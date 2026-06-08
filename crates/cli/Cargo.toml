@@ -10,6 +10,12 @@ description = "Agentic terminal coding agent"
 name = "ghosty"
 path = "src/main.rs"
 
+# Legacy alias — forwards to `ghosty` and prints a deprecation
+# notice. Will be removed in v0.9.0.
+[[bin]]
+name = "deepseek"
+path = "src/bin/deepseek_legacy_shim.rs"
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
