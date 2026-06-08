@@ -33,7 +33,7 @@ const TUI_PREFS_FILE_NAME: &str = "tui.toml";
 /// # Example `~/.ghosty/tui.toml`
 ///
 /// ```toml
-/// theme    = "dark"        # "system" | "dark" | "light" | "grayscale" | "catppuccin-mocha" | ...
+/// theme    = "ghosty"      # "system" | "ghosty" | "dark" | "light" | "grayscale" | "catppuccin-mocha" | ...
 /// font_size = 14
 ///
 /// [keybinds]
@@ -49,7 +49,7 @@ const TUI_PREFS_FILE_NAME: &str = "tui.toml";
 #[serde(default)]
 pub struct TuiPrefs {
     /// UI colour theme.
-    /// Default `"dark"`.
+    /// Default `"ghosty"`.
     pub theme: String,
     /// Terminal font size hint forwarded to supporting front-ends (e.g. the
     /// Tauri shell). `0` means "use terminal default". Default `0`.
@@ -62,7 +62,7 @@ pub struct TuiPrefs {
 impl Default for TuiPrefs {
     fn default() -> Self {
         Self {
-            theme: "dark".to_string(),
+            theme: "ghosty".to_string(),
             font_size: 0,
             keybinds: KeybindPrefs::default(),
         }
@@ -162,7 +162,7 @@ impl TuiPrefs {
         let theme = self.theme.trim().to_ascii_lowercase();
         let Some(theme) = normalize_theme_name(&theme) else {
             anyhow::bail!(
-                "Invalid tui.toml theme '{}': expected system, dark, light, grayscale, catppuccin-mocha, tokyo-night, dracula, gruvbox-dark, or solarized-light.",
+                "Invalid tui.toml theme '{}': expected system, terminal, dark, light, grayscale, catppuccin-mocha, tokyo-night, dracula, gruvbox-dark, claude, matrix, solarized-light, or ghosty.",
                 self.theme
             );
         };
@@ -339,7 +339,7 @@ impl Default for Settings {
             show_thinking: true,
             show_tool_details: true,
             locale: "auto".to_string(),
-            theme: "system".to_string(),
+            theme: "ghosty".to_string(),
             background_color: None,
             composer_density: "comfortable".to_string(),
             composer_border: true,
@@ -887,7 +887,7 @@ impl Settings {
             ),
             (
                 "theme",
-                "UI theme: system, dark, light, grayscale, catppuccin-mocha, tokyo-night, dracula, gruvbox-dark, solarized-light",
+                "UI theme: system, terminal, dark, light, grayscale, catppuccin-mocha, tokyo-night, dracula, gruvbox-dark, claude, matrix, solarized-light, ghosty",
             ),
             (
                 "background_color",
@@ -1377,7 +1377,7 @@ mod tests {
     #[test]
     fn theme_normalizes_supported_values_and_rejects_unknowns() {
         let mut settings = Settings::default();
-        assert_eq!(settings.theme, "system");
+        assert_eq!(settings.theme, "ghosty");
 
         settings.set("theme", "grayscale").expect("set grayscale");
         assert_eq!(settings.theme, "grayscale");
@@ -2423,9 +2423,9 @@ mod tests {
     }
 
     #[test]
-    fn tui_prefs_defaults_are_dark_theme_zero_font() {
+    fn tui_prefs_defaults_are_ghosty_theme_zero_font() {
         let prefs = TuiPrefs::default();
-        assert_eq!(prefs.theme, "dark");
+        assert_eq!(prefs.theme, "ghosty");
         assert_eq!(prefs.font_size, 0);
         assert!(prefs.keybinds.submit.is_none());
         assert!(prefs.keybinds.new_line.is_none());
@@ -2443,6 +2443,7 @@ mod tests {
             "dracula",
             "gruvbox-dark",
             "solarized-light",
+            "ghosty",
         ] {
             let mut prefs = TuiPrefs {
                 theme: theme.to_string(),
@@ -2477,7 +2478,7 @@ mod tests {
         assert!(err.to_string().contains("Invalid tui.toml theme"));
         assert!(
             err.to_string()
-                .contains("expected system, dark, light, grayscale")
+                .contains("expected system, terminal, dark, light, grayscale")
         );
         assert!(err.to_string().contains("solarized-light"));
     }
@@ -2518,7 +2519,7 @@ mod tests {
             );
         }
         let prefs = TuiPrefs::load().expect("load should not fail when file absent");
-        assert_eq!(prefs.theme, "dark", "should fall back to default theme");
+        assert_eq!(prefs.theme, "ghosty", "should fall back to default theme");
         // SAFETY: cleanup under the guard.
         unsafe {
             std::env::remove_var("DEEPSEEK_CONFIG_PATH");

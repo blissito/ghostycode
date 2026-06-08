@@ -1498,6 +1498,7 @@ pub fn normalize_theme_name(value: &str) -> Option<&'static str> {
         "claude" => Some("claude"),
         "matrix" | "hacker" => Some("matrix"),
         "solarized-light" | "solarized" => Some("solarized-light"),
+        "ghosty" => Some("ghosty"),
         _ => None,
     }
 }
