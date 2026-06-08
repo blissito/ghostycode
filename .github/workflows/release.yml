@@ -91,6 +91,14 @@ jobs:
             exit 1
           fi
 
+          # Version policy: stay on 0.0.x — only the patch (3rd) segment may
+          # change. Reject any bump to the major/minor segments so releases
+          # never roll past 0.0.x by accident.
+          if ! printf '%s' "${tag}" | grep -Eq '^v0\.0\.[0-9]+$'; then
+            echo "Release tag '${tag}' violates the 0.0.x policy: only the patch segment may change (expected v0.0.<patch>)." >&2
+            exit 1
+          fi
+
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "source_ref=${source_ref}" >> "$GITHUB_OUTPUT"
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"

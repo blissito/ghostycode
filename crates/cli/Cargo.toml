@@ -14,14 +14,14 @@ path = "src/main.rs"
 anyhow.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
-ghosty-agent = { path = "../agent", version = "0.0.1" }
-ghosty-app-server = { path = "../app-server", version = "0.0.1" }
-ghosty-config = { path = "../config", version = "0.0.1" }
-ghosty-execpolicy = { path = "../execpolicy", version = "0.0.1" }
-ghosty-mcp = { path = "../mcp", version = "0.0.1" }
-ghosty-release = { path = "../release", version = "0.0.1" }
-ghosty-secrets = { path = "../secrets", version = "0.0.1" }
-ghosty-state = { path = "../state", version = "0.0.1" }
+ghosty-agent = { path = "../agent", version = "0.0.2" }
+ghosty-app-server = { path = "../app-server", version = "0.0.2" }
+ghosty-config = { path = "../config", version = "0.0.2" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.2" }
+ghosty-mcp = { path = "../mcp", version = "0.0.2" }
+ghosty-release = { path = "../release", version = "0.0.2" }
+ghosty-secrets = { path = "../secrets", version = "0.0.2" }
+ghosty-state = { path = "../state", version = "0.0.2" }
 chrono.workspace = true
 dirs.workspace = true
 serde.workspace = true
