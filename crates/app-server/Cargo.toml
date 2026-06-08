@@ -1,0 +1,30 @@
+[package]
+name = "ghosty-app-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Codex-style app-server transport for DeepSeek workspace architecture"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+ghosty-agent = { path = "../agent", version = "0.0.1" }
+ghosty-config = { path = "../config", version = "0.0.1" }
+ghosty-core = { path = "../core", version = "0.0.1" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.1" }
+ghosty-hooks = { path = "../hooks", version = "0.0.1" }
+ghosty-mcp = { path = "../mcp", version = "0.0.1" }
+ghosty-protocol = { path = "../protocol", version = "0.0.1" }
+ghosty-state = { path = "../state", version = "0.0.1" }
+ghosty-tools = { path = "../tools", version = "0.0.1" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile = "3.16"
+tower = "0.5"

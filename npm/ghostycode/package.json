@@ -1,0 +1,56 @@
+{
+  "name": "ghostycode",
+  "version": "0.0.1",
+  "ghostyBinaryVersion": "0.0.1",
+  "description": "Ghosty Code \u2014 agentic terminal coding agent",
+  "author": "Bliss (blissito)",
+  "license": "MIT",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/blissito"
+    }
+  ],
+  "homepage": "https://github.com/blissito/ghostycode",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blissito/ghostycode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blissito/ghostycode/issues"
+  },
+  "keywords": [
+    "ghosty",
+    "ai",
+    "cli",
+    "tui",
+    "rust",
+    "terminal",
+    "coding-agent"
+  ],
+  "type": "commonjs",
+  "bin": {
+    "ghosty": "bin/ghosty.js"
+  },
+  "scripts": {
+    "release:check": "node scripts/verify-release-assets.js",
+    "postinstall": "node scripts/install.js --optional",
+    "prepublishOnly": "node scripts/verify-release-assets.js",
+    "prepack": "node scripts/install.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "preferGlobal": true,
+  "files": [
+    "bin/*.js",
+    "scripts/*.js",
+    "test/*.js",
+    "README.md",
+    "package.json"
+  ]
+}

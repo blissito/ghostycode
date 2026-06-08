@@ -1,0 +1,36 @@
+[package]
+name = "ghosty-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Agentic terminal coding agent"
+
+[[bin]]
+name = "ghosty"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+ghosty-agent = { path = "../agent", version = "0.0.1" }
+ghosty-app-server = { path = "../app-server", version = "0.0.1" }
+ghosty-config = { path = "../config", version = "0.0.1" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.1" }
+ghosty-mcp = { path = "../mcp", version = "0.0.1" }
+ghosty-release = { path = "../release", version = "0.0.1" }
+ghosty-secrets = { path = "../secrets", version = "0.0.1" }
+ghosty-state = { path = "../state", version = "0.0.1" }
+chrono.workspace = true
+dirs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
+semver.workspace = true
+tokio.workspace = true
+sha2.workspace = true
+tempfile = "3.16"
+tracing.workspace = true
+
+[dev-dependencies]

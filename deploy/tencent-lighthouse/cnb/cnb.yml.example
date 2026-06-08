@@ -1,0 +1,87 @@
+# Historical CNB config template for the Tencent Lighthouse remote-first path.
+# The active pipeline now lives in the repository-root .cnb.yml so the GitHub
+# -> CNB one-way mirror cannot overwrite CNB-only pipeline edits.
+
+main:
+  push:
+    - docker:
+        image: node:22-bookworm
+      stages:
+        - name: feishu bridge tests
+          script: |
+            cd integrations/feishu-bridge
+            npm install
+            npm run check
+            npm test
+
+    - docker:
+        image: rust:1.88-bookworm
+      stages:
+        - name: release version check
+          script: |
+            ./scripts/release/check-versions.sh
+
+  web_trigger_lighthouse:
+    - docker:
+        image: cnbcool/default-build-env:latest
+      stages:
+        - name: deploy to lighthouse
+          script: |
+            set -euo pipefail
+
+            : "${LIGHTHOUSE_HOST:?Set LIGHTHOUSE_HOST in CNB secrets}"
+            : "${LIGHTHOUSE_SSH_TARGET:?Set LIGHTHOUSE_SSH_TARGET in CNB secrets}"
+            : "${LIGHTHOUSE_SSH_PRIVATE_KEY:?Set LIGHTHOUSE_SSH_PRIVATE_KEY in CNB secrets}"
+
+            if ! command -v ssh >/dev/null 2>&1 || ! command -v ssh-keyscan >/dev/null 2>&1; then
+              apt-get update
+              apt-get install -y openssh-client
+            fi
+
+            LIGHTHOUSE_SSH_PORT="${LIGHTHOUSE_SSH_PORT:-22}"
+            GHOSTY_REPO_BRANCH="${GHOSTY_REPO_BRANCH:-main}"
+            GHOSTY_REPO_URL="${GHOSTY_REPO_URL:-https://cnb.cool/ghosty.net/ghosty.git}"
+
+            install -m 700 -d ~/.ssh
+            printf '%s\n' "$LIGHTHOUSE_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+            chmod 600 ~/.ssh/id_ed25519
+            ssh-keyscan -p "$LIGHTHOUSE_SSH_PORT" -H "$LIGHTHOUSE_HOST" >> ~/.ssh/known_hosts
+
+            ssh -p "$LIGHTHOUSE_SSH_PORT" "$LIGHTHOUSE_SSH_TARGET" \
+              "GHOSTY_REPO_BRANCH='$GHOSTY_REPO_BRANCH' GHOSTY_REPO_URL='$GHOSTY_REPO_URL' bash -s" <<'REMOTE'
+            set -euo pipefail
+
+            if [ ! -d /opt/whalebro/ghosty/.git ]; then
+              sudo -u ghosty git clone --branch "$GHOSTY_REPO_BRANCH" "$GHOSTY_REPO_URL" /opt/whalebro/ghosty
+            fi
+
+            cd /opt/whalebro/ghosty
+            if [ -n "$(sudo -u ghosty git status --porcelain)" ]; then
+              echo "Refusing to deploy over a dirty /opt/whalebro/ghosty checkout." >&2
+              sudo -u ghosty git status --short
+              exit 1
+            fi
+
+            sudo -u ghosty git fetch --all --tags
+            if sudo -u ghosty git rev-parse --verify --quiet "refs/remotes/origin/$GHOSTY_REPO_BRANCH" >/dev/null; then
+              sudo -u ghosty git checkout -B "$GHOSTY_REPO_BRANCH" "origin/$GHOSTY_REPO_BRANCH"
+            elif sudo -u ghosty git rev-parse --verify --quiet "refs/tags/$GHOSTY_REPO_BRANCH" >/dev/null; then
+              sudo -u ghosty git checkout --detach "$GHOSTY_REPO_BRANCH"
+            else
+              sudo -u ghosty git checkout "$GHOSTY_REPO_BRANCH"
+              sudo -u ghosty git pull --ff-only
+            fi
+
+            sudo -iu ghosty bash -lc '
+              set -euo pipefail
+              . "$HOME/.cargo/env"
+              cd /opt/whalebro/ghosty
+              cargo install --path crates/cli --locked --force
+              cargo install --path crates/tui --locked --force
+            '
+
+            sudo bash scripts/tencent-lighthouse/install-services.sh
+            sudo systemctl restart ghosty-runtime
+            sudo systemctl restart ghosty-feishu-bridge
+            sudo bash scripts/tencent-lighthouse/doctor.sh
+            REMOTE

@@ -1,0 +1,192 @@
+# CNB is a one-way mirror from GitHub. Keep this file source-controlled here;
+# CNB-side edits will be overwritten by the GitHub -> CNB sync workflow.
+
+.feishu_bridge_tests: &feishu_bridge_tests
+  name: feishu bridge tests
+  runner:
+    tags: cnb:arch:amd64
+    cpus: 8
+  docker:
+    image: node:22-bookworm
+  stages:
+    - name: feishu bridge tests
+      script: |
+        set -eu
+        cd integrations/feishu-bridge
+        npm ci
+        npm run check
+        npm test
+
+.linux_rust_gates: &linux_rust_gates
+  name: linux rust gates
+  runner:
+    tags: cnb:arch:amd64
+    cpus: 16
+  docker:
+    image: rust:1.88-bookworm
+  stages:
+    - name: install linux dependencies
+      script: |
+        set -eu
+        apt-get update
+        apt-get install -y git libdbus-1-dev nodejs npm pkg-config
+        if command -v rustup >/dev/null 2>&1; then
+          rustup component add rustfmt clippy
+        fi
+
+    - name: rust workspace gates
+      script: |
+        set -eu
+        ./scripts/release/check-versions.sh
+        cargo fmt --all -- --check
+        cargo check --workspace --all-targets --locked
+        cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        cargo test --workspace --all-features --locked
+
+    - name: linux npm wrapper smoke
+      script: |
+        set -eu
+        cargo build --release --locked -p ghosty-cli -p ghosty-tui
+        export PATH="$PWD/target/release:$PATH"
+        node scripts/release/npm-wrapper-smoke.js
+        ./target/release/ghosty --version
+        ./target/release/ghosty-tui --version
+        ./target/release/deepseek --version
+        ./target/release/deepseek-tui --version
+
+.linux_release_preflight: &linux_release_preflight
+  name: linux release preflight
+  runner:
+    tags: cnb:arch:amd64
+    cpus: 16
+  docker:
+    image: rust:1.88-bookworm
+  stages:
+    - name: install release dependencies
+      script: |
+        set -eu
+        apt-get update
+        apt-get install -y curl git libdbus-1-dev nodejs npm pkg-config
+        if command -v rustup >/dev/null 2>&1; then
+          rustup component add rustfmt clippy
+        fi
+
+    - name: rust workspace gates
+      script: |
+        set -eu
+        ./scripts/release/check-versions.sh
+        cargo fmt --all -- --check
+        cargo check --workspace --all-targets --locked
+        cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        cargo test --workspace --all-features --locked
+
+    - name: crate publish dry-run
+      script: |
+        set -eu
+        ./scripts/release/publish-crates.sh dry-run
+
+    - name: release binary smoke
+      script: |
+        set -eu
+        cargo build --release --locked -p ghosty-cli -p ghosty-tui
+        export PATH="$PWD/target/release:$PATH"
+        node scripts/release/npm-wrapper-smoke.js
+        ./target/release/ghosty --version
+        ./target/release/ghosty-tui --version
+        ./target/release/deepseek --version
+        ./target/release/deepseek-tui --version
+
+main:
+  push:
+    - *feishu_bridge_tests
+    - *linux_rust_gates
+
+"(fix/*|rebrand/*)":
+  push:
+    - *linux_rust_gates
+
+"work/v*":
+  push:
+    - *feishu_bridge_tests
+    - *linux_release_preflight
+
+$:
+  tag_push:
+    - docker:
+        image: rust:1.88-bookworm
+      stages:
+        - name: build linux x64 release assets
+          script: |
+            set -eu
+
+            apt-get update
+            apt-get install -y git libdbus-1-dev nodejs pkg-config
+
+            ./scripts/release/check-versions.sh
+            cargo build --release --locked -p ghosty-cli -p ghosty-tui
+
+            mkdir -p target/cnb-release
+            cp target/release/ghosty target/cnb-release/ghosty-linux-x64
+            cp target/release/ghosty-tui target/cnb-release/ghosty-tui-linux-x64
+            cp target/release/deepseek target/cnb-release/deepseek-linux-x64
+            cp target/release/deepseek-tui target/cnb-release/deepseek-tui-linux-x64
+            strip \
+              target/cnb-release/ghosty-linux-x64 \
+              target/cnb-release/ghosty-tui-linux-x64 \
+              target/cnb-release/deepseek-linux-x64 \
+              target/cnb-release/deepseek-tui-linux-x64 \
+              || true
+
+            (
+              cd target/cnb-release
+              sha256sum \
+                ghosty-linux-x64 \
+                ghosty-tui-linux-x64 \
+                deepseek-linux-x64 \
+                deepseek-tui-linux-x64 \
+                > ghosty-artifacts-sha256.txt
+              cp ghosty-artifacts-sha256.txt deepseek-artifacts-sha256.txt
+            )
+
+            tag_name="${CNB_BRANCH:-}"
+            if [ -z "$tag_name" ]; then
+              tag_name="$(git describe --tags --exact-match 2>/dev/null || true)"
+            fi
+            version="${tag_name#v}"
+            commit_sha="${CNB_COMMIT:-$(git rev-parse HEAD)}"
+            {
+              echo "# ${tag_name:-CNB release}"
+              echo
+              awk -v version="${version}" '
+                index($0, "## [" version "]") == 1 { in_section = 1; next }
+                in_section && /^## \[/ { exit }
+                in_section { print }
+              ' CHANGELOG.md
+              echo
+              echo "Built by CNB from ${commit_sha}."
+              echo
+              echo "Assets:"
+              echo "- ghosty-linux-x64"
+              echo "- ghosty-tui-linux-x64"
+              echo "- ghosty-artifacts-sha256.txt"
+              echo "- deepseek-linux-x64"
+              echo "- deepseek-tui-linux-x64"
+              echo "- deepseek-artifacts-sha256.txt"
+            } > target/cnb-release/CNB_RELEASE.md
+
+        - name: create cnb release
+          type: git:release
+          options:
+            descriptionFromFile: target/cnb-release/CNB_RELEASE.md
+            latest: true
+
+        - name: upload linux x64 release assets
+          image: cnbcool/attachments:latest
+          settings:
+            attachments:
+              - target/cnb-release/ghosty-linux-x64
+              - target/cnb-release/ghosty-tui-linux-x64
+              - target/cnb-release/ghosty-artifacts-sha256.txt
+              - target/cnb-release/deepseek-linux-x64
+              - target/cnb-release/deepseek-tui-linux-x64
+              - target/cnb-release/deepseek-artifacts-sha256.txt

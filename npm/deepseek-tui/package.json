@@ -1,0 +1,43 @@
+{
+  "name": "deepseek-tui",
+  "version": "0.8.49",
+  "private": true,
+  "description": "Deprecated legacy package name. Install `ghosty` instead; this package is not republished.",
+  "author": "blissito",
+  "license": "MIT",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/blissito"
+    },
+    {
+      "type": "buymeacoffee",
+      "url": "https://www.buymeacoffee.com/hmbown"
+    }
+  ],
+  "homepage": "https://github.com/blissito/ghostycode/blob/main/docs/REBRAND.md",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blissito/ghostycode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blissito/ghostycode/issues"
+  },
+  "keywords": [
+    "compatibility",
+    "deepseek",
+    "ghosty"
+  ],
+  "type": "commonjs",
+  "scripts": {
+    "postinstall": "node scripts/deprecation-notice.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "scripts/*.js",
+    "README.md",
+    "package.json"
+  ]
+}

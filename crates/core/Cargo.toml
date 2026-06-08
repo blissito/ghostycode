@@ -1,0 +1,21 @@
+[package]
+name = "ghosty-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core runtime boundaries for DeepSeek workspace architecture"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+ghosty-agent = { path = "../agent", version = "0.0.1" }
+ghosty-config = { path = "../config", version = "0.0.1" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.1" }
+ghosty-hooks = { path = "../hooks", version = "0.0.1" }
+ghosty-mcp = { path = "../mcp", version = "0.0.1" }
+ghosty-protocol = { path = "../protocol", version = "0.0.1" }
+ghosty-state = { path = "../state", version = "0.0.1" }
+ghosty-tools = { path = "../tools", version = "0.0.1" }
+serde_json.workspace = true
+uuid.workspace = true

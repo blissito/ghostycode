@@ -1,0 +1,17 @@
+[package]
+name = "ghosty-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Tool invocation lifecycle, schema validation, and scheduler parallelism for DeepSeek workspace architecture"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+ghosty-protocol = { path = "../protocol", version = "0.0.1" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true

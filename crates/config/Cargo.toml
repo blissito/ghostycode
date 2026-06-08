@@ -1,0 +1,17 @@
+[package]
+name = "ghosty-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Config schema and precedence model for DeepSeek workspace architecture"
+
+[dependencies]
+anyhow.workspace = true
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.1" }
+ghosty-secrets = { path = "../secrets", version = "0.0.1" }
+dirs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tracing.workspace = true
