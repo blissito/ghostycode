@@ -645,8 +645,12 @@ jobs:
           TOKEN: ${{ secrets.HOMEBREW_TAP_PAT || secrets.RELEASE_TAG_PAT }}
         run: bash .github/scripts/update-homebrew-tap.sh
 
-# npm publish is intentionally not automated. The npm account requires 2FA OTP
-# on every publish, and a granular automation token that bypasses 2FA has not
-# been provisioned. Release the npm wrapper manually from a developer machine
-# after the GitHub Release has been created — see CLAUDE.md "Releases" for the
-# exact commands.
+# npm publish is intentionally not automated — no automation token is
+# provisioned in CI. Release the npm wrapper manually from a developer
+# machine after the GitHub Release has been created:
+#
+#   cd npm/ghostycode && npm publish
+#
+# The `prepublishOnly` hook verifies the GitHub Release assets first. If the
+# npm account has 2FA enforced for writes, add `--otp=<code>` to the command
+# (the interactive prompt does not work in non-interactive shells).
