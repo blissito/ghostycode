@@ -5,7 +5,7 @@
 # Checks performed:
 #   1. No `crates/*/Cargo.toml` carries a literal `version = "x.y.z"`; every
 #      crate must inherit `version.workspace = true`.
-#   2. `npm/ghosty/package.json` `version` matches the workspace
+#   2. `npm/ghostycode/package.json` `version` matches the workspace
 #      `version` in the root `Cargo.toml`. (`npm/deepseek-tui/` still
 #      exists only as an unpublished compatibility notice and must stay
 #      private.)
@@ -32,9 +32,9 @@ fi
 
 # 2) Workspace ↔ npm package.json.
 workspace_version="$(grep -E '^version = "' Cargo.toml | head -n1 | sed -E 's/^version = "([^"]+)".*/\1/')"
-npm_version="$(node -p "require('./npm/ghosty/package.json').version")"
+npm_version="$(node -p "require('./npm/ghostycode/package.json').version")"
 if [[ "${workspace_version}" != "${npm_version}" ]]; then
-  echo "::error::npm/ghosty/package.json version (${npm_version}) does not match workspace Cargo.toml (${workspace_version})." >&2
+  echo "::error::npm/ghostycode/package.json version (${npm_version}) does not match workspace Cargo.toml (${workspace_version})." >&2
   fail=1
 fi
 if [[ -f npm/deepseek-tui/package.json ]]; then
