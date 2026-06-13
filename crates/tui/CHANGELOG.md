@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Onboarding flow simplified: Welcome → Language → ApiKey → EasyBits → Chat.
 - TrustDirectory step removed from normal onboarding flow.
 
+### Fixed
+
+- Welcome onboarding screen now localized (uses app.tr(), previously hardcoded English).
+- Spanish (es-419) added to the language picker at onboarding step 2.
+- EasyBits MCP key paste (Cmd+V) fixed during onboarding; bracketed paste events
+  were not routed to the EasyBits input field.
+- Composer cursor tests pinned to English locale to prevent locale-dependent
+  failures on CI (Spanish placeholder wraps differently at narrow widths).
+
 ## [0.8.53] - 2026-06-03
 
 ### Added
@@ -5552,3 +5561,4 @@ Welcome — and thank you.
 [0.1.6]: https://github.com/blissito/ghostycode/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
+[0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
