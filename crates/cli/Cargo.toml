@@ -20,14 +20,14 @@ path = "src/bin/deepseek_legacy_shim.rs"
 anyhow.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
-ghosty-agent = { path = "../agent", version = "0.0.4" }
-ghosty-app-server = { path = "../app-server", version = "0.0.4" }
-ghosty-config = { path = "../config", version = "0.0.4" }
-ghosty-execpolicy = { path = "../execpolicy", version = "0.0.4" }
-ghosty-mcp = { path = "../mcp", version = "0.0.4" }
-ghosty-release = { path = "../release", version = "0.0.4" }
-ghosty-secrets = { path = "../secrets", version = "0.0.4" }
-ghosty-state = { path = "../state", version = "0.0.4" }
+ghosty-agent = { path = "../agent", version = "0.0.5" }
+ghosty-app-server = { path = "../app-server", version = "0.0.5" }
+ghosty-config = { path = "../config", version = "0.0.5" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.5" }
+ghosty-mcp = { path = "../mcp", version = "0.0.5" }
+ghosty-release = { path = "../release", version = "0.0.5" }
+ghosty-secrets = { path = "../secrets", version = "0.0.5" }
+ghosty-state = { path = "../state", version = "0.0.5" }
 chrono.workspace = true
 dirs.workspace = true
 serde.workspace = true

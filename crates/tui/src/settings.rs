@@ -237,7 +237,9 @@ pub struct Settings {
     /// reasons at full effort, but the live reasoning stream is hidden in the
     /// TUI unless the user opts in via `/config show_thinking on`.
     pub show_thinking: bool,
-    /// Show detailed tool output
+    /// Show detailed tool output. Defaults to off: tool calls run normally,
+    /// but their detailed output is collapsed in the TUI unless the user opts
+    /// in via `/config show_tool_details on`.
     pub show_tool_details: bool,
     /// UI locale: auto, en, ja, zh-Hans, pt-BR, es-419
     pub locale: String,
@@ -339,7 +341,7 @@ impl Default for Settings {
             mention_walk_depth: 10,
             mention_menu_behavior: "fuzzy".to_string(),
             show_thinking: false,
-            show_tool_details: true,
+            show_tool_details: false,
             locale: "auto".to_string(),
             theme: "ghosty".to_string(),
             background_color: None,

@@ -5329,6 +5329,14 @@ Welcome — and thank you.
 - Disabled automatic RLM mode switching; use /rlm or /aleph to enter RLM mode
 - Fixed cargo fmt formatting issues
 
+## [0.0.5] - 2026-06-13
+
+### Changed
+- **Tool details off by default.** `show_tool_details` now defaults to off:
+  tool calls run normally, but their detailed output is collapsed in the TUI.
+  Re-enable with `/config show_tool_details on`. Mirrors the reasoning-display
+  default introduced in 0.0.3.
+
 ## [0.0.4] - 2026-06-13
 
 ### Added
@@ -5520,6 +5528,7 @@ Welcome — and thank you.
 [0.3.0]: https://github.com/blissito/ghostycode/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/blissito/ghostycode/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/blissito/ghostycode/releases/tag/v0.2.0
+[0.0.5]: https://github.com/blissito/ghostycode/releases/tag/v0.0.5
 [0.0.4]: https://github.com/blissito/ghostycode/releases/tag/v0.0.4
 [0.0.3]: https://github.com/blissito/ghostycode/releases/tag/v0.0.3
 [0.0.2]: https://github.com/blissito/ghostycode/releases/tag/v0.0.2
