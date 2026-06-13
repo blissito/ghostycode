@@ -119,6 +119,7 @@ use super::app::{
     StatusToastLevel, SubmitDisposition, TaskPanelEntry, TuiOptions,
     looks_like_slash_command_input, shell_command_from_bang_input,
 };
+use super::clipboard::ClipboardContent;
 use super::approval::{
     ApprovalMode, ApprovalRequest, ApprovalView, ElevationRequest, ElevationView, ReviewDecision,
 };
@@ -2809,6 +2810,11 @@ async fn run_event_loop(
                         app.api_key_cursor = 0;
                         app.status_message = None;
                     }
+                    KeyCode::Esc if app.onboarding == OnboardingState::EasybitsMcp => {
+                        app.onboarding = OnboardingState::Language;
+                        app.easybits_key_input.clear();
+                        app.status_message = None;
+                    }
                     KeyCode::Esc if app.onboarding == OnboardingState::Language => {
                         app.onboarding = OnboardingState::Welcome;
                         app.status_message = None;
@@ -2904,10 +2910,29 @@ async fn run_event_loop(
                                             .await;
                                     }
 
-                                    onboarding::advance_onboarding_after_language(app);
+                                    onboarding::advance_onboarding_after_api_key(app);
                                 }
                                 Err(e) => {
                                     app.status_message = Some(e.to_string());
+                                }
+                            }
+                        }
+                        OnboardingState::EasybitsMcp => {
+                            match app.submit_easybits_key() {
+                                Ok(()) => {
+                                    if !app.easybits_key_input.trim().is_empty() {
+                                        app.push_status_toast(
+                                            "EasyBits key saved to mcp.json".to_string(),
+                                            StatusToastLevel::Info,
+                                            Some(3_000),
+                                        );
+                                    }
+                                    app.finish_onboarding();
+                                }
+                                Err(e) => {
+                                    app.status_message = Some(format!(
+                                        "Failed to save EasyBits key: {e}"
+                                    ));
                                 }
                             }
                         }
@@ -2928,7 +2953,7 @@ async fn run_event_loop(
                                     app.onboarding_workspace_trust_gate = false;
                                     app.onboarding = OnboardingState::None;
                                 } else {
-                                    app.onboarding = OnboardingState::Tips;
+                                    app.onboarding = OnboardingState::EasybitsMcp;
                                 }
                             }
                             Err(err) => {
@@ -2967,6 +2992,34 @@ async fn run_event_loop(
                     {
                         app.insert_api_key_char(c);
                         onboarding::sync_api_key_validation_status(app, false);
+                    }
+                    KeyCode::Backspace if app.onboarding == OnboardingState::EasybitsMcp => {
+                        app.easybits_key_input.pop();
+                    }
+                    KeyCode::Char('h')
+                        if key_shortcuts::is_ctrl_h_backspace(&key)
+                            && app.onboarding == OnboardingState::EasybitsMcp =>
+                    {
+                        app.easybits_key_input.pop();
+                    }
+                    _ if key_shortcuts::is_paste_shortcut(&key)
+                        && app.onboarding == OnboardingState::EasybitsMcp =>
+                    {
+                        if let Some(ClipboardContent::Text(text)) =
+                            app.clipboard.read(app.workspace.as_path())
+                        {
+                            let cleaned: String = text
+                                .chars()
+                                .filter(|c| !c.is_control() || *c == '\n')
+                                .collect();
+                            app.easybits_key_input.push_str(&cleaned);
+                        }
+                    }
+                    KeyCode::Char(c)
+                        if app.onboarding == OnboardingState::EasybitsMcp
+                            && key_shortcuts::is_text_input_key(&key) =>
+                    {
+                        app.easybits_key_input.push(c);
                     }
                     _ => {}
                 }

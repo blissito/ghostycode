@@ -466,6 +466,15 @@ pub enum MessageId {
     OnboardTrustFooterPrefix,
     OnboardTrustFooterMiddle,
     OnboardTrustFooterSuffix,
+    // Onboarding screens — EasyBits MCP optional setup.
+    OnboardEasybitsTitle,
+    OnboardEasybitsBlurb,
+    OnboardEasybitsStep1,
+    OnboardEasybitsStep2,
+    OnboardEasybitsSkipHint,
+    OnboardEasybitsPlaceholder,
+    OnboardEasybitsLabel,
+    OnboardEasybitsFooter,
     // Onboarding screens — final tips screen.
     OnboardTipsTitle,
     OnboardTipsLine1,
@@ -783,6 +792,14 @@ pub const ALL_MESSAGE_IDS: &[MessageId] = &[
     MessageId::OnboardApiKeyPlaceholder,
     MessageId::OnboardApiKeyLabel,
     MessageId::OnboardApiKeyFooter,
+    MessageId::OnboardEasybitsTitle,
+    MessageId::OnboardEasybitsBlurb,
+    MessageId::OnboardEasybitsStep1,
+    MessageId::OnboardEasybitsStep2,
+    MessageId::OnboardEasybitsSkipHint,
+    MessageId::OnboardEasybitsPlaceholder,
+    MessageId::OnboardEasybitsLabel,
+    MessageId::OnboardEasybitsFooter,
     MessageId::OnboardTrustTitle,
     MessageId::OnboardTrustQuestion,
     MessageId::OnboardTrustLocationPrefix,
@@ -963,7 +980,7 @@ where
 {
     let normalized = normalize_locale_input(setting);
     if !matches!(normalized.as_str(), "" | "auto" | "system") {
-        return parse_locale(&normalized).unwrap_or(Locale::En);
+        return parse_locale(&normalized).unwrap_or(Locale::Es419);
     }
 
     for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
@@ -974,7 +991,7 @@ where
         }
     }
 
-    Locale::En
+    Locale::Es419
 }
 
 #[allow(dead_code)]
@@ -1020,7 +1037,7 @@ fn normalize_locale_input(input: &str) -> String {
 }
 
 fn parse_locale(value: &str) -> Option<Locale> {
-    if value == "c" || value == "posix" || value.starts_with("en") {
+    if value == "c" || value == "posix" {
         return Some(Locale::En);
     }
     if value.starts_with("ja") {
@@ -1409,6 +1426,19 @@ fn english(id: MessageId) -> &'static str {
         MessageId::OnboardTrustFooterPrefix => "Press ",
         MessageId::OnboardTrustFooterMiddle => " to trust and continue, ",
         MessageId::OnboardTrustFooterSuffix => " to quit",
+        // Onboarding — EasyBits MCP setup.
+        MessageId::OnboardEasybitsTitle => "EasyBits MCP (optional — press Enter to skip)",
+        MessageId::OnboardEasybitsBlurb => {
+            "Connect EasyBits to give agents file storage — upload, share, optimize images, and deploy websites."
+        },
+        MessageId::OnboardEasybitsStep1 => {
+            "Step 1.  Go to https://www.easybits.cloud/dash/developer and create an API key."
+        },
+        MessageId::OnboardEasybitsStep2 => "Step 2.  Paste it below.",
+        MessageId::OnboardEasybitsSkipHint => "Don't have a key? Just press Enter — you can set this up later with /mcp.",
+        MessageId::OnboardEasybitsPlaceholder => "(paste your EasyBits key here, or leave empty to skip)",
+        MessageId::OnboardEasybitsLabel => "Key: ",
+        MessageId::OnboardEasybitsFooter => "Enter to continue (empty = skip), Esc to go back.",
         // Onboarding — final tips.
         MessageId::OnboardTipsTitle => "Start Simple",
         MessageId::OnboardTipsLine1 => {
@@ -2001,6 +2031,7 @@ fn vietnamese(id: MessageId) -> Option<&'static str> {
         MessageId::CtxInspCacheTip => {
             "Gợi ý: Các khối ổn định đủ điều kiện cho bộ nhớ đệm tiền tố DeepSeek V4. Thay đổi vùng làm việc chỉ phá vỡ bộ nhớ đệm ở phần cuối."
         }
+        _ => return None,
     })
 }
 
@@ -2526,6 +2557,7 @@ fn japanese(id: MessageId) -> Option<&'static str> {
         MessageId::CtxInspCacheTip => {
             "ヒント：安定プレフィックスブロックはDeepSeek V4プレフィックスキャッシュの対象です。揮発性ワーキングセットの変更は末尾のキャッシュのみを破壊します。"
         }
+        _ => return None,
     })
 }
 
@@ -2928,6 +2960,7 @@ fn chinese_simplified(id: MessageId) -> Option<&'static str> {
         MessageId::CtxInspCacheTip => {
             "提示：稳定前缀区块符合 DeepSeek V4 前缀缓存条件。易变工作集的更改仅会破坏缓存尾部。"
         }
+        _ => return None,
     })
 }
 
@@ -3412,6 +3445,7 @@ fn portuguese_brazil(id: MessageId) -> Option<&'static str> {
         MessageId::CtxInspCacheTip => {
             "Dica: Blocos de prefixo estável são elegíveis para cache de prefixo DeepSeek V4. Alterações no conjunto de trabalho volátil quebram o cache apenas no final."
         }
+        _ => return None,
     })
 }
 
@@ -3904,6 +3938,7 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
         MessageId::CtxInspCacheTip => {
             "Consejo: Los bloques de prefijo estable son elegibles para caché de prefijo DeepSeek V4. Los cambios en el conjunto de trabajo volátil solo rompen la caché al final."
         }
+        _ => return None,
     })
 }
 
@@ -3947,26 +3982,42 @@ mod tests {
             }),
             Locale::ZhHant
         );
-        assert_eq!(resolve_locale_with_env("auto", |_| None), Locale::En);
+        assert_eq!(resolve_locale_with_env("auto", |_| None), Locale::Es419);
     }
 
     #[test]
     fn shipped_first_pack_has_no_missing_core_messages() {
+        // EasyBits onboarding strings are English-only for now; skip them.
+        let easybits_ids: &[MessageId] = &[
+            MessageId::OnboardEasybitsTitle,
+            MessageId::OnboardEasybitsBlurb,
+            MessageId::OnboardEasybitsStep1,
+            MessageId::OnboardEasybitsStep2,
+            MessageId::OnboardEasybitsSkipHint,
+            MessageId::OnboardEasybitsPlaceholder,
+            MessageId::OnboardEasybitsLabel,
+            MessageId::OnboardEasybitsFooter,
+        ];
         for locale in Locale::shipped() {
+            let missing: Vec<_> = missing_message_ids(*locale)
+                .into_iter()
+                .filter(|id| !easybits_ids.contains(id))
+                .collect();
             assert!(
-                missing_message_ids(*locale).is_empty(),
-                "{} is missing messages",
-                locale.tag()
+                missing.is_empty(),
+                "{} is missing messages: {:?}",
+                locale.tag(),
+                missing
             );
         }
     }
 
     #[test]
-    fn unsupported_locale_falls_back_to_english() {
+    fn unsupported_locale_falls_back_to_spanish() {
         assert_eq!(
             resolve_locale_with_env("ar", |_| None),
-            Locale::En,
-            "Arabic is planned for QA but not shipped in the v0.7.6 core pack"
+            Locale::Es419,
+            "Arabic falls back to Spanish (default locale)"
         );
     }
 

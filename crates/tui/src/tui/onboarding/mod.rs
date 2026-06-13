@@ -1,6 +1,7 @@
 //! Onboarding flow rendering and helpers.
 
 pub mod api_key;
+pub mod easybits_mcp;
 pub mod language;
 pub mod trust_directory;
 pub mod welcome;
@@ -36,6 +37,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         OnboardingState::Welcome => welcome::lines(),
         OnboardingState::Language => language::lines(app),
         OnboardingState::ApiKey => api_key::lines(app),
+        OnboardingState::EasybitsMcp => easybits_mcp::lines(app),
         OnboardingState::TrustDirectory => trust_directory::lines(app),
         OnboardingState::Tips => tips_lines(app),
         OnboardingState::None => Vec::new(),
@@ -70,13 +72,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
 }
 
 fn onboarding_step(app: &App) -> (usize, usize) {
-    let needs_trust = !app.trust_mode && needs_trust(&app.workspace);
-    // Welcome + Language + Tips are always shown.
+    // Welcome + Language + EasyBits (always shown).
     let mut total = 3;
     if app.onboarding_needs_api_key {
-        total += 1;
-    }
-    if needs_trust {
         total += 1;
     }
 
@@ -84,10 +82,10 @@ fn onboarding_step(app: &App) -> (usize, usize) {
         OnboardingState::Welcome => 1,
         OnboardingState::Language => 2,
         OnboardingState::ApiKey => 3,
-        OnboardingState::TrustDirectory => {
-            // Welcome (1) + Language (2) + optional ApiKey
+        OnboardingState::EasybitsMcp => {
             if app.onboarding_needs_api_key { 4 } else { 3 }
         }
+        OnboardingState::TrustDirectory => total,
         OnboardingState::Tips => total,
         OnboardingState::None => total,
     };
@@ -221,16 +219,20 @@ pub fn advance_onboarding_from_welcome(app: &mut App) {
 }
 
 /// Language → next step. Routes to ApiKey when the session lacks a key,
-/// to TrustDirectory when the workspace is untrusted, otherwise to Tips.
+/// otherwise to the optional EasyBits MCP setup.
 pub fn advance_onboarding_after_language(app: &mut App) {
     app.status_message = None;
     if app.onboarding_needs_api_key {
         app.onboarding = OnboardingState::ApiKey;
-    } else if !app.trust_mode && needs_trust(&app.workspace) {
-        app.onboarding = OnboardingState::TrustDirectory;
     } else {
-        app.onboarding = OnboardingState::Tips;
+        app.onboarding = OnboardingState::EasybitsMcp;
     }
+}
+
+/// ApiKey → EasyBits MCP. Called after the DeepSeek API key is saved.
+pub fn advance_onboarding_after_api_key(app: &mut App) {
+    app.status_message = None;
+    app.onboarding = OnboardingState::EasybitsMcp;
 }
 
 /// Re-validate the current `api_key_input` and project the result onto

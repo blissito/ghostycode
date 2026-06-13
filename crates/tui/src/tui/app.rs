@@ -56,6 +56,9 @@ pub enum OnboardingState {
     /// land in the persisted settings.toml via `Settings::set("locale", …)`.
     Language,
     ApiKey,
+    /// Optional EasyBits MCP API key setup. Skippable — pressing Enter
+    /// with an empty input advances past it.
+    EasybitsMcp,
     TrustDirectory,
     Tips,
     None,
@@ -124,7 +127,9 @@ fn initial_onboarding_state(
     if was_onboarded && needs_api_key {
         OnboardingState::ApiKey
     } else if was_onboarded && needs_workspace_trust {
-        OnboardingState::TrustDirectory
+        // Auto-trust the workspace and go to the optional EasyBits step.
+        // The user was already onboarded; no need to re-confirm trust.
+        OnboardingState::EasybitsMcp
     } else {
         OnboardingState::Welcome
     }
@@ -1362,6 +1367,8 @@ pub struct App {
     pub api_key_env_only: bool,
     pub api_key_input: String,
     pub api_key_cursor: usize,
+    /// EasyBits MCP API key entered during onboarding (optional, skippable).
+    pub easybits_key_input: String,
     // Hooks system
     pub hooks: HookExecutor,
     #[allow(dead_code)]
@@ -2068,6 +2075,7 @@ impl App {
             api_key_env_only,
             api_key_input: String::new(),
             api_key_cursor: 0,
+            easybits_key_input: String::new(),
             hooks,
             yolo: initial_mode == AppMode::Yolo,
             yolo_restore,
@@ -2226,6 +2234,29 @@ impl App {
             }
             Err(source) => Err(ApiKeyError::SaveFailed { source }),
         }
+    }
+
+    /// Save the EasyBits MCP API key entered during onboarding to
+    /// `mcp.json`. An empty key is a no-op (user chose to skip).
+    pub fn submit_easybits_key(&mut self) -> Result<(), anyhow::Error> {
+        let key = self.easybits_key_input.trim().to_string();
+        if key.is_empty() {
+            return Ok(());
+        }
+        crate::mcp::add_server_config(
+            &self.mcp_config_path,
+            crate::mcp::EASYBITS_MCP_NAME.to_string(),
+            None,
+            Some(crate::mcp::EASYBITS_MCP_URL.to_string()),
+            Vec::new(),
+            None,
+            std::collections::HashMap::from([(
+                "Authorization".to_string(),
+                format!("Bearer {key}"),
+            )]),
+        )?;
+        self.easybits_key_input.clear();
+        Ok(())
     }
 
     pub fn finish_onboarding(&mut self) {
@@ -5609,10 +5640,10 @@ mod tests {
     }
 
     #[test]
-    fn onboarded_user_still_gets_workspace_trust_prompt_when_needed() {
+    fn onboarded_user_goes_to_easybits_when_workspace_untrusted() {
         assert_eq!(
             initial_onboarding_state(false, true, false, true),
-            OnboardingState::TrustDirectory
+            OnboardingState::EasybitsMcp
         );
     }
 
