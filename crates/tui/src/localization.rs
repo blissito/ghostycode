@@ -3915,6 +3915,23 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
         MessageId::OnboardTrustFooterPrefix => "Presiona ",
         MessageId::OnboardTrustFooterMiddle => " para confiar y continuar, ",
         MessageId::OnboardTrustFooterSuffix => " para salir",
+        // Onboarding — EasyBits MCP setup.
+        MessageId::OnboardEasybitsTitle => "EasyBits MCP (opcional — Enter para omitir)",
+        MessageId::OnboardEasybitsBlurb => {
+            "Conecta EasyBits para dar a los agentes almacenamiento de archivos — subir, compartir, optimizar imágenes y desplegar sitios web."
+        }
+        MessageId::OnboardEasybitsStep1 => {
+            "Paso 1.  Ve a https://www.easybits.cloud/dash/developer y crea una API key."
+        }
+        MessageId::OnboardEasybitsStep2 => "Paso 2.  Pégala abajo.",
+        MessageId::OnboardEasybitsSkipHint => {
+            "¿No tienes una key? Solo presiona Enter — puedes configurarlo después con /mcp."
+        }
+        MessageId::OnboardEasybitsPlaceholder => {
+            "(pega tu key de EasyBits aquí, o deja vacío para omitir)"
+        }
+        MessageId::OnboardEasybitsLabel => "Key: ",
+        MessageId::OnboardEasybitsFooter => "Enter para continuar (vacío = omitir), Esc para volver.",
         MessageId::OnboardTipsTitle => "Empieza simple",
         MessageId::OnboardTipsLine1 => {
             "Escribe la tarea en lenguaje natural. Usa /help o Ctrl+K para comandos."
