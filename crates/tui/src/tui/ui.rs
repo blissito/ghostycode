@@ -119,10 +119,10 @@ use super::app::{
     StatusToastLevel, SubmitDisposition, TaskPanelEntry, TuiOptions,
     looks_like_slash_command_input, shell_command_from_bang_input,
 };
-use super::clipboard::ClipboardContent;
 use super::approval::{
     ApprovalMode, ApprovalRequest, ApprovalView, ElevationRequest, ElevationView, ReviewDecision,
 };
+use super::clipboard::ClipboardContent;
 use super::history::{
     HistoryCell, ToolCell, ToolStatus, TranscriptRenderOptions, history_cells_from_message,
     summarize_tool_output,
@@ -2914,25 +2914,22 @@ async fn run_event_loop(
                                 }
                             }
                         }
-                        OnboardingState::EasybitsMcp => {
-                            match app.submit_easybits_key() {
-                                Ok(()) => {
-                                    if !app.easybits_key_input.trim().is_empty() {
-                                        app.push_status_toast(
-                                            "EasyBits key saved to mcp.json".to_string(),
-                                            StatusToastLevel::Info,
-                                            Some(3_000),
-                                        );
-                                    }
-                                    app.finish_onboarding();
+                        OnboardingState::EasybitsMcp => match app.submit_easybits_key() {
+                            Ok(()) => {
+                                if !app.easybits_key_input.trim().is_empty() {
+                                    app.push_status_toast(
+                                        "EasyBits key saved to mcp.json".to_string(),
+                                        StatusToastLevel::Info,
+                                        Some(3_000),
+                                    );
                                 }
-                                Err(e) => {
-                                    app.status_message = Some(format!(
-                                        "Failed to save EasyBits key: {e}"
-                                    ));
-                                }
+                                app.finish_onboarding();
                             }
-                        }
+                            Err(e) => {
+                                app.status_message =
+                                    Some(format!("Failed to save EasyBits key: {e}"));
+                            }
+                        },
                         OnboardingState::TrustDirectory => {}
                         OnboardingState::Tips => {
                             app.finish_onboarding();

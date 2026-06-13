@@ -83,7 +83,11 @@ fn onboarding_step(app: &App) -> (usize, usize) {
         OnboardingState::Language => 2,
         OnboardingState::ApiKey => 3,
         OnboardingState::EasybitsMcp => {
-            if app.onboarding_needs_api_key { 4 } else { 3 }
+            if app.onboarding_needs_api_key {
+                4
+            } else {
+                3
+            }
         }
         OnboardingState::TrustDirectory => total,
         OnboardingState::Tips => total,

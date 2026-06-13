@@ -1430,13 +1430,17 @@ fn english(id: MessageId) -> &'static str {
         MessageId::OnboardEasybitsTitle => "EasyBits MCP (optional — press Enter to skip)",
         MessageId::OnboardEasybitsBlurb => {
             "Connect EasyBits to give agents file storage — upload, share, optimize images, and deploy websites."
-        },
+        }
         MessageId::OnboardEasybitsStep1 => {
             "Step 1.  Go to https://www.easybits.cloud/dash/developer and create an API key."
-        },
+        }
         MessageId::OnboardEasybitsStep2 => "Step 2.  Paste it below.",
-        MessageId::OnboardEasybitsSkipHint => "Don't have a key? Just press Enter — you can set this up later with /mcp.",
-        MessageId::OnboardEasybitsPlaceholder => "(paste your EasyBits key here, or leave empty to skip)",
+        MessageId::OnboardEasybitsSkipHint => {
+            "Don't have a key? Just press Enter — you can set this up later with /mcp."
+        }
+        MessageId::OnboardEasybitsPlaceholder => {
+            "(paste your EasyBits key here, or leave empty to skip)"
+        }
         MessageId::OnboardEasybitsLabel => "Key: ",
         MessageId::OnboardEasybitsFooter => "Enter to continue (empty = skip), Esc to go back.",
         // Onboarding — final tips.
