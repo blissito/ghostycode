@@ -1037,7 +1037,7 @@ fn normalize_locale_input(input: &str) -> String {
 }
 
 fn parse_locale(value: &str) -> Option<Locale> {
-    if value == "c" || value == "posix" {
+    if value == "c" || value == "posix" || value.starts_with("en") {
         return Some(Locale::En);
     }
     if value.starts_with("ja") {

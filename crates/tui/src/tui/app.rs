@@ -60,6 +60,7 @@ pub enum OnboardingState {
     /// with an empty input advances past it.
     EasybitsMcp,
     TrustDirectory,
+    #[allow(dead_code)]
     Tips,
     None,
 }

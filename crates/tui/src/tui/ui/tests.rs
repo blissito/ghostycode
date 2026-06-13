@@ -4633,12 +4633,12 @@ fn onboarding_after_api_key_save_does_not_repeat_language_step() {
 
     crate::tui::onboarding::advance_onboarding_after_language(&mut app);
 
-    assert_eq!(app.onboarding, OnboardingState::Tips);
+    assert_eq!(app.onboarding, OnboardingState::EasybitsMcp);
     assert_eq!(app.status_message, None);
 }
 
 #[test]
-fn onboarding_after_api_key_save_routes_to_trust_when_needed() {
+fn onboarding_after_api_key_save_routes_to_easybits_when_needed() {
     let tmpdir = TempDir::new().expect("tempdir");
     let mut app = create_test_app();
     app.workspace = tmpdir.path().to_path_buf();
@@ -4648,7 +4648,7 @@ fn onboarding_after_api_key_save_routes_to_trust_when_needed() {
 
     crate::tui::onboarding::advance_onboarding_after_language(&mut app);
 
-    assert_eq!(app.onboarding, OnboardingState::TrustDirectory);
+    assert_eq!(app.onboarding, OnboardingState::EasybitsMcp);
 }
 
 #[test]

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-06-13
+
+### Added
+
+- EasyBits MCP onboarding step (optional, non-blocking).
+- OSC 8 hyperlinks enabled by default (Cmd+Click URLs in compatible terminals).
+- Default locale changed to Spanish (es-419).
+
+### Changed
+
+- Onboarding flow simplified: Welcome → Language → ApiKey → EasyBits → Chat.
+- TrustDirectory step removed from normal onboarding flow.
+
 ## [0.8.53] - 2026-06-03
 
 ### Added
