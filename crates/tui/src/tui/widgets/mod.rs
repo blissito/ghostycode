@@ -3159,6 +3159,7 @@ mod tests {
     #[test]
     fn empty_composer_cursor_matches_placeholder_padding() {
         let mut app = create_test_app();
+        app.ui_locale = Locale::En; // Pin to English so the placeholder text is deterministic.
         // Pin density so the test is independent of any loaded user settings.
         app.composer_density = ComposerDensity::Comfortable;
         let slash_menu_entries = Vec::<SlashMenuEntry>::new();
@@ -3185,6 +3186,7 @@ mod tests {
     #[test]
     fn empty_composer_cursor_accounts_for_placeholder_wrapping() {
         let mut app = create_test_app();
+        app.ui_locale = Locale::En; // Pin to English so the placeholder text matches COMPOSER_PLACEHOLDER.
         app.composer_density = ComposerDensity::Comfortable;
         let slash_menu_entries = Vec::<SlashMenuEntry>::new();
         let mention_menu_entries = Vec::<String>::new();
