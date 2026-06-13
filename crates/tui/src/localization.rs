@@ -1402,14 +1402,12 @@ fn english(id: MessageId) -> &'static str {
         MessageId::HomePlanModeChecklistTip => "  Use /mode plan to create structured checklists",
         MessageId::HomeGoalModeTip => "Goal tracking - Set /goal <objective> to pursue objectives",
         // Onboarding — welcome.
-        MessageId::OnboardWelcomeTagline => {
-            "A focused terminal workspace for longer model sessions."
-        }
+        MessageId::OnboardWelcomeTagline => "Ghosty is a programmer agent.",
         MessageId::OnboardWelcomeFlow => {
-            "You'll add an API key, review trust for this directory, and then land in the chat."
+            "You'll add a DeepSeek API key and optionally an EasyBits one, then land in the chat."
         }
         MessageId::OnboardWelcomeComposerHint => {
-            "The main composer is multi-line, so you can write full prompts instead of squeezing everything into one line."
+            "Don't forget to pick your favorite theme with /theme."
         }
         MessageId::OnboardWelcomeContinue => "Press Enter to continue.",
         MessageId::OnboardWelcomeExit => "Ctrl+C exits at any point.",
@@ -1929,6 +1927,16 @@ fn vietnamese(id: MessageId) -> Option<&'static str> {
         MessageId::HomeGoalModeTip => {
             "Theo dõi mục tiêu - Dùng /goal <mục_tiêu> để đặt mục tiêu làm việc"
         }
+        // Onboarding — welcome.
+        MessageId::OnboardWelcomeTagline => "Ghosty là một tác nhân lập trình.",
+        MessageId::OnboardWelcomeFlow => {
+            "Bạn sẽ thêm khóa API DeepSeek và tùy chọn khóa EasyBits, sau đó vào chat."
+        }
+        MessageId::OnboardWelcomeComposerHint => {
+            "Đừng quên chọn chủ đề yêu thích của bạn với /theme."
+        }
+        MessageId::OnboardWelcomeContinue => "Nhấn Enter để tiếp tục.",
+        MessageId::OnboardWelcomeExit => "Ctrl+C để thoát bất kỳ lúc nào.",
         // Onboarding — language picker.
         MessageId::OnboardLanguageTitle => "Chọn ngôn ngữ của bạn",
         MessageId::OnboardLanguageBlurb => {
@@ -2455,6 +2463,16 @@ fn japanese(id: MessageId) -> Option<&'static str> {
             "  /mode plan を使って構造化されたチェックリストを作成"
         }
         MessageId::HomeGoalModeTip => "Goal 追跡 - /goal <目標> で持続的な目標を追跡",
+        // Onboarding — welcome.
+        MessageId::OnboardWelcomeTagline => "Ghosty はプログラマーエージェントです。",
+        MessageId::OnboardWelcomeFlow => {
+            "DeepSeek API キーと、オプションで EasyBits キーを追加して、チャットに入ります。"
+        }
+        MessageId::OnboardWelcomeComposerHint => {
+            "/theme でお気に入りのテーマを選ぶのをお忘れなく。"
+        }
+        MessageId::OnboardWelcomeContinue => "Enter で続行。",
+        MessageId::OnboardWelcomeExit => "Ctrl+C でいつでも終了できます。",
         // Onboarding — language picker.
         MessageId::OnboardLanguageTitle => "言語を選択",
         MessageId::OnboardLanguageBlurb => {
@@ -2870,6 +2888,14 @@ fn chinese_simplified(id: MessageId) -> Option<&'static str> {
         MessageId::HomePlanModeTip => "Plan 模式 - 先设计再实现",
         MessageId::HomePlanModeChecklistTip => "  使用 /mode plan 创建结构化检查清单",
         MessageId::HomeGoalModeTip => "Goal 跟踪 - 设置 /goal <目标> 以跟踪持久目标",
+        // Onboarding — welcome.
+        MessageId::OnboardWelcomeTagline => "Ghosty 是一个程序员智能体。",
+        MessageId::OnboardWelcomeFlow => {
+            "你将添加 DeepSeek API 密钥，并可选择添加 EasyBits 密钥，然后进入聊天。"
+        }
+        MessageId::OnboardWelcomeComposerHint => "别忘了用 /theme 选择你喜欢的主题。",
+        MessageId::OnboardWelcomeContinue => "按 Enter 继续。",
+        MessageId::OnboardWelcomeExit => "随时按 Ctrl+C 退出。",
         // Onboarding — language picker.
         MessageId::OnboardLanguageTitle => "选择语言",
         MessageId::OnboardLanguageBlurb => {
@@ -3339,6 +3365,16 @@ fn portuguese_brazil(id: MessageId) -> Option<&'static str> {
         MessageId::HomeGoalModeTip => {
             "Rastreamento de Goal - Use /goal <objetivo> para rastrear um objetivo persistente"
         }
+        // Onboarding — welcome.
+        MessageId::OnboardWelcomeTagline => "Ghosty é um agente programador.",
+        MessageId::OnboardWelcomeFlow => {
+            "Você adicionará uma chave API DeepSeek e opcionalmente uma do EasyBits, depois entrará no chat."
+        }
+        MessageId::OnboardWelcomeComposerHint => {
+            "Não esqueça de escolher seu tema favorito com /theme."
+        }
+        MessageId::OnboardWelcomeContinue => "Pressione Enter para continuar.",
+        MessageId::OnboardWelcomeExit => "Ctrl+C sai a qualquer momento.",
         // Onboarding — language picker.
         MessageId::OnboardLanguageTitle => "Escolha o idioma",
         MessageId::OnboardLanguageBlurb => {
@@ -3837,14 +3873,12 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
             "Seguimiento de Goal - Usa /goal <objetivo> para seguir un objetivo persistente"
         }
         // Onboarding — welcome.
-        MessageId::OnboardWelcomeTagline => {
-            "Un espacio de trabajo en terminal para sesiones largas con modelos."
-        }
+        MessageId::OnboardWelcomeTagline => "Ghosty es un agente programador.",
         MessageId::OnboardWelcomeFlow => {
-            "Agregarás una API key, revisarás la confianza del directorio y luego aterrizarás en el chat."
+            "Agregarás una API key DeepSeek y opcionalmente una de EasyBits y luego aterrizarás en el chat."
         }
         MessageId::OnboardWelcomeComposerHint => {
-            "El compositor principal es multi-línea para que escribas prompts completos sin comprimir todo en una línea."
+            "No olvides seleccionar tu tema favorito con /theme."
         }
         MessageId::OnboardWelcomeContinue => "Presiona Enter para continuar.",
         MessageId::OnboardWelcomeExit => "Ctrl+C sale en cualquier momento.",
@@ -4026,14 +4060,6 @@ mod tests {
 
     #[test]
     fn shipped_first_pack_has_no_missing_core_messages() {
-        // Onboarding welcome strings are English+Spanish only for now; skip them.
-        let welcome_ids: &[MessageId] = &[
-            MessageId::OnboardWelcomeTagline,
-            MessageId::OnboardWelcomeFlow,
-            MessageId::OnboardWelcomeComposerHint,
-            MessageId::OnboardWelcomeContinue,
-            MessageId::OnboardWelcomeExit,
-        ];
         // EasyBits onboarding strings are English-only for now; skip them.
         let easybits_ids: &[MessageId] = &[
             MessageId::OnboardEasybitsTitle,
@@ -4048,7 +4074,7 @@ mod tests {
         for locale in Locale::shipped() {
             let missing: Vec<_> = missing_message_ids(*locale)
                 .into_iter()
-                .filter(|id| !welcome_ids.contains(id) && !easybits_ids.contains(id))
+                .filter(|id| !easybits_ids.contains(id))
                 .collect();
             assert!(
                 missing.is_empty(),
