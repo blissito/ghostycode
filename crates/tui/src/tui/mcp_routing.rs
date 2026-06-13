@@ -17,26 +17,19 @@ pub(super) fn format_mcp_manager(snapshot: &McpManagerSnapshot) -> String {
             "Restart required: MCP config changed; the current model-visible MCP tool pool is not hot-reloaded."
                 .to_string(),
         );
-    } else {
-        lines.push("Restart required: no pending in-TUI config change.".to_string());
     }
     lines.push(String::new());
 
     if snapshot.servers.is_empty() {
         lines.push("No MCP servers configured.".to_string());
     } else {
-        lines.push(format!("Servers ({})", snapshot.servers.len()));
-        lines.push("----------------------------------------".to_string());
         for server in &snapshot.servers {
             push_server(lines.as_mut(), server);
         }
     }
 
     lines.push(String::new());
-    lines.push(
-        "Actions: /mcp init, /mcp add stdio <name> <command> [args...], /mcp add http <name> <url> [--bearer <token>], /mcp enable <name>, /mcp disable <name>, /mcp remove <name>, /mcp validate, /mcp reload."
-            .to_string(),
-    );
+    lines.push("/mcp add | enable | disable | remove | reload".to_string());
     lines.join("\n")
 }
 
@@ -52,46 +45,26 @@ fn push_server(lines: &mut Vec<String>, server: &McpServerSnapshot) {
     } else {
         "disabled"
     };
-    let required = if server.required { " required" } else { "" };
     lines.push(format!(
-        "- {} [{}{}] {} {}",
-        server.name, state, required, server.transport, server.command_or_url
+        "- {} [{state}] {} {}",
+        server.name, server.transport, server.command_or_url
     ));
     lines.push(format!(
-        "  timeouts: connect={}s execute={}s read={}s",
-        server.connect_timeout, server.execute_timeout, server.read_timeout
+        "  {} tools, {} resources, {} prompts",
+        server.tools.len(),
+        server.resources.len(),
+        server.prompts.len()
     ));
     // The bundled EasyBits server ships disabled until the user supplies a key;
     // point them at the one-command setup and where to get the key.
     if server.name == EASYBITS_MCP_NAME && !server.enabled {
         lines.push(format!(
-            "  add your key: /mcp add http {EASYBITS_MCP_NAME} {EASYBITS_MCP_URL} --bearer <KEY>"
+            "  /mcp add http {EASYBITS_MCP_NAME} {EASYBITS_MCP_URL} --bearer <KEY>"
         ));
-        lines.push(format!("  get a key at: {EASYBITS_DOCS_URL}"));
+        lines.push(format!("  key: {EASYBITS_DOCS_URL}"));
     }
     if let Some(error) = server.error.as_ref() {
         lines.push(format!("  error: {error}"));
-    }
-    lines.push(format!(
-        "  discovered: {} tools, {} resources, {} prompts",
-        server.tools.len(),
-        server.resources.len(),
-        server.prompts.len()
-    ));
-    for tool in &server.tools {
-        lines.push(format!(
-            "    tool {}{}",
-            tool.model_name,
-            tool.description
-                .as_ref()
-                .map_or(String::new(), |desc| format!(" - {desc}"))
-        ));
-    }
-    for resource in &server.resources {
-        lines.push(format!("    resource {}", resource.name));
-    }
-    for prompt in &server.prompts {
-        lines.push(format!("    prompt {}", prompt.model_name));
     }
 }
 
@@ -164,8 +137,9 @@ mod tests {
         };
         let text = format_mcp_manager(&snapshot);
         assert!(text.contains("Restart required"));
-        assert!(text.contains("mcp_fs_read"));
+        assert!(text.contains("[connected]"));
         assert!(text.contains("[failed]"));
         assert!(text.contains("boom"));
+        assert!(text.contains("1 tools, 0 resources, 0 prompts"));
     }
 }

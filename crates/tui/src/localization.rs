@@ -3931,7 +3931,9 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
             "(pega tu key de EasyBits aquí, o deja vacío para omitir)"
         }
         MessageId::OnboardEasybitsLabel => "Key: ",
-        MessageId::OnboardEasybitsFooter => "Enter para continuar (vacío = omitir), Esc para volver.",
+        MessageId::OnboardEasybitsFooter => {
+            "Enter para continuar (vacío = omitir), Esc para volver."
+        }
         MessageId::OnboardTipsTitle => "Empieza simple",
         MessageId::OnboardTipsLine1 => {
             "Escribe la tarea en lenguaje natural. Usa /help o Ctrl+K para comandos."
@@ -4028,7 +4030,6 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
         MessageId::CtxInspCacheTip => {
             "Consejo: Los bloques de prefijo estable son elegibles para caché de prefijo DeepSeek V4. Los cambios en el conjunto de trabajo volátil solo rompen la caché al final."
         }
-        _ => return None,
     })
 }
 
