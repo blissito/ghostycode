@@ -1450,7 +1450,7 @@ fn english(id: MessageId) -> &'static str {
         // Onboarding — EasyBits MCP setup.
         MessageId::OnboardEasybitsTitle => "EasyBits MCP (optional — press Enter to skip)",
         MessageId::OnboardEasybitsBlurb => {
-            "Connect EasyBits to give agents file storage — upload, share, optimize images, and deploy websites."
+            "Connect EasyBits to give Ghosty an all-in-one memory MCP."
         }
         MessageId::OnboardEasybitsStep1 => {
             "Step 1.  Go to https://www.easybits.cloud/dash/developer and create an API key."
@@ -3918,7 +3918,7 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
         // Onboarding — EasyBits MCP setup.
         MessageId::OnboardEasybitsTitle => "EasyBits MCP (opcional — Enter para omitir)",
         MessageId::OnboardEasybitsBlurb => {
-            "Conecta EasyBits para dar a los agentes almacenamiento de archivos — subir, compartir, optimizar imágenes y desplegar sitios web."
+            "Conecta EasyBits para darle un MCP de memoria todo en uno a Ghosty."
         }
         MessageId::OnboardEasybitsStep1 => {
             "Paso 1.  Ve a https://www.easybits.cloud/dash/developer y crea una API key."

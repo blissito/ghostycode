@@ -25,21 +25,19 @@ pub fn lines(app: &App) -> Vec<Line<'static>> {
             app.tr(MessageId::OnboardEasybitsBlurb).to_string(),
             Style::default().fg(palette::TEXT_PRIMARY),
         )),
-        Line::from(""),
         Line::from(Span::styled(
             app.tr(MessageId::OnboardEasybitsStep1).to_string(),
-            Style::default().fg(palette::TEXT_PRIMARY),
+            Style::default().fg(palette::TEXT_MUTED),
         )),
         Line::from(Span::styled(
             app.tr(MessageId::OnboardEasybitsStep2).to_string(),
-            Style::default().fg(palette::TEXT_PRIMARY),
+            Style::default().fg(palette::TEXT_MUTED),
         )),
         Line::from(""),
         Line::from(Span::styled(
             app.tr(MessageId::OnboardEasybitsSkipHint).to_string(),
             Style::default().fg(palette::TEXT_MUTED),
         )),
-        Line::from(""),
     ];
 
     let masked = mask_key(&app.easybits_key_input);
@@ -49,6 +47,7 @@ pub fn lines(app: &App) -> Vec<Line<'static>> {
     } else {
         masked
     };
+    lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::styled(
             app.tr(MessageId::OnboardEasybitsLabel).to_string(),
@@ -61,14 +60,12 @@ pub fn lines(app: &App) -> Vec<Line<'static>> {
                 .add_modifier(Modifier::BOLD),
         ),
     ]));
-    lines.push(Line::from(""));
 
     if let Some(message) = app.status_message.as_deref() {
         lines.push(Line::from(Span::styled(
             message.to_string(),
             Style::default().fg(palette::STATUS_WARNING),
         )));
-        lines.push(Line::from(""));
     }
 
     lines.push(Line::from(""));
