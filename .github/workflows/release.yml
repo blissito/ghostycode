@@ -393,6 +393,10 @@ jobs:
   docker:
     needs: [build, resolve]
     if: ${{ !cancelled() && needs.build.result == 'success' }}
+    # The container image is a best-effort artifact. A docker build/push failure
+    # must never mark the release run as failed or block npm/Homebrew, which no
+    # longer depend on this job.
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -459,7 +463,10 @@ jobs:
           cache-to: type=gha,mode=max
 
   release:
-    needs: [build, bundle, windows-installer, docker, resolve]
+    # `docker` is intentionally NOT a dependency: the npm/binary release must
+    # not wait on (or be blocked by) the container-image build. Docker runs in
+    # parallel and is allowed to fail without affecting publication.
+    needs: [build, bundle, windows-installer, resolve]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.bundle.result == 'success' && needs.resolve.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
