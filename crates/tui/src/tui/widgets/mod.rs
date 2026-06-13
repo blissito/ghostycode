@@ -1978,7 +1978,7 @@ fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
 
     // Ghosty block mascot — paired line-for-line with the info rows,
     // Claude-style. Purple body, eyes carved by the spaces.
-    const MASCOT: [&str; 3] = [" ▄████▄ ", "▐ ◑  ◑ ▌", " ▀▌▐▀▌▐▀"];
+    const MASCOT: [&str; 3] = [" ▄████▄ ", "▐ ◑  ◑ ▌", "▐█▀██▀█▌"];
     let info: [(String, Style); 3] = [
         (
             format!("Ghosty Code v{}", env!("CARGO_PKG_VERSION")),

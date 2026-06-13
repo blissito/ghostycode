@@ -1410,6 +1410,10 @@ fn create_test_app() -> App {
     // Pin locale and currency for deterministic tests regardless of host locale.
     app.cost_currency = crate::pricing::CostCurrency::Usd;
     app.ui_locale = crate::localization::Locale::En;
+    // `show_thinking` now defaults to off in production; keep it on for the UI
+    // tests that exercise the reasoning timeline so they still render thinking
+    // cells. Tests that need it off set `app.show_thinking = false` explicitly.
+    app.show_thinking = true;
     app
 }
 

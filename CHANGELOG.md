@@ -5329,6 +5329,20 @@ Welcome — and thank you.
 - Disabled automatic RLM mode switching; use /rlm or /aleph to enter RLM mode
 - Fixed cargo fmt formatting issues
 
+## [0.0.3] - 2026-06-13
+
+### Changed
+- **Reasoning display off by default.** `show_thinking` now defaults to off:
+  the model still reasons at full effort (default tier is `max`), but the live
+  reasoning stream is hidden in the TUI. Re-enable with `/config show_thinking on`.
+- **Ghosty mascot.** Filled the welcome-screen mascot's lower body into a
+  solid skirt with a ruffled (`olán`) bottom edge.
+
+### Added
+- **Spanish adaptive-reasoning keywords.** Auto mode now recognizes Spanish
+  debug/search terms (`depurar`, `falla`, `analiza`, `buscar`, `consulta`, …)
+  when picking a reasoning-effort tier.
+
 ## [0.0.2] - 2026-01-20
 
 ### Fixed

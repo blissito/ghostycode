@@ -233,7 +233,9 @@ pub struct Settings {
     /// `@`-mention completion behavior: fuzzy workspace search or deterministic
     /// directory browser.
     pub mention_menu_behavior: String,
-    /// Show thinking blocks from the model
+    /// Show thinking blocks from the model. Defaults to off: the model still
+    /// reasons at full effort, but the live reasoning stream is hidden in the
+    /// TUI unless the user opts in via `/config show_thinking on`.
     pub show_thinking: bool,
     /// Show detailed tool output
     pub show_tool_details: bool,
@@ -336,7 +338,7 @@ impl Default for Settings {
             mention_menu_limit: 128,
             mention_walk_depth: 10,
             mention_menu_behavior: "fuzzy".to_string(),
-            show_thinking: true,
+            show_thinking: false,
             show_tool_details: true,
             locale: "auto".to_string(),
             theme: "ghosty".to_string(),
