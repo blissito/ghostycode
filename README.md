@@ -77,9 +77,27 @@ Cambia de modo dentro de la TUI o con flags al arrancar.
 
 Override con `--model <nombre>` o `/model` dentro de la TUI.
 
+## MCP — easybits incluido por defecto
+
+Ghosty trae preconfigurado el servidor MCP de **easybits** (gestión de archivos
+desde el agente, 100+ herramientas). Viene **desactivado** de fábrica hasta que
+añadas tu llave, así que una instalación nueva nunca falla por falta de credencial.
+
+1. Consigue tu API key en el panel de desarrollador de easybits:
+   **https://www.easybits.cloud/dash/developer**
+2. Añádela (esto la activa):
+
+   ```bash
+   ghosty mcp add easybits --url "https://www.easybits.cloud/api/mcp?tools=all" --bearer TU_EASYBITS_API_KEY
+   ```
+
+3. Verifica: `ghosty mcp list`
+
+Gestiona otros servidores con `ghosty mcp add stdio|http <nombre> ...`,
+`ghosty mcp enable|disable|remove <nombre>` y `ghosty mcp validate`.
+
 ## Más
 
-- **MCP**: `ghosty mcp list` / `ghosty mcp validate` para servidores MCP.
 - **Servidor**: `ghosty serve --http` (API HTTP/SSE) o `--mobile` (control desde el móvil en LAN).
 - **Zed/ACP**: `ghosty serve --acp`.
 - Otros proveedores compatibles con OpenAI vía `base_url` en la config.

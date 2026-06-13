@@ -2576,7 +2576,9 @@ pub struct McpManagerSnapshot {
 pub fn load_config(path: &Path) -> Result<McpConfig> {
     validate_mcp_config_path(path)?;
     if !path.exists() {
-        return Ok(McpConfig::default());
+        // Fresh install: ship with the bundled EasyBits server (disabled until
+        // the user adds their API key) rather than a blank config.
+        return Ok(seeded_default_config());
     }
     let contents = fs::read_to_string(path)
         .with_context(|| format!("Failed to read MCP config {}", path.display()))?;
@@ -2626,8 +2628,59 @@ pub fn save_config(path: &Path, cfg: &McpConfig) -> Result<()> {
     Ok(())
 }
 
-fn mcp_template_json() -> Result<String> {
+/// Name of the bundled EasyBits MCP server seeded into fresh configs.
+pub const EASYBITS_MCP_NAME: &str = "easybits";
+/// Streamable-HTTP endpoint for the EasyBits MCP server. `?tools=all` exposes
+/// the full tool set (100+ file-management tools).
+pub const EASYBITS_MCP_URL: &str = "https://www.easybits.cloud/api/mcp?tools=all";
+/// Where users create the API key that authorizes the EasyBits MCP server.
+pub const EASYBITS_DOCS_URL: &str = "https://www.easybits.cloud/dash/developer";
+/// Placeholder written into the seeded `Authorization` header until the user
+/// pastes their real key (via `ghosty mcp add http easybits … --bearer <KEY>`).
+const EASYBITS_KEY_PLACEHOLDER: &str = "YOUR_EASYBITS_API_KEY";
+
+/// The bundled EasyBits server entry. Ships **disabled** with a placeholder
+/// Bearer token so a fresh install never tries to connect (and fail) before
+/// the user has supplied their API key.
+fn easybits_server_config() -> McpServerConfig {
+    let mut headers = HashMap::new();
+    headers.insert(
+        "Authorization".to_string(),
+        format!("Bearer {EASYBITS_KEY_PLACEHOLDER}"),
+    );
+    McpServerConfig {
+        command: None,
+        args: Vec::new(),
+        env: HashMap::new(),
+        url: Some(EASYBITS_MCP_URL.to_string()),
+        transport: None,
+        connect_timeout: None,
+        execute_timeout: None,
+        read_timeout: None,
+        disabled: true,
+        enabled: true,
+        required: false,
+        enabled_tools: Vec::new(),
+        disabled_tools: Vec::new(),
+        headers,
+    }
+}
+
+/// Config returned on a fresh install (no `mcp.json` yet) and used as the base
+/// for the `mcp init` template: the empty default plus the bundled, disabled
+/// EasyBits server so it ships with the app out of the box.
+///
+/// Kept separate from `McpConfig::default()` on purpose — that stays empty
+/// because parse-error fallbacks and tests rely on a blank baseline.
+pub fn seeded_default_config() -> McpConfig {
     let mut cfg = McpConfig::default();
+    cfg.servers
+        .insert(EASYBITS_MCP_NAME.to_string(), easybits_server_config());
+    cfg
+}
+
+pub fn mcp_template_json() -> Result<String> {
+    let mut cfg = seeded_default_config();
     cfg.servers.insert(
         "example".to_string(),
         McpServerConfig {
@@ -2677,6 +2730,7 @@ pub fn add_server_config(
     url: Option<String>,
     args: Vec<String>,
     transport: Option<String>,
+    headers: HashMap<String, String>,
 ) -> Result<()> {
     if command.is_none() && url.is_none() {
         anyhow::bail!("Provide either a command or URL for MCP server '{name}'.");
@@ -2699,7 +2753,7 @@ pub fn add_server_config(
             required: false,
             enabled_tools: Vec::new(),
             disabled_tools: Vec::new(),
-            headers: HashMap::new(),
+            headers,
         },
     );
     save_config(path, &cfg)
@@ -3159,6 +3213,7 @@ mod tests {
             None,
             vec!["server.js".to_string()],
             None,
+            HashMap::new(),
         )
         .unwrap();
         set_server_enabled(&path, "local", false).unwrap();
@@ -3188,6 +3243,7 @@ mod tests {
             Some("https://example.com/v1/mcp/sse".to_string()),
             Vec::new(),
             Some("sse".to_string()),
+            HashMap::new(),
         )
         .unwrap();
 
@@ -3200,7 +3256,42 @@ mod tests {
         );
 
         let snapshot = manager_snapshot_from_config(&path, false).unwrap();
-        assert_eq!(snapshot.servers[0].transport, "sse");
+        let legacy = snapshot
+            .servers
+            .iter()
+            .find(|server| server.name == "legacy")
+            .expect("legacy server present");
+        assert_eq!(legacy.transport, "sse");
+    }
+
+    #[test]
+    fn test_fresh_config_seeds_disabled_easybits() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mcp.json");
+
+        // No file on disk yet → fresh-install config ships the EasyBits server.
+        let cfg = load_config(&path).unwrap();
+        let easybits = cfg
+            .servers
+            .get(EASYBITS_MCP_NAME)
+            .expect("easybits seeded on fresh install");
+        assert!(
+            !easybits.is_enabled(),
+            "easybits must ship disabled until the user adds a key"
+        );
+        assert_eq!(easybits.url.as_deref(), Some(EASYBITS_MCP_URL));
+        assert!(
+            easybits
+                .headers
+                .get("Authorization")
+                .is_some_and(|value| value.starts_with("Bearer ")),
+            "seeded easybits should carry a placeholder Bearer header"
+        );
+
+        // `mcp init` materializes the same server to disk.
+        init_config(&path, false).unwrap();
+        let written = load_config(&path).unwrap();
+        assert!(written.servers.contains_key(EASYBITS_MCP_NAME));
     }
 
     #[test]
@@ -3215,6 +3306,7 @@ mod tests {
             Some("https://example.com/mcp".to_string()),
             Vec::new(),
             Some("streamable".to_string()),
+            HashMap::new(),
         )
         .expect_err("unknown transport should fail");
 

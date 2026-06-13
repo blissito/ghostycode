@@ -1,7 +1,7 @@
 {
   "name": "ghostycode",
-  "version": "0.0.3",
-  "ghostyBinaryVersion": "0.0.3",
+  "version": "0.0.4",
+  "ghostyBinaryVersion": "0.0.4",
   "description": "Ghosty Code \u2014 agentic terminal coding agent",
   "author": "Bliss (blissito)",
   "license": "MIT",

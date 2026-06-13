@@ -44,6 +44,20 @@ ghosty sessions / resume --last       # sesiones guardadas
 ghosty update                         # actualiza el binario
 ```
 
+## MCP — easybits incluido por defecto
+
+Ghosty trae preconfigurado el servidor MCP de **easybits** (gestión de archivos
+desde el agente, 100+ herramientas), **desactivado** hasta que añadas tu llave.
+
+1. Consigue tu API key: **https://www.easybits.cloud/dash/developer**
+2. Añádela (esto la activa):
+
+   ```bash
+   ghosty mcp add easybits --url "https://www.easybits.cloud/api/mcp?tools=all" --bearer TU_EASYBITS_API_KEY
+   ```
+
+3. Verifica con `ghosty mcp list`.
+
 Código y documentación: https://github.com/blissito/ghostycode
 
 ## Licencia

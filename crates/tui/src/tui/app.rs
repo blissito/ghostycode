@@ -4974,6 +4974,7 @@ pub enum McpUiAction {
         name: String,
         url: String,
         transport: Option<String>,
+        headers: std::collections::HashMap<String, String>,
     },
     Enable {
         name: String,

@@ -746,6 +746,9 @@ enum McpCommand {
         /// Arguments for command-based servers
         #[arg(long = "arg")]
         args: Vec<String>,
+        /// Bearer token for HTTP servers; stored as an `Authorization: Bearer <token>` header.
+        #[arg(long, requires = "url")]
+        bearer: Option<String>,
     },
     /// Remove an MCP server entry
     Remove {
@@ -1526,28 +1529,10 @@ fn write_template_file(path: &Path, contents: &str, force: bool) -> Result<Write
 }
 
 fn mcp_template_json() -> Result<String> {
-    let mut cfg = McpConfig::default();
-    cfg.servers.insert(
-        "example".to_string(),
-        McpServerConfig {
-            command: Some("node".to_string()),
-            args: vec!["./path/to/your-mcp-server.js".to_string()],
-            env: std::collections::HashMap::new(),
-            url: None,
-            transport: None,
-            connect_timeout: None,
-            execute_timeout: None,
-            read_timeout: None,
-            disabled: true,
-            enabled: true,
-            required: false,
-            enabled_tools: Vec::new(),
-            disabled_tools: Vec::new(),
-            headers: std::collections::HashMap::new(),
-        },
-    );
-    serde_json::to_string_pretty(&cfg)
-        .map_err(|e| anyhow!("Failed to render MCP template JSON: {e}"))
+    // Single source of truth: the seeded template (bundled EasyBits server +
+    // an `example` stub) lives in `crate::mcp` so the CLI and the interactive
+    // `/mcp init` can never drift apart.
+    crate::mcp::mcp_template_json()
 }
 
 fn init_mcp_config(path: &Path, force: bool) -> Result<WriteStatus> {
@@ -4537,6 +4522,7 @@ async fn run_mcp_command(config: &Config, command: McpCommand) -> Result<()> {
             url,
             transport,
             args,
+            bearer,
         } => {
             if command.is_none() && url.is_none() {
                 bail!("Provide either --command or --url for `mcp add`.");
@@ -4545,6 +4531,10 @@ async fn run_mcp_command(config: &Config, command: McpCommand) -> Result<()> {
                 && !transport.trim().eq_ignore_ascii_case("sse")
             {
                 bail!("Unsupported MCP transport '{transport}'. Supported values: sse");
+            }
+            let mut headers = std::collections::HashMap::new();
+            if let Some(token) = bearer {
+                headers.insert("Authorization".to_string(), format!("Bearer {token}"));
             }
             let mut cfg = load_mcp_config(&config_path)?;
             cfg.servers.insert(
@@ -4563,7 +4553,7 @@ async fn run_mcp_command(config: &Config, command: McpCommand) -> Result<()> {
                     required: false,
                     enabled_tools: Vec::new(),
                     disabled_tools: Vec::new(),
-                    headers: std::collections::HashMap::new(),
+                    headers,
                 },
             );
             save_mcp_config(&config_path, &cfg)?;
@@ -4673,7 +4663,10 @@ async fn run_mcp_command(config: &Config, command: McpCommand) -> Result<()> {
 
 fn load_mcp_config(path: &Path) -> Result<McpConfig> {
     if !path.exists() {
-        return Ok(McpConfig::default());
+        // Fresh install: ship the bundled EasyBits server (disabled until the
+        // user adds a key) so `ghosty mcp list`/doctor match the interactive
+        // `/mcp` view. Same seed as `crate::mcp::load_config`.
+        return Ok(crate::mcp::seeded_default_config());
     }
     let contents = std::fs::read_to_string(path)
         .map_err(|e| anyhow::anyhow!("Failed to read MCP config {}: {}", path.display(), e))?;

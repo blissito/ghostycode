@@ -1,5 +1,7 @@
 //! In-TUI MCP manager command parser.
 
+use std::collections::HashMap;
+
 use crate::tui::app::{App, AppAction, McpUiAction};
 
 use super::CommandResult;
@@ -32,7 +34,7 @@ pub fn mcp(_app: &mut App, args: Option<&str>) -> CommandResult {
         "validate" => CommandResult::action(AppAction::Mcp(McpUiAction::Validate)),
         "reload" | "reconnect" => CommandResult::action(AppAction::Mcp(McpUiAction::Reload)),
         _ => CommandResult::error(
-            "Usage: /mcp [init|add stdio <name> <command> [args...]|add http <name> <url>|enable <name>|disable <name>|remove <name>|validate|reload]",
+            "Usage: /mcp [init|add stdio <name> <command> [args...]|add http <name> <url> [--bearer <token>]|enable <name>|disable <name>|remove <name>|validate|reload]",
         ),
     }
 }
@@ -47,7 +49,7 @@ fn parse_name(name: Option<&str>, usage: &str) -> Result<String, String> {
 fn parse_add(parts: Vec<&str>) -> CommandResult {
     if parts.len() < 3 {
         return CommandResult::error(
-            "Usage: /mcp add stdio <name> <command> [args...] OR /mcp add http <name> <url>",
+            "Usage: /mcp add stdio <name> <command> [args...] OR /mcp add http <name> <url> [--bearer <token>]",
         );
     }
     match parts[0].to_ascii_lowercase().as_str() {
@@ -56,20 +58,48 @@ fn parse_add(parts: Vec<&str>) -> CommandResult {
             command: parts[2].to_string(),
             args: parts[3..].iter().map(|s| (*s).to_string()).collect(),
         })),
-        "http" => CommandResult::action(AppAction::Mcp(McpUiAction::AddHttp {
-            name: parts[1].to_string(),
-            url: parts[2].to_string(),
-            transport: None,
-        })),
-        "sse" => CommandResult::action(AppAction::Mcp(McpUiAction::AddHttp {
-            name: parts[1].to_string(),
-            url: parts[2].to_string(),
-            transport: Some("sse".to_string()),
-        })),
+        "http" | "sse" => {
+            let transport = if parts[0].eq_ignore_ascii_case("sse") {
+                Some("sse".to_string())
+            } else {
+                None
+            };
+            match parse_http_headers(&parts[3..]) {
+                Ok(headers) => CommandResult::action(AppAction::Mcp(McpUiAction::AddHttp {
+                    name: parts[1].to_string(),
+                    url: parts[2].to_string(),
+                    transport,
+                    headers,
+                })),
+                Err(msg) => CommandResult::error(msg),
+            }
+        }
         _ => CommandResult::error(
-            "Usage: /mcp add stdio <name> <command> [args...] OR /mcp add http <name> <url>",
+            "Usage: /mcp add stdio <name> <command> [args...] OR /mcp add http <name> <url> [--bearer <token>]",
         ),
     }
+}
+
+/// Parse optional flags following an `add http`/`add sse` URL. Today the only
+/// flag is `--bearer <token>`, which becomes an `Authorization: Bearer <token>`
+/// header (how key-gated MCP gateways like EasyBits authenticate). Tokens are
+/// whitespace-free, so the upstream `split_whitespace` tokenizer is fine.
+fn parse_http_headers(rest: &[&str]) -> Result<HashMap<String, String>, String> {
+    let mut headers = HashMap::new();
+    let mut i = 0;
+    while i < rest.len() {
+        match rest[i] {
+            "--bearer" => {
+                let token = rest.get(i + 1).ok_or_else(|| {
+                    "Usage: /mcp add http <name> <url> --bearer <token>".to_string()
+                })?;
+                headers.insert("Authorization".to_string(), format!("Bearer {token}"));
+                i += 2;
+            }
+            other => return Err(format!("Unknown option '{other}' for /mcp add http")),
+        }
+    }
+    Ok(headers)
 }
 
 #[cfg(test)]
@@ -121,5 +151,38 @@ mod tests {
             validate.action,
             Some(AppAction::Mcp(McpUiAction::Validate))
         ));
+    }
+
+    #[test]
+    fn parses_add_http_with_bearer() {
+        let mut app = app();
+        let res = mcp(
+            &mut app,
+            Some("add http easybits https://www.easybits.cloud/api/mcp?tools=all --bearer sk-test123"),
+        );
+        match res.action {
+            Some(AppAction::Mcp(McpUiAction::AddHttp {
+                name,
+                url,
+                transport,
+                headers,
+            })) => {
+                assert_eq!(name, "easybits");
+                assert_eq!(url, "https://www.easybits.cloud/api/mcp?tools=all");
+                assert_eq!(transport, None);
+                assert_eq!(
+                    headers.get("Authorization").map(String::as_str),
+                    Some("Bearer sk-test123")
+                );
+            }
+            _ => panic!("expected AddHttp action with bearer header"),
+        }
+    }
+
+    #[test]
+    fn add_http_rejects_dangling_bearer() {
+        let mut app = app();
+        let res = mcp(&mut app, Some("add http foo https://example.com/mcp --bearer"));
+        assert!(res.action.is_none(), "dangling --bearer should be an error");
     }
 }

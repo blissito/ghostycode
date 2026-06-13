@@ -1,6 +1,8 @@
 //! MCP manager formatting and UI action helpers.
 
-use crate::mcp::{McpManagerSnapshot, McpServerSnapshot};
+use crate::mcp::{
+    McpManagerSnapshot, McpServerSnapshot, EASYBITS_DOCS_URL, EASYBITS_MCP_NAME, EASYBITS_MCP_URL,
+};
 use crate::tui::app::App;
 use crate::tui::history::HistoryCell;
 use crate::tui::pager::PagerView;
@@ -32,7 +34,7 @@ pub(super) fn format_mcp_manager(snapshot: &McpManagerSnapshot) -> String {
 
     lines.push(String::new());
     lines.push(
-        "Actions: /mcp init, /mcp add stdio <name> <command> [args...], /mcp add http <name> <url>, /mcp enable <name>, /mcp disable <name>, /mcp remove <name>, /mcp validate, /mcp reload."
+        "Actions: /mcp init, /mcp add stdio <name> <command> [args...], /mcp add http <name> <url> [--bearer <token>], /mcp enable <name>, /mcp disable <name>, /mcp remove <name>, /mcp validate, /mcp reload."
             .to_string(),
     );
     lines.join("\n")
@@ -59,6 +61,14 @@ fn push_server(lines: &mut Vec<String>, server: &McpServerSnapshot) {
         "  timeouts: connect={}s execute={}s read={}s",
         server.connect_timeout, server.execute_timeout, server.read_timeout
     ));
+    // The bundled EasyBits server ships disabled until the user supplies a key;
+    // point them at the one-command setup and where to get the key.
+    if server.name == EASYBITS_MCP_NAME && !server.enabled {
+        lines.push(format!(
+            "  add your key: /mcp add http {EASYBITS_MCP_NAME} {EASYBITS_MCP_URL} --bearer <KEY>"
+        ));
+        lines.push(format!("  get a key at: {EASYBITS_DOCS_URL}"));
+    }
     if let Some(error) = server.error.as_ref() {
         lines.push(format!("  error: {error}"));
     }

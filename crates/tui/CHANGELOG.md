@@ -5329,6 +5329,17 @@ Welcome — and thank you.
 - Disabled automatic RLM mode switching; use /rlm or /aleph to enter RLM mode
 - Fixed cargo fmt formatting issues
 
+## [0.0.4] - 2026-06-13
+
+### Added
+- **EasyBits MCP server bundled by default.** Fresh installs now ship the
+  EasyBits MCP server (file management from the agent, 100+ tools) seeded into
+  the config — disabled until you add a key, so a clean install never fails to
+  connect. Add your key in one command with the new `--bearer` flag:
+  `ghosty mcp add easybits --url "https://www.easybits.cloud/api/mcp?tools=all" --bearer <KEY>`.
+  Get a key at https://www.easybits.cloud/dash/developer. The `/mcp` manager
+  shows the setup hint while the server is disabled.
+
 ## [0.0.3] - 2026-06-13
 
 ### Changed
@@ -5509,6 +5520,7 @@ Welcome — and thank you.
 [0.3.0]: https://github.com/blissito/ghostycode/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/blissito/ghostycode/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/blissito/ghostycode/releases/tag/v0.2.0
+[0.0.4]: https://github.com/blissito/ghostycode/releases/tag/v0.0.4
 [0.0.3]: https://github.com/blissito/ghostycode/releases/tag/v0.0.3
 [0.0.2]: https://github.com/blissito/ghostycode/releases/tag/v0.0.2
 [0.0.1]: https://github.com/blissito/ghostycode/releases/tag/v0.0.1
