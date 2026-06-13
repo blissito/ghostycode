@@ -2104,13 +2104,15 @@ impl App {
                 ..RuntimeToolServices::default()
             },
             mcp_snapshot: None,
-            // Read the MCP config once at boot to know how many servers
-            // the user has declared. The footer chip uses this even when
-            // no live snapshot is available (#502). Cheap (just reads
-            // the JSON file); errors fall through to zero so a missing
-            // or malformed config simply hides the chip.
+            // Read the MCP config once at boot to know how many *enabled*
+            // servers the user has. The footer chip uses this even when no
+            // live snapshot is available (#502). Counting enabled-only keeps
+            // the bundled-but-disabled EasyBits server from showing a
+            // misleading "MCP 0/1" chip on a fresh install. Cheap (just reads
+            // the JSON file); errors fall through to zero so a missing or
+            // malformed config simply hides the chip.
             mcp_configured_count: crate::mcp::load_config(&mcp_config_path)
-                .map(|cfg| cfg.servers.len())
+                .map(|cfg| cfg.servers.values().filter(|s| s.is_enabled()).count())
                 .unwrap_or(0),
             mcp_restart_required: false,
             tool_log: Vec::new(),

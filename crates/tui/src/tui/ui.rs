@@ -6068,8 +6068,16 @@ async fn handle_mcp_ui_action(
             headers,
         } => {
             changed = true;
-            mcp::add_server_config(&path, name.clone(), None, Some(url), Vec::new(), transport, headers)
-                .map(|()| message = Some(format!("Added MCP HTTP/SSE server '{name}'")))
+            mcp::add_server_config(
+                &path,
+                name.clone(),
+                None,
+                Some(url),
+                Vec::new(),
+                transport,
+                headers,
+            )
+            .map(|()| message = Some(format!("Added MCP HTTP/SSE server '{name}'")))
         }
         crate::tui::app::McpUiAction::Enable { name } => {
             changed = true;
@@ -6120,8 +6128,9 @@ async fn handle_mcp_ui_action(
             }
             // Keep the boot-time MCP-count chip in sync with the live
             // snapshot so footers and panels reflect post-/mcp edits
-            // (#502).
-            app.mcp_configured_count = snapshot.servers.len();
+            // (#502). Enabled-only, matching the boot-time count, so the
+            // bundled-but-disabled EasyBits server stays out of the chip.
+            app.mcp_configured_count = snapshot.servers.iter().filter(|s| s.enabled).count();
             app.mcp_snapshot = Some(snapshot.clone());
             open_mcp_manager_pager(app, &snapshot);
         }

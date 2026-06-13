@@ -1,7 +1,7 @@
 //! MCP manager formatting and UI action helpers.
 
 use crate::mcp::{
-    McpManagerSnapshot, McpServerSnapshot, EASYBITS_DOCS_URL, EASYBITS_MCP_NAME, EASYBITS_MCP_URL,
+    EASYBITS_DOCS_URL, EASYBITS_MCP_NAME, EASYBITS_MCP_URL, McpManagerSnapshot, McpServerSnapshot,
 };
 use crate::tui::app::App;
 use crate::tui::history::HistoryCell;

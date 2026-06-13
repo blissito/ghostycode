@@ -158,7 +158,9 @@ mod tests {
         let mut app = app();
         let res = mcp(
             &mut app,
-            Some("add http easybits https://www.easybits.cloud/api/mcp?tools=all --bearer sk-test123"),
+            Some(
+                "add http easybits https://www.easybits.cloud/api/mcp?tools=all --bearer sk-test123",
+            ),
         );
         match res.action {
             Some(AppAction::Mcp(McpUiAction::AddHttp {
@@ -182,7 +184,10 @@ mod tests {
     #[test]
     fn add_http_rejects_dangling_bearer() {
         let mut app = app();
-        let res = mcp(&mut app, Some("add http foo https://example.com/mcp --bearer"));
+        let res = mcp(
+            &mut app,
+            Some("add http foo https://example.com/mcp --bearer"),
+        );
         assert!(res.action.is_none(), "dangling --bearer should be an error");
     }
 }
