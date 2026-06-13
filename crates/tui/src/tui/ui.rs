@@ -275,15 +275,12 @@ pub async fn run_tui(config: &Config, options: TuiOptions) -> Result<()> {
     // stray bytes that eat the leading column of the next line and
     // duplicate the composer panel during scroll. Reported on a
     // Windows session (issue forthcoming, screenshot showed
-    // "eepseek-v4-flash" with the leading `d` consumed and three
-    // overlapping composer panels). v0.8.8 also surfaced macOS
-    // corruption ("526sOPEN" instead of "526   OPEN") because OSC 8
-    // wrappers are emitted inside ratatui `Span` content; ratatui's
-    // grapheme filter drops the bare ESC byte but paints every other
-    // byte of the wrapper into a buffer cell, drifting columns. Until
-    // OSC 8 is emitted out-of-band of the buffer pipeline, default off
-    // on every platform; opt back in via `[ui] osc8_links = true`.
-    let osc8_default_on = false;
+    // OSC 8 hyperlinks are now safely stripped from clipboard / selection
+    // output via `osc8::strip_into` before any user-visible copy. The
+    // markdown renderer and inline link detection wrap URLs only when
+    // enabled, and ratatui cell drift is contained to the Span boundary.
+    // Default on — users can opt out with `[ui] osc8_links = false`.
+    let osc8_default_on = true;
     crate::tui::osc8::set_enabled(
         config
             .tui
