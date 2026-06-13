@@ -3,7 +3,9 @@
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
+use crate::localization::MessageId;
 use crate::palette;
+use crate::tui::app::App;
 
 /// Ghosty mascot — the brand ghost with round glasses and three ruffles.
 const MASCOT: &[&str] = &[
@@ -14,7 +16,7 @@ const MASCOT: &[&str] = &[
     " \\___/\\__/\\_/",
 ];
 
-pub fn lines() -> Vec<Line<'static>> {
+pub fn lines(app: &App) -> Vec<Line<'static>> {
     let mut out: Vec<Line<'static>> = MASCOT
         .iter()
         .map(|row| {
@@ -38,24 +40,24 @@ pub fn lines() -> Vec<Line<'static>> {
         )),
         Line::from(""),
         Line::from(Span::styled(
-            "A focused terminal workspace for longer model sessions.",
+            app.tr(MessageId::OnboardWelcomeTagline).to_string(),
             Style::default().fg(palette::TEXT_PRIMARY),
         )),
         Line::from(Span::styled(
-            "You'll add an API key, review trust for this directory, and then land in the chat.",
+            app.tr(MessageId::OnboardWelcomeFlow).to_string(),
             Style::default().fg(palette::TEXT_MUTED),
         )),
         Line::from(Span::styled(
-            "The main composer is multi-line, so you can write full prompts instead of squeezing everything into one line.",
+            app.tr(MessageId::OnboardWelcomeComposerHint).to_string(),
             Style::default().fg(palette::TEXT_MUTED),
         )),
         Line::from(""),
         Line::from(Span::styled(
-            "Press Enter to continue.",
+            app.tr(MessageId::OnboardWelcomeContinue).to_string(),
             Style::default().fg(palette::TEXT_PRIMARY),
         )),
         Line::from(Span::styled(
-            "Ctrl+C exits at any point.",
+            app.tr(MessageId::OnboardWelcomeExit).to_string(),
             Style::default().fg(palette::TEXT_MUTED),
         )),
     ]);

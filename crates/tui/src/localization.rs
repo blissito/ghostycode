@@ -444,6 +444,12 @@ pub enum MessageId {
     HomePlanModeTip,
     HomePlanModeChecklistTip,
     HomeGoalModeTip,
+    // Onboarding screens — welcome.
+    OnboardWelcomeTagline,
+    OnboardWelcomeFlow,
+    OnboardWelcomeComposerHint,
+    OnboardWelcomeContinue,
+    OnboardWelcomeExit,
     // Onboarding screens — language picker.
     OnboardLanguageTitle,
     OnboardLanguageBlurb,
@@ -781,6 +787,11 @@ pub const ALL_MESSAGE_IDS: &[MessageId] = &[
     MessageId::HomePlanModeTip,
     MessageId::HomePlanModeChecklistTip,
     MessageId::HomeGoalModeTip,
+    MessageId::OnboardWelcomeTagline,
+    MessageId::OnboardWelcomeFlow,
+    MessageId::OnboardWelcomeComposerHint,
+    MessageId::OnboardWelcomeContinue,
+    MessageId::OnboardWelcomeExit,
     MessageId::OnboardLanguageTitle,
     MessageId::OnboardLanguageBlurb,
     MessageId::OnboardLanguageFooter,
@@ -1390,6 +1401,18 @@ fn english(id: MessageId) -> &'static str {
         MessageId::HomePlanModeTip => "Plan mode - Design before implementing",
         MessageId::HomePlanModeChecklistTip => "  Use /mode plan to create structured checklists",
         MessageId::HomeGoalModeTip => "Goal tracking - Set /goal <objective> to pursue objectives",
+        // Onboarding — welcome.
+        MessageId::OnboardWelcomeTagline => {
+            "A focused terminal workspace for longer model sessions."
+        }
+        MessageId::OnboardWelcomeFlow => {
+            "You'll add an API key, review trust for this directory, and then land in the chat."
+        }
+        MessageId::OnboardWelcomeComposerHint => {
+            "The main composer is multi-line, so you can write full prompts instead of squeezing everything into one line."
+        }
+        MessageId::OnboardWelcomeContinue => "Press Enter to continue.",
+        MessageId::OnboardWelcomeExit => "Ctrl+C exits at any point.",
         // Onboarding — language picker.
         MessageId::OnboardLanguageTitle => "Choose your language",
         MessageId::OnboardLanguageBlurb => {
@@ -3813,6 +3836,18 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
         MessageId::HomeGoalModeTip => {
             "Seguimiento de Goal - Usa /goal <objetivo> para seguir un objetivo persistente"
         }
+        // Onboarding — welcome.
+        MessageId::OnboardWelcomeTagline => {
+            "Un espacio de trabajo en terminal para sesiones largas con modelos."
+        }
+        MessageId::OnboardWelcomeFlow => {
+            "Agregarás una API key, revisarás la confianza del directorio y luego aterrizarás en el chat."
+        }
+        MessageId::OnboardWelcomeComposerHint => {
+            "El compositor principal es multi-línea para que escribas prompts completos sin comprimir todo en una línea."
+        }
+        MessageId::OnboardWelcomeContinue => "Presiona Enter para continuar.",
+        MessageId::OnboardWelcomeExit => "Ctrl+C sale en cualquier momento.",
         MessageId::OnboardLanguageTitle => "Elige el idioma",
         MessageId::OnboardLanguageBlurb => {
             "Elige el idioma de la interfaz. Puedes cambiarlo en cualquier momento con `/settings set locale <etiqueta>`."
@@ -3991,6 +4026,14 @@ mod tests {
 
     #[test]
     fn shipped_first_pack_has_no_missing_core_messages() {
+        // Onboarding welcome strings are English+Spanish only for now; skip them.
+        let welcome_ids: &[MessageId] = &[
+            MessageId::OnboardWelcomeTagline,
+            MessageId::OnboardWelcomeFlow,
+            MessageId::OnboardWelcomeComposerHint,
+            MessageId::OnboardWelcomeContinue,
+            MessageId::OnboardWelcomeExit,
+        ];
         // EasyBits onboarding strings are English-only for now; skip them.
         let easybits_ids: &[MessageId] = &[
             MessageId::OnboardEasybitsTitle,
@@ -4005,7 +4048,7 @@ mod tests {
         for locale in Locale::shipped() {
             let missing: Vec<_> = missing_message_ids(*locale)
                 .into_iter()
-                .filter(|id| !easybits_ids.contains(id))
+                .filter(|id| !welcome_ids.contains(id) && !easybits_ids.contains(id))
                 .collect();
             assert!(
                 missing.is_empty(),

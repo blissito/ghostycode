@@ -18,11 +18,12 @@ use crate::tui::app::App;
 /// `localization::Locale` resolves on next read.
 pub const LANGUAGE_OPTIONS: &[(char, &str, &str, &str)] = &[
     ('1', "auto", "Auto-detect", "(LC_ALL / LANG)"),
-    ('2', "en", "English", ""),
-    ('3', "ja", "日本語", "(Japanese)"),
-    ('4', "zh-Hans", "简体中文", "(Simplified Chinese)"),
-    ('5', "zh-Hant", "繁體中文", "(Traditional Chinese)"),
-    ('6', "pt-BR", "Português (Brasil)", "(Brazilian Portuguese)"),
+    ('2', "es-419", "Español", "(Spanish)"),
+    ('3', "en", "English", ""),
+    ('4', "ja", "日本語", "(Japanese)"),
+    ('5', "zh-Hans", "简体中文", "(Simplified Chinese)"),
+    ('6', "zh-Hant", "繁體中文", "(Traditional Chinese)"),
+    ('7', "pt-BR", "Português (Brasil)", "(Brazilian Portuguese)"),
 ];
 
 pub fn lines(app: &App) -> Vec<Line<'static>> {

@@ -122,7 +122,6 @@ use super::app::{
 use super::approval::{
     ApprovalMode, ApprovalRequest, ApprovalView, ElevationRequest, ElevationView, ReviewDecision,
 };
-use super::clipboard::ClipboardContent;
 use super::history::{
     HistoryCell, ToolCell, ToolStatus, TranscriptRenderOptions, history_cells_from_message,
     summarize_tool_output,
@@ -2589,6 +2588,9 @@ async fn run_event_loop(
                     // Paste into API key input
                     app.insert_api_key_str(text);
                     onboarding::sync_api_key_validation_status(app, false);
+                } else if app.onboarding == OnboardingState::EasybitsMcp {
+                    // Paste into EasyBits MCP key input
+                    app.insert_easybits_key_str(text);
                 } else if app.is_history_search_active() {
                     app.history_search_insert_str(text);
                 } else if app.view_stack.handle_paste(text) {
@@ -2999,15 +3001,7 @@ async fn run_event_loop(
                     _ if key_shortcuts::is_paste_shortcut(&key)
                         && app.onboarding == OnboardingState::EasybitsMcp =>
                     {
-                        if let Some(ClipboardContent::Text(text)) =
-                            app.clipboard.read(app.workspace.as_path())
-                        {
-                            let cleaned: String = text
-                                .chars()
-                                .filter(|c| !c.is_control() || *c == '\n')
-                                .collect();
-                            app.easybits_key_input.push_str(&cleaned);
-                        }
+                        app.paste_easybits_key_from_clipboard();
                     }
                     KeyCode::Char(c)
                         if app.onboarding == OnboardingState::EasybitsMcp

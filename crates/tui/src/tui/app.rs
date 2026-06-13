@@ -3558,6 +3558,17 @@ impl App {
         }
     }
 
+    pub fn insert_easybits_key_str(&mut self, text: &str) {
+        let sanitized = sanitize_api_key_text(text);
+        self.easybits_key_input.push_str(&sanitized);
+    }
+
+    pub fn paste_easybits_key_from_clipboard(&mut self) {
+        if let Some(ClipboardContent::Text(text)) = self.clipboard.read(self.workspace.as_path()) {
+            self.insert_easybits_key_str(&text);
+        }
+    }
+
     /// Paste from clipboard into input
     pub fn paste_from_clipboard(&mut self) {
         if let Some(content) = self.clipboard.read(self.workspace.as_path()) {
