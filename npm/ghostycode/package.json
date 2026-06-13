@@ -30,7 +30,8 @@
   ],
   "type": "commonjs",
   "bin": {
-    "ghosty": "bin/ghosty.js"
+    "ghosty": "bin/ghosty.js",
+    "ghosty-tui": "bin/ghosty-tui.js"
   },
   "scripts": {
     "release:check": "node scripts/verify-release-assets.js",

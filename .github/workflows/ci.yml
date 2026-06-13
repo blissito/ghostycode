@@ -88,8 +88,12 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
+        # Linux is a no-op stub here (the real Linux smoke runs on CNB), so the
+        # meaningful Actions coverage is macOS. Windows is dropped to avoid its
+        # slow release build; the wrapper's win32 path is exercised on release.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest","macos-latest"]') }}
     steps:
       - uses: actions/checkout@v4
         if: runner.os != 'Linux'

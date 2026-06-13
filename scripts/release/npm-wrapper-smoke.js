@@ -8,7 +8,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const packageDir = path.join(repoRoot, "npm", "ghosty");
+const packageDir = path.join(repoRoot, "npm", "ghostycode");
 const prepareAssetsScript = path.join(
   repoRoot,
   "scripts",
