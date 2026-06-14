@@ -1,24 +1,20 @@
 <div align="center">
 
-```
-   .------.
-  /        \
- ──(o)⌒(o)──
- |          |
- \___/\__/\_/
-```
+<img src="https://easybits-public.fly.storage.tigris.dev/699f35cbc8ad86037eda62b1/HGF" alt="Ghosty" width="160" />
 
 # Ghosty Code
 
-**Agente de código para tu terminal, sobre DeepSeek V4.** 👻
+**DeepSeek V4 terminal coding agent &amp; constitutional harness.** 👻
 
 [![CI](https://github.com/blissito/ghostycode/actions/workflows/ci.yml/badge.svg)](https://github.com/blissito/ghostycode/actions/workflows/ci.yml)
 
 </div>
 
-Ghosty Code es una TUI (interfaz de terminal) que conversa con modelos DeepSeek V4 para
-ayudarte a programar: lee y edita archivos, corre comandos, busca en tu repo y mantiene
-sesiones largas. Escrito en Rust.
+Ghosty Code is a **DeepSeek V4 terminal coding agent** and **constitutional harness** —
+a Rust TUI that reads, edits, runs shell commands, searches your repo, and coordinates
+sub-agents through long tool-using sessions with evidence-driven verification.
+Built for developers who want a keyboard-first coding agent with MCP support,
+session persistence, and zero vendor lock-in. Open source (MIT).
 
 ## Instalación
 
@@ -101,6 +97,11 @@ Gestiona otros servidores con `ghosty mcp add stdio|http <nombre> ...`,
 - **Servidor**: `ghosty serve --http` (API HTTP/SSE) o `--mobile` (control desde el móvil en LAN).
 - **Zed/ACP**: `ghosty serve --acp`.
 - Otros proveedores compatibles con OpenAI vía `base_url` en la config.
+
+## Related
+
+- **[formmy.app/ghosty](https://formmy.app/ghosty)** — Ghosty on the web: run your agent from a browser dashboard.
+- **[easybits.cloud](https://www.easybits.cloud)** — File management MCP server (100+ tools), pre-bundled with Ghosty.
 
 ## Licencia
 
