@@ -1517,29 +1517,48 @@ mod tests {
 
     #[test]
     fn http_links_get_osc_8_wrapped_when_enabled() {
+        // ratatui 0.30.1: OSC 8 is injected post-render via apply_links().
+        // Span content contains only the visible label.
         let joined = render_with_osc8(true, "see https://example.com for details");
         assert!(
-            joined.contains("\x1b]8;;https://example.com\x1b\\https://example.com\x1b]8;;\x1b\\"),
-            "expected OSC 8 wrapper around URL; got {joined:?}"
+            joined.contains("https://example.com"),
+            "expected plain URL label in rendered output; got {joined:?}"
         );
+        assert!(
+            !joined.contains("\x1b]8;;"),
+            "OSC 8 escape codes should not be in Span content; got {joined:?}"
+        );
+        // The link should be registered in the link registry
+        let links = osc8::take_links();
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].0, "https://example.com");
+        assert_eq!(links[0].1, "https://example.com");
     }
 
     #[test]
     fn wrapped_osc_8_url_chunks_keep_full_link_target() {
         let url = "https://raw.githubusercontent.com/blissito/deepseek-skills/main/index.json";
         let joined = render_with_osc8_width(true, url, 34);
-        let full_target = format!("\x1b]8;;{url}\x1b\\");
 
+        // Span content should be the plain URL (no OSC 8 escapes)
         assert!(
-            joined.matches(&full_target).count() > 1,
-            "expected each wrapped URL chunk to reopen the full OSC 8 target; got {joined:?}"
+            joined.contains(url),
+            "expected plain URL label in rendered output; got {joined:?}"
         );
         assert!(
-            !joined.contains(
-                "\x1b]8;;https://raw.githubusercontent.com/blissito/deepseek-skills/main/inde\x1b\\"
-            ),
-            "wrapped link must not expose a truncated OSC 8 target: {joined:?}"
+            !joined.contains("\x1b]8;;"),
+            "OSC 8 escape codes should not be in Span content; got {joined:?}"
         );
+
+        // Each line chunk should be registered as a link with the full URL
+        let links = osc8::take_links();
+        for (label, link_url) in &links {
+            assert_eq!(link_url, url, "each chunk should register the full URL");
+            assert!(
+                url.contains(label.as_str()),
+                "label {label:?} should be a substring of the full URL {url:?}"
+            );
+        }
     }
 
     #[test]
