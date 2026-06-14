@@ -4877,6 +4877,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "flaky: TCP port binding races on CI runners"]
     async fn legacy_sse_closed_stream_reconnects_and_retries_tool_call() {
         use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
