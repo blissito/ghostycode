@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-06-13
+
+### Fixed
+
+- OSC 8 hyperlinks: rewired for ratatui 0.30.1. Control chars filtered from
+  Span content; links now injected post-render via `Cell::set_symbol()` with
+  `CellDiffOption::ForcedWidth`.
+- Windows installer CI: makensis.exe path resolution via PATH refresh.
+- Flaky CI: ignored SSE reconnection test and qa_pty integration tests
+  that require a real terminal.
+- Removed FUNDING.yml referencing original repo owner.
+- Welcome screen, language picker, EasyBits onboarding all localized to
+  Spanish and other shipped locales.
+- `/mcp` output compacted to counts instead of per-tool listing.
+- Composer cursor tests pinned to English locale to fix Windows CI.
+
 ## [0.0.6] - 2026-06-13
 
 ### Added
@@ -5562,3 +5578,4 @@ Welcome — and thank you.
 [0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
 [0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
+[0.0.7]: https://github.com/blissito/ghostycode/compare/v0.0.6...v0.0.7
