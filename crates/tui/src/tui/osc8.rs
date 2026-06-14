@@ -44,7 +44,7 @@ pub fn enabled() -> bool {
 }
 
 thread_local! {
-    static LINK_REGISTRY: RefCell<Vec<(String, String)>> = RefCell::new(Vec::new());
+    static LINK_REGISTRY: RefCell<Vec<(String, String)>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Register a link label→URL mapping. Called during widget rendering.
