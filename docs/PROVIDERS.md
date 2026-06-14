@@ -129,6 +129,7 @@ endpoint.
 | `vllm` | `[providers.vllm]` | Optional `VLLM_API_KEY` | `VLLM_BASE_URL`; default `http://localhost:8000/v1` | `deepseek-ai/DeepSeek-V4-Pro`, `deepseek-ai/DeepSeek-V4-Flash` | Self-hosted vLLM OpenAI-compatible route. Localhost deployments commonly omit auth. `VLLM_MODEL` is accepted. |
 | `ollama` | `[providers.ollama]` | Optional `OLLAMA_API_KEY` | `OLLAMA_BASE_URL`; default `http://localhost:11434/v1` | `deepseek-coder:1.3b`; provider-hinted custom tags pass through | Self-hosted Ollama OpenAI-compatible route. Localhost deployments commonly omit auth. `OLLAMA_MODEL` is accepted. |
 | `huggingface` | `[providers.huggingface]` | `HUGGINGFACE_API_KEY`, `HF_TOKEN` | `HUGGINGFACE_BASE_URL`; default `https://router.huggingface.co/v1` | `deepseek-ai/DeepSeek-V4-Pro`, `deepseek-ai/DeepSeek-V4-Flash` | Hugging Face Inference Providers OpenAI-compatible route. Org-prefixed model IDs pass through. |
+| `easybits` | `[providers.easybits]` | `EASYBITS_API_KEY` | default `https://www.easybits.cloud/api/v2/llm/v1` (override per-table with `base_url`) | `deepseek-v4-pro`, `deepseek-v4-flash` | EasyBits.cloud DeepSeek reseller. The `easybits` alias maps **internally** to the `deepseek` provider (`ApiProvider::Deepseek`) and inherits all DeepSeek behavior — reasoning, `thinking`, cache telemetry — overriding only the base URL. One key serves both the LLM and the bundled EasyBits MCP server. See [EasyBits Notes](#easybits-notes). |
 
 ### Xiaomi MiMo Notes
 
@@ -156,6 +157,50 @@ large models verified through OpenRouter's model metadata:
 `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`.
 `minimax/minimax-m3` was added from OpenRouter's May 31, 2026 listing as a 1M
 context multimodal model for coding, tool use, and long-horizon agentic work.
+
+### EasyBits Notes
+
+[EasyBits.cloud](https://www.easybits.cloud) is a DeepSeek reseller — same API,
+same models, same reasoning behavior. The integration follows a "Plan B"
+design: instead of a new `ApiProvider` variant, `provider = "easybits"` maps
+**internally** to `ApiProvider::Deepseek`. `Config::is_easybits_mode()` then
+redirects key lookup to `[providers.easybits]` and the base URL to
+`https://www.easybits.cloud/api/v2/llm/v1`. Everything else (default model,
+reasoning/thinking, cache telemetry, model registry) is inherited from DeepSeek
+unchanged. One EasyBits key (`eb_sk_live_...`) serves both the LLM provider and
+the bundled EasyBits MCP memory server.
+
+**Setup — either path:**
+
+- CLI: `ghosty auth set --provider easybits --api-key eb_sk_live_...`
+  writes `provider = "easybits"` plus `[providers.easybits].api_key`.
+- Onboarding: the EasyBits step (shown before the DeepSeek key prompt) accepts
+  the key once and saves it as both the MCP token and the LLM provider key, so
+  the DeepSeek key step is skipped.
+
+```toml
+provider = "easybits"
+
+[providers.easybits]
+api_key  = "eb_sk_live_..."
+base_url = "https://www.easybits.cloud/api/v2/llm/v1"   # optional; this is the default
+# model  = "deepseek-v4-pro"                             # or deepseek-v4-flash
+```
+
+**Switching:** `/provider easybits` and `/provider deepseek` toggle between the
+EasyBits proxy and direct DeepSeek. The picker shows the active row as
+`DeepSeek` because EasyBits resolves to it; the `easybits` alias is preserved in
+`config.toml` so the mode survives restarts.
+
+**Footgun — env overrides config.** Per the global precedence rules
+([Auth And Env Rules](#auth-and-env-rules)), `GHOSTY_PROVIDER` / the legacy
+`DEEPSEEK_PROVIDER` environment variables **override** `provider = "easybits"`
+from the config file. A stray `export DEEPSEEK_PROVIDER=deepseek` left in a
+shell silently flips the active provider to DeepSeek, and since the DeepSeek key
+slot is empty in EasyBits setups, sends fail with "DeepSeek API key not found".
+When EasyBits is configured but a key cannot be resolved because of this, the
+error message names the offending variable and tells you to
+`unset DEEPSEEK_PROVIDER GHOSTY_PROVIDER` (or open a fresh shell).
 
 ## Static Model Registry
 

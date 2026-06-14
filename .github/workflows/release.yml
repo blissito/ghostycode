@@ -93,9 +93,10 @@ jobs:
 
           # Version policy: stay on 0.0.x — only the patch (3rd) segment may
           # change. Reject any bump to the major/minor segments so releases
-          # never roll past 0.0.x by accident.
-          if ! printf '%s' "${tag}" | grep -Eq '^v0\.0\.[0-9]+$'; then
-            echo "Release tag '${tag}' violates the 0.0.x policy: only the patch segment may change (expected v0.0.<patch>)." >&2
+          # never roll past 0.0.x by accident. An optional prerelease suffix
+          # (e.g. v0.0.8-preview.0) is allowed for preview channels.
+          if ! printf '%s' "${tag}" | grep -Eq '^v0\.0\.[0-9]+(-[a-z0-9.]+)?$'; then
+            echo "Release tag '${tag}' violates the 0.0.x policy: only the patch segment may change (expected v0.0.<patch> or v0.0.<patch>-<prerelease>)." >&2
             exit 1
           fi
 
@@ -528,7 +529,9 @@ jobs:
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
           files: artifacts/*/*
-          prerelease: false
+          # Prerelease tags (e.g. v0.0.8-preview.0) carry a `-suffix`; mark the
+          # GitHub Release as a pre-release so it never becomes "Latest".
+          prerelease: ${{ contains(needs.resolve.outputs.tag, '-') }}
           body: |
             > This release renames the project to **Ghosty Code**. The legacy
             > `deepseek` and `deepseek-tui` binaries continue to ship as
@@ -623,7 +626,9 @@ jobs:
 
   homebrew:
     needs: [release, resolve]
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    # Skip the stable Homebrew tap for prerelease tags (e.g. -preview.N) so a
+    # preview never bumps the stable formula.
+    if: ${{ !cancelled() && needs.release.result == 'success' && !contains(needs.resolve.outputs.tag, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

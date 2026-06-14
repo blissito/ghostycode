@@ -35,12 +35,15 @@ El paquete de npm se llama **`ghostycode`**; el comando que instala es **`ghosty
 
 ```bash
 ghosty auth set --provider deepseek --api-key "TU_DEEPSEEK_API_KEY"
+# Alternativa: EasyBits (revendedor de DeepSeek; la misma key sirve para LLM y MCP)
+ghosty auth set --provider easybits --api-key "TU_EASYBITS_API_KEY"
 ghosty doctor    # verifica setup y conexión
 ghosty           # abre la TUI interactiva
 ```
 
 La config vive en `~/.ghosty/config.toml`. También puedes usar la variable de entorno
-`DEEPSEEK_API_KEY`.
+`DEEPSEEK_API_KEY`. Más providers y las notas de EasyBits en
+[`docs/PROVIDERS.md`](docs/PROVIDERS.md).
 
 ## Comandos básicos
 

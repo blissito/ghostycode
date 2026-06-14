@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.8-preview.0] - 2026-06-14
+
+### Added
+
+- EasyBits provider (DeepSeek-compatible reseller): `provider = "easybits"`
+  maps internally to DeepSeek; one EasyBits key serves both the LLM and the
+  bundled MCP server. `ghosty auth set --provider easybits` and `/provider
+  easybits`. See `docs/PROVIDERS.md`.
+
+### Fixed
+
+- EasyBits end-to-end: CLI dispatcher allowlist, onboarding engine respawn on
+  key save, `/provider easybits` persisting the alias (not `deepseek`),
+  onboarding no longer re-prompts for a key already configured, and
+  `sync_config_provider_from_app` no longer collapses `easybits`→`deepseek` at
+  startup (root cause of "DeepSeek API key not found").
+- Clear error when a stray `DEEPSEEK_PROVIDER`/`GHOSTY_PROVIDER` env var
+  overrides an explicit `easybits` config, naming the var and the fix.
+
 ## [0.0.7] - 2026-06-13
 
 ### Fixed
@@ -5578,4 +5597,5 @@ Welcome — and thank you.
 [0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
 [0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
+[0.0.8-preview.0]: https://github.com/blissito/ghostycode/releases/tag/v0.0.8-preview.0
 [0.0.7]: https://github.com/blissito/ghostycode/compare/v0.0.6...v0.0.7
