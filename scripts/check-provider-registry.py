@@ -27,6 +27,12 @@ PROVIDERS_MD = ROOT / "docs" / "PROVIDERS.md"
 
 
 API_PROVIDER_ONLY_IDS = {"deepseek-cn"}
+# ProviderKind IDs that intentionally have NO dedicated `ApiProvider` variant
+# because they are aliases mapping onto an existing provider. EasyBits is a
+# DeepSeek-compatible reseller: `provider = "easybits"` resolves to
+# `ApiProvider::Deepseek` (see `Config::is_easybits_mode`), so it ships as a
+# canonical provider (TOML table, docs row, `auth set`) without its own enum.
+PROVIDER_KIND_ALIAS_IDS = {"easybits"}
 SHARED_PROVIDER_TABLES = {
     "siliconflow-CN": "siliconflow",
 }
@@ -174,7 +180,9 @@ def report_provider_enum_drift(
     provider_kind_ids: set[str], api_provider_ids: set[str]
 ) -> list[str]:
     errors = []
-    missing_from_api_provider = sorted(provider_kind_ids - api_provider_ids)
+    missing_from_api_provider = sorted(
+        provider_kind_ids - api_provider_ids - PROVIDER_KIND_ALIAS_IDS
+    )
     unexpected_api_provider_ids = sorted(
         api_provider_ids - provider_kind_ids - API_PROVIDER_ONLY_IDS
     )
