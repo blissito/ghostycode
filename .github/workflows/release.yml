@@ -370,18 +370,29 @@ jobs:
           $version = "${{ needs.resolve.outputs.tag }}".TrimStart("v")
           Copy-Item "artifacts\ghosty-windows-x64.exe\ghosty-windows-x64.exe" "scripts\installer\ghosty.exe"
           Copy-Item "artifacts\ghosty-tui-windows-x64.exe\ghosty-tui-windows-x64.exe" "scripts\installer\ghosty-tui.exe"
-          $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
-          if (!(Test-Path $makensis)) {
-            $makensis = "${env:ProgramFiles}\NSIS\makensis.exe"
+          # Refresh PATH after choco install so makensis is discoverable
+          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1" -ErrorAction SilentlyContinue
+          refreshenv -ErrorAction SilentlyContinue
+          # Find makensis: try common locations, then fall back to PATH lookup
+          $makensis = $null
+          foreach ($candidate in @(
+              "${env:ProgramFiles}\NSIS\makensis.exe",
+              "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+              (Get-Command makensis -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
+          )) {
+              if ($candidate -and (Test-Path $candidate)) {
+                  $makensis = $candidate
+                  break
+              }
           }
-          if (!(Test-Path $makensis)) {
-            throw "makensis.exe not found after NSIS install"
+          if (!$makensis) {
+              throw "makensis.exe not found after NSIS install"
           }
           Push-Location scripts\installer
           & $makensis "/DVERSION=$version" "ghosty.nsi"
           Pop-Location
           if (!(Test-Path "scripts\installer\GhostyCodeSetup.exe")) {
-            throw "GhostyCodeSetup.exe was not produced"
+              throw "GhostyCodeSetup.exe was not produced"
           }
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
