@@ -128,9 +128,12 @@ fn initial_onboarding_state(
     if was_onboarded && needs_api_key {
         OnboardingState::ApiKey
     } else if was_onboarded && needs_workspace_trust {
-        // Auto-trust the workspace and go to the optional EasyBits step.
-        // The user was already onboarded; no need to re-confirm trust.
-        OnboardingState::EasybitsMcp
+        // Returning user (already onboarded, key already configured) who just
+        // opened an untrusted workspace: the only thing missing is trust. Go
+        // straight to the trust step — do NOT re-show the EasyBits key prompt
+        // for a key they already have (that path asks for the provider key and
+        // confused users who set it via `ghosty auth set`).
+        OnboardingState::TrustDirectory
     } else {
         OnboardingState::Welcome
     }
@@ -1808,7 +1811,12 @@ impl App {
             provider = parsed;
         }
         let mut effective_auth_config = config.clone();
-        effective_auth_config.provider = Some(provider.as_str().to_string());
+        // Preserve "easybits" alias — as_str() would collapse it to "deepseek".
+        effective_auth_config.provider = if config.is_easybits_mode() {
+            Some("easybits".to_string())
+        } else {
+            Some(provider.as_str().to_string())
+        };
         let model_ids_passthrough = effective_auth_config.model_ids_pass_through();
 
         // Check if the effective provider has an API key. This must happen
@@ -2238,7 +2246,9 @@ impl App {
     }
 
     /// Save the EasyBits MCP API key entered during onboarding to
-    /// `mcp.json`. An empty key is a no-op (user chose to skip).
+    /// `mcp.json`. Also saves it as the LLM provider key in
+    /// `[providers.easybits]` so it doubles as the API token provider.
+    /// An empty key is a no-op (user chose to skip).
     pub fn submit_easybits_key(&mut self) -> Result<(), anyhow::Error> {
         let key = self.easybits_key_input.trim().to_string();
         if key.is_empty() {
@@ -2256,6 +2266,35 @@ impl App {
                 format!("Bearer {key}"),
             )]),
         )?;
+        // Save as LLM provider key so the user can use /provider easybits
+        // without entering a separate API key.
+        if let Some(config_path) = crate::config::default_config_path() {
+            crate::config::ensure_parent_dir(&config_path)?;
+            let raw = std::fs::read_to_string(&config_path).unwrap_or_default();
+            let mut doc: toml::Value =
+                toml::from_str(&raw).unwrap_or(toml::Value::Table(toml::value::Table::new()));
+            let table = doc.as_table_mut().expect("config root is a table");
+            table.insert(
+                "provider".to_string(),
+                toml::Value::String("easybits".to_string()),
+            );
+            let providers = table
+                .entry("providers")
+                .or_insert(toml::Value::Table(toml::value::Table::new()));
+            let providers_table = providers.as_table_mut().unwrap();
+            let easybits = providers_table
+                .entry("easybits")
+                .or_insert(toml::Value::Table(toml::value::Table::new()));
+            let easybits_table = easybits.as_table_mut().unwrap();
+            easybits_table.insert("api_key".to_string(), toml::Value::String(key.clone()));
+            easybits_table
+                .entry("base_url")
+                .or_insert(toml::Value::String(
+                    crate::config::DEFAULT_EASYBITS_BASE_URL.to_string(),
+                ));
+            let _ = std::fs::write(&config_path, toml::to_string(&doc).unwrap_or_default());
+        }
+        self.onboarding_needs_api_key = false;
         self.easybits_key_input.clear();
         Ok(())
     }
@@ -2290,7 +2329,7 @@ impl App {
     pub fn current_locale_tag(&self) -> String {
         Settings::load()
             .map(|s| s.locale)
-            .unwrap_or_else(|_| "auto".to_string())
+            .unwrap_or_else(|_| "es-419".to_string())
     }
 
     pub fn set_mode(&mut self, mode: AppMode) -> bool {
@@ -4949,6 +4988,8 @@ pub enum AppAction {
     SwitchProvider {
         provider: ApiProvider,
         model: Option<String>,
+        /// Override for `config.provider` string (e.g. "easybits" → Deepseek).
+        provider_name_override: Option<String>,
     },
     UpdateCompaction(CompactionConfig),
     OpenContextInspector,
@@ -5652,10 +5693,13 @@ mod tests {
     }
 
     #[test]
-    fn onboarded_user_goes_to_easybits_when_workspace_untrusted() {
+    fn onboarded_user_goes_to_trust_when_workspace_untrusted() {
+        // Already onboarded + has a key + untrusted workspace → straight to the
+        // trust step, NOT the EasyBits key prompt (regression: returning users
+        // who configured a key via `auth set` were re-asked for it).
         assert_eq!(
             initial_onboarding_state(false, true, false, true),
-            OnboardingState::EasybitsMcp
+            OnboardingState::TrustDirectory
         );
     }
 

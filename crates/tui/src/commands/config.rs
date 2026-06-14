@@ -598,14 +598,25 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
                     ApiProvider::names_hint()
                 ));
             };
-            if provider == app.api_provider {
+            // Preserve "easybits" alias in config so is_easybits_mode() works.
+            let is_easybits_alias = matches!(
+                value.to_ascii_lowercase().as_str(),
+                "easybits" | "easy-bits" | "easy_bits" | "eb"
+            );
+            if provider == app.api_provider && !is_easybits_alias {
                 return CommandResult::message(format!("provider = {}", provider.as_str()));
             }
+            let display_name = if is_easybits_alias {
+                "easybits"
+            } else {
+                provider.as_str()
+            };
             return CommandResult::with_message_and_action(
-                format!("provider = {}", provider.as_str()),
+                format!("provider = {display_name}"),
                 AppAction::SwitchProvider {
                     provider,
                     model: None,
+                    provider_name_override: None,
                 },
             );
         }
@@ -2193,7 +2204,9 @@ mod tests {
         assert!(!result.is_error);
         assert_eq!(result.message.as_deref(), Some("provider = openrouter"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Openrouter);
                 assert_eq!(model, None);
             }

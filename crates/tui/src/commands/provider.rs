@@ -35,6 +35,12 @@ pub fn provider(app: &mut App, args: Option<&str>) -> CommandResult {
         ));
     };
 
+    // Detect easybits alias to force config.provider = "easybits" later.
+    let is_easybits_alias = matches!(
+        name.to_ascii_lowercase().as_str(),
+        "easybits" | "easy-bits" | "easy_bits" | "eb"
+    );
+
     let model = match model_arg {
         None => None,
         Some(raw) if matches!(target, ApiProvider::XiaomiMimo) => {
@@ -60,13 +66,18 @@ pub fn provider(app: &mut App, args: Option<&str>) -> CommandResult {
         }
     };
 
-    if target == app.api_provider && model.is_none() {
+    if target == app.api_provider && model.is_none() && !is_easybits_alias {
         return CommandResult::message(format!("Already on provider: {}", target.as_str()));
     }
 
     CommandResult::action(AppAction::SwitchProvider {
         provider: target,
         model,
+        provider_name_override: if is_easybits_alias {
+            Some("easybits".to_string())
+        } else {
+            None
+        },
     })
 }
 
@@ -154,7 +165,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("openrouter"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Openrouter);
                 assert_eq!(model, None);
             }
@@ -167,7 +180,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("xiaomi-mimo"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::XiaomiMimo);
                 assert_eq!(model, None);
             }
@@ -180,7 +195,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("xiaomi-mimo tts"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::XiaomiMimo);
                 assert_eq!(model.as_deref(), Some("mimo-v2.5-tts"));
             }
@@ -189,7 +206,9 @@ mod tests {
 
         let result = provider(&mut app, Some("xiaomi-mimo voiceclone"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::XiaomiMimo);
                 assert_eq!(model.as_deref(), Some("mimo-v2.5-tts-voiceclone"));
             }
@@ -206,7 +225,9 @@ mod tests {
         ] {
             let result = provider(&mut app, Some(input));
             match result.action {
-                Some(AppAction::SwitchProvider { provider, model }) => {
+                Some(AppAction::SwitchProvider {
+                    provider, model, ..
+                }) => {
                     assert_eq!(provider, ApiProvider::XiaomiMimo);
                     assert_eq!(model.as_deref(), Some(expected));
                 }
@@ -220,7 +241,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("atlascloud"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Atlascloud);
                 assert_eq!(model, None);
             }
@@ -233,7 +256,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("ark-wanjie account-model-id"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::WanjieArk);
                 assert_eq!(model.as_deref(), Some("account-model-id"));
             }
@@ -246,7 +271,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("novita"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Novita);
                 assert_eq!(model, None);
             }
@@ -259,7 +286,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("fireworks pro"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Fireworks);
                 assert_eq!(model.as_deref(), Some("deepseek-v4-pro"));
             }
@@ -272,7 +301,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("siliconflow flash"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Siliconflow);
                 assert_eq!(model.as_deref(), Some("deepseek-v4-flash"));
             }
@@ -285,7 +316,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("siliconflow-CN flash"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::SiliconflowCn);
                 assert_eq!(model.as_deref(), Some("deepseek-v4-flash"));
             }
@@ -298,7 +331,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("sglang flash"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Sglang);
                 assert_eq!(model.as_deref(), Some("deepseek-v4-flash"));
             }
@@ -311,7 +346,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("vllm flash"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Vllm);
                 assert_eq!(model.as_deref(), Some("deepseek-v4-flash"));
             }
@@ -324,7 +361,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("ollama qwen2.5-coder:7b"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Ollama);
                 assert_eq!(model.as_deref(), Some("qwen2.5-coder:7b"));
             }
@@ -347,7 +386,9 @@ mod tests {
         let result = provider(&mut app, Some("nvidia-nim"));
         assert!(result.message.is_none());
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::NvidiaNim);
                 assert_eq!(model, None);
             }
@@ -360,7 +401,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("nim flash"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::NvidiaNim);
                 assert_eq!(model.as_deref(), Some("deepseek-v4-flash"));
             }
@@ -373,7 +416,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("nim pro"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::NvidiaNim);
                 assert_eq!(model.as_deref(), Some("deepseek-v4-pro"));
             }
@@ -386,7 +431,9 @@ mod tests {
         let mut app = create_test_app();
         let result = provider(&mut app, Some("deepseek flash"));
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Deepseek);
                 assert_eq!(model.as_deref(), Some("deepseek-v4-flash"));
             }
@@ -402,7 +449,9 @@ mod tests {
         let result = provider(&mut app, Some("deepseek deepseek/deepseek-v4-pro"));
 
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, ApiProvider::Deepseek);
                 assert_eq!(model.as_deref(), Some("deepseek-v4-pro"));
             }

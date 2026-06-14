@@ -133,6 +133,10 @@ pub const DEFAULT_HUGGINGFACE_BASE_URL: &str = "https://router.huggingface.co/v1
 /// Legacy typo hostname `api.deepseeki.com` remains recognized in URL
 /// heuristics for backward compatibility.
 pub const DEFAULT_DEEPSEEKCN_BASE_URL: &str = DEFAULT_DEEPSEEK_BASE_URL;
+/// EasyBits is a DeepSeek-compatible reseller (Plan B): the `"easybits"`
+/// provider alias maps internally to `ApiProvider::Deepseek` and inherits all
+/// DeepSeek behavior, overriding only the base URL.
+pub const DEFAULT_EASYBITS_BASE_URL: &str = "https://www.easybits.cloud/api/v2/llm/v1";
 const API_KEYRING_SENTINEL: &str = "__KEYRING__";
 pub const COMMON_DEEPSEEK_MODELS: &[&str] = &[
     "deepseek-v4-pro",
@@ -187,6 +191,9 @@ impl ApiProvider {
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "deepseek" | "deep-seek" => Some(Self::Deepseek),
+            // EasyBits is a DeepSeek reseller — map the alias to Deepseek and
+            // let `Config::is_easybits_mode` redirect base URL / key lookup.
+            "easybits" | "easy-bits" | "easy_bits" | "eb" => Some(Self::Deepseek),
             "deepseek-cn" | "deepseek_china" | "deepseekcn" | "deepseek-china" => {
                 Some(Self::DeepseekCN)
             }
@@ -1899,6 +1906,8 @@ pub struct ProvidersConfig {
     pub ollama: ProviderConfig,
     #[serde(default, alias = "hugging-face", alias = "hf")]
     pub huggingface: ProviderConfig,
+    #[serde(default)]
+    pub easybits: ProviderConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -2188,8 +2197,23 @@ impl Config {
             })
     }
 
+    /// Whether the user configured `provider = "easybits"` (DeepSeek proxy).
+    #[must_use]
+    pub fn is_easybits_mode(&self) -> bool {
+        self.provider.as_deref().is_some_and(|p| {
+            p.trim().eq_ignore_ascii_case("easybits")
+                || p.trim().eq_ignore_ascii_case("easy-bits")
+                || p.trim().eq_ignore_ascii_case("eb")
+        })
+    }
+
     pub(crate) fn provider_config_for(&self, provider: ApiProvider) -> Option<&ProviderConfig> {
         let providers = self.providers.as_ref()?;
+        if self.is_easybits_mode()
+            && matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN)
+        {
+            return Some(&providers.easybits);
+        }
         Some(match provider {
             ApiProvider::Deepseek => &providers.deepseek,
             ApiProvider::DeepseekCN => &providers.deepseek_cn,
@@ -2213,6 +2237,12 @@ impl Config {
     }
 
     pub(crate) fn provider_config_for_mut(&mut self, provider: ApiProvider) -> &mut ProviderConfig {
+        if self.is_easybits_mode()
+            && matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN)
+        {
+            let providers = self.providers.get_or_insert_with(ProvidersConfig::default);
+            return &mut providers.easybits;
+        }
         let providers = self.providers.get_or_insert_with(ProvidersConfig::default);
         match provider {
             ApiProvider::Deepseek => &mut providers.deepseek,
@@ -2387,7 +2417,13 @@ impl Config {
         } else {
             configured_base_url.unwrap_or_else(|| {
                 match provider {
-                    ApiProvider::Deepseek => DEFAULT_DEEPSEEK_BASE_URL,
+                    ApiProvider::Deepseek => {
+                        if self.is_easybits_mode() {
+                            DEFAULT_EASYBITS_BASE_URL
+                        } else {
+                            DEFAULT_DEEPSEEK_BASE_URL
+                        }
+                    }
                     ApiProvider::DeepseekCN => DEFAULT_DEEPSEEKCN_BASE_URL,
                     ApiProvider::NvidiaNim => DEFAULT_NVIDIA_NIM_BASE_URL,
                     ApiProvider::Openai => DEFAULT_OPENAI_BASE_URL,
@@ -2467,7 +2503,10 @@ impl Config {
         // 0. DeepSeek compatibility slot. The legacy top-level `api_key`
         // belongs to DeepSeek only; provider-specific keys below must win for
         // NIM/OpenRouter/etc. so a stale DeepSeek key is not sent elsewhere.
-        if matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN)
+        // In EasyBits mode the top-level slot is NOT the easybits key, so skip
+        // it and let the provider-scoped `[providers.easybits]` slot win.
+        if !self.is_easybits_mode()
+            && matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN)
             && let Some(configured) = self.api_key.as_ref()
             && !configured.trim().is_empty()
             && configured != API_KEYRING_SENTINEL
@@ -2520,19 +2559,62 @@ impl Config {
         }
 
         match provider {
-            ApiProvider::Deepseek | ApiProvider::DeepseekCN => anyhow::bail!(
-                "DeepSeek API key not found.\n\
-                 \n\
-                 1. Get a key:  https://platform.deepseek.com/api_keys\n\
-                 2. Save it (works in every folder, no OS prompts):\n\
-                        ghosty auth set --provider deepseek\n\
-                 \n\
-                 Alternatives:\n\
-                   • export DEEPSEEK_API_KEY=<your-key>      (current shell only;\n\
-                     also note: zsh users — exports in ~/.zshrc only reach interactive\n\
-                     shells, prefer ~/.zshenv for everything)\n\
-                   • api_key = \"<your-key>\"  in ~/.ghosty/config.toml"
-            ),
+            ApiProvider::Deepseek | ApiProvider::DeepseekCN => {
+                if self.is_easybits_mode() {
+                    anyhow::bail!(
+                        "EasyBits API key not found.\n\
+                         \n\
+                         1. Get a key:  https://www.easybits.cloud\n\
+                         2. Save it (works every folder, no OS prompts):\n\
+                                ghosty auth set --provider easybits\n\
+                         \n\
+                         Alternatives:\n\
+                           • export EASYBITS_API_KEY=<your-key>\n\
+                           • [providers.easybits] api_key = \"<your-key>\"  in ~/.ghosty/config.toml"
+                    )
+                }
+                // Common footgun: the config file selects EasyBits and an
+                // EasyBits key is present, but a leftover `DEEPSEEK_PROVIDER`
+                // / `GHOSTY_PROVIDER` shell export flipped the active provider
+                // to DeepSeek (env wins over config by design). Without this
+                // hint the user just sees "DeepSeek key not found" and has no
+                // idea their explicit easybits config was overridden.
+                let easybits_key_present = self
+                    .providers
+                    .as_ref()
+                    .and_then(|p| p.easybits.api_key.as_deref())
+                    .is_some_and(|k| !k.trim().is_empty() && k != API_KEYRING_SENTINEL);
+                if easybits_key_present {
+                    let env_override = ["GHOSTY_PROVIDER", "DEEPSEEK_PROVIDER"]
+                        .into_iter()
+                        .find(|name| std::env::var(name).is_ok_and(|v| !v.trim().is_empty()));
+                    if let Some(name) = env_override {
+                        anyhow::bail!(
+                            "EasyBits is configured ([providers.easybits] has a key), but the \
+                             environment variable {name} is overriding your provider to DeepSeek.\n\
+                             \n\
+                             Fix — clear the stray export in this shell:\n\
+                                    unset DEEPSEEK_PROVIDER GHOSTY_PROVIDER\n\
+                             \n\
+                             (Environment variables take precedence over ~/.ghosty/config.toml, \
+                             so {name} wins until you unset it or open a new terminal.)"
+                        )
+                    }
+                }
+                anyhow::bail!(
+                    "DeepSeek API key not found.\n\
+                     \n\
+                     1. Get a key:  https://platform.deepseek.com/api_keys\n\
+                     2. Save it (works in every folder, no OS prompts):\n\
+                            ghosty auth set --provider deepseek\n\
+                     \n\
+                     Alternatives:\n\
+                       • export DEEPSEEK_API_KEY=<your-key>      (current shell only;\n\
+                         also note: zsh users — exports in ~/.zshrc only reach interactive\n\
+                         shells, prefer ~/.zshenv for everything)\n\
+                       • api_key = \"<your-key>\"  in ~/.ghosty/config.toml"
+                )
+            }
             ApiProvider::NvidiaNim => anyhow::bail!(
                 "NVIDIA NIM API key not found. Run 'ghosty auth set --provider nvidia-nim', \
                  set NVIDIA_API_KEY/NVIDIA_NIM_API_KEY, or save api_key in ~/.ghosty/config.toml \
@@ -2887,7 +2969,7 @@ impl Config {
 
 // === Defaults ===
 
-fn default_config_path() -> Option<PathBuf> {
+pub(crate) fn default_config_path() -> Option<PathBuf> {
     env_config_path().or_else(home_config_path)
 }
 
@@ -4347,6 +4429,7 @@ fn merge_providers(
             ollama: merge_provider_config(base.ollama, override_cfg.ollama),
             volcengine: merge_provider_config(base.volcengine, override_cfg.volcengine),
             huggingface: merge_provider_config(base.huggingface, override_cfg.huggingface),
+            easybits: merge_provider_config(base.easybits, override_cfg.easybits),
         }),
     }
 }
@@ -4787,6 +4870,8 @@ pub fn active_provider_has_env_api_key(config: &Config) -> bool {
     match config.api_provider() {
         ApiProvider::Deepseek | ApiProvider::DeepseekCN => {
             std::env::var("DEEPSEEK_API_KEY").is_ok_and(|k| !k.trim().is_empty())
+                || (config.is_easybits_mode()
+                    && std::env::var("EASYBITS_API_KEY").is_ok_and(|k| !k.trim().is_empty()))
         }
         ApiProvider::NvidiaNim => {
             std::env::var("NVIDIA_API_KEY").is_ok_and(|k| !k.trim().is_empty())
@@ -4847,7 +4932,13 @@ pub fn active_provider_uses_env_only_api_key(config: &Config) -> bool {
 #[must_use]
 pub fn has_api_key_for(config: &Config, provider: ApiProvider) -> bool {
     let env_var = match provider {
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN => "DEEPSEEK_API_KEY",
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN => {
+            if config.is_easybits_mode() {
+                "EASYBITS_API_KEY"
+            } else {
+                "DEEPSEEK_API_KEY"
+            }
+        }
         ApiProvider::NvidiaNim => "NVIDIA_API_KEY",
         ApiProvider::Openai => "OPENAI_API_KEY",
         ApiProvider::Atlascloud => "ATLASCLOUD_API_KEY",
@@ -10107,6 +10198,109 @@ model = "deepseek-ai/deepseek-v4-pro"
         assert_eq!(config.deepseek_api_key()?, "hf-env-key");
         assert_eq!(config.deepseek_base_url(), "https://custom-hf.example/v1");
         assert_eq!(config.default_model(), "meta-llama/Llama-3-70B");
+        Ok(())
+    }
+
+    #[test]
+    fn easybits_mode_resolves_key_from_providers_easybits() {
+        let config = Config {
+            provider: Some("easybits".to_string()),
+            providers: Some(ProvidersConfig {
+                easybits: ProviderConfig {
+                    api_key: Some("eb_sk_test".to_string()),
+                    base_url: Some("https://www.easybits.cloud/api/v2/compute/v1".to_string()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert!(config.is_easybits_mode());
+        assert_eq!(config.api_provider(), ApiProvider::Deepseek);
+        assert_eq!(config.deepseek_api_key().unwrap(), "eb_sk_test");
+        assert_eq!(
+            config.deepseek_base_url(),
+            "https://www.easybits.cloud/api/v2/compute/v1"
+        );
+    }
+
+    /// End-to-end load: a real `[providers.easybits]` config on disk, loaded
+    /// through the full `Config::load` pipeline in a CLEAN environment, must
+    /// resolve as EasyBits and surface the key. Pins the user-reported
+    /// "DeepSeek API key not found" regression.
+    #[test]
+    fn easybits_config_loads_from_disk_in_clean_env() -> Result<()> {
+        let _lock = lock_test_env();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_root =
+            env::temp_dir().join(format!("ghosty-easybits-{}-{}", std::process::id(), nanos));
+        fs::create_dir_all(temp_root.join(".ghosty"))?;
+        let _guard = EnvGuard::new(&temp_root);
+        // Safety: test-only env mutation under the global test lock.
+        unsafe {
+            env::remove_var("EASYBITS_API_KEY");
+        }
+
+        let config_path = temp_root.join(".ghosty").join("config.toml");
+        fs::write(
+            &config_path,
+            "provider = \"easybits\"\n\n[providers.easybits]\napi_key = \"eb_sk_live_FROMDISK\"\nbase_url = \"https://www.easybits.cloud/api/v2/llm/v1\"\n",
+        )?;
+
+        let config = Config::load(Some(config_path), None)?;
+        assert!(config.is_easybits_mode());
+        assert_eq!(config.api_provider(), ApiProvider::Deepseek);
+        assert_eq!(config.deepseek_api_key()?, "eb_sk_live_FROMDISK");
+        assert_eq!(
+            config.deepseek_base_url(),
+            "https://www.easybits.cloud/api/v2/llm/v1"
+        );
+        Ok(())
+    }
+
+    /// A stray `DEEPSEEK_PROVIDER=deepseek` overrides the config's explicit
+    /// `provider = "easybits"` (documented env-wins precedence). The resulting
+    /// error must name the overriding env var and the fix, not the generic
+    /// "DeepSeek key not found".
+    #[test]
+    fn deepseek_provider_env_overrides_easybits_config() -> Result<()> {
+        let _lock = lock_test_env();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_root = env::temp_dir().join(format!(
+            "ghosty-easybits-env-{}-{}",
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(temp_root.join(".ghosty"))?;
+        let _guard = EnvGuard::new(&temp_root);
+        // Safety: test-only env mutation under the global test lock.
+        unsafe {
+            env::remove_var("EASYBITS_API_KEY");
+            env::set_var("DEEPSEEK_PROVIDER", "deepseek");
+        }
+
+        let config_path = temp_root.join(".ghosty").join("config.toml");
+        fs::write(
+            &config_path,
+            "provider = \"easybits\"\n\n[providers.easybits]\napi_key = \"eb_sk_live_FROMDISK\"\nbase_url = \"https://www.easybits.cloud/api/v2/llm/v1\"\n",
+        )?;
+
+        let config = Config::load(Some(config_path), None)?;
+        assert!(!config.is_easybits_mode());
+        let err = config
+            .deepseek_api_key()
+            .expect_err("no deepseek key configured");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("DEEPSEEK_PROVIDER") && msg.contains("unset"),
+            "error must name the overriding env var and the fix, got: {msg}"
+        );
         Ok(())
     }
 }

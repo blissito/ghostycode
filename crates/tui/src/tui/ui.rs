@@ -2916,22 +2916,76 @@ async fn run_event_loop(
                                 }
                             }
                         }
-                        OnboardingState::EasybitsMcp => match app.submit_easybits_key() {
-                            Ok(()) => {
-                                if !app.easybits_key_input.trim().is_empty() {
-                                    app.push_status_toast(
-                                        "EasyBits key saved to mcp.json".to_string(),
-                                        StatusToastLevel::Info,
-                                        Some(3_000),
-                                    );
+                        OnboardingState::EasybitsMcp => {
+                            // Capture before submit: `submit_easybits_key`
+                            // clears `easybits_key_input` on success, so we
+                            // must remember whether a key was actually entered.
+                            let entered_key = !app.easybits_key_input.trim().is_empty();
+                            match app.submit_easybits_key() {
+                                Ok(()) => {
+                                    if entered_key {
+                                        // The key was persisted to disk as both
+                                        // the MCP token and the
+                                        // `[providers.easybits]` LLM key (with
+                                        // `provider = "easybits"`). Reload the
+                                        // in-memory config and respawn the
+                                        // engine so the running session adopts
+                                        // the new provider/key without a
+                                        // restart. Without this, the engine
+                                        // spawned at startup keeps its keyless
+                                        // DeepSeek config and the first message
+                                        // send fails with "DeepSeek API key not
+                                        // found".
+                                        match Config::load(
+                                            app.config_path.clone(),
+                                            app.config_profile.as_deref(),
+                                        ) {
+                                            Ok(new_config) => {
+                                                *config = new_config;
+                                                app.api_provider = config.api_provider();
+                                                let _ = engine_handle.send(Op::Shutdown).await;
+                                                let engine_config =
+                                                    build_engine_config(app, config);
+                                                engine_handle = spawn_engine(engine_config, config);
+                                                app.offline_mode = false;
+                                                app.api_key_env_only = false;
+                                                if !app.api_messages.is_empty() {
+                                                    let _ = engine_handle
+                                                        .send(Op::SyncSession {
+                                                            session_id: app
+                                                                .current_session_id
+                                                                .clone(),
+                                                            messages: app.api_messages.clone(),
+                                                            system_prompt: app
+                                                                .system_prompt
+                                                                .clone(),
+                                                            system_prompt_override: false,
+                                                            model: app.model.clone(),
+                                                            workspace: app.workspace.clone(),
+                                                        })
+                                                        .await;
+                                                }
+                                            }
+                                            Err(err) => {
+                                                app.status_message = Some(format!(
+                                                    "EasyBits key saved but reload failed: {err}"
+                                                ));
+                                            }
+                                        }
+                                        app.push_status_toast(
+                                            "EasyBits key saved (MCP + LLM provider)".to_string(),
+                                            StatusToastLevel::Info,
+                                            Some(3_000),
+                                        );
+                                    }
+                                    onboarding::advance_onboarding_after_easybits(app);
                                 }
-                                app.finish_onboarding();
+                                Err(e) => {
+                                    app.status_message =
+                                        Some(format!("Failed to save EasyBits key: {e}"));
+                                }
                             }
-                            Err(e) => {
-                                app.status_message =
-                                    Some(format!("Failed to save EasyBits key: {e}"));
-                            }
-                        },
+                        }
                         OnboardingState::TrustDirectory => {}
                         OnboardingState::Tips => {
                             app.finish_onboarding();
@@ -2949,7 +3003,7 @@ async fn run_event_loop(
                                     app.onboarding_workspace_trust_gate = false;
                                     app.onboarding = OnboardingState::None;
                                 } else {
-                                    app.onboarding = OnboardingState::EasybitsMcp;
+                                    app.onboarding = OnboardingState::Tips;
                                 }
                             }
                             Err(err) => {
@@ -5180,6 +5234,7 @@ async fn apply_model_picker_choice(
             config,
             target_provider,
             Some(model.clone()),
+            None,
         )
         .await;
         if app.api_provider != target_provider {
@@ -5318,6 +5373,7 @@ async fn switch_provider(
     config: &mut Config,
     target: ApiProvider,
     model_override: Option<String>,
+    provider_name_override: Option<String>,
 ) {
     let previous_provider = app.api_provider;
     let previous_model = app.model.clone();
@@ -5327,6 +5383,10 @@ async fn switch_provider(
     let previous_providers = config.providers.clone();
 
     config.provider = Some(target.as_str().to_string());
+    // Preserve easybits alias so is_easybits_mode() detects it.
+    if let Some(ref name) = provider_name_override {
+        config.provider = Some(name.clone());
+    }
     if matches!(target, ApiProvider::NvidiaNim)
         && config
             .base_url
@@ -5405,11 +5465,24 @@ async fn switch_provider(
         })
         .await;
 
+    // Persist the alias the user chose, not the resolved `ApiProvider`.
+    // EasyBits resolves to `ApiProvider::Deepseek`, so `target.as_str()`
+    // would write `provider = "deepseek"` to disk — silently dropping the
+    // EasyBits mode on the next launch (and sending the user back to a
+    // keyless DeepSeek). Prefer the override name when present.
+    let persisted_provider = provider_name_override
+        .as_deref()
+        .unwrap_or_else(|| target.as_str())
+        .to_string();
     let persist_warning = (|| -> anyhow::Result<()> {
-        commands::persist_root_string_key(app.config_path.as_deref(), "provider", target.as_str())?;
+        commands::persist_root_string_key(
+            app.config_path.as_deref(),
+            "provider",
+            &persisted_provider,
+        )?;
 
         let mut settings = crate::settings::Settings::load()?;
-        settings.default_provider = Some(target.as_str().to_string());
+        settings.default_provider = Some(persisted_provider.clone());
         if model_override.is_some() {
             settings.set_model_for_provider(target.as_str(), &new_model);
             if matches!(target, ApiProvider::Deepseek | ApiProvider::DeepseekCN) {
@@ -5422,10 +5495,13 @@ async fn switch_provider(
     .err()
     .map(|err| format!("Provider selection was not fully persisted: {err}"));
 
+    let previous_provider_label = previous_provider_str
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| previous_provider.as_str());
     let mut switch_summary = format!(
         "Provider switched: {} → {}",
-        previous_provider.as_str(),
-        target.as_str(),
+        previous_provider_label, persisted_provider,
     );
     switch_summary.push(char::from(10));
     switch_summary.push_str(&format!("Model: {} → {}", previous_model, new_model));
@@ -5439,7 +5515,7 @@ async fn switch_provider(
         content: switch_summary,
     });
 
-    let mut status_message = format!("Provider: {} via {}", target.as_str(), new_endpoint);
+    let mut status_message = format!("Provider: {} via {}", persisted_provider, new_endpoint);
     if persist_warning.is_some() {
         status_message.push_str(" (not fully persisted)");
     }
@@ -5480,6 +5556,16 @@ fn display_base_url_host(base_url: &str) -> String {
 }
 
 fn sync_config_provider_from_app(config: &mut Config, app: &App) {
+    // `app.api_provider` collapses the EasyBits alias to `ApiProvider::Deepseek`
+    // (EasyBits is a DeepSeek-compatible proxy). Writing `as_str()` back here
+    // would overwrite `provider = "easybits"` with `"deepseek"` at startup,
+    // silently dropping EasyBits mode so key resolution looks in the empty
+    // DeepSeek slot and fails with "DeepSeek API key not found". Preserve the
+    // alias when the config is already in EasyBits mode and the active provider
+    // is the DeepSeek it maps to.
+    if config.is_easybits_mode() && app.api_provider == ApiProvider::Deepseek {
+        return;
+    }
     config.provider = Some(app.api_provider.as_str().to_string());
 }
 
@@ -5653,8 +5739,20 @@ async fn apply_command_result(
                     }
                 }
             }
-            AppAction::SwitchProvider { provider, model } => {
-                switch_provider(app, engine_handle, config, provider, model).await;
+            AppAction::SwitchProvider {
+                provider,
+                model,
+                provider_name_override,
+            } => {
+                switch_provider(
+                    app,
+                    engine_handle,
+                    config,
+                    provider,
+                    model,
+                    provider_name_override,
+                )
+                .await;
                 // Refresh balance after provider switch.
                 let balance_cooldown_expired = app
                     .last_balance_fetch
@@ -7356,7 +7454,7 @@ async fn handle_view_events(
             }
             ViewEvent::ProviderPickerApplied { provider } => {
                 let model_override = provider_picker_model_override(app, provider);
-                switch_provider(app, engine_handle, config, provider, model_override).await;
+                switch_provider(app, engine_handle, config, provider, model_override, None).await;
             }
             ViewEvent::ProviderPickerApiKeySubmitted { provider, api_key } => {
                 apply_provider_picker_api_key(app, engine_handle, config, provider, api_key).await;
@@ -7715,7 +7813,7 @@ async fn apply_provider_picker_api_key(
         entry.api_key = Some(api_key);
     }
 
-    switch_provider(app, engine_handle, config, provider, None).await;
+    switch_provider(app, engine_handle, config, provider, None, None).await;
 }
 
 async fn apply_provider_picker_auth_mode(
@@ -7743,7 +7841,7 @@ async fn apply_provider_picker_auth_mode(
         }
     }
 
-    switch_provider(app, engine_handle, config, provider, None).await;
+    switch_provider(app, engine_handle, config, provider, None, None).await;
 }
 
 fn set_provider_auth_mode_in_memory(config: &mut Config, provider: ApiProvider, auth_mode: String) {

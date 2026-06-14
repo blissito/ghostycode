@@ -78,6 +78,8 @@ const DEFAULT_ARCEE_BASE_URL: &str = "https://api.arcee.ai/api/v1";
 const DEFAULT_HUGGINGFACE_MODEL: &str = "deepseek-ai/DeepSeek-V4-Pro";
 const DEFAULT_HUGGINGFACE_FLASH_MODEL: &str = "deepseek-ai/DeepSeek-V4-Flash";
 const DEFAULT_HUGGINGFACE_BASE_URL: &str = "https://router.huggingface.co/v1";
+const DEFAULT_EASYBITS_MODEL: &str = "deepseek-v4-pro";
+const DEFAULT_EASYBITS_BASE_URL: &str = "https://www.easybits.cloud/api/v2/llm/v1";
 const DEFAULT_SGLANG_BASE_URL: &str = "http://localhost:30000/v1";
 const DEFAULT_VLLM_MODEL: &str = "deepseek-ai/DeepSeek-V4-Pro";
 const DEFAULT_VLLM_FLASH_MODEL: &str = "deepseek-ai/DeepSeek-V4-Flash";
@@ -128,6 +130,8 @@ pub enum ProviderKind {
     Ollama,
     #[serde(alias = "hugging-face", alias = "hugging_face", alias = "hf")]
     Huggingface,
+    #[serde(alias = "easybits", alias = "easy-bits", alias = "eb")]
+    Easybits,
 }
 
 impl ProviderKind {
@@ -152,6 +156,7 @@ impl ProviderKind {
             Self::Vllm => "vllm",
             Self::Ollama => "ollama",
             Self::Huggingface => "huggingface",
+            Self::Easybits => "easybits",
         }
     }
 
@@ -181,6 +186,7 @@ impl ProviderKind {
             "vllm" | "v-llm" => Some(Self::Vllm),
             "ollama" | "ollama-local" => Some(Self::Ollama),
             "huggingface" | "hugging-face" | "hugging_face" | "hf" => Some(Self::Huggingface),
+            "easybits" | "easy-bits" | "easy_bits" | "eb" => Some(Self::Easybits),
             _ => None,
         }
     }
@@ -238,6 +244,8 @@ pub struct ProvidersToml {
     pub ollama: ProviderConfigToml,
     #[serde(default)]
     pub huggingface: ProviderConfigToml,
+    #[serde(default)]
+    pub easybits: ProviderConfigToml,
 }
 
 /// Sibling `permissions.toml` schema.
@@ -280,6 +288,7 @@ impl ProvidersToml {
             ProviderKind::Vllm => &self.vllm,
             ProviderKind::Ollama => &self.ollama,
             ProviderKind::Huggingface => &self.huggingface,
+            ProviderKind::Easybits => &self.easybits,
         }
     }
 
@@ -302,6 +311,7 @@ impl ProvidersToml {
             ProviderKind::Vllm => &mut self.vllm,
             ProviderKind::Ollama => &mut self.ollama,
             ProviderKind::Huggingface => &mut self.huggingface,
+            ProviderKind::Easybits => &mut self.easybits,
         }
     }
 }
@@ -554,6 +564,7 @@ impl ConfigToml {
             &mut self.providers.huggingface,
             &project.providers.huggingface,
         );
+        merge_project_provider_config(&mut self.providers.easybits, &project.providers.easybits);
     }
 
     #[must_use]
@@ -679,6 +690,12 @@ impl ConfigToml {
             "providers.huggingface.model" => self.providers.huggingface.model.clone(),
             "providers.huggingface.http_headers" => {
                 serialize_http_headers(&self.providers.huggingface.http_headers)
+            }
+            "providers.easybits.api_key" => self.providers.easybits.api_key.clone(),
+            "providers.easybits.base_url" => self.providers.easybits.base_url.clone(),
+            "providers.easybits.model" => self.providers.easybits.model.clone(),
+            "providers.easybits.http_headers" => {
+                serialize_http_headers(&self.providers.easybits.http_headers)
             }
             _ => self.extras.get(key).map(toml::Value::to_string),
         }
@@ -928,6 +945,18 @@ impl ConfigToml {
             "providers.huggingface.http_headers" => {
                 self.providers.huggingface.http_headers = parse_http_headers(value)?;
             }
+            "providers.easybits.api_key" => {
+                self.providers.easybits.api_key = Some(value.to_string());
+            }
+            "providers.easybits.base_url" => {
+                self.providers.easybits.base_url = Some(value.to_string());
+            }
+            "providers.easybits.model" => {
+                self.providers.easybits.model = Some(value.to_string());
+            }
+            "providers.easybits.http_headers" => {
+                self.providers.easybits.http_headers = parse_http_headers(value)?;
+            }
             _ => {
                 self.extras
                     .insert(key.to_string(), toml::Value::String(value.to_string()));
@@ -1046,6 +1075,10 @@ impl ConfigToml {
             "providers.huggingface.base_url" => self.providers.huggingface.base_url = None,
             "providers.huggingface.model" => self.providers.huggingface.model = None,
             "providers.huggingface.http_headers" => self.providers.huggingface.http_headers.clear(),
+            "providers.easybits.api_key" => self.providers.easybits.api_key = None,
+            "providers.easybits.base_url" => self.providers.easybits.base_url = None,
+            "providers.easybits.model" => self.providers.easybits.model = None,
+            "providers.easybits.http_headers" => self.providers.easybits.http_headers.clear(),
             _ => {
                 self.extras.remove(key);
             }
@@ -1318,6 +1351,19 @@ impl ConfigToml {
             out.insert("providers.huggingface.http_headers".to_string(), v);
         }
 
+        if let Some(v) = self.providers.easybits.api_key.as_ref() {
+            out.insert("providers.easybits.api_key".to_string(), redact_secret(v));
+        }
+        if let Some(v) = self.providers.easybits.base_url.as_ref() {
+            out.insert("providers.easybits.base_url".to_string(), v.clone());
+        }
+        if let Some(v) = self.providers.easybits.model.as_ref() {
+            out.insert("providers.easybits.model".to_string(), v.clone());
+        }
+        if let Some(v) = serialize_http_headers(&self.providers.easybits.http_headers) {
+            out.insert("providers.easybits.http_headers".to_string(), v);
+        }
+
         for (k, v) in &self.extras {
             out.insert(k.clone(), v.to_string());
         }
@@ -1402,6 +1448,7 @@ impl ConfigToml {
                 ProviderKind::Vllm => DEFAULT_VLLM_BASE_URL.to_string(),
                 ProviderKind::Ollama => DEFAULT_OLLAMA_BASE_URL.to_string(),
                 ProviderKind::Huggingface => DEFAULT_HUGGINGFACE_BASE_URL.to_string(),
+                ProviderKind::Easybits => DEFAULT_EASYBITS_BASE_URL.to_string(),
             })
         };
         // CLI flag wins outright. Otherwise: config-file → injected secrets/env.
@@ -1815,6 +1862,7 @@ fn default_model_for_provider(provider: ProviderKind) -> &'static str {
         ProviderKind::Vllm => DEFAULT_VLLM_MODEL,
         ProviderKind::Ollama => DEFAULT_OLLAMA_MODEL,
         ProviderKind::Huggingface => DEFAULT_HUGGINGFACE_MODEL,
+        ProviderKind::Easybits => DEFAULT_EASYBITS_MODEL,
     }
 }
 
@@ -1838,6 +1886,7 @@ fn default_base_url_for_provider(provider: ProviderKind) -> &'static str {
         ProviderKind::Vllm => DEFAULT_VLLM_BASE_URL,
         ProviderKind::Ollama => DEFAULT_OLLAMA_BASE_URL,
         ProviderKind::Huggingface => DEFAULT_HUGGINGFACE_BASE_URL,
+        ProviderKind::Easybits => DEFAULT_EASYBITS_BASE_URL,
     }
 }
 
@@ -2460,6 +2509,7 @@ struct EnvRuntimeOverrides {
     ollama_base_url: Option<String>,
     huggingface_base_url: Option<String>,
     huggingface_model: Option<String>,
+    easybits_base_url: Option<String>,
 }
 
 impl EnvRuntimeOverrides {
@@ -2587,6 +2637,9 @@ impl EnvRuntimeOverrides {
                 .or_else(|_| std::env::var("HF_MODEL"))
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
+            easybits_base_url: std::env::var("EASYBITS_BASE_URL")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
         }
     }
 
@@ -2613,6 +2666,7 @@ impl EnvRuntimeOverrides {
             ProviderKind::Vllm => self.vllm_base_url.clone(),
             ProviderKind::Ollama => self.ollama_base_url.clone(),
             ProviderKind::Huggingface => self.huggingface_base_url.clone(),
+            ProviderKind::Easybits => self.easybits_base_url.clone(),
         }
     }
 

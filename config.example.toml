@@ -20,7 +20,7 @@
 # `api_key` / `base_url` are
 # still read as DeepSeek defaults when `[providers.deepseek]` is absent
 # (backward compatibility).
-provider = "deepseek" # deepseek | deepseek-cn | nvidia-nim | openai | atlascloud | wanjie-ark | volcengine | openrouter | xiaomi-mimo | novita | fireworks | siliconflow | siliconflow-CN | arcee | moonshot | sglang | vllm | ollama | huggingface
+provider = "deepseek" # deepseek | deepseek-cn | nvidia-nim | openai | atlascloud | wanjie-ark | volcengine | openrouter | xiaomi-mimo | novita | fireworks | siliconflow | siliconflow-CN | arcee | moonshot | sglang | vllm | ollama | huggingface | easybits
 api_key = "YOUR_DEEPSEEK_API_KEY" # must be non-empty
 base_url = "https://api.deepseek.com/beta"
 # provider = "deepseek-cn"                       # legacy alias (official host is still https://api.deepseek.com)
@@ -389,6 +389,14 @@ max_subagents = 10 # optional (1-20)
 # api_key = "YOUR_HF_TOKEN"
 # base_url = "https://router.huggingface.co/v1"
 # model = "deepseek-ai/DeepSeek-V4-Pro"     # or deepseek-ai/DeepSeek-V4-Flash
+
+# EasyBits cloud proxy (DeepSeek reseller, OpenAI-compatible endpoint).
+# Same API key as the EasyBits MCP server. Set provider = "easybits" above,
+# then configure your key here:
+[providers.easybits]
+# api_key = "YOUR_EASYBITS_API_KEY"
+# base_url = "https://www.easybits.cloud/api/v2/llm/v1"
+# model = "deepseek-v4-pro"                # or deepseek-v4-flash
 
 # ─────────────────────────────────────────────────────────────────────────────────
 # Web Search Provider

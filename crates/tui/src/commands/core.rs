@@ -167,6 +167,7 @@ pub fn model(app: &mut App, model_name: Option<&str>) -> CommandResult {
                         AppAction::SwitchProvider {
                             provider,
                             model: Some(model_id),
+                            provider_name_override: None,
                         },
                     );
                 }
@@ -952,7 +953,9 @@ mod tests {
         let result = model(&mut app, Some("kimi-k2.6"));
 
         match result.action {
-            Some(AppAction::SwitchProvider { provider, model }) => {
+            Some(AppAction::SwitchProvider {
+                provider, model, ..
+            }) => {
                 assert_eq!(provider, crate::config::ApiProvider::Moonshot);
                 assert_eq!(model.as_deref(), Some("kimi-k2.6"));
             }

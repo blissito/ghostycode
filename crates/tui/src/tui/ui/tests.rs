@@ -2081,6 +2081,38 @@ fn saved_default_provider_syncs_back_to_runtime_config() {
 }
 
 #[test]
+fn sync_config_provider_preserves_easybits_alias() {
+    // Regression: `app.api_provider` collapses EasyBits → Deepseek, so the
+    // startup `sync_config_provider_from_app` used to overwrite
+    // `provider = "easybits"` with `"deepseek"`, dropping EasyBits mode and
+    // breaking key resolution ("DeepSeek API key not found"). The alias must
+    // survive the sync.
+    let mut config = Config {
+        provider: Some("easybits".to_string()),
+        providers: Some(crate::config::ProvidersConfig {
+            easybits: crate::config::ProviderConfig {
+                api_key: Some("eb_sk_live_test".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    assert!(config.is_easybits_mode());
+
+    let mut app = create_test_app();
+    app.api_provider = config.api_provider(); // Deepseek, via the easybits map
+
+    sync_config_provider_from_app(&mut config, &app);
+
+    assert!(
+        config.is_easybits_mode(),
+        "sync must keep provider = \"easybits\", not collapse it to deepseek"
+    );
+    assert_eq!(config.deepseek_api_key().unwrap(), "eb_sk_live_test");
+}
+
+#[test]
 fn provider_picker_reselecting_active_provider_preserves_current_model() {
     let mut app = create_test_app();
     app.api_provider = ApiProvider::Ollama;
@@ -2166,6 +2198,7 @@ async fn provider_switch_clears_turn_cache_history() {
         &mut config,
         ApiProvider::Ollama,
         None,
+        None,
     )
     .await;
 
@@ -2192,6 +2225,7 @@ async fn provider_switch_to_deepseek_canonicalizes_openrouter_default_model() {
         &mut engine.handle,
         &mut config,
         ApiProvider::Deepseek,
+        None,
         None,
     )
     .await;
@@ -2230,6 +2264,7 @@ async fn provider_switch_to_deepseek_drops_stale_xiaomi_root_base_url() {
         &mut engine.handle,
         &mut config,
         ApiProvider::Deepseek,
+        None,
         None,
     )
     .await;
@@ -2274,6 +2309,7 @@ api_key = "arcee-key"
         &mut engine.handle,
         &mut config,
         ApiProvider::XiaomiMimo,
+        None,
         None,
     )
     .await;
@@ -2320,6 +2356,7 @@ async fn provider_switch_model_override_updates_target_provider_model_slot() {
         &mut config,
         ApiProvider::Deepseek,
         Some("deepseek-v4-flash".to_string()),
+        None,
     )
     .await;
 
@@ -2366,6 +2403,7 @@ async fn provider_switch_to_openrouter_canonicalizes_deepseek_default_model() {
         &mut engine.handle,
         &mut config,
         ApiProvider::Openrouter,
+        None,
         None,
     )
     .await;
@@ -4624,26 +4662,31 @@ fn api_key_validation_warns_without_blocking_unusual_formats() {
 }
 
 #[test]
-fn onboarding_after_api_key_save_does_not_repeat_language_step() {
+fn onboarding_after_language_skips_easybits_when_key_already_present() {
+    // A key already exists (e.g. configured via `ghosty auth set`), so the
+    // EasyBits step — whose only job is to capture that key — is skipped and
+    // we go straight to the trust step instead of re-asking for it.
     let mut app = create_test_app();
-    app.onboarding = OnboardingState::ApiKey;
+    app.onboarding = OnboardingState::Language;
     app.onboarding_needs_api_key = false;
     app.trust_mode = true;
     app.status_message = Some("saved".to_string());
 
     crate::tui::onboarding::advance_onboarding_after_language(&mut app);
 
-    assert_eq!(app.onboarding, OnboardingState::EasybitsMcp);
+    assert_eq!(app.onboarding, OnboardingState::TrustDirectory);
     assert_eq!(app.status_message, None);
 }
 
 #[test]
-fn onboarding_after_api_key_save_routes_to_easybits_when_needed() {
+fn onboarding_after_language_routes_to_easybits_when_key_needed() {
+    // No key configured yet → show the EasyBits step so the user can enter a
+    // key that doubles as the LLM provider key.
     let tmpdir = TempDir::new().expect("tempdir");
     let mut app = create_test_app();
     app.workspace = tmpdir.path().to_path_buf();
-    app.onboarding = OnboardingState::ApiKey;
-    app.onboarding_needs_api_key = false;
+    app.onboarding = OnboardingState::Language;
+    app.onboarding_needs_api_key = true;
     app.trust_mode = false;
 
     crate::tui::onboarding::advance_onboarding_after_language(&mut app);
