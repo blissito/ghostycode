@@ -6592,6 +6592,7 @@ fn render(f: &mut Frame, app: &mut App) {
     // Show onboarding screen if needed
     if app.onboarding != OnboardingState::None {
         onboarding::render(f, size, app);
+        crate::tui::osc8::apply_links(f.buffer_mut());
         return;
     }
 
@@ -6956,6 +6957,12 @@ fn render(f: &mut Frame, app: &mut App) {
         let buf = f.buffer_mut();
         app.view_stack.render(size, buf);
     }
+
+    // Inject OSC 8 hyperlinks into buffer cells post-render.
+    // ratatui 0.30.1 filters control chars from Span content, so we
+    // accumulate link registrations during rendering and inject escape
+    // codes directly via Cell::set_symbol here.
+    crate::tui::osc8::apply_links(f.buffer_mut());
 }
 
 /// Draw a complete application frame, optionally with a full viewport reset.
