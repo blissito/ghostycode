@@ -6,22 +6,21 @@ use ratatui::text::{Line, Span};
 use crate::localization::MessageId;
 use crate::palette;
 use crate::tui::app::App;
-
-/// Ghosty mascot — the brand ghost with round glasses and three ruffles.
-const MASCOT: &[&str] = &[
-    "   .------.",
-    "  /        \\",
-    " ──(o)⌒(o)──",
-    " |          |",
-    " \\___/\\__/\\_/",
-];
+use crate::tui::widgets::{MASCOT_BOTTOM, MASCOT_TOP, mascot_anim_tick, mascot_eyes_row};
 
 pub fn lines(app: &App) -> Vec<Line<'static>> {
-    let mut out: Vec<Line<'static>> = MASCOT
+    // Same block ghost as the chat empty state, with the same idle
+    // blink/glance/smile animation so onboarding and home agree.
+    let mascot = [
+        MASCOT_TOP.to_string(),
+        mascot_eyes_row(mascot_anim_tick()),
+        MASCOT_BOTTOM.to_string(),
+    ];
+    let mut out: Vec<Line<'static>> = mascot
         .iter()
         .map(|row| {
             Line::from(Span::styled(
-                (*row).to_string(),
+                row.clone(),
                 Style::default().fg(palette::GHOSTY_PURPLE),
             ))
         })

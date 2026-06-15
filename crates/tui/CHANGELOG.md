@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.8-preview.0] - 2026-06-14
+## [0.0.9] - 2026-06-15
 
 ### Added
 
+- Idle ghost mascot now animates: the block ghost on the chat empty state and
+  the onboarding welcome blinks slowly and occasionally glances around (left,
+  right, up, down) or flashes a happy look. It rests looking left, and the
+  welcome screen now uses the same block ghost as the home screen. Runs at a
+  gentle ~5.5 FPS so it stays visible even on terminals that force low-motion
+  (Ghostty, VS Code, SSH).
 - EasyBits provider (DeepSeek-compatible reseller): `provider = "easybits"`
   maps internally to DeepSeek; one EasyBits key serves both the LLM and the
   bundled MCP server. `ghosty auth set --provider easybits` and `/provider
@@ -5597,5 +5603,6 @@ Welcome — and thank you.
 [0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
 [0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
+[0.0.9]: https://github.com/blissito/ghostycode/releases/tag/v0.0.9
 [0.0.8-preview.0]: https://github.com/blissito/ghostycode/releases/tag/v0.0.8-preview.0
 [0.0.7]: https://github.com/blissito/ghostycode/compare/v0.0.6...v0.0.7

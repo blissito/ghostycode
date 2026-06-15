@@ -1106,6 +1106,15 @@ async fn run_event_loop(
     let mut last_status_frame = Instant::now()
         .checked_sub(Duration::from_millis(UI_STATUS_ANIMATION_MS))
         .unwrap_or_else(Instant::now);
+    // Drives the idle ghost-mascot eye animation (blink/glance/smile) on
+    // the chat empty state and onboarding welcome. Unlike the status
+    // spinner this advances while the app is otherwise idle, so it needs
+    // its own cadence to wake the loop and request redraws.
+    let mut last_mascot_frame = Instant::now()
+        .checked_sub(Duration::from_millis(
+            crate::tui::widgets::MASCOT_ANIM_FRAME_MS,
+        ))
+        .unwrap_or_else(Instant::now);
     // 120 FPS draw cap. Without this we redraw on every SSE chunk during a
     // long stream — wasted work the user can't perceive. See
     // `tui::frame_rate_limiter` for the rationale; ports the small piece of
@@ -2446,6 +2455,22 @@ async fn run_event_loop(
             }
             app.needs_redraw = true;
             last_status_frame = Instant::now();
+        }
+
+        // Idle ghost-mascot eyes. Animates while the mascot is on screen
+        // (chat empty state or the onboarding welcome). Intentionally not
+        // gated on `low_motion`: at ~5.5 FPS it's nowhere near the flicker
+        // threshold that flag targets, and freezing it would leave the
+        // ghost looking dead on Ghostty/VS Code/SSH (where low_motion is
+        // force-enabled). We only spend wake-ups while the mascot shows.
+        let mascot_on_screen = crate::tui::widgets::should_render_empty_state(app)
+            || app.onboarding == crate::tui::app::OnboardingState::Welcome;
+        if mascot_on_screen
+            && last_mascot_frame.elapsed()
+                >= Duration::from_millis(crate::tui::widgets::MASCOT_ANIM_FRAME_MS)
+        {
+            app.needs_redraw = true;
+            last_mascot_frame = Instant::now();
         }
 
         if event_broker.is_paused() {

@@ -22,7 +22,7 @@ pub use footer::{
 pub use header::{HeaderData, HeaderWidget, header_status_indicator_frame};
 pub use renderable::Renderable;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::localization::Locale;
 use crate::palette;
@@ -1962,8 +1962,87 @@ fn composer_top_right_chrome(app: &App, area_width: u16) -> Option<Line<'static>
     }
 }
 
-fn should_render_empty_state(app: &App) -> bool {
+pub(crate) fn should_render_empty_state(app: &App) -> bool {
     app.history.is_empty() && !app.is_loading && !app.is_compacting && !app.is_purging
+}
+
+/// Cadence of the idle ghost-mascot eye animation. One timeline frame
+/// every ~180ms keeps the motion gentle — a slow blink/glance, never a
+/// spinner. The main loop wakes on this same cadence while the mascot is
+/// on screen (see `ui.rs`) so the frame-rate limiter doesn't eat frames.
+pub const MASCOT_ANIM_FRAME_MS: u64 = 180;
+
+/// Fixed top/bottom rows of the block ghost mascot. The middle (eyes)
+/// row is built per-frame by [`mascot_eyes_row`] so the ghost can blink
+/// and glance around while idle.
+pub const MASCOT_TOP: &str = " ▄████▄ ";
+pub const MASCOT_BOTTOM: &str = "▐█▀██▀█▌";
+
+/// Idle eye timeline as `(glyph, frames)` runs. The ghost rests looking
+/// left (`◐`) the vast majority of the time — this is also the default
+/// frame (frame 0) shown when the animation isn't running — with brief
+/// blinks (`─`), forward/side/up/down looks (`● ◑ ◓ ◒`), and the
+/// occasional happy look (`◕`). Every glyph is the same display width as
+/// the original `◑` so the mascot never shifts. The whole loop runs
+/// ~22s, so any single expression is rare and unobtrusive. Deterministic
+/// in the frame index — no RNG — so snapshots can pin a resting frame.
+const MASCOT_EYE_TIMELINE: &[(&str, u64)] = &[
+    ("◐", 16), // rest: looking left (default)
+    ("─", 2),  // blink
+    ("◐", 14),
+    ("◑", 5), // glance right
+    ("◐", 12),
+    ("─", 2), // blink
+    ("◐", 10),
+    ("●", 5), // look forward
+    ("◐", 12),
+    ("◕", 6), // happy
+    ("◐", 10),
+    ("─", 2), // blink
+    ("◐", 10),
+    ("◓", 4), // glance up
+    ("◐", 12),
+    ("◒", 4), // glance down
+    ("◐", 14),
+];
+
+/// Resolve the eye glyph for animation frame `tick`.
+fn mascot_eye(tick: u64) -> &'static str {
+    let total: u64 = MASCOT_EYE_TIMELINE.iter().map(|(_, frames)| *frames).sum();
+    if total == 0 {
+        return "◐";
+    }
+    let mut pos = tick % total;
+    for (glyph, frames) in MASCOT_EYE_TIMELINE {
+        if pos < *frames {
+            return glyph;
+        }
+        pos -= *frames;
+    }
+    "◐"
+}
+
+/// Current animation frame for the idle ghost mascot, shared by the chat
+/// empty state and the onboarding welcome so both ghosts blink in sync.
+///
+/// Deliberately *not* gated on `low_motion`: that flag exists to dodge the
+/// 120-FPS flicker some terminals (Ghostty, VS Code, SSH) show during
+/// streaming, but this animation ticks at ~5.5 FPS — far below the flicker
+/// threshold — so freezing it there would only make the ghost look dead on
+/// the very terminals most people use. Tests pin specific frames via
+/// [`mascot_eyes_row`]/[`mascot_eye`] directly instead of through this.
+pub fn mascot_anim_tick() -> u64 {
+    use std::sync::OnceLock;
+    static EPOCH: OnceLock<Instant> = OnceLock::new();
+    let epoch = EPOCH.get_or_init(Instant::now);
+    (epoch.elapsed().as_millis() / u128::from(MASCOT_ANIM_FRAME_MS)) as u64
+}
+
+/// Build the mascot's eyes row for animation frame `tick`. Framing and
+/// width match the static `▐ ◑  ◑ ▌` art so columns stay aligned.
+pub fn mascot_eyes_row(tick: u64) -> String {
+    let eye = mascot_eye(tick);
+    format!("▐ {eye}  {eye} ▌")
 }
 
 fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
@@ -1977,8 +2056,13 @@ fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
     let inset = " ".repeat(left_padding);
 
     // Ghosty block mascot — paired line-for-line with the info rows,
-    // Claude-style. Purple body, eyes carved by the spaces.
-    const MASCOT: [&str; 3] = [" ▄████▄ ", "▐ ◑  ◑ ▌", "▐█▀██▀█▌"];
+    // Claude-style. Purple body, eyes carved by the spaces. The eyes
+    // animate (blink/glance/smile) while idle; see `mascot_eyes_row`.
+    let mascot: [String; 3] = [
+        MASCOT_TOP.to_string(),
+        mascot_eyes_row(mascot_anim_tick()),
+        MASCOT_BOTTOM.to_string(),
+    ];
     let info: [(String, Style); 3] = [
         (
             format!("Ghosty Code v{}", env!("CARGO_PKG_VERSION")),
@@ -1993,7 +2077,7 @@ fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
             Style::default().fg(palette::TEXT_MUTED),
         ),
     ];
-    let body: Vec<Line<'static>> = MASCOT
+    let body: Vec<Line<'static>> = mascot
         .iter()
         .zip(info)
         .map(|(art, (text, style))| {
@@ -2632,6 +2716,7 @@ mod tests {
         push_command_entry, should_render_empty_state, slash_completion_hints, wrap_input_lines,
         wrap_text,
     };
+    use super::{MASCOT_EYE_TIMELINE, mascot_eye, mascot_eyes_row};
     use crate::config::{ApiProvider, Config};
     use crate::localization::Locale;
     use crate::palette;
@@ -3364,6 +3449,38 @@ mod tests {
         assert_eq!(composer_top_padding(3, 3), 0);
         // content_lines > budget is clamped
         assert_eq!(composer_top_padding(5, 3), 0);
+    }
+
+    #[test]
+    fn mascot_eyes_row_keeps_width_across_every_frame() {
+        // Width must never change as the eyes animate, or the mascot
+        // shifts and breaks the line-for-line pairing with the info rows.
+        let rest = UnicodeWidthStr::width(mascot_eyes_row(0).as_str());
+        let total: u64 = MASCOT_EYE_TIMELINE.iter().map(|(_, n)| *n).sum();
+        for tick in 0..total {
+            assert_eq!(
+                UnicodeWidthStr::width(mascot_eyes_row(tick).as_str()),
+                rest,
+                "eyes row width drifted at tick {tick}"
+            );
+        }
+    }
+
+    #[test]
+    fn mascot_default_frame_looks_left() {
+        // Frame 0 is the resting look shown when the animation isn't
+        // running (snapshots, frozen renders): eyes to the left.
+        assert_eq!(mascot_eye(0), "◐");
+        assert_eq!(mascot_eyes_row(0), "▐ ◐  ◐ ▌");
+    }
+
+    #[test]
+    fn mascot_timeline_visits_blink_glance_and_happy() {
+        let seen: std::collections::HashSet<&str> =
+            MASCOT_EYE_TIMELINE.iter().map(|(g, _)| *g).collect();
+        for glyph in ["●", "─", "◑", "◐", "◕", "◓", "◒"] {
+            assert!(seen.contains(glyph), "missing eye state {glyph}");
+        }
     }
 
     #[test]
