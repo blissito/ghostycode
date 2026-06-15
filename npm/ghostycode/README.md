@@ -19,6 +19,12 @@ npm install ghostycode
 npx ghostycode --help
 ```
 
+¿Sin Node ni Rust? Baja el binario precompilado directo:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/blissito/ghostycode/main/scripts/install.sh | sh
+```
+
 El `postinstall` baja los binarios de tu plataforma a `bin/downloads/` y expone los
 comandos **`ghosty`** y **`ghosty-tui`**. Si los assets del release no están disponibles
 en ese momento, la instalación continúa y el wrapper reintenta la descarga al primer uso.

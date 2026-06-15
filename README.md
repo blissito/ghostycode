@@ -18,11 +18,19 @@ session persistence, and zero vendor lock-in. Open source (MIT).
 
 ## Instalación
 
+**Recomendado** — sin Node ni Rust, baja el binario precompilado:
+
 ```bash
-# npm (lo más fácil — baja los binarios precompilados del release)
+curl -fsSL https://raw.githubusercontent.com/blissito/ghostycode/main/scripts/install.sh | sh
+```
+
+### Alternativas
+
+```bash
+# npm (baja los binarios precompilados del release)
 npm install -g ghostycode
 
-# Cargo (sin Node — requiere Rust 1.88+)
+# Cargo (requiere Rust 1.88+)
 cargo install --git https://github.com/blissito/ghostycode ghosty-cli
 
 # Descarga directa: archivos por plataforma en
