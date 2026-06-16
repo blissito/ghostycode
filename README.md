@@ -21,7 +21,7 @@ session persistence, and zero vendor lock-in. Open source (MIT).
 **Recomendado** — sin Node ni Rust, baja el binario precompilado:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/blissito/ghostycode/main/scripts/install.sh | sh
+curl -fsSL https://formmy.app/ghosty/install.sh | sh
 ```
 
 ### Alternativas

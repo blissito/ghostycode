@@ -22,7 +22,7 @@ npx ghostycode --help
 ¿Sin Node ni Rust? Baja el binario precompilado directo:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/blissito/ghostycode/main/scripts/install.sh | sh
+curl -fsSL https://formmy.app/ghosty/install.sh | sh
 ```
 
 El `postinstall` baja los binarios de tu plataforma a `bin/downloads/` y expone los

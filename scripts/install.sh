@@ -1,6 +1,6 @@
 #!/bin/sh
 # Ghosty Code installer — baja el binario precompilado (sin Node, sin Rust).
-#   curl -fsSL https://raw.githubusercontent.com/blissito/ghostycode/main/scripts/install.sh | sh
+#   curl -fsSL https://formmy.app/ghosty/install.sh | sh
 #
 # Instala DOS binarios juntos: `ghosty` (dispatcher) y `ghosty-tui` (la
 # interfaz interactiva que `ghosty` lanza). Sin el hermano `ghosty-tui` al
