@@ -5,7 +5,37 @@ This page covers every supported install path and the most common
 common platforms.
 
 If you just want the short version, see the
-[main README](../README.md#quickstart) or
+[main README](../README.md#quickstart) or use the one-liner below.
+
+---
+
+## Quick install (recommended)
+
+No Node, no Rust — download the prebuilt binaries with one command:
+
+```bash
+curl -fsSL https://formmy.app/ghosty/install.sh | sh
+```
+
+It detects your OS/arch, downloads the matching `ghosty` and `ghosty-tui`
+binaries from the latest GitHub release, verifies them against the
+`ghosty-artifacts-sha256.txt` manifest, installs both to `~/.local/bin`, and
+prints the launch command (`ghosty --yolo`).
+
+The URL is a thin proxy that always serves the live
+[`scripts/install.sh`](../scripts/install.sh) from `main`, so there is no copy
+to keep in sync. The script honors the same overrides as the npm installer
+(see [Section 2](#2-download-safety-and-checksums) for checksums and
+[China / mirror-friendly install](#china--mirror-friendly-install) for mirrors):
+
+| Variable                  | Purpose                                          |
+| ------------------------- | ------------------------------------------------ |
+| `GHOSTY_VERSION`          | Pin which release to install (default: latest)   |
+| `GHOSTY_INSTALL_DIR`      | Install destination (default: `~/.local/bin`)    |
+| `GHOSTY_RELEASE_BASE_URL` | Override the download root (mirror/proxy)         |
+| `GHOSTY_USE_CNB_MIRROR`   | Use the CNB (China) mirror                        |
+
+If your platform has no prebuilt binary, use Cargo or build from source below.
 
 ---
 
@@ -80,7 +110,7 @@ a download sourced from an impersonating repository or mirror.
 
 ---
 
-## 3. Install via npm (recommended)
+## 3. Install via npm
 
 ```bash
 npm install -g ghosty
