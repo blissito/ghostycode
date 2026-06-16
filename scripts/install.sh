@@ -64,4 +64,4 @@ case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
   *) echo "ghosty-install: añade al PATH →  export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
 esac
-echo "Listo. Corre: ghosty doctor"
+echo "Listo. Arranca con:  ghosty --yolo"
