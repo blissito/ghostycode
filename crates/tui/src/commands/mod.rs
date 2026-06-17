@@ -727,7 +727,8 @@ pub use config::{
 };
 
 /// Execute a Recursive Language Model (RLM) turn — Algorithm 1 from
-/// Zhang et al. (arXiv:2512.24601).
+/// Zhang & Khattab, "Recursive Language Models"
+/// (https://alexzhang13.github.io/blog/2025/rlm/).
 ///
 /// The user's prompt text is passed as the argument. It will be stored
 /// in the REPL as the `PROMPT` variable. The root LLM will only see

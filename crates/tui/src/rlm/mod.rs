@@ -1,6 +1,7 @@
 //! Recursive Language Model (RLM) loop — paper-spec Algorithm 1.
 //!
-//! Implements Zhang, Kraska & Khattab (arXiv:2512.24601, §2 Algorithm 1):
+//! Implements Alex L. Zhang & Omar Khattab, "Recursive Language Models"
+//! (https://alexzhang13.github.io/blog/2025/rlm/, Algorithm 1):
 //!
 //! ```text
 //! state ← InitREPL(prompt=P)

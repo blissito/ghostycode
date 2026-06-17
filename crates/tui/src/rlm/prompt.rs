@@ -1,5 +1,6 @@
 //! RLM system prompt — adapted from the reference implementation
-//! (alexzhang13/rlm) and Zhang et al., arXiv:2512.24601.
+//! (alexzhang13/rlm) and Zhang & Khattab, "Recursive Language Models"
+//! (https://alexzhang13.github.io/blog/2025/rlm/).
 //!
 //! The prompt is deliberately strict: the only way to make progress is
 //! through a `repl` block. There is no fall-through prose path.
