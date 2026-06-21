@@ -155,6 +155,19 @@ impl DeepSeekClient {
                     }
                 }
             }
+            // OpenAI reasoning models reject root-level `oneOf`/`anyOf`/etc. in a
+            // function schema (e.g. `apply_patch`); strip them at the wire level.
+            if is_openai_reasoning_model(&model) {
+                for t in &mut chat_tools {
+                    if let Some(fn_obj) = t
+                        .as_object_mut()
+                        .and_then(|t| t.get_mut("function"))
+                        .and_then(|f| f.get_mut("parameters"))
+                    {
+                        crate::tools::schema_sanitize::sanitize_for_openai(fn_obj);
+                    }
+                }
+            }
             body["tools"] = json!(chat_tools);
         }
         if let Some(choice) = request.tool_choice.as_ref()
@@ -250,6 +263,19 @@ impl DeepSeekClient {
                         .and_then(|f| f.get_mut("parameters"))
                     {
                         crate::tools::schema_sanitize::sanitize_for_kimi(fn_obj);
+                    }
+                }
+            }
+            // OpenAI reasoning models reject root-level `oneOf`/`anyOf`/etc. in a
+            // function schema (e.g. `apply_patch`); strip them at the wire level.
+            if is_openai_reasoning_model(&model) {
+                for t in &mut chat_tools {
+                    if let Some(fn_obj) = t
+                        .as_object_mut()
+                        .and_then(|t| t.get_mut("function"))
+                        .and_then(|f| f.get_mut("parameters"))
+                    {
+                        crate::tools::schema_sanitize::sanitize_for_openai(fn_obj);
                     }
                 }
             }

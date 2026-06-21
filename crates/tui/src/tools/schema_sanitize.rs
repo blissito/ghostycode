@@ -648,6 +648,92 @@ pub fn sanitize_for_kimi(schema: &mut serde_json::Value) {
     }
 }
 
+/// Normalize a tool's function schema for OpenAI's strict tool-schema rules.
+///
+/// OpenAI rejects a function parameter schema whose **top level** is anything
+/// other than a plain object: the root must declare `type: "object"` and must
+/// not carry `oneOf` / `anyOf` / `allOf` / `enum` / `const` / `not`
+/// (`Invalid schema for function ...: schema must have type 'object' and not
+/// have 'oneOf'/'anyOf'/'allOf'/'enum'/'const'/'not' at the top level.`).
+///
+/// Tools such as `apply_patch` express an "exactly one of these inputs"
+/// constraint with a root `oneOf` (e.g. `[{required:["patch"]},
+/// {required:["changes"]}]`). That is a soft validation hint the tool runtime
+/// re-checks anyway, so dropping it at the wire level keeps the tool callable
+/// without changing behaviour.
+///
+/// Only the root is touched: nested `anyOf` / `oneOf` (e.g. nullable unions on
+/// individual properties) are valid for OpenAI and left intact.
+pub fn sanitize_for_openai(schema: &mut serde_json::Value) {
+    let Some(obj) = schema.as_object_mut() else {
+        return;
+    };
+    for key in ["oneOf", "anyOf", "allOf", "enum", "const", "not"] {
+        obj.remove(key);
+    }
+    obj.entry("type")
+        .or_insert_with(|| Value::String("object".to_string()));
+    if !obj.contains_key("properties") {
+        obj.insert("properties".to_string(), Value::Object(Map::new()));
+    }
+}
+
+#[cfg(test)]
+mod openai_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn openai_sanitize_strips_root_oneof_from_apply_patch_shape() {
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "patch": {"type": "string"},
+                "changes": {"type": "array", "items": {"type": "object"}}
+            },
+            "oneOf": [
+                {"required": ["patch"]},
+                {"required": ["changes"]}
+            ]
+        });
+
+        sanitize_for_openai(&mut schema);
+
+        assert!(schema.get("oneOf").is_none(), "root oneOf must be stripped");
+        assert_eq!(schema["type"], "object");
+        // Properties are untouched.
+        assert_eq!(schema["properties"]["patch"]["type"], "string");
+    }
+
+    #[test]
+    fn openai_sanitize_preserves_nested_nullable_unions() {
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "maybe": {"anyOf": [{"type": "string"}, {"type": "null"}]}
+            }
+        });
+        let expected = schema.clone();
+
+        sanitize_for_openai(&mut schema);
+
+        assert_eq!(schema, expected, "nested anyOf must be left intact");
+    }
+
+    #[test]
+    fn openai_sanitize_injects_object_type_and_properties() {
+        let mut schema = json!({
+            "enum": ["a", "b"]
+        });
+
+        sanitize_for_openai(&mut schema);
+
+        assert!(schema.get("enum").is_none());
+        assert_eq!(schema["type"], "object");
+        assert_eq!(schema["properties"], json!({}));
+    }
+}
+
 #[cfg(test)]
 mod kimi_tests {
     use super::*;
