@@ -86,6 +86,37 @@ fn apply_provider_token_limit(body: &mut Value, provider: ApiProvider, max_token
     body["max_completion_tokens"] = json!(max_tokens);
 }
 
+/// OpenAI's reasoning models (the GPT-5.x family, the o-series, and their
+/// `-codex` variants) reject the legacy `max_tokens` field and any non-default
+/// `temperature` / `top_p`. They require `max_completion_tokens` instead and
+/// only accept the default sampling settings. Matching is done on the wire
+/// model name so this adapts regardless of which OpenAI-compatible provider
+/// routes the request (direct `api.openai.com`, OpenRouter `openai/...`, etc.).
+fn is_openai_reasoning_model(model: &str) -> bool {
+    let lower = model.trim().to_ascii_lowercase();
+    // Strip an optional vendor prefix some gateways prepend (e.g. `openai/`).
+    let name = lower.rsplit('/').next().unwrap_or(lower.as_str());
+    name.starts_with("gpt-5") || name.starts_with("o1") || name.starts_with("o3")
+        || name.starts_with("o4")
+}
+
+/// Normalises a Chat Completions payload for OpenAI reasoning models: converts
+/// `max_tokens` -> `max_completion_tokens` and drops `temperature` / `top_p`,
+/// which those models reject with a 400. No-op for every other model so the
+/// existing DeepSeek / gateway paths are unaffected.
+fn apply_openai_reasoning_compat(body: &mut Value, model: &str) {
+    if !is_openai_reasoning_model(model) {
+        return;
+    }
+    if let Some(object) = body.as_object_mut() {
+        if let Some(max_tokens) = object.remove("max_tokens") {
+            object.entry("max_completion_tokens").or_insert(max_tokens);
+        }
+        object.remove("temperature");
+        object.remove("top_p");
+    }
+}
+
 impl DeepSeekClient {
     pub(super) async fn create_message_chat(
         &self,
@@ -136,6 +167,7 @@ impl DeepSeekClient {
             request.reasoning_effort.as_deref(),
             self.api_provider,
         );
+        apply_openai_reasoning_compat(&mut body, &model);
 
         let url = api_url_with_suffix(
             &self.base_url,
@@ -233,6 +265,7 @@ impl DeepSeekClient {
             request.reasoning_effort.as_deref(),
             self.api_provider,
         );
+        apply_openai_reasoning_compat(&mut body, &model);
 
         // Bulletproof final sanitizer: walk the wire payload and force
         // `reasoning_content` onto any assistant message that has tool_calls
@@ -3524,9 +3557,10 @@ mod alias_thinking_detection_tests {
     //! turn. See upstream API docs:
     //! https://api-docs.deepseek.com/guides/thinking_mode
     use super::{
-        apply_provider_token_limit, is_reasoning_model_for_stream,
-        provider_accepts_reasoning_content, requires_reasoning_content,
-        should_replay_reasoning_content, should_replay_reasoning_content_for_provider,
+        apply_openai_reasoning_compat, apply_provider_token_limit, is_openai_reasoning_model,
+        is_reasoning_model_for_stream, provider_accepts_reasoning_content,
+        requires_reasoning_content, should_replay_reasoning_content,
+        should_replay_reasoning_content_for_provider,
     };
     use crate::config::ApiProvider;
     use serde_json::json;
@@ -3615,6 +3649,64 @@ mod alias_thinking_detection_tests {
                 .and_then(serde_json::Value::as_u64),
             Some(8192)
         );
+    }
+
+    #[test]
+    fn detects_openai_reasoning_models_by_wire_name() {
+        // GPT-5.x family, o-series, and codex variants — including a gateway
+        // vendor prefix and case variations users sometimes paste.
+        assert!(is_openai_reasoning_model("gpt-5.5"));
+        assert!(is_openai_reasoning_model("gpt-5.5-2026-04-23"));
+        assert!(is_openai_reasoning_model("gpt-5.2-codex"));
+        assert!(is_openai_reasoning_model("o3-mini"));
+        assert!(is_openai_reasoning_model("openai/gpt-5.5"));
+        assert!(is_openai_reasoning_model("GPT-5.5"));
+        // DeepSeek / unrelated models routed through the generic provider must
+        // keep the legacy `max_tokens` + sampling behaviour.
+        assert!(!is_openai_reasoning_model("deepseek-v4-pro"));
+        assert!(!is_openai_reasoning_model("gpt-4o"));
+        assert!(!is_openai_reasoning_model("qwen3-coder"));
+    }
+
+    #[test]
+    fn openai_reasoning_compat_rewrites_token_param_and_drops_sampling() {
+        let mut body = json!({
+            "model": "gpt-5.5",
+            "messages": [],
+            "max_tokens": 8192,
+            "temperature": 0.7,
+            "top_p": 0.9,
+        });
+
+        apply_openai_reasoning_compat(&mut body, "gpt-5.5");
+
+        assert!(body.get("max_tokens").is_none());
+        assert_eq!(
+            body.get("max_completion_tokens")
+                .and_then(serde_json::Value::as_u64),
+            Some(8192)
+        );
+        assert!(body.get("temperature").is_none());
+        assert!(body.get("top_p").is_none());
+    }
+
+    #[test]
+    fn openai_reasoning_compat_is_noop_for_deepseek_models() {
+        let mut body = json!({
+            "model": "deepseek-v4-pro",
+            "messages": [],
+            "max_tokens": 8192,
+            "temperature": 0.7,
+        });
+
+        apply_openai_reasoning_compat(&mut body, "deepseek-v4-pro");
+
+        assert_eq!(
+            body.get("max_tokens").and_then(serde_json::Value::as_u64),
+            Some(8192)
+        );
+        assert!(body.get("max_completion_tokens").is_none());
+        assert!(body.get("temperature").is_some());
     }
 
     #[test]
