@@ -96,7 +96,9 @@ fn is_openai_reasoning_model(model: &str) -> bool {
     let lower = model.trim().to_ascii_lowercase();
     // Strip an optional vendor prefix some gateways prepend (e.g. `openai/`).
     let name = lower.rsplit('/').next().unwrap_or(lower.as_str());
-    name.starts_with("gpt-5") || name.starts_with("o1") || name.starts_with("o3")
+    name.starts_with("gpt-5")
+        || name.starts_with("o1")
+        || name.starts_with("o3")
         || name.starts_with("o4")
 }
 

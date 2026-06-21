@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.10-preview.0] - 2026-06-21
+
+### Added
+
+- OpenAI reasoning models on the generic `openai` provider: the GPT-5.x family,
+  the o-series, and their `-codex` variants now run against
+  `https://api.openai.com/v1`. Set `provider = "openai"` with
+  `[providers.openai].model = "gpt-5.5"` (or `OPENAI_MODEL`). Requests are
+  normalised to send `max_completion_tokens` and to drop `temperature`/`top_p`,
+  which those models reject. See `docs/PROVIDERS.md`.
+
+### Fixed
+
+- Tool calling against OpenAI reasoning models: function schemas whose root
+  carries `oneOf`/`anyOf`/`allOf`/`enum`/`const`/`not` (e.g. `apply_patch`) are
+  now sanitised at the wire level, so OpenAI's strict schema validator no longer
+  rejects the request with HTTP 400 ("Invalid schema for function ...").
+
 ## [0.0.9] - 2026-06-15
 
 ### Added
@@ -5603,6 +5621,7 @@ Welcome — and thank you.
 [0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
 [0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
+[0.0.10-preview.0]: https://github.com/blissito/ghostycode/releases/tag/v0.0.10-preview.0
 [0.0.9]: https://github.com/blissito/ghostycode/releases/tag/v0.0.9
 [0.0.8-preview.0]: https://github.com/blissito/ghostycode/releases/tag/v0.0.8-preview.0
 [0.0.7]: https://github.com/blissito/ghostycode/compare/v0.0.6...v0.0.7
