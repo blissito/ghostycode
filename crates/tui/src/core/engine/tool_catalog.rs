@@ -196,7 +196,34 @@ pub(super) fn build_model_tool_catalog(
     native_tools.sort_by(|a, b| a.name.cmp(&b.name));
     mcp_tools.sort_by(|a, b| a.name.cmp(&b.name));
     native_tools.extend(mcp_tools);
+    warn_if_over_deepseek_tool_limit(&native_tools);
     native_tools
+}
+
+/// DeepSeek's OpenAI-compatible API (and resellers like EasyBits) reject any
+/// request whose `tools` array exceeds this length — `Invalid 'tools': array
+/// too long ... maximum length 128`. Unlike Anthropic, DeepSeek ignores the
+/// `defer_loading` flag and counts every advertised tool, so the cap applies
+/// to the full catalog (built-ins + every MCP tool), not just the active head.
+const DEEPSEEK_MAX_TOOLS: usize = 128;
+
+/// Surface a clear, actionable warning before the request is sent. We do NOT
+/// truncate: silently dropping tools could remove the wrong one and the head
+/// must stay byte-stable for the prefix cache. The user reduces the count by
+/// scoping their MCP servers (e.g. EasyBits `?tools=core` instead of
+/// `core,sandbox`).
+fn warn_if_over_deepseek_tool_limit(catalog: &[Tool]) {
+    let total = catalog.len();
+    if total > DEEPSEEK_MAX_TOOLS {
+        tracing::warn!(
+            total,
+            limit = DEEPSEEK_MAX_TOOLS,
+            "tool catalog has {total} tools, over the DeepSeek/EasyBits cap of \
+             {DEEPSEEK_MAX_TOOLS}; this request will fail with \"Invalid 'tools': \
+             array too long\". Reduce MCP tool groups (e.g. EasyBits ?tools=core \
+             instead of core,sandbox) or disable an MCP server."
+        );
+    }
 }
 
 pub(super) fn ensure_advanced_tooling(
