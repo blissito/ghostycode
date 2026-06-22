@@ -95,10 +95,18 @@ añadas tu llave, así que una instalación nueva nunca falla por falta de crede
 2. Añádela (esto la activa):
 
    ```bash
-   ghosty mcp add easybits --url "https://www.easybits.cloud/api/mcp?tools=all" --bearer TU_EASYBITS_API_KEY
+   ghosty mcp add easybits --url "https://www.easybits.cloud/api/mcp?tools=core,sandbox" --bearer TU_EASYBITS_API_KEY
    ```
 
 3. Verifica: `ghosty mcp list`
+
+> **¿Por qué `core,sandbox` y no `tools=all`?** EasyBits revende DeepSeek, cuya API
+> (compatible con OpenAI) tiene un **tope duro de 128 tools por request**. El subset
+> `core,sandbox` deja el catálogo del agente dentro del límite. Si usas `tools=all`
+> (100+ tools) sumado a las built-in de Ghosty verás el error
+> `Invalid 'tools': array too long ... maximum length 128`. Con Anthropic no pasa
+> porque sus tools MCP van como `defer_loading` (ToolSearch) y no cuentan en el tope;
+> DeepSeek ignora ese flag y cuenta todas.
 
 Gestiona otros servidores con `ghosty mcp add stdio|http <nombre> ...`,
 `ghosty mcp enable|disable|remove <nombre>` y `ghosty mcp validate`.
