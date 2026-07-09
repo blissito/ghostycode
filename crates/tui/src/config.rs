@@ -733,6 +733,25 @@ pub fn normalize_model_name_for_provider(provider: ApiProvider, model: &str) -> 
         return Some(canonical.to_string());
     }
 
+    // Z.AI (GLM Coding Plan) serves only the GLM family. Map the `glm-*`
+    // spellings to their direct ids and fall back any non-GLM model (e.g. a
+    // leftover DeepSeek default from a provider switch) to GLM-5.2, so an
+    // invalid model id never reaches the Z.AI endpoint.
+    if matches!(provider, ApiProvider::Zai) {
+        let trimmed = model.trim();
+        let lower = trimmed.to_ascii_lowercase();
+        return Some(match lower.as_str() {
+            "glm-5.1" | "glm-5-1" | "zai-glm-5.1" | "zai-glm-5-1" => ZAI_GLM_5_1_MODEL.to_string(),
+            "glm-5-turbo" | "glm-5turbo" | "zai-glm-5-turbo" => ZAI_GLM_5_TURBO_MODEL.to_string(),
+            "glm-5.2" | "glm-5-2" | "zai-glm-5.2" | "zai-glm-5-2" | "glm" => {
+                DEFAULT_ZAI_MODEL.to_string()
+            }
+            // A GLM id Z.AI may add later — keep the user's value verbatim.
+            _ if lower.starts_with("glm-") => trimmed.to_string(),
+            _ => DEFAULT_ZAI_MODEL.to_string(),
+        });
+    }
+
     if matches!(provider, ApiProvider::Arcee) {
         return canonical_arcee_model_id(model)
             .map(ToString::to_string)
@@ -8004,6 +8023,52 @@ http_headers = { "X-Model-Provider-Id" = "from-file" }
         assert_eq!(config.api_provider(), ApiProvider::XiaomiMimo);
         assert_eq!(config.default_model(), DEFAULT_XIAOMI_MIMO_MODEL);
         assert_eq!(config.deepseek_base_url(), DEFAULT_XIAOMI_MIMO_BASE_URL);
+        Ok(())
+    }
+
+    #[test]
+    fn zai_provider_uses_documented_defaults() -> Result<()> {
+        let _lock = lock_test_env();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_root = env::temp_dir().join(format!(
+            "ghosty-tui-zai-defaults-{}-{}",
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(&temp_root)?;
+        let _guard = EnvGuard::new(&temp_root);
+
+        // Bare provider switch (e.g. `auth set --provider zai`): no explicit
+        // model → the direct Coding Plan default GLM-5.2 on the z.ai endpoint.
+        let config = Config {
+            provider: Some("zai".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(config.api_provider(), ApiProvider::Zai);
+        assert_eq!(config.default_model(), DEFAULT_ZAI_MODEL);
+        assert_eq!(config.deepseek_base_url(), DEFAULT_ZAI_BASE_URL);
+
+        // Regression: a leftover DeepSeek default must NOT be sent to Z.AI
+        // (that produced a 400 "Unknown Model"); it resolves to GLM-5.2.
+        let stale = Config {
+            provider: Some("zai".to_string()),
+            default_text_model: Some("deepseek-v4-pro".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(stale.default_model(), DEFAULT_ZAI_MODEL);
+
+        // Explicit tier aliases resolve to their direct ids.
+        assert_eq!(
+            normalize_model_name_for_provider(ApiProvider::Zai, "glm-5.1").as_deref(),
+            Some(ZAI_GLM_5_1_MODEL)
+        );
+        assert_eq!(
+            normalize_model_name_for_provider(ApiProvider::Zai, "glm-5-turbo").as_deref(),
+            Some(ZAI_GLM_5_TURBO_MODEL)
+        );
         Ok(())
     }
 
