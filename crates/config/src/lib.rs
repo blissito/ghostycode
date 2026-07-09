@@ -71,6 +71,13 @@ const DEFAULT_SGLANG_MODEL: &str = "deepseek-ai/DeepSeek-V4-Pro";
 const DEFAULT_SGLANG_FLASH_MODEL: &str = "deepseek-ai/DeepSeek-V4-Flash";
 const DEFAULT_OPENROUTER_BASE_URL: &str = "https://openrouter.ai/api/v1";
 const XIAOMI_MIMO_PAY_AS_YOU_GO_BASE_URL: &str = "https://api.xiaomimimo.com/v1";
+// Z.ai (GLM Coding Plan) defaults — ported from CodeWhale upstream.
+const DEFAULT_ZAI_MODEL: &str = "GLM-5.2";
+const ZAI_GLM_5_1_MODEL: &str = "GLM-5.1";
+#[allow(dead_code)]
+const ZAI_GLM_5_2_MODEL: &str = "GLM-5.2";
+const ZAI_GLM_5_TURBO_MODEL: &str = "GLM-5-Turbo";
+const DEFAULT_ZAI_BASE_URL: &str = "https://api.z.ai/api/coding/paas/v4";
 const DEFAULT_XIAOMI_MIMO_BASE_URL: &str = "https://token-plan-sgp.xiaomimimo.com/v1";
 const DEFAULT_NOVITA_BASE_URL: &str = "https://api.novita.ai/v1";
 const DEFAULT_FIREWORKS_BASE_URL: &str = "https://api.fireworks.ai/inference/v1";
@@ -134,6 +141,14 @@ pub enum ProviderKind {
     Huggingface,
     #[serde(alias = "easybits", alias = "easy-bits", alias = "eb")]
     Easybits,
+    #[serde(
+        alias = "z-ai",
+        alias = "z_ai",
+        alias = "z.ai",
+        alias = "bigmodel",
+        alias = "glm"
+    )]
+    Zai,
 }
 
 impl ProviderKind {
@@ -159,6 +174,7 @@ impl ProviderKind {
             Self::Ollama => "ollama",
             Self::Huggingface => "huggingface",
             Self::Easybits => "easybits",
+            Self::Zai => "zai",
         }
     }
 
@@ -189,6 +205,7 @@ impl ProviderKind {
             "ollama" | "ollama-local" => Some(Self::Ollama),
             "huggingface" | "hugging-face" | "hugging_face" | "hf" => Some(Self::Huggingface),
             "easybits" | "easy-bits" | "easy_bits" | "eb" => Some(Self::Easybits),
+            "zai" | "z-ai" | "z_ai" | "z.ai" | "bigmodel" | "glm" => Some(Self::Zai),
             _ => None,
         }
     }
@@ -248,6 +265,8 @@ pub struct ProvidersToml {
     pub huggingface: ProviderConfigToml,
     #[serde(default)]
     pub easybits: ProviderConfigToml,
+    #[serde(default)]
+    pub zai: ProviderConfigToml,
 }
 
 /// Sibling `permissions.toml` schema.
@@ -291,6 +310,7 @@ impl ProvidersToml {
             ProviderKind::Ollama => &self.ollama,
             ProviderKind::Huggingface => &self.huggingface,
             ProviderKind::Easybits => &self.easybits,
+            ProviderKind::Zai => &self.zai,
         }
     }
 
@@ -314,6 +334,7 @@ impl ProvidersToml {
             ProviderKind::Ollama => &mut self.ollama,
             ProviderKind::Huggingface => &mut self.huggingface,
             ProviderKind::Easybits => &mut self.easybits,
+            ProviderKind::Zai => &mut self.zai,
         }
     }
 }
@@ -1451,6 +1472,7 @@ impl ConfigToml {
                 ProviderKind::Ollama => DEFAULT_OLLAMA_BASE_URL.to_string(),
                 ProviderKind::Huggingface => DEFAULT_HUGGINGFACE_BASE_URL.to_string(),
                 ProviderKind::Easybits => DEFAULT_EASYBITS_BASE_URL.to_string(),
+                ProviderKind::Zai => DEFAULT_ZAI_BASE_URL.to_string(),
             })
         };
         // CLI flag wins outright. Otherwise: config-file → injected secrets/env.
@@ -1871,6 +1893,7 @@ fn default_model_for_provider(provider: ProviderKind) -> &'static str {
         ProviderKind::Ollama => DEFAULT_OLLAMA_MODEL,
         ProviderKind::Huggingface => DEFAULT_HUGGINGFACE_MODEL,
         ProviderKind::Easybits => DEFAULT_EASYBITS_MODEL,
+        ProviderKind::Zai => DEFAULT_ZAI_MODEL,
     }
 }
 
@@ -1895,6 +1918,7 @@ fn default_base_url_for_provider(provider: ProviderKind) -> &'static str {
         ProviderKind::Ollama => DEFAULT_OLLAMA_BASE_URL,
         ProviderKind::Huggingface => DEFAULT_HUGGINGFACE_BASE_URL,
         ProviderKind::Easybits => DEFAULT_EASYBITS_BASE_URL,
+        ProviderKind::Zai => DEFAULT_ZAI_BASE_URL,
     }
 }
 
@@ -2518,6 +2542,7 @@ struct EnvRuntimeOverrides {
     huggingface_base_url: Option<String>,
     huggingface_model: Option<String>,
     easybits_base_url: Option<String>,
+    zai_base_url: Option<String>,
 }
 
 impl EnvRuntimeOverrides {
@@ -2648,6 +2673,9 @@ impl EnvRuntimeOverrides {
             easybits_base_url: std::env::var("EASYBITS_BASE_URL")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
+            zai_base_url: std::env::var("ZAI_BASE_URL")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
         }
     }
 
@@ -2675,6 +2703,7 @@ impl EnvRuntimeOverrides {
             ProviderKind::Ollama => self.ollama_base_url.clone(),
             ProviderKind::Huggingface => self.huggingface_base_url.clone(),
             ProviderKind::Easybits => self.easybits_base_url.clone(),
+            ProviderKind::Zai => self.zai_base_url.clone(),
         }
     }
 

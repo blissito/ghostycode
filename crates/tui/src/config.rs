@@ -92,6 +92,11 @@ pub const RECENT_OPENROUTER_LARGE_MODELS: &[&str] = &[
     OPENROUTER_NEMOTRON_3_NANO_OMNI_MODEL,
 ];
 pub const DEFAULT_OPENROUTER_BASE_URL: &str = "https://openrouter.ai/api/v1";
+// Z.ai (GLM Coding Plan) direct provider — ported from CodeWhale upstream.
+pub const DEFAULT_ZAI_MODEL: &str = "GLM-5.2";
+pub const ZAI_GLM_5_1_MODEL: &str = "GLM-5.1";
+pub const ZAI_GLM_5_TURBO_MODEL: &str = "GLM-5-Turbo";
+pub const DEFAULT_ZAI_BASE_URL: &str = "https://api.z.ai/api/coding/paas/v4";
 pub const DEFAULT_XIAOMI_MIMO_MODEL: &str = "mimo-v2.5-pro";
 pub const XIAOMI_MIMO_PAY_AS_YOU_GO_BASE_URL: &str = "https://api.xiaomimimo.com/v1";
 pub const DEFAULT_XIAOMI_MIMO_BASE_URL: &str = "https://token-plan-sgp.xiaomimimo.com/v1";
@@ -173,6 +178,7 @@ pub enum ApiProvider {
     Vllm,
     Ollama,
     Huggingface,
+    Zai,
 }
 
 impl ApiProvider {
