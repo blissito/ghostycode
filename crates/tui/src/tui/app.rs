@@ -59,6 +59,10 @@ pub enum OnboardingState {
     /// Optional EasyBits MCP API key setup. Skippable — pressing Enter
     /// with an empty input advances past it.
     EasybitsMcp,
+    /// Optional GLM (Z.AI via OpenRouter) API key setup. Skippable —
+    /// pressing Enter with an empty input advances past it. Only shown
+    /// when no LLM provider key is configured yet.
+    GlmKey,
     TrustDirectory,
     #[allow(dead_code)]
     Tips,
@@ -1373,6 +1377,8 @@ pub struct App {
     pub api_key_cursor: usize,
     /// EasyBits MCP API key entered during onboarding (optional, skippable).
     pub easybits_key_input: String,
+    /// GLM (OpenRouter) API key entered during onboarding (optional, skippable).
+    pub glm_key_input: String,
     // Hooks system
     pub hooks: HookExecutor,
     #[allow(dead_code)]
@@ -2085,6 +2091,7 @@ impl App {
             api_key_input: String::new(),
             api_key_cursor: 0,
             easybits_key_input: String::new(),
+            glm_key_input: String::new(),
             hooks,
             yolo: initial_mode == AppMode::Yolo,
             yolo_restore,
@@ -2297,6 +2304,65 @@ impl App {
         self.onboarding_needs_api_key = false;
         self.easybits_key_input.clear();
         Ok(())
+    }
+
+    /// Persist a GLM key entered during onboarding as the OpenRouter LLM
+    /// provider key and default the model to GLM-5.2, so the user can run
+    /// the Z.AI GLM family without a separate `/provider` step. Empty input
+    /// is a no-op (the step is skippable). Mirrors `submit_easybits_key`.
+    pub fn submit_glm_key(&mut self) -> Result<(), anyhow::Error> {
+        let key = self.glm_key_input.trim().to_string();
+        if key.is_empty() {
+            return Ok(());
+        }
+        if let Some(config_path) = crate::config::default_config_path() {
+            crate::config::ensure_parent_dir(&config_path)?;
+            let raw = std::fs::read_to_string(&config_path).unwrap_or_default();
+            let mut doc: toml::Value =
+                toml::from_str(&raw).unwrap_or(toml::Value::Table(toml::value::Table::new()));
+            let table = doc.as_table_mut().expect("config root is a table");
+            table.insert(
+                "provider".to_string(),
+                toml::Value::String("openrouter".to_string()),
+            );
+            table.insert(
+                "model".to_string(),
+                toml::Value::String(crate::config::OPENROUTER_GLM_5_2_MODEL.to_string()),
+            );
+            let providers = table
+                .entry("providers")
+                .or_insert(toml::Value::Table(toml::value::Table::new()));
+            let providers_table = providers.as_table_mut().unwrap();
+            let openrouter = providers_table
+                .entry("openrouter")
+                .or_insert(toml::Value::Table(toml::value::Table::new()));
+            let openrouter_table = openrouter.as_table_mut().unwrap();
+            openrouter_table.insert("api_key".to_string(), toml::Value::String(key.clone()));
+            openrouter_table
+                .entry("base_url")
+                .or_insert(toml::Value::String(
+                    crate::config::DEFAULT_OPENROUTER_BASE_URL.to_string(),
+                ));
+            openrouter_table.insert(
+                "model".to_string(),
+                toml::Value::String(crate::config::OPENROUTER_GLM_5_2_MODEL.to_string()),
+            );
+            let _ = std::fs::write(&config_path, toml::to_string(&doc).unwrap_or_default());
+        }
+        self.onboarding_needs_api_key = false;
+        self.glm_key_input.clear();
+        Ok(())
+    }
+
+    pub fn insert_glm_key_str(&mut self, text: &str) {
+        let sanitized = sanitize_api_key_text(text);
+        self.glm_key_input.push_str(&sanitized);
+    }
+
+    pub fn paste_glm_key_from_clipboard(&mut self) {
+        if let Some(ClipboardContent::Text(text)) = self.clipboard.read(self.workspace.as_path()) {
+            self.insert_glm_key_str(&text);
+        }
     }
 
     pub fn finish_onboarding(&mut self) {

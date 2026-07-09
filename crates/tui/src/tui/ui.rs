@@ -2839,6 +2839,11 @@ async fn run_event_loop(
                         app.easybits_key_input.clear();
                         app.status_message = None;
                     }
+                    KeyCode::Esc if app.onboarding == OnboardingState::GlmKey => {
+                        app.onboarding = OnboardingState::EasybitsMcp;
+                        app.glm_key_input.clear();
+                        app.status_message = None;
+                    }
                     KeyCode::Esc if app.onboarding == OnboardingState::Language => {
                         app.onboarding = OnboardingState::Welcome;
                         app.status_message = None;
@@ -3011,6 +3016,71 @@ async fn run_event_loop(
                                 }
                             }
                         }
+                        OnboardingState::GlmKey => {
+                            // Capture before submit: `submit_glm_key` clears
+                            // `glm_key_input` on success, so we must remember
+                            // whether a key was actually entered.
+                            let entered_key = !app.glm_key_input.trim().is_empty();
+                            match app.submit_glm_key() {
+                                Ok(()) => {
+                                    if entered_key {
+                                        // The key was persisted to disk as the
+                                        // `[providers.openrouter]` LLM key with
+                                        // `provider = "openrouter"` and model
+                                        // GLM-5.2. Reload the in-memory config
+                                        // and respawn the engine so the running
+                                        // session adopts the new provider/key
+                                        // without a restart.
+                                        match Config::load(
+                                            app.config_path.clone(),
+                                            app.config_profile.as_deref(),
+                                        ) {
+                                            Ok(new_config) => {
+                                                *config = new_config;
+                                                app.api_provider = config.api_provider();
+                                                let _ = engine_handle.send(Op::Shutdown).await;
+                                                let engine_config =
+                                                    build_engine_config(app, config);
+                                                engine_handle = spawn_engine(engine_config, config);
+                                                app.offline_mode = false;
+                                                app.api_key_env_only = false;
+                                                if !app.api_messages.is_empty() {
+                                                    let _ = engine_handle
+                                                        .send(Op::SyncSession {
+                                                            session_id: app
+                                                                .current_session_id
+                                                                .clone(),
+                                                            messages: app.api_messages.clone(),
+                                                            system_prompt: app
+                                                                .system_prompt
+                                                                .clone(),
+                                                            system_prompt_override: false,
+                                                            model: app.model.clone(),
+                                                            workspace: app.workspace.clone(),
+                                                        })
+                                                        .await;
+                                                }
+                                            }
+                                            Err(err) => {
+                                                app.status_message = Some(format!(
+                                                    "GLM key saved but reload failed: {err}"
+                                                ));
+                                            }
+                                        }
+                                        app.push_status_toast(
+                                            "GLM key saved (OpenRouter · GLM-5.2)".to_string(),
+                                            StatusToastLevel::Info,
+                                            Some(3_000),
+                                        );
+                                    }
+                                    onboarding::advance_onboarding_after_glm(app);
+                                }
+                                Err(e) => {
+                                    app.status_message =
+                                        Some(format!("Failed to save GLM key: {e}"));
+                                }
+                            }
+                        }
                         OnboardingState::TrustDirectory => {}
                         OnboardingState::Tips => {
                             app.finish_onboarding();
@@ -3087,6 +3157,26 @@ async fn run_event_loop(
                             && key_shortcuts::is_text_input_key(&key) =>
                     {
                         app.easybits_key_input.push(c);
+                    }
+                    KeyCode::Backspace if app.onboarding == OnboardingState::GlmKey => {
+                        app.glm_key_input.pop();
+                    }
+                    KeyCode::Char('h')
+                        if key_shortcuts::is_ctrl_h_backspace(&key)
+                            && app.onboarding == OnboardingState::GlmKey =>
+                    {
+                        app.glm_key_input.pop();
+                    }
+                    _ if key_shortcuts::is_paste_shortcut(&key)
+                        && app.onboarding == OnboardingState::GlmKey =>
+                    {
+                        app.paste_glm_key_from_clipboard();
+                    }
+                    KeyCode::Char(c)
+                        if app.onboarding == OnboardingState::GlmKey
+                            && key_shortcuts::is_text_input_key(&key) =>
+                    {
+                        app.glm_key_input.push(c);
                     }
                     _ => {}
                 }

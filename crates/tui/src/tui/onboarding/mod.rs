@@ -2,6 +2,7 @@
 
 pub mod api_key;
 pub mod easybits_mcp;
+pub mod glm_key;
 pub mod language;
 pub mod trust_directory;
 pub mod welcome;
@@ -38,6 +39,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         OnboardingState::Language => language::lines(app),
         OnboardingState::ApiKey => api_key::lines(app),
         OnboardingState::EasybitsMcp => easybits_mcp::lines(app),
+        OnboardingState::GlmKey => glm_key::lines(app),
         OnboardingState::TrustDirectory => trust_directory::lines(app),
         OnboardingState::Tips => tips_lines(app),
         OnboardingState::None => Vec::new(),
@@ -80,7 +82,10 @@ fn onboarding_step(app: &App) -> (usize, usize) {
         OnboardingState::Welcome => (1, 3 + app.onboarding_needs_api_key as usize),
         OnboardingState::Language => (2, 3 + app.onboarding_needs_api_key as usize),
         OnboardingState::EasybitsMcp => (3, 3 + app.onboarding_needs_api_key as usize),
-        OnboardingState::ApiKey => (4, 4), // only reachable when needs_api_key
+        // GlmKey and ApiKey are the optional provider-key steps, only reachable
+        // while no key is configured yet.
+        OnboardingState::GlmKey => (4, 4),
+        OnboardingState::ApiKey => (4, 4),
         OnboardingState::TrustDirectory | OnboardingState::Tips | OnboardingState::None => (0, 0),
     }
 }
@@ -227,16 +232,28 @@ pub fn advance_onboarding_after_language(app: &mut App) {
     }
 }
 
-/// ApiKey → TrustDirectory (EasyBits already handled before ApiKey).
+/// ApiKey → TrustDirectory (EasyBits/GLM already handled before ApiKey).
 pub fn advance_onboarding_after_api_key(app: &mut App) {
     app.status_message = None;
     app.onboarding = OnboardingState::TrustDirectory;
 }
 
-/// EasyBits MCP → ApiKey (if still needed) or TrustDirectory.
+/// EasyBits MCP → GLM key (if still needed) or TrustDirectory.
 /// If the user entered an EasyBits key, it doubles as the LLM provider
-/// key and the DeepSeek API key step is skipped.
+/// key and the remaining provider-key steps are skipped.
 pub fn advance_onboarding_after_easybits(app: &mut App) {
+    app.status_message = None;
+    if app.onboarding_needs_api_key {
+        app.onboarding = OnboardingState::GlmKey;
+    } else {
+        app.onboarding = OnboardingState::TrustDirectory;
+    }
+}
+
+/// GLM key → DeepSeek ApiKey (if still needed) or TrustDirectory.
+/// If the user entered a GLM (OpenRouter) key, it becomes the LLM provider
+/// key and the DeepSeek API key step is skipped.
+pub fn advance_onboarding_after_glm(app: &mut App) {
     app.status_message = None;
     if app.onboarding_needs_api_key {
         app.onboarding = OnboardingState::ApiKey;

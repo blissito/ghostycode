@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   windows and reasoning support. Manually ported from CodeWhale upstream (no
   shared git history). The direct Z.AI provider (`ProviderKind::Zai`) is
   intentionally deferred.
+- Onboarding wizard: optional GLM key step. If no LLM provider key is
+  configured yet, the wizard now offers a GLM (Z.AI via OpenRouter) key entry
+  after the EasyBits step — mirroring the DeepSeek/EasyBits screens. Entering a
+  key persists it as the `[providers.openrouter]` LLM key with
+  `provider = "openrouter"` and defaults the model to GLM-5.2; the step is
+  skippable with Enter. Localized in English and Spanish (the default locale).
 
 ## [0.0.9] - 2026-06-15
 

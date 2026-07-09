@@ -481,6 +481,15 @@ pub enum MessageId {
     OnboardEasybitsPlaceholder,
     OnboardEasybitsLabel,
     OnboardEasybitsFooter,
+    // Onboarding screens — GLM (Z.AI via OpenRouter) optional setup.
+    OnboardGlmTitle,
+    OnboardGlmBlurb,
+    OnboardGlmStep1,
+    OnboardGlmStep2,
+    OnboardGlmSkipHint,
+    OnboardGlmPlaceholder,
+    OnboardGlmLabel,
+    OnboardGlmFooter,
     // Onboarding screens — final tips screen.
     OnboardTipsTitle,
     OnboardTipsLine1,
@@ -1464,6 +1473,23 @@ fn english(id: MessageId) -> &'static str {
         }
         MessageId::OnboardEasybitsLabel => "Key: ",
         MessageId::OnboardEasybitsFooter => "Enter to continue (empty = skip), Esc to go back.",
+        // Onboarding — GLM (Z.AI via OpenRouter).
+        MessageId::OnboardGlmTitle => "GLM · Z.AI (optional — press Enter to skip)",
+        MessageId::OnboardGlmBlurb => {
+            "Connect an OpenRouter API key to use Z.AI's GLM models (GLM-5.2 by default)."
+        }
+        MessageId::OnboardGlmStep1 => {
+            "Step 1.  Go to https://openrouter.ai/keys and create an API key."
+        }
+        MessageId::OnboardGlmStep2 => "Step 2.  Paste it below.",
+        MessageId::OnboardGlmSkipHint => {
+            "Don't have a key? Just press Enter — you can set this up later with /provider."
+        }
+        MessageId::OnboardGlmPlaceholder => {
+            "(paste your OpenRouter key here, or leave empty to skip)"
+        }
+        MessageId::OnboardGlmLabel => "Key: ",
+        MessageId::OnboardGlmFooter => "Enter to continue (empty = skip), Esc to go back.",
         // Onboarding — final tips.
         MessageId::OnboardTipsTitle => "Start Simple",
         MessageId::OnboardTipsLine1 => {
@@ -3934,6 +3960,23 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
         MessageId::OnboardEasybitsFooter => {
             "Enter para continuar (vacío = omitir), Esc para volver."
         }
+        // Onboarding — GLM (Z.AI vía OpenRouter).
+        MessageId::OnboardGlmTitle => "GLM · Z.AI (opcional — Enter para omitir)",
+        MessageId::OnboardGlmBlurb => {
+            "Conecta una API key de OpenRouter para usar los modelos GLM de Z.AI (GLM-5.2 por defecto)."
+        }
+        MessageId::OnboardGlmStep1 => {
+            "Paso 1.  Ve a https://openrouter.ai/keys y crea una API key."
+        }
+        MessageId::OnboardGlmStep2 => "Paso 2.  Pégala abajo.",
+        MessageId::OnboardGlmSkipHint => {
+            "¿No tienes una key? Solo presiona Enter — puedes configurarlo después con /provider."
+        }
+        MessageId::OnboardGlmPlaceholder => {
+            "(pega tu key de OpenRouter aquí, o deja vacío para omitir)"
+        }
+        MessageId::OnboardGlmLabel => "Key: ",
+        MessageId::OnboardGlmFooter => "Enter para continuar (vacío = omitir), Esc para volver.",
         MessageId::OnboardTipsTitle => "Empieza simple",
         MessageId::OnboardTipsLine1 => {
             "Escribe la tarea en lenguaje natural. Usa /help o Ctrl+K para comandos."
