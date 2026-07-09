@@ -1,8 +1,13 @@
 # ghostycode
 
-**Ghosty Code** — agente de código para tu terminal, sobre DeepSeek V4. 👻
+**Ghosty Code** — agente de código para tu terminal. Corre sobre **DeepSeek V4** o
+**GLM-5.2** (directo del Z.AI Coding Plan). 👻
 
 Instala y corre Ghosty Code desde los binarios precompilados (Rust) publicados en GitHub Releases.
+
+> **Novedad (0.0.10)** — GLM-5.2 directo de Z.AI, con paridad de cache y razonamiento
+> igual que DeepSeek. Un comando: `ghosty auth set --provider zai --api-key "TU_TOKEN_ZAI"`.
+> Además: notificaciones apagadas por default y razonamiento en español para sesiones `es-419`.
 
 ## Instalación
 
@@ -32,12 +37,17 @@ en ese momento, la instalación continúa y el wrapper reintenta la descarga al 
 ## Primer uso
 
 ```bash
+# DeepSeek V4
 ghosty auth set --provider deepseek --api-key "TU_DEEPSEEK_API_KEY"
+# GLM-5.2 directo (Z.AI Coding Plan)
+ghosty auth set --provider zai --api-key "TU_TOKEN_ZAI"
 ghosty doctor
 ghosty
 ```
 
 La config vive en `~/.ghosty/config.toml` (también lee la variable `DEEPSEEK_API_KEY`).
+O elige tu provider en el wizard de arranque. GLM-5.2 también está disponible vía
+OpenRouter (`z-ai/glm-5.2`).
 
 ## Comandos básicos
 
