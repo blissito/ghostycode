@@ -3028,12 +3028,17 @@ async fn run_event_loop(
                                 Ok(()) => {
                                     if entered_key {
                                         // The key was persisted to disk as the
-                                        // `[providers.openrouter]` LLM key with
-                                        // `provider = "openrouter"` and model
-                                        // GLM-5.2. Reload the in-memory config
-                                        // and respawn the engine so the running
-                                        // session adopts the new provider/key
-                                        // without a restart.
+                                        // `[providers.zai]` LLM key with
+                                        // `provider = "zai"` and model GLM-5.2.
+                                        // Reload the in-memory config and respawn
+                                        // the engine so the running session
+                                        // adopts the new provider/model/key
+                                        // without a restart. Crucially, refresh
+                                        // `app.api_provider` AND `app.model` from
+                                        // the reloaded config — `build_engine_config`
+                                        // reads `app.model`, so leaving it at the
+                                        // launch-time DeepSeek default would send
+                                        // `deepseek-v4-pro` to the Z.AI endpoint.
                                         match Config::load(
                                             app.config_path.clone(),
                                             app.config_profile.as_deref(),
@@ -3041,6 +3046,7 @@ async fn run_event_loop(
                                             Ok(new_config) => {
                                                 *config = new_config;
                                                 app.api_provider = config.api_provider();
+                                                app.model = config.default_model();
                                                 let _ = engine_handle.send(Op::Shutdown).await;
                                                 let engine_config =
                                                     build_engine_config(app, config);
