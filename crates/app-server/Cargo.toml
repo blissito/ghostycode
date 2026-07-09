@@ -10,15 +10,15 @@ description = "Codex-style app-server transport for DeepSeek workspace architect
 anyhow.workspace = true
 axum.workspace = true
 clap.workspace = true
-ghosty-agent = { path = "../agent", version = "0.0.9" }
-ghosty-config = { path = "../config", version = "0.0.9" }
-ghosty-core = { path = "../core", version = "0.0.9" }
-ghosty-execpolicy = { path = "../execpolicy", version = "0.0.9" }
-ghosty-hooks = { path = "../hooks", version = "0.0.9" }
-ghosty-mcp = { path = "../mcp", version = "0.0.9" }
-ghosty-protocol = { path = "../protocol", version = "0.0.9" }
-ghosty-state = { path = "../state", version = "0.0.9" }
-ghosty-tools = { path = "../tools", version = "0.0.9" }
+ghosty-agent = { path = "../agent", version = "0.0.10" }
+ghosty-config = { path = "../config", version = "0.0.10" }
+ghosty-core = { path = "../core", version = "0.0.10" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.10" }
+ghosty-hooks = { path = "../hooks", version = "0.0.10" }
+ghosty-mcp = { path = "../mcp", version = "0.0.10" }
+ghosty-protocol = { path = "../protocol", version = "0.0.10" }
+ghosty-state = { path = "../state", version = "0.0.10" }
+ghosty-tools = { path = "../tools", version = "0.0.10" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

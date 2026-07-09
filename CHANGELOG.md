@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-07-09
+
+### Added
+
+- GLM-5.2 and GLM-5-Turbo via OpenRouter: `z-ai/glm-5.2` (aliases `glm-5.2`,
+  `zai-glm-5.2`; 1M context) and `z-ai/glm-5-turbo` (aliases `glm-5-turbo`,
+  `zai-glm-5-turbo`; 202K context) join the existing `z-ai/glm-5.1` in the
+  OpenRouter open-model routing layer — registry, alias resolution, context
+  windows and reasoning support. Manually ported from CodeWhale upstream (no
+  shared git history). The direct Z.AI provider (`ProviderKind::Zai`) is
+  intentionally deferred.
+
 ## [0.0.9] - 2026-06-15
 
 ### Added
@@ -5603,6 +5615,7 @@ Welcome — and thank you.
 [0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
 [0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
+[0.0.10]: https://github.com/blissito/ghostycode/releases/tag/v0.0.10
 [0.0.9]: https://github.com/blissito/ghostycode/releases/tag/v0.0.9
 [0.0.8-preview.0]: https://github.com/blissito/ghostycode/releases/tag/v0.0.8-preview.0
 [0.0.7]: https://github.com/blissito/ghostycode/compare/v0.0.6...v0.0.7
