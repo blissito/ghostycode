@@ -6896,6 +6896,7 @@ fn render(f: &mut Frame, app: &mut App) {
             crate::config::ApiProvider::Volcengine => Some("Volc"),
             crate::config::ApiProvider::Openrouter => Some("OR"),
             crate::config::ApiProvider::XiaomiMimo => Some("MiMo"),
+            crate::config::ApiProvider::Zai => Some("Z.AI"),
             crate::config::ApiProvider::Novita => Some("Novita"),
             crate::config::ApiProvider::Fireworks => Some("Fireworks"),
             crate::config::ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => {
@@ -7918,6 +7919,7 @@ async fn apply_provider_picker_api_key(
             ApiProvider::Volcengine => &mut providers.volcengine,
             ApiProvider::Openrouter => &mut providers.openrouter,
             ApiProvider::XiaomiMimo => &mut providers.xiaomi_mimo,
+            ApiProvider::Zai => &mut providers.zai,
             ApiProvider::Novita => &mut providers.novita,
             ApiProvider::Fireworks => &mut providers.fireworks,
             ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &mut providers.siliconflow,
@@ -7968,6 +7970,7 @@ fn set_provider_auth_mode_in_memory(config: &mut Config, provider: ApiProvider, 
         .get_or_insert_with(ProvidersConfig::default);
     let entry: &mut ProviderConfig = match provider {
         ApiProvider::Deepseek | ApiProvider::DeepseekCN => return,
+        ApiProvider::Zai => &mut providers.zai,
         ApiProvider::NvidiaNim => &mut providers.nvidia_nim,
         ApiProvider::Openai => &mut providers.openai,
         ApiProvider::Atlascloud => &mut providers.atlascloud,

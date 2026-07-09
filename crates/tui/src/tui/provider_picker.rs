@@ -109,6 +109,7 @@ impl ProviderPickerView {
             ApiProvider::Volcengine => "VOLCENGINE_API_KEY",
             ApiProvider::Openrouter => "OPENROUTER_API_KEY",
             ApiProvider::XiaomiMimo => "XIAOMI_MIMO_API_KEY / XIAOMI_API_KEY / MIMO_API_KEY",
+            ApiProvider::Zai => "ZAI_API_KEY",
             ApiProvider::Novita => "NOVITA_API_KEY",
             ApiProvider::Fireworks => "FIREWORKS_API_KEY",
             ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => "SILICONFLOW_API_KEY",

@@ -1975,6 +1975,10 @@ fn run_setup_status(config: &Config, workspace: &Path) -> Result<()> {
                     "XIAOMI_MIMO_API_KEY/XIAOMI_API_KEY/MIMO_API_KEY",
                     "ghosty auth set --provider xiaomi-mimo --api-key \"...\"",
                 ),
+                crate::config::ApiProvider::Zai => (
+                    "ZAI_API_KEY",
+                    "ghosty auth set --provider zai --api-key \"...\"",
+                ),
                 crate::config::ApiProvider::Novita => (
                     "NOVITA_API_KEY",
                     "ghosty auth set --provider novita --api-key \"...\"",
@@ -2030,6 +2034,7 @@ fn run_setup_status(config: &Config, workspace: &Path) -> Result<()> {
                     crate::config::ApiProvider::Volcengine => "volcengine",
                     crate::config::ApiProvider::Openrouter => "openrouter",
                     crate::config::ApiProvider::XiaomiMimo => "xiaomi_mimo",
+                    crate::config::ApiProvider::Zai => "zai",
                     crate::config::ApiProvider::Novita => "novita",
                     crate::config::ApiProvider::Fireworks => "fireworks",
                     crate::config::ApiProvider::Siliconflow

@@ -1671,6 +1671,20 @@ fn normalize_model_for_provider(provider: ProviderKind, model: &str) -> String {
         return canonical.to_string();
     }
 
+    // Z.ai GLM Coding Plan: resolve the `glm-*` spellings to the direct Z.ai
+    // model ids (distinct from the OpenRouter `z-ai/glm-*` ids). Ported from
+    // CodeWhale upstream.
+    if provider == ProviderKind::Zai {
+        return match model.trim().to_ascii_lowercase().as_str() {
+            "glm-5.1" | "glm-5-1" | "zai-glm-5.1" | "zai-glm-5-1" => ZAI_GLM_5_1_MODEL.to_string(),
+            "glm-5-turbo" | "glm-5turbo" | "zai-glm-5-turbo" => ZAI_GLM_5_TURBO_MODEL.to_string(),
+            "glm-5.2" | "glm-5-2" | "zai-glm-5.2" | "zai-glm-5-2" | "glm" => {
+                DEFAULT_ZAI_MODEL.to_string()
+            }
+            _ => model.to_string(),
+        };
+    }
+
     if matches!(
         provider,
         ProviderKind::Atlascloud

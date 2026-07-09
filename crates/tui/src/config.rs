@@ -246,6 +246,7 @@ impl ApiProvider {
             Self::Volcengine => "volcengine",
             Self::Openrouter => "openrouter",
             Self::XiaomiMimo => "xiaomi-mimo",
+            Self::Zai => "zai",
             Self::Novita => "novita",
             Self::Fireworks => "fireworks",
             Self::Siliconflow => "siliconflow",
@@ -272,6 +273,7 @@ impl ApiProvider {
             Self::Volcengine => "Volcengine Ark",
             Self::Openrouter => "OpenRouter",
             Self::XiaomiMimo => "Xiaomi MiMo",
+            Self::Zai => "Z.AI",
             Self::Novita => "Novita AI",
             Self::Fireworks => "Fireworks AI",
             Self::Siliconflow => "SiliconFlow",
@@ -796,6 +798,7 @@ pub fn model_completion_names_for_provider(provider: ApiProvider) -> Vec<&'stati
             models
         }
         ApiProvider::XiaomiMimo => vec![DEFAULT_XIAOMI_MIMO_MODEL, XIAOMI_MIMO_V2_5_OMNI_MODEL],
+        ApiProvider::Zai => vec![DEFAULT_ZAI_MODEL, ZAI_GLM_5_1_MODEL, ZAI_GLM_5_TURBO_MODEL],
         ApiProvider::Novita => vec![DEFAULT_NOVITA_MODEL, DEFAULT_NOVITA_FLASH_MODEL],
         ApiProvider::Fireworks => vec![DEFAULT_FIREWORKS_MODEL],
         ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => {
@@ -1923,6 +1926,8 @@ pub struct ProvidersConfig {
     pub huggingface: ProviderConfig,
     #[serde(default)]
     pub easybits: ProviderConfig,
+    #[serde(default)]
+    pub zai: ProviderConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -2075,6 +2080,7 @@ impl Config {
             ApiProvider::WanjieArk => "providers.wanjie_ark",
             ApiProvider::Openrouter => "providers.openrouter",
             ApiProvider::XiaomiMimo => "providers.xiaomi_mimo",
+            ApiProvider::Zai => "providers.zai",
             ApiProvider::Novita => "providers.novita",
             ApiProvider::Fireworks => "providers.fireworks",
             ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => "providers.siliconflow",
@@ -2238,6 +2244,7 @@ impl Config {
             ApiProvider::WanjieArk => &providers.wanjie_ark,
             ApiProvider::Openrouter => &providers.openrouter,
             ApiProvider::XiaomiMimo => &providers.xiaomi_mimo,
+            ApiProvider::Zai => &providers.zai,
             ApiProvider::Novita => &providers.novita,
             ApiProvider::Fireworks => &providers.fireworks,
             ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &providers.siliconflow,
@@ -2268,6 +2275,7 @@ impl Config {
             ApiProvider::WanjieArk => &mut providers.wanjie_ark,
             ApiProvider::Openrouter => &mut providers.openrouter,
             ApiProvider::XiaomiMimo => &mut providers.xiaomi_mimo,
+            ApiProvider::Zai => &mut providers.zai,
             ApiProvider::Novita => &mut providers.novita,
             ApiProvider::Fireworks => &mut providers.fireworks,
             ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &mut providers.siliconflow,
@@ -2372,6 +2380,7 @@ impl Config {
             ApiProvider::WanjieArk => DEFAULT_WANJIE_ARK_MODEL,
             ApiProvider::Openrouter => DEFAULT_OPENROUTER_MODEL,
             ApiProvider::XiaomiMimo => DEFAULT_XIAOMI_MIMO_MODEL,
+            ApiProvider::Zai => DEFAULT_ZAI_MODEL,
             ApiProvider::Novita => DEFAULT_NOVITA_MODEL,
             ApiProvider::Fireworks => DEFAULT_FIREWORKS_MODEL,
             ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => DEFAULT_SILICONFLOW_MODEL,
@@ -2419,6 +2428,7 @@ impl Config {
             | ApiProvider::Vllm
             | ApiProvider::Ollama
             | ApiProvider::Volcengine
+            | ApiProvider::Zai
             | ApiProvider::Huggingface => None,
         };
         let configured_base_url = provider_base.or(root_base);
@@ -2446,6 +2456,7 @@ impl Config {
                     ApiProvider::WanjieArk => DEFAULT_WANJIE_ARK_BASE_URL,
                     ApiProvider::Openrouter => DEFAULT_OPENROUTER_BASE_URL,
                     ApiProvider::XiaomiMimo => DEFAULT_XIAOMI_MIMO_BASE_URL,
+                    ApiProvider::Zai => DEFAULT_ZAI_BASE_URL,
                     ApiProvider::Novita => DEFAULT_NOVITA_BASE_URL,
                     ApiProvider::Fireworks => DEFAULT_FIREWORKS_BASE_URL,
                     ApiProvider::Siliconflow => DEFAULT_SILICONFLOW_BASE_URL,
@@ -2502,6 +2513,7 @@ impl Config {
             ApiProvider::WanjieArk => "wanjie-ark",
             ApiProvider::Openrouter => "openrouter",
             ApiProvider::XiaomiMimo => "xiaomi-mimo",
+            ApiProvider::Zai => "zai",
             ApiProvider::Novita => "novita",
             ApiProvider::Fireworks => "fireworks",
             ApiProvider::Siliconflow => "siliconflow",
@@ -2660,6 +2672,10 @@ impl Config {
             ApiProvider::XiaomiMimo => anyhow::bail!(
                 "Xiaomi MiMo API key not found. Run 'ghosty auth set --provider xiaomi-mimo', \
                  set XIAOMI_MIMO_API_KEY/XIAOMI_API_KEY/MIMO_API_KEY, or add [providers.xiaomi_mimo] api_key in ~/.ghosty/config.toml."
+            ),
+            ApiProvider::Zai => anyhow::bail!(
+                "Z.AI API key not found. Run 'ghosty auth set --provider zai', \
+                 set ZAI_API_KEY, or add [providers.zai] api_key in ~/.ghosty/config.toml."
             ),
             ApiProvider::Novita => anyhow::bail!(
                 "Novita API key not found. Run 'ghosty auth set --provider novita', \
@@ -3347,6 +3363,13 @@ fn apply_env_overrides(config: &mut Config) {
                     .xiaomi_mimo
                     .base_url = Some(value);
             }
+            ApiProvider::Zai => {
+                config
+                    .providers
+                    .get_or_insert_with(ProvidersConfig::default)
+                    .zai
+                    .base_url = Some(value);
+            }
             ApiProvider::WanjieArk => {
                 config
                     .providers
@@ -3616,6 +3639,7 @@ fn apply_env_overrides(config: &mut Config) {
             ApiProvider::WanjieArk => &mut providers.wanjie_ark,
             ApiProvider::Openrouter => &mut providers.openrouter,
             ApiProvider::XiaomiMimo => &mut providers.xiaomi_mimo,
+            ApiProvider::Zai => &mut providers.zai,
             ApiProvider::Novita => &mut providers.novita,
             ApiProvider::Fireworks => &mut providers.fireworks,
             ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &mut providers.siliconflow,
@@ -3810,6 +3834,7 @@ fn apply_env_overrides(config: &mut Config) {
                 ApiProvider::WanjieArk => &mut providers.wanjie_ark,
                 ApiProvider::Openrouter => &mut providers.openrouter,
                 ApiProvider::XiaomiMimo => &mut providers.xiaomi_mimo,
+                ApiProvider::Zai => &mut providers.zai,
                 ApiProvider::Novita => &mut providers.novita,
                 ApiProvider::Fireworks => &mut providers.fireworks,
                 ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &mut providers.siliconflow,
@@ -4125,6 +4150,7 @@ fn default_base_url_for_provider(provider: ApiProvider) -> &'static str {
         ApiProvider::WanjieArk => DEFAULT_WANJIE_ARK_BASE_URL,
         ApiProvider::Openrouter => DEFAULT_OPENROUTER_BASE_URL,
         ApiProvider::XiaomiMimo => DEFAULT_XIAOMI_MIMO_BASE_URL,
+        ApiProvider::Zai => DEFAULT_ZAI_BASE_URL,
         ApiProvider::Novita => DEFAULT_NOVITA_BASE_URL,
         ApiProvider::Fireworks => DEFAULT_FIREWORKS_BASE_URL,
         ApiProvider::Siliconflow => DEFAULT_SILICONFLOW_BASE_URL,
@@ -4445,6 +4471,7 @@ fn merge_providers(
             volcengine: merge_provider_config(base.volcengine, override_cfg.volcengine),
             huggingface: merge_provider_config(base.huggingface, override_cfg.huggingface),
             easybits: merge_provider_config(base.easybits, override_cfg.easybits),
+            zai: merge_provider_config(base.zai, override_cfg.zai),
         }),
     }
 }
@@ -4909,6 +4936,7 @@ pub fn active_provider_has_env_api_key(config: &Config) -> bool {
                 || std::env::var("XIAOMI_API_KEY").is_ok_and(|k| !k.trim().is_empty())
                 || std::env::var("MIMO_API_KEY").is_ok_and(|k| !k.trim().is_empty())
         }
+        ApiProvider::Zai => std::env::var("ZAI_API_KEY").is_ok_and(|k| !k.trim().is_empty()),
         ApiProvider::Novita => std::env::var("NOVITA_API_KEY").is_ok_and(|k| !k.trim().is_empty()),
         ApiProvider::Fireworks => {
             std::env::var("FIREWORKS_API_KEY").is_ok_and(|k| !k.trim().is_empty())
@@ -4960,6 +4988,7 @@ pub fn has_api_key_for(config: &Config, provider: ApiProvider) -> bool {
         ApiProvider::WanjieArk => "WANJIE_ARK_API_KEY",
         ApiProvider::Openrouter => "OPENROUTER_API_KEY",
         ApiProvider::XiaomiMimo => "XIAOMI_MIMO_API_KEY",
+        ApiProvider::Zai => "ZAI_API_KEY",
         ApiProvider::Novita => "NOVITA_API_KEY",
         ApiProvider::Fireworks => "FIREWORKS_API_KEY",
         ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => "SILICONFLOW_API_KEY",
@@ -5076,6 +5105,7 @@ pub fn save_api_key_for(provider: ApiProvider, api_key: &str) -> Result<PathBuf>
         ApiProvider::WanjieArk => "providers.wanjie_ark",
         ApiProvider::Openrouter => "providers.openrouter",
         ApiProvider::XiaomiMimo => "providers.xiaomi_mimo",
+        ApiProvider::Zai => "providers.zai",
         ApiProvider::Novita => "providers.novita",
         ApiProvider::Fireworks => "providers.fireworks",
         ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => "providers.siliconflow",
@@ -5118,6 +5148,7 @@ pub fn save_api_key_for(provider: ApiProvider, api_key: &str) -> Result<PathBuf>
         ApiProvider::WanjieArk => "wanjie_ark",
         ApiProvider::Openrouter => "openrouter",
         ApiProvider::XiaomiMimo => "xiaomi_mimo",
+        ApiProvider::Zai => "zai",
         ApiProvider::Novita => "novita",
         ApiProvider::Fireworks => "fireworks",
         ApiProvider::Siliconflow => "siliconflow",
@@ -5214,6 +5245,7 @@ fn provider_config_key(provider: ApiProvider) -> Result<&'static str> {
         ApiProvider::Volcengine => Ok("volcengine"),
         ApiProvider::Openrouter => Ok("openrouter"),
         ApiProvider::XiaomiMimo => Ok("xiaomi_mimo"),
+        ApiProvider::Zai => Ok("zai"),
         ApiProvider::Novita => Ok("novita"),
         ApiProvider::Fireworks => Ok("fireworks"),
         ApiProvider::Siliconflow => Ok("siliconflow"),

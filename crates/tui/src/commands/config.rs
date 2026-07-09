@@ -473,6 +473,7 @@ fn provider_base_url_table_key(provider: ApiProvider) -> anyhow::Result<&'static
         ApiProvider::Volcengine => Ok("volcengine"),
         ApiProvider::Openrouter => Ok("openrouter"),
         ApiProvider::XiaomiMimo => Ok("xiaomi_mimo"),
+        ApiProvider::Zai => Ok("zai"),
         ApiProvider::Novita => Ok("novita"),
         ApiProvider::Fireworks => Ok("fireworks"),
         ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => Ok("siliconflow"),
