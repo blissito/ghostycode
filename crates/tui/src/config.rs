@@ -2148,9 +2148,14 @@ impl Config {
             && !provider_passes_model_through(self.api_provider())
             && !self.active_provider_preserves_custom_base_url_model()
             && normalize_model_name(model).is_none()
+            // Extensible guard: also accept any model the ACTIVE provider knows
+            // how to resolve (e.g. GLM ids on Z.AI), not just DeepSeek ids. New
+            // providers get validated for free via their own normalize arm — no
+            // per-provider special-case here.
+            && normalize_model_name_for_provider(self.api_provider(), model).is_none()
         {
             anyhow::bail!(
-                "Invalid default_text_model '{model}': expected auto or a DeepSeek model ID (for example: deepseek-v4-pro, deepseek-v4-flash, deepseek-ai/deepseek-v4-pro)."
+                "Invalid default_text_model '{model}': expected auto or a valid model ID for the active provider (DeepSeek example: deepseek-v4-pro, deepseek-v4-flash)."
             );
         }
         if let Some(policy) = self.approval_policy.as_deref() {
@@ -8069,6 +8074,17 @@ http_headers = { "X-Model-Provider-Id" = "from-file" }
             normalize_model_name_for_provider(ApiProvider::Zai, "glm-5-turbo").as_deref(),
             Some(ZAI_GLM_5_TURBO_MODEL)
         );
+
+        // Regression: validate() must accept a GLM model on Z.AI (it used to
+        // reject any non-DeepSeek default_text_model, which failed config load
+        // and silently fell back to the DeepSeek default).
+        let with_model = Config {
+            provider: Some("zai".to_string()),
+            default_text_model: Some(DEFAULT_ZAI_MODEL.to_string()),
+            ..Default::default()
+        };
+        with_model.validate()?;
+        assert_eq!(with_model.default_model(), DEFAULT_ZAI_MODEL);
         Ok(())
     }
 
