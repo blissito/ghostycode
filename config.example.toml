@@ -319,7 +319,7 @@ max_subagents = 10 # optional (1-20)
 # Recent large model IDs also accepted here include arcee-ai/trinity-large-thinking,
 # xiaomi/mimo-v2.5-pro, qwen/qwen3.6-flash, qwen/qwen3.6-35b-a3b,
 # qwen/qwen3.6-max-preview, qwen/qwen3.6-27b, qwen/qwen3.6-plus,
-# google/gemma-4-31b-it, z-ai/glm-5.1, moonshotai/kimi-k2.6, and
+# google/gemma-4-31b-it, z-ai/glm-5.1, z-ai/glm-5.2, z-ai/glm-5-turbo, moonshotai/kimi-k2.6, and
 # nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free.
 
 # Xiaomi MiMo OpenAI-compatible endpoint (https://platform.xiaomimimo.com)

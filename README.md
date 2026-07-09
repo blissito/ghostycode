@@ -84,6 +84,20 @@ Cambia de modo dentro de la TUI o con flags al arrancar.
 
 Override con `--model <nombre>` o `/model` dentro de la TUI.
 
+### Modelos abiertos vía OpenRouter
+
+Además de DeepSeek, puedes rutear modelos abiertos con `provider = "openrouter"`
+(`OPENROUTER_API_KEY`). Incluye la familia **GLM de Z.AI**:
+
+| Modelo | Contexto | Ideal para |
+|--------|----------|------------|
+| `z-ai/glm-5.2` (alias `glm-5.2`) | 1M | Modelo GLM más capaz |
+| `z-ai/glm-5.1` (alias `glm-5.1`) | 202K | GLM estándar |
+| `z-ai/glm-5-turbo` (alias `glm-5-turbo`) | 202K | GLM rápido para explorar |
+
+La lista completa de modelos OpenRouter (Qwen, Kimi, MiniMax, Gemma, etc.) está
+en [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
+
 ## MCP — easybits incluido por defecto
 
 Ghosty trae preconfigurado el servidor MCP de **easybits** (gestión de archivos
