@@ -325,6 +325,39 @@ impl Default for ModelRegistry {
                 supports_tools: true,
                 supports_reasoning: true,
             },
+            // Direct Z.AI (GLM Coding Plan) — distinct ids from the OpenRouter
+            // `z-ai/glm-*` routes; resolution is provider-scoped.
+            ModelInfo {
+                id: "GLM-5.2".to_string(),
+                provider: ProviderKind::Zai,
+                aliases: vec![
+                    "glm-5.2".to_string(),
+                    "glm-5-2".to_string(),
+                    "zai-glm-5.2".to_string(),
+                    "zai-glm-5-2".to_string(),
+                ],
+                supports_tools: true,
+                supports_reasoning: true,
+            },
+            ModelInfo {
+                id: "GLM-5.1".to_string(),
+                provider: ProviderKind::Zai,
+                aliases: vec![
+                    "glm-5.1".to_string(),
+                    "glm-5-1".to_string(),
+                    "zai-glm-5.1".to_string(),
+                    "zai-glm-5-1".to_string(),
+                ],
+                supports_tools: true,
+                supports_reasoning: true,
+            },
+            ModelInfo {
+                id: "GLM-5-Turbo".to_string(),
+                provider: ProviderKind::Zai,
+                aliases: vec!["glm-5-turbo".to_string(), "zai-glm-5-turbo".to_string()],
+                supports_tools: true,
+                supports_reasoning: true,
+            },
             ModelInfo {
                 id: "tencent/hy3-preview".to_string(),
                 provider: ProviderKind::Openrouter,

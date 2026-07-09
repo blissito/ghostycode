@@ -3071,7 +3071,7 @@ async fn run_event_loop(
                                             }
                                         }
                                         app.push_status_toast(
-                                            "GLM key saved (OpenRouter · GLM-5.2)".to_string(),
+                                            "GLM key saved (Z.AI · GLM-5.2)".to_string(),
                                             StatusToastLevel::Info,
                                             Some(3_000),
                                         );

@@ -41,6 +41,14 @@ enum ProviderArg {
     Ollama,
     Huggingface,
     Easybits,
+    #[value(
+        alias = "z-ai",
+        alias = "z_ai",
+        alias = "z.ai",
+        alias = "bigmodel",
+        alias = "glm"
+    )]
+    Zai,
 }
 
 impl From<ProviderArg> for ProviderKind {
@@ -64,6 +72,7 @@ impl From<ProviderArg> for ProviderKind {
             ProviderArg::Ollama => ProviderKind::Ollama,
             ProviderArg::Huggingface => ProviderKind::Huggingface,
             ProviderArg::Easybits => ProviderKind::Easybits,
+            ProviderArg::Zai => ProviderKind::Zai,
         }
     }
 }

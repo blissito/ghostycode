@@ -1476,18 +1476,16 @@ fn english(id: MessageId) -> &'static str {
         // Onboarding — GLM (Z.AI via OpenRouter).
         MessageId::OnboardGlmTitle => "GLM · Z.AI (optional — press Enter to skip)",
         MessageId::OnboardGlmBlurb => {
-            "Connect an OpenRouter API key to use Z.AI's GLM models (GLM-5.2 by default)."
+            "Connect your Z.AI (GLM Coding Plan) API key to run the GLM models directly (GLM-5.2 by default)."
         }
         MessageId::OnboardGlmStep1 => {
-            "Step 1.  Go to https://openrouter.ai/keys and create an API key."
+            "Step 1.  Go to https://z.ai and create an API key (GLM Coding Plan)."
         }
         MessageId::OnboardGlmStep2 => "Step 2.  Paste it below.",
         MessageId::OnboardGlmSkipHint => {
             "Don't have a key? Just press Enter — you can set this up later with /provider."
         }
-        MessageId::OnboardGlmPlaceholder => {
-            "(paste your OpenRouter key here, or leave empty to skip)"
-        }
+        MessageId::OnboardGlmPlaceholder => "(paste your Z.AI key here, or leave empty to skip)",
         MessageId::OnboardGlmLabel => "Key: ",
         MessageId::OnboardGlmFooter => "Enter to continue (empty = skip), Esc to go back.",
         // Onboarding — final tips.
@@ -3963,18 +3961,16 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
         // Onboarding — GLM (Z.AI vía OpenRouter).
         MessageId::OnboardGlmTitle => "GLM · Z.AI (opcional — Enter para omitir)",
         MessageId::OnboardGlmBlurb => {
-            "Conecta una API key de OpenRouter para usar los modelos GLM de Z.AI (GLM-5.2 por defecto)."
+            "Conecta tu API key de Z.AI (GLM Coding Plan) para correr los modelos GLM directo (GLM-5.2 por defecto)."
         }
         MessageId::OnboardGlmStep1 => {
-            "Paso 1.  Ve a https://openrouter.ai/keys y crea una API key."
+            "Paso 1.  Ve a https://z.ai y crea una API key (GLM Coding Plan)."
         }
         MessageId::OnboardGlmStep2 => "Paso 2.  Pégala abajo.",
         MessageId::OnboardGlmSkipHint => {
             "¿No tienes una key? Solo presiona Enter — puedes configurarlo después con /provider."
         }
-        MessageId::OnboardGlmPlaceholder => {
-            "(pega tu key de OpenRouter aquí, o deja vacío para omitir)"
-        }
+        MessageId::OnboardGlmPlaceholder => "(pega tu key de Z.AI aquí, o deja vacío para omitir)",
         MessageId::OnboardGlmLabel => "Key: ",
         MessageId::OnboardGlmFooter => "Enter para continuar (vacío = omitir), Esc para volver.",
         MessageId::OnboardTipsTitle => "Empieza simple",
