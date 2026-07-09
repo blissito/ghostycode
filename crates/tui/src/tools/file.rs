@@ -1321,7 +1321,7 @@ mod tests {
         assert!(
             result.content.contains("Recursive Language Models"),
             "pdf-extract should recover the document title; got prefix {:?}",
-            &result.content.chars().take(200).collect::<String>()
+            result.content.chars().take(200).collect::<String>()
         );
     }
 

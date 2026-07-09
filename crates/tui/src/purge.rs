@@ -858,7 +858,7 @@ mod tests {
         } else {
             panic!(
                 "expected text block, got {:?}",
-                &result.messages[0].content[0]
+                result.messages[0].content[0]
             );
         }
         if let ContentBlock::Text { text, .. } = &result.messages[1].content[0] {
@@ -866,7 +866,7 @@ mod tests {
         } else {
             panic!(
                 "expected text block, got {:?}",
-                &result.messages[1].content[0]
+                result.messages[1].content[0]
             );
         }
     }
@@ -891,7 +891,7 @@ mod tests {
         } else {
             panic!(
                 "expected text block, got {:?}",
-                &result.messages[0].content[0]
+                result.messages[0].content[0]
             );
         }
     }
