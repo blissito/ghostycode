@@ -217,6 +217,7 @@ impl ApiProvider {
             "xiaomi-mimo" | "xiaomi_mimo" | "xiaomimimo" | "mimo" | "xiaomi" => {
                 Some(Self::XiaomiMimo)
             }
+            "zai" | "z-ai" | "z_ai" | "z.ai" | "bigmodel" | "glm" => Some(Self::Zai),
             "novita" => Some(Self::Novita),
             "fireworks" | "fireworks-ai" => Some(Self::Fireworks),
             "siliconflow" | "silicon-flow" | "silicon_flow" => Some(Self::Siliconflow),
@@ -6658,6 +6659,9 @@ mod tests {
             }
             "openrouter" => {
                 providers.openrouter.api_key = Some(api_key.to_string());
+            }
+            "zai" => {
+                providers.zai.api_key = Some(api_key.to_string());
             }
             "novita" => {
                 providers.novita.api_key = Some(api_key.to_string());
