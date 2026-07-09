@@ -930,8 +930,9 @@ pub enum NotificationCondition {
 #[serde(rename_all = "kebab-case")]
 pub enum NotificationMethod {
     /// Auto-detect: picks the best protocol for the current terminal
-    /// (OSC 9, Kitty OSC 99, Ghostty OSC 777, or Bel).
-    #[default]
+    /// (OSC 9, Kitty OSC 99, Ghostty OSC 777, or Bel). On macOS this uses
+    /// `osascript`, which the OS attributes to "Script Editor" and plays a
+    /// sound — opt in explicitly with `method = "auto"` if you want that.
     Auto,
     /// OSC 9 escape.
     Osc9,
@@ -941,7 +942,9 @@ pub enum NotificationMethod {
     Kitty,
     /// Ghostty notification protocol (OSC 777).
     Ghostty,
-    /// Disable notifications.
+    /// Disable notifications. Default — turn-completion pings are off unless
+    /// the user opts in via `[notifications] method = "..."`.
+    #[default]
     Off,
 }
 
