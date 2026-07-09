@@ -1112,10 +1112,13 @@ fn run_auth_command_with_secrets(
                 (None, false) => prompt_api_key(slot)?,
             };
             write_provider_api_key_to_config(store, provider, &api_key);
-            // EasyBits maps to DeepSeek internally, so explicitly record
-            // the user's choice so is_easybits_mode() fires in the TUI.
-            if provider == ProviderKind::Easybits {
-                store.config.provider = ProviderKind::Easybits;
+            // EasyBits maps to DeepSeek internally, so explicitly record the
+            // user's choice so is_easybits_mode() fires in the TUI. Z.AI is a
+            // first-class non-DeepSeek provider and is only set up to be used,
+            // so activate it too — otherwise `auth set --provider zai` saves
+            // the key but leaves the active provider on the DeepSeek default.
+            if matches!(provider, ProviderKind::Easybits | ProviderKind::Zai) {
+                store.config.provider = provider;
             }
             let keyring_saved = write_provider_api_key_to_keyring(secrets, provider, &api_key);
             store.save()?;
