@@ -41,6 +41,14 @@ enum ProviderArg {
     Ollama,
     Huggingface,
     Easybits,
+    #[value(
+        alias = "z-ai",
+        alias = "z_ai",
+        alias = "z.ai",
+        alias = "bigmodel",
+        alias = "glm"
+    )]
+    Zai,
 }
 
 impl From<ProviderArg> for ProviderKind {
@@ -64,6 +72,7 @@ impl From<ProviderArg> for ProviderKind {
             ProviderArg::Ollama => ProviderKind::Ollama,
             ProviderArg::Huggingface => ProviderKind::Huggingface,
             ProviderArg::Easybits => ProviderKind::Easybits,
+            ProviderArg::Zai => ProviderKind::Zai,
         }
     }
 }
@@ -762,11 +771,12 @@ fn provider_slot(provider: ProviderKind) -> &'static str {
         ProviderKind::Ollama => "ollama",
         ProviderKind::Huggingface => "huggingface",
         ProviderKind::Easybits => "easybits",
+        ProviderKind::Zai => "zai",
     }
 }
 
 /// Provider order used by the `auth list` and `auth status` outputs.
-const PROVIDER_LIST: [ProviderKind; 19] = [
+const PROVIDER_LIST: [ProviderKind; 20] = [
     ProviderKind::Deepseek,
     ProviderKind::NvidiaNim,
     ProviderKind::Openai,
@@ -786,6 +796,7 @@ const PROVIDER_LIST: [ProviderKind; 19] = [
     ProviderKind::Ollama,
     ProviderKind::Huggingface,
     ProviderKind::Easybits,
+    ProviderKind::Zai,
 ];
 
 #[cfg(test)]
@@ -846,6 +857,7 @@ fn provider_env_vars(provider: ProviderKind) -> &'static [&'static str] {
         ProviderKind::Ollama => &["OLLAMA_API_KEY"],
         ProviderKind::Huggingface => &["HUGGINGFACE_API_KEY", "HF_TOKEN"],
         ProviderKind::Easybits => &["EASYBITS_API_KEY"],
+        ProviderKind::Zai => &["ZAI_API_KEY"],
         ProviderKind::Openai => &["OPENAI_API_KEY"],
         ProviderKind::Atlascloud => &["ATLASCLOUD_API_KEY"],
         ProviderKind::Volcengine => &[
@@ -1100,10 +1112,13 @@ fn run_auth_command_with_secrets(
                 (None, false) => prompt_api_key(slot)?,
             };
             write_provider_api_key_to_config(store, provider, &api_key);
-            // EasyBits maps to DeepSeek internally, so explicitly record
-            // the user's choice so is_easybits_mode() fires in the TUI.
-            if provider == ProviderKind::Easybits {
-                store.config.provider = ProviderKind::Easybits;
+            // EasyBits maps to DeepSeek internally, so explicitly record the
+            // user's choice so is_easybits_mode() fires in the TUI. Z.AI is a
+            // first-class non-DeepSeek provider and is only set up to be used,
+            // so activate it too — otherwise `auth set --provider zai` saves
+            // the key but leaves the active provider on the DeepSeek default.
+            if matches!(provider, ProviderKind::Easybits | ProviderKind::Zai) {
+                store.config.provider = provider;
             }
             let keyring_saved = write_provider_api_key_to_keyring(secrets, provider, &api_key);
             store.save()?;
@@ -1620,9 +1635,10 @@ fn build_tui_command(
             | ProviderKind::Vllm
             | ProviderKind::Ollama
             | ProviderKind::Easybits
+            | ProviderKind::Zai
     ) {
         bail!(
-            "The interactive TUI supports DeepSeek, NVIDIA NIM, OpenAI-compatible, AtlasCloud, Wanjie Ark, OpenRouter, Xiaomi MiMo, Novita, Fireworks, SiliconFlow, Arcee AI, Moonshot/Kimi, SGLang, vLLM, EasyBits, and Ollama providers. Remove --provider {} or use `ghosty model ...` for provider registry inspection.",
+            "The interactive TUI supports DeepSeek, NVIDIA NIM, OpenAI-compatible, AtlasCloud, Wanjie Ark, OpenRouter, Xiaomi MiMo, Novita, Fireworks, SiliconFlow, Arcee AI, Moonshot/Kimi, SGLang, vLLM, EasyBits, Z.AI, and Ollama providers. Remove --provider {} or use `ghosty model ...` for provider registry inspection.",
             resolved_runtime.provider.as_str()
         );
     }

@@ -1119,7 +1119,8 @@ pub(super) fn apply_reasoning_effort(
             | ApiProvider::Siliconflow
             | ApiProvider::SiliconflowCn
             | ApiProvider::Sglang
-            | ApiProvider::Volcengine => {
+            | ApiProvider::Volcengine
+            | ApiProvider::Zai => {
                 body["thinking"] = json!({ "type": "disabled" });
             }
             ApiProvider::Fireworks => {}
@@ -1176,6 +1177,12 @@ pub(super) fn apply_reasoning_effort(
             ApiProvider::XiaomiMimo => {
                 body["thinking"] = json!({ "type": "enabled" });
             }
+            // Z.ai GLM: keep reasoning_content across turns (`clear_thinking:
+            // false`) so the stable prefix stays cacheable — ported from
+            // CodeWhale upstream.
+            ApiProvider::Zai => {
+                body["thinking"] = json!({ "type": "enabled", "clear_thinking": false });
+            }
             ApiProvider::Arcee | ApiProvider::Huggingface => {
                 let value = match normalized.as_str() {
                     "minimal" => "minimal",
@@ -1229,6 +1236,9 @@ pub(super) fn apply_reasoning_effort(
             }
             ApiProvider::XiaomiMimo => {
                 body["thinking"] = json!({ "type": "enabled" });
+            }
+            ApiProvider::Zai => {
+                body["thinking"] = json!({ "type": "enabled", "clear_thinking": false });
             }
             ApiProvider::Arcee | ApiProvider::Huggingface => {
                 body["reasoning_effort"] = json!("high");

@@ -264,8 +264,10 @@ fn known_context_window_for_model(model_lower: &str) -> Option<u32> {
         | "tencent/hy3-preview"
         | "moonshotai/kimi-k2.6"
         | "moonshotai/kimi-k2.6:free" => Some(262_144),
-        "z-ai/glm-5.1" | "z-ai/glm-5v-turbo" | "z-ai/glm-5-turbo" => Some(202_752),
-        "z-ai/glm-5.2" => Some(1_000_000),
+        "z-ai/glm-5.1" | "z-ai/glm-5v-turbo" | "z-ai/glm-5-turbo" | "glm-5.1" | "glm-5-turbo" => {
+            Some(202_752)
+        }
+        "z-ai/glm-5.2" | "glm-5.2" => Some(1_000_000),
         "minimax/minimax-m3" | "qwen/qwen3.6-flash" | "qwen/qwen3.6-plus" => Some(1_000_000),
         "xiaomi/mimo-v2.5-pro" | "xiaomi/mimo-v2.5" | "mimo-v2.5-pro" | "mimo-v2.5" => {
             Some(1_000_000)
@@ -338,6 +340,9 @@ pub fn model_supports_reasoning(model: &str) -> bool {
             | "z-ai/glm-5.1"
             | "z-ai/glm-5.2"
             | "z-ai/glm-5-turbo"
+            | "glm-5.1"
+            | "glm-5.2"
+            | "glm-5-turbo"
     )
 }
 

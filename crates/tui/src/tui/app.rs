@@ -2306,10 +2306,11 @@ impl App {
         Ok(())
     }
 
-    /// Persist a GLM key entered during onboarding as the OpenRouter LLM
-    /// provider key and default the model to GLM-5.2, so the user can run
-    /// the Z.AI GLM family without a separate `/provider` step. Empty input
-    /// is a no-op (the step is skippable). Mirrors `submit_easybits_key`.
+    /// Persist a GLM key entered during onboarding as the direct Z.AI (GLM
+    /// Coding Plan) LLM provider key and default the model to GLM-5.2, so the
+    /// user can run the Z.AI GLM family with their z.ai token without a
+    /// separate `/provider` step. Empty input is a no-op (the step is
+    /// skippable). Mirrors `submit_easybits_key`.
     pub fn submit_glm_key(&mut self) -> Result<(), anyhow::Error> {
         let key = self.glm_key_input.trim().to_string();
         if key.is_empty() {
@@ -2323,29 +2324,27 @@ impl App {
             let table = doc.as_table_mut().expect("config root is a table");
             table.insert(
                 "provider".to_string(),
-                toml::Value::String("openrouter".to_string()),
+                toml::Value::String("zai".to_string()),
             );
             table.insert(
                 "model".to_string(),
-                toml::Value::String(crate::config::OPENROUTER_GLM_5_2_MODEL.to_string()),
+                toml::Value::String(crate::config::DEFAULT_ZAI_MODEL.to_string()),
             );
             let providers = table
                 .entry("providers")
                 .or_insert(toml::Value::Table(toml::value::Table::new()));
             let providers_table = providers.as_table_mut().unwrap();
-            let openrouter = providers_table
-                .entry("openrouter")
+            let zai = providers_table
+                .entry("zai")
                 .or_insert(toml::Value::Table(toml::value::Table::new()));
-            let openrouter_table = openrouter.as_table_mut().unwrap();
-            openrouter_table.insert("api_key".to_string(), toml::Value::String(key.clone()));
-            openrouter_table
-                .entry("base_url")
-                .or_insert(toml::Value::String(
-                    crate::config::DEFAULT_OPENROUTER_BASE_URL.to_string(),
-                ));
-            openrouter_table.insert(
+            let zai_table = zai.as_table_mut().unwrap();
+            zai_table.insert("api_key".to_string(), toml::Value::String(key.clone()));
+            zai_table.entry("base_url").or_insert(toml::Value::String(
+                crate::config::DEFAULT_ZAI_BASE_URL.to_string(),
+            ));
+            zai_table.insert(
                 "model".to_string(),
-                toml::Value::String(crate::config::OPENROUTER_GLM_5_2_MODEL.to_string()),
+                toml::Value::String(crate::config::DEFAULT_ZAI_MODEL.to_string()),
             );
             let _ = std::fs::write(&config_path, toml::to_string(&doc).unwrap_or_default());
         }

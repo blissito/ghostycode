@@ -3028,12 +3028,17 @@ async fn run_event_loop(
                                 Ok(()) => {
                                     if entered_key {
                                         // The key was persisted to disk as the
-                                        // `[providers.openrouter]` LLM key with
-                                        // `provider = "openrouter"` and model
-                                        // GLM-5.2. Reload the in-memory config
-                                        // and respawn the engine so the running
-                                        // session adopts the new provider/key
-                                        // without a restart.
+                                        // `[providers.zai]` LLM key with
+                                        // `provider = "zai"` and model GLM-5.2.
+                                        // Reload the in-memory config and respawn
+                                        // the engine so the running session
+                                        // adopts the new provider/model/key
+                                        // without a restart. Crucially, refresh
+                                        // `app.api_provider` AND `app.model` from
+                                        // the reloaded config — `build_engine_config`
+                                        // reads `app.model`, so leaving it at the
+                                        // launch-time DeepSeek default would send
+                                        // `deepseek-v4-pro` to the Z.AI endpoint.
                                         match Config::load(
                                             app.config_path.clone(),
                                             app.config_profile.as_deref(),
@@ -3041,6 +3046,7 @@ async fn run_event_loop(
                                             Ok(new_config) => {
                                                 *config = new_config;
                                                 app.api_provider = config.api_provider();
+                                                app.model = config.default_model();
                                                 let _ = engine_handle.send(Op::Shutdown).await;
                                                 let engine_config =
                                                     build_engine_config(app, config);
@@ -3071,7 +3077,7 @@ async fn run_event_loop(
                                             }
                                         }
                                         app.push_status_toast(
-                                            "GLM key saved (OpenRouter · GLM-5.2)".to_string(),
+                                            "GLM key saved (Z.AI · GLM-5.2)".to_string(),
                                             StatusToastLevel::Info,
                                             Some(3_000),
                                         );
@@ -6896,6 +6902,7 @@ fn render(f: &mut Frame, app: &mut App) {
             crate::config::ApiProvider::Volcengine => Some("Volc"),
             crate::config::ApiProvider::Openrouter => Some("OR"),
             crate::config::ApiProvider::XiaomiMimo => Some("MiMo"),
+            crate::config::ApiProvider::Zai => Some("Z.AI"),
             crate::config::ApiProvider::Novita => Some("Novita"),
             crate::config::ApiProvider::Fireworks => Some("Fireworks"),
             crate::config::ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => {
@@ -7918,6 +7925,7 @@ async fn apply_provider_picker_api_key(
             ApiProvider::Volcengine => &mut providers.volcengine,
             ApiProvider::Openrouter => &mut providers.openrouter,
             ApiProvider::XiaomiMimo => &mut providers.xiaomi_mimo,
+            ApiProvider::Zai => &mut providers.zai,
             ApiProvider::Novita => &mut providers.novita,
             ApiProvider::Fireworks => &mut providers.fireworks,
             ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &mut providers.siliconflow,
@@ -7968,6 +7976,7 @@ fn set_provider_auth_mode_in_memory(config: &mut Config, provider: ApiProvider, 
         .get_or_insert_with(ProvidersConfig::default);
     let entry: &mut ProviderConfig = match provider {
         ApiProvider::Deepseek | ApiProvider::DeepseekCN => return,
+        ApiProvider::Zai => &mut providers.zai,
         ApiProvider::NvidiaNim => &mut providers.nvidia_nim,
         ApiProvider::Openai => &mut providers.openai,
         ApiProvider::Atlascloud => &mut providers.atlascloud,
