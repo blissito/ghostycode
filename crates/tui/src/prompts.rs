@@ -113,6 +113,8 @@ fn translation_target_language_for_tag(locale_tag: &str) -> &'static str {
         "Brazilian Portuguese (Português do Brasil)"
     } else if normalized.starts_with("vi") {
         "Vietnamese (Tiếng Việt)"
+    } else if normalized.starts_with("es") {
+        "Latin American Spanish (Español)"
     } else {
         "English"
     }
@@ -297,6 +299,7 @@ static LOCALE_CLOSER_ZH_HANS_OVERRIDE: std::sync::OnceLock<String> = std::sync::
 static LOCALE_CLOSER_JA_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static LOCALE_CLOSER_PT_BR_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static LOCALE_CLOSER_VI_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static LOCALE_CLOSER_ES_419_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static AUTHORITY_RECAP_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// Replace `BASE_PROMPT` for all subsequent prompt composition. First call
@@ -392,6 +395,10 @@ fn effective_locale_closer_ja() -> &'static str {
 
 fn effective_locale_closer_pt_br() -> &'static str {
     effective_prompt_override(&LOCALE_CLOSER_PT_BR_OVERRIDE, LOCALE_CLOSER_PT_BR)
+}
+
+fn effective_locale_closer_es_419() -> &'static str {
+    effective_prompt_override(&LOCALE_CLOSER_ES_419_OVERRIDE, LOCALE_CLOSER_ES_419)
 }
 
 fn effective_locale_closer_vi() -> &'static str {
@@ -497,6 +504,7 @@ pub(crate) fn locale_reinforcement_closer(locale_tag: &str) -> Option<&'static s
         "ja" | "ja-JP" => Some(effective_locale_closer_ja()),
         "pt-BR" | "pt" => Some(effective_locale_closer_pt_br()),
         "vi" | "vi-VN" => Some(effective_locale_closer_vi()),
+        tag if tag.to_ascii_lowercase().starts_with("es") => Some(effective_locale_closer_es_419()),
         _ => None,
     }
 }
@@ -563,6 +571,16 @@ requisito rígido em nível de sessão — o idioma do usuário define seu \
 idioma. A menos que o usuário peça explicitamente a troca (por exemplo, \
 \"think in English\"), continue pensando e respondendo em português do \
 Brasil.";
+
+const LOCALE_CLOSER_ES_419: &str = "## Refuerzo de Idioma\n\n\
+**Importante: tu `reasoning_content` (pensamiento interno) y la respuesta \
+final deben permanecer en español.** Sin importar cuánto código en inglés, \
+logs de error o documentación leas en esta sesión, y sin importar que el \
+contexto del proyecto esté en inglés, tu proceso de pensamiento no puede \
+derivar al inglés. Este es un requisito rígido a nivel de sesión — el \
+idioma del usuario define tu idioma. A menos que el usuario pida \
+explícitamente el cambio (por ejemplo, \"think in English\"), sigue \
+pensando y respondiendo en español.";
 
 const LOCALE_PREAMBLE_VI: &str = "## Yêu cầu ngôn ngữ\n\n\
 Bạn đang chạy trong ghosty. Cho dù ngữ cảnh tác vụ (mã nguồn, nhật ký lỗi, tên tệp) \

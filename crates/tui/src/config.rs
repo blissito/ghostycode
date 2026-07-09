@@ -3615,6 +3615,16 @@ fn apply_env_overrides(config: &mut Config) {
             .huggingface
             .base_url = Some(value);
     }
+    if matches!(config.api_provider(), ApiProvider::Zai)
+        && let Ok(value) = std::env::var("ZAI_BASE_URL")
+        && !value.trim().is_empty()
+    {
+        config
+            .providers
+            .get_or_insert_with(ProvidersConfig::default)
+            .zai
+            .base_url = Some(value);
+    }
     if matches!(config.api_provider(), ApiProvider::Moonshot)
         && let Ok(value) =
             std::env::var("MOONSHOT_BASE_URL").or_else(|_| std::env::var("KIMI_BASE_URL"))
