@@ -2616,6 +2616,9 @@ async fn run_event_loop(
                 } else if app.onboarding == OnboardingState::EasybitsMcp {
                     // Paste into EasyBits MCP key input
                     app.insert_easybits_key_str(text);
+                } else if app.onboarding == OnboardingState::GlmKey {
+                    // Paste into GLM (OpenRouter) key input
+                    app.insert_glm_key_str(text);
                 } else if app.is_history_search_active() {
                     app.history_search_insert_str(text);
                 } else if app.view_stack.handle_paste(text) {
