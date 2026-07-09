@@ -1632,9 +1632,10 @@ fn build_tui_command(
             | ProviderKind::Vllm
             | ProviderKind::Ollama
             | ProviderKind::Easybits
+            | ProviderKind::Zai
     ) {
         bail!(
-            "The interactive TUI supports DeepSeek, NVIDIA NIM, OpenAI-compatible, AtlasCloud, Wanjie Ark, OpenRouter, Xiaomi MiMo, Novita, Fireworks, SiliconFlow, Arcee AI, Moonshot/Kimi, SGLang, vLLM, EasyBits, and Ollama providers. Remove --provider {} or use `ghosty model ...` for provider registry inspection.",
+            "The interactive TUI supports DeepSeek, NVIDIA NIM, OpenAI-compatible, AtlasCloud, Wanjie Ark, OpenRouter, Xiaomi MiMo, Novita, Fireworks, SiliconFlow, Arcee AI, Moonshot/Kimi, SGLang, vLLM, EasyBits, Z.AI, and Ollama providers. Remove --provider {} or use `ghosty model ...` for provider registry inspection.",
             resolved_runtime.provider.as_str()
         );
     }
