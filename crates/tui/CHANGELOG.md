@@ -11,19 +11,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- GLM-5.2 and GLM-5-Turbo via OpenRouter: `z-ai/glm-5.2` (aliases `glm-5.2`,
-  `zai-glm-5.2`; 1M context) and `z-ai/glm-5-turbo` (aliases `glm-5-turbo`,
-  `zai-glm-5-turbo`; 202K context) join the existing `z-ai/glm-5.1` in the
-  OpenRouter open-model routing layer — registry, alias resolution, context
-  windows and reasoning support. Manually ported from CodeWhale upstream (no
-  shared git history). The direct Z.AI provider (`ProviderKind::Zai`) is
-  intentionally deferred.
-- Onboarding wizard: optional GLM key step. If no LLM provider key is
-  configured yet, the wizard now offers a GLM (Z.AI via OpenRouter) key entry
-  after the EasyBits step — mirroring the DeepSeek/EasyBits screens. Entering a
-  key persists it as the `[providers.openrouter]` LLM key with
-  `provider = "openrouter"` and defaults the model to GLM-5.2; the step is
-  skippable with Enter. Localized in English and Spanish (the default locale).
+- **Direct Z.AI (GLM Coding Plan) provider** (`ProviderKind::Zai`), ported from
+  CodeWhale upstream. Use a z.ai token via `ghosty auth set --provider zai` or
+  the onboarding wizard's GLM step; requests hit `api.z.ai/api/coding/paas/v4`
+  with `GLM-5.2` by default (`GLM-5.1`, `GLM-5-Turbo` also available). Full
+  parity with DeepSeek on caching and reasoning: the request uses Z.AI's
+  documented thinking shape (`clear_thinking: false`) so `reasoning_content`
+  is preserved across turns for prefix-cache hits, and the response's
+  `reasoning_content` is classified as thinking (rendered as a Thinking cell,
+  respecting `show_thinking`) instead of leaking into the answer.
+- GLM models via OpenRouter as well: `z-ai/glm-5.2` (1M context) and
+  `z-ai/glm-5-turbo` (202K) join `z-ai/glm-5.1` in the open-model routing layer.
+- Onboarding wizard: optional GLM key step after EasyBits (only when no LLM
+  provider key is configured). Entering a z.ai token persists it as the
+  `[providers.zai]` key with `provider = "zai"` and model `GLM-5.2`; skippable
+  with Enter. Localized in English and Spanish.
+- Spanish (`es-419`) reasoning-language support: the model now keeps its
+  `reasoning_content` in Spanish for `es-419` sessions when thinking is visible
+  (previously only zh/ja/pt-BR/vi were handled, so Spanish reasoned in English).
+
+### Changed
+
+- **Turn-completion notifications now default to off.** The previous `auto`
+  default shelled out to `osascript` on macOS (attributed to "Script Editor",
+  with a sound) on every turn. Opt back in with `[notifications] method =
+  "auto" | "osc9" | "bel" | "ghostty"`.
+- Config validation is provider-aware: a non-DeepSeek model id (e.g. `GLM-5.2`)
+  is accepted when the active provider can resolve it, instead of always
+  requiring a DeepSeek model id.
 
 ## [0.0.9] - 2026-06-15
 

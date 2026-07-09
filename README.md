@@ -16,6 +16,20 @@ sub-agents through long tool-using sessions with evidence-driven verification.
 Built for developers who want a keyboard-first coding agent with MCP support,
 session persistence, and zero vendor lock-in. Open source (MIT).
 
+> ### ✨ Novedad (0.0.10) — GLM-5.2 directo de Z.AI
+>
+> Ahora corres **GLM-5.2** con tu token del **Z.AI Coding Plan**, con paridad de
+> cache y razonamiento igual que DeepSeek (thinking preservado para prefix-cache,
+> `reasoning_content` clasificado como thinking). Un comando y listo:
+>
+> ```bash
+> ghosty auth set --provider zai --api-key "TU_TOKEN_ZAI"
+> ```
+>
+> O elige GLM en el wizard de arranque. También disponible vía OpenRouter
+> (`z-ai/glm-5.2`). Además: notificaciones apagadas por default y razonamiento en
+> español para sesiones `es-419`.
+
 ## Instalación
 
 **Recomendado** — sin Node ni Rust, baja el binario precompilado:
@@ -43,7 +57,9 @@ El paquete de npm se llama **`ghostycode`**; el comando que instala es **`ghosty
 
 ```bash
 ghosty auth set --provider deepseek --api-key "TU_DEEPSEEK_API_KEY"
-# Alternativa: EasyBits (revendedor de DeepSeek; la misma key sirve para LLM y MCP)
+# GLM-5.2 directo (Z.AI Coding Plan)
+ghosty auth set --provider zai --api-key "TU_TOKEN_ZAI"
+# EasyBits (revendedor de DeepSeek; la misma key sirve para LLM y MCP)
 ghosty auth set --provider easybits --api-key "TU_EASYBITS_API_KEY"
 ghosty doctor    # verifica setup y conexión
 ghosty           # abre la TUI interactiva
@@ -84,16 +100,21 @@ Cambia de modo dentro de la TUI o con flags al arrancar.
 
 Override con `--model <nombre>` o `/model` dentro de la TUI.
 
-### Modelos abiertos vía OpenRouter
+### GLM de Z.AI — directo o vía OpenRouter
 
-Además de DeepSeek, puedes rutear modelos abiertos con `provider = "openrouter"`
-(`OPENROUTER_API_KEY`). Incluye la familia **GLM de Z.AI**:
+Ghosty habla con la familia **GLM de Z.AI** por dos rutas:
+
+**Directo (Z.AI Coding Plan)** — `provider = "zai"` (`ZAI_API_KEY`), endpoint
+`api.z.ai/api/coding/paas/v4`. Paridad de cache y thinking con DeepSeek:
 
 | Modelo | Contexto | Ideal para |
 |--------|----------|------------|
-| `z-ai/glm-5.2` (alias `glm-5.2`) | 1M | Modelo GLM más capaz |
-| `z-ai/glm-5.1` (alias `glm-5.1`) | 202K | GLM estándar |
-| `z-ai/glm-5-turbo` (alias `glm-5-turbo`) | 202K | GLM rápido para explorar |
+| `GLM-5.2` (default) | — | Modelo GLM más capaz |
+| `GLM-5.1` | — | GLM estándar |
+| `GLM-5-Turbo` | — | GLM rápido para explorar |
+
+**Vía OpenRouter** — `provider = "openrouter"` (`OPENROUTER_API_KEY`):
+`z-ai/glm-5.2` (1M), `z-ai/glm-5.1` (202K), `z-ai/glm-5-turbo` (202K).
 
 La lista completa de modelos OpenRouter (Qwen, Kimi, MiniMax, Gemma, etc.) está
 en [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
