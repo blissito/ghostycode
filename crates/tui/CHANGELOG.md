@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-07-12
+
+### Fixed
+
+- **Stale HTTP connections after microVM suspend/resume.** The LLM HTTP client no
+  longer reuses idle pooled connections (`pool_max_idle_per_host(0)`). In a
+  Firecracker microVM that suspends and resumes (memory snapshot), an idle socket
+  goes stale — the remote closed it during sleep and the guest's monotonic clock
+  freezes, so any `pool_idle_timeout` fails to evict it — and the next request
+  hangs on the dead socket until timeout (the agent "stops responding" after
+  sleeping). Opening a fresh connection per request (~100ms handshake, negligible
+  vs a multi-second LLM turn) fixes this at the root. Does not affect streaming.
+
 ## [0.0.10] - 2026-07-09
 
 ### Added
