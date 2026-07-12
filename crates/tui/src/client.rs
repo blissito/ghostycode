@@ -631,6 +631,14 @@ impl DeepSeekClient {
             ))
             .connect_timeout(Duration::from_secs(30))
             .tcp_keepalive(Some(Duration::from_secs(30)))
+            // No reusar conexiones idle del pool. En un microVM que se suspende y
+            // resume (snapshot Firecracker), un socket idle queda STALE (el remoto lo
+            // cerró durante el sueño) y el reloj monotónico se CONGELA → cualquier
+            // pool_idle_timeout falla (la conexión no "parece" vieja al resumir) y el
+            // siguiente request cuelga sobre el socket muerto hasta el timeout. Abrir
+            // una conexión fresca por request (handshake ~100ms, despreciable vs un
+            // turno LLM de segundos) elimina el problema de raíz. No afecta streaming.
+            .pool_max_idle_per_host(0)
             .http2_keep_alive_interval(Some(Duration::from_secs(15)))
             .http2_keep_alive_timeout(Duration::from_secs(20))
             .min_tls_version(reqwest::tls::Version::TLS_1_2);
