@@ -62,6 +62,7 @@ pub const OPENROUTER_GLM_5_1_MODEL: &str = "z-ai/glm-5.1";
 pub const OPENROUTER_GLM_5_2_MODEL: &str = "z-ai/glm-5.2";
 pub const OPENROUTER_GLM_5_TURBO_MODEL: &str = "z-ai/glm-5-turbo";
 pub const OPENROUTER_KIMI_K2_6_MODEL: &str = "moonshotai/kimi-k2.6";
+pub const OPENROUTER_KIMI_K3_MODEL: &str = "moonshotai/kimi-k3";
 pub const OPENROUTER_MINIMAX_M3_MODEL: &str = "minimax/minimax-m3";
 pub const OPENROUTER_NEMOTRON_3_NANO_OMNI_MODEL: &str =
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
@@ -83,6 +84,7 @@ pub const RECENT_OPENROUTER_LARGE_MODELS: &[&str] = &[
     OPENROUTER_QWEN_3_6_MAX_PREVIEW_MODEL,
     OPENROUTER_QWEN_3_6_27B_MODEL,
     OPENROUTER_QWEN_3_6_PLUS_MODEL,
+    OPENROUTER_KIMI_K3_MODEL,
     OPENROUTER_KIMI_K2_6_MODEL,
     OPENROUTER_GLM_5_2_MODEL,
     OPENROUTER_GLM_5_1_MODEL,
@@ -119,7 +121,8 @@ pub const DEFAULT_ARCEE_MODEL: &str = "trinity-large-thinking";
 pub const ARCEE_TRINITY_LARGE_PREVIEW_MODEL: &str = "trinity-large-preview";
 pub const ARCEE_TRINITY_MINI_MODEL: &str = "trinity-mini";
 pub const DEFAULT_ARCEE_BASE_URL: &str = "https://api.arcee.ai/api/v1";
-pub const DEFAULT_MOONSHOT_MODEL: &str = "kimi-k2.6";
+pub const DEFAULT_MOONSHOT_MODEL: &str = "kimi-k3";
+pub const MOONSHOT_KIMI_K2_6_MODEL: &str = "kimi-k2.6";
 pub const DEFAULT_MOONSHOT_BASE_URL: &str = "https://api.moonshot.ai/v1";
 pub const DEFAULT_KIMI_CODE_MODEL: &str = "kimi-for-coding";
 pub const DEFAULT_KIMI_CODE_BASE_URL: &str = "https://api.kimi.com/coding/v1";
@@ -608,6 +611,7 @@ fn canonical_openrouter_recent_model_id(model: &str) -> Option<&'static str> {
         OPENROUTER_KIMI_K2_6_MODEL | "kimi-k2.6" | "kimi-k2-6" | "moonshot-kimi-k2.6" => {
             Some(OPENROUTER_KIMI_K2_6_MODEL)
         }
+        OPENROUTER_KIMI_K3_MODEL | "kimi-k3" | "moonshot-kimi-k3" => Some(OPENROUTER_KIMI_K3_MODEL),
         OPENROUTER_MINIMAX_M3_MODEL | "minimax-m3" | "minimax-m-3" => {
             Some(OPENROUTER_MINIMAX_M3_MODEL)
         }
@@ -825,7 +829,7 @@ pub fn model_completion_names_for_provider(provider: ApiProvider) -> Vec<&'stati
             vec![DEFAULT_SILICONFLOW_MODEL, DEFAULT_SILICONFLOW_FLASH_MODEL]
         }
         ApiProvider::Arcee => vec![DEFAULT_ARCEE_MODEL, ARCEE_TRINITY_LARGE_PREVIEW_MODEL],
-        ApiProvider::Moonshot => vec![DEFAULT_MOONSHOT_MODEL],
+        ApiProvider::Moonshot => vec![DEFAULT_MOONSHOT_MODEL, MOONSHOT_KIMI_K2_6_MODEL],
         ApiProvider::Huggingface => {
             vec![DEFAULT_HUGGINGFACE_MODEL, DEFAULT_HUGGINGFACE_FLASH_MODEL]
         }
@@ -7475,6 +7479,7 @@ api_key = "old-openrouter-key"
             ("qwen3.6-plus", OPENROUTER_QWEN_3_6_PLUS_MODEL),
             ("mimo-v2.5-pro", OPENROUTER_XIAOMI_MIMO_V2_5_PRO_MODEL),
             ("kimi-k2.6", OPENROUTER_KIMI_K2_6_MODEL),
+            ("kimi-k3", OPENROUTER_KIMI_K3_MODEL),
             ("minimax-m3", OPENROUTER_MINIMAX_M3_MODEL),
             ("gemma-4-31b-it", OPENROUTER_GEMMA_4_31B_MODEL),
             ("glm-5.1", OPENROUTER_GLM_5_1_MODEL),
@@ -7586,10 +7591,14 @@ api_key = "old-openrouter-key"
 
     #[test]
     fn model_completion_names_for_moonshot_excludes_oauth_only_kimi_code_model() {
+        let models = model_completion_names_for_provider(ApiProvider::Moonshot);
+        // K3 (default) and K2.6 are both switchable at runtime...
         assert_eq!(
-            model_completion_names_for_provider(ApiProvider::Moonshot),
-            vec![DEFAULT_MOONSHOT_MODEL]
+            models,
+            vec![DEFAULT_MOONSHOT_MODEL, MOONSHOT_KIMI_K2_6_MODEL]
         );
+        // ...but the OAuth-only Kimi Code model is never offered here.
+        assert!(!models.contains(&DEFAULT_KIMI_CODE_MODEL));
     }
 
     #[test]

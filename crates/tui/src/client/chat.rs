@@ -112,15 +112,13 @@ impl DeepSeekClient {
                 .map(|tool| tool_to_chat_for_base_url(tool, &self.base_url))
                 .collect();
             // Kimi / Moonshot enforces stricter JSON Schema: `type` must be
-            // inside `anyOf` / `oneOf` items, not on the parent (#2438).
+            // inside `anyOf` / `oneOf` items, not on the parent (#2438), and the
+            // root `parameters` must be typed `"object"` even when a tool ships
+            // an empty or missing schema (e.g. no-arg MCP tools).
             if matches!(self.api_provider, crate::config::ApiProvider::Moonshot) {
                 for t in &mut chat_tools {
-                    if let Some(fn_obj) = t
-                        .as_object_mut()
-                        .and_then(|t| t.get_mut("function"))
-                        .and_then(|f| f.get_mut("parameters"))
-                    {
-                        crate::tools::schema_sanitize::sanitize_for_kimi(fn_obj);
+                    if let Some(function) = t.as_object_mut().and_then(|t| t.get_mut("function")) {
+                        crate::tools::schema_sanitize::normalize_kimi_function_parameters(function);
                     }
                 }
             }
@@ -209,15 +207,13 @@ impl DeepSeekClient {
                 .map(|tool| tool_to_chat_for_base_url(tool, &self.base_url))
                 .collect();
             // Kimi / Moonshot enforces stricter JSON Schema: `type` must be
-            // inside `anyOf` / `oneOf` items, not on the parent (#2438).
+            // inside `anyOf` / `oneOf` items, not on the parent (#2438), and the
+            // root `parameters` must be typed `"object"` even when a tool ships
+            // an empty or missing schema (e.g. no-arg MCP tools).
             if matches!(self.api_provider, crate::config::ApiProvider::Moonshot) {
                 for t in &mut chat_tools {
-                    if let Some(fn_obj) = t
-                        .as_object_mut()
-                        .and_then(|t| t.get_mut("function"))
-                        .and_then(|f| f.get_mut("parameters"))
-                    {
-                        crate::tools::schema_sanitize::sanitize_for_kimi(fn_obj);
+                    if let Some(function) = t.as_object_mut().and_then(|t| t.get_mut("function")) {
+                        crate::tools::schema_sanitize::normalize_kimi_function_parameters(function);
                     }
                 }
             }
@@ -1985,6 +1981,10 @@ fn provider_accepts_reasoning_content(provider: ApiProvider) -> bool {
             | ApiProvider::Arcee
             | ApiProvider::Sglang
             | ApiProvider::Zai
+            // Moonshot / Kimi (K3 always thinks) streams its trace as
+            // `delta.reasoning_content`; classify it as thinking so it renders
+            // as a Thinking cell instead of leaking into the visible answer.
+            | ApiProvider::Moonshot
     )
 }
 

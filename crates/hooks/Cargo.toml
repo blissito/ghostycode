@@ -10,7 +10,7 @@ description = "Hook dispatch and notifications parity for DeepSeek workspace arc
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
-ghosty-protocol = { path = "../protocol", version = "0.0.11" }
+ghosty-protocol = { path = "../protocol", version = "0.0.12" }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

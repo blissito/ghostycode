@@ -294,6 +294,13 @@ impl Default for ModelRegistry {
                 supports_reasoning: true,
             },
             ModelInfo {
+                id: "moonshotai/kimi-k3".to_string(),
+                provider: ProviderKind::Openrouter,
+                aliases: vec!["openrouter-kimi-k3".to_string()],
+                supports_tools: true,
+                supports_reasoning: true,
+            },
+            ModelInfo {
                 id: "minimax/minimax-m3".to_string(),
                 provider: ProviderKind::Openrouter,
                 aliases: vec![
@@ -533,13 +540,16 @@ impl Default for ModelRegistry {
                 supports_reasoning: false,
             },
             ModelInfo {
+                id: "kimi-k3".to_string(),
+                provider: ProviderKind::Moonshot,
+                aliases: vec!["kimi".to_string(), "moonshot-kimi-k3".to_string()],
+                supports_tools: true,
+                supports_reasoning: true,
+            },
+            ModelInfo {
                 id: "kimi-k2.6".to_string(),
                 provider: ProviderKind::Moonshot,
-                aliases: vec![
-                    "kimi".to_string(),
-                    "kimi-k2".to_string(),
-                    "moonshot-kimi-k2.6".to_string(),
-                ],
+                aliases: vec!["kimi-k2".to_string(), "moonshot-kimi-k2.6".to_string()],
                 supports_tools: true,
                 supports_reasoning: true,
             },
@@ -1186,6 +1196,7 @@ mod tests {
             ("minimax-m3", "minimax/minimax-m3"),
             ("openrouter-mimo-v2.5-pro", "xiaomi/mimo-v2.5-pro"),
             ("openrouter-kimi-k2.6", "moonshotai/kimi-k2.6"),
+            ("openrouter-kimi-k3", "moonshotai/kimi-k3"),
         ] {
             let resolved = registry.resolve(Some(alias), Some(ProviderKind::Openrouter));
 

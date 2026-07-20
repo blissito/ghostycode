@@ -648,10 +648,95 @@ pub fn sanitize_for_kimi(schema: &mut serde_json::Value) {
     }
 }
 
+/// Ensure a Kimi / Moonshot function tool carries a valid root `parameters`
+/// object.
+///
+/// Moonshot's API rejects any tool whose `function.parameters` lacks a
+/// top-level `"type": "object"` with
+/// `tools.function.parameters.type is required and must be "object"` (HTTP
+/// 400). This happens for tools that arrive with no `parameters` at all, an
+/// empty `{}` schema (common for MCP tools that take no arguments), or a root
+/// object whose `type` was pushed into `anyOf`/`oneOf` items by
+/// [`sanitize_for_kimi`]. This runs the nested sanitizer first, then guarantees
+/// the root stays an object typed `"object"`.
+pub fn normalize_kimi_function_parameters(function: &mut serde_json::Value) {
+    let Some(func_obj) = function.as_object_mut() else {
+        return;
+    };
+    let params = func_obj
+        .entry("parameters")
+        .or_insert_with(|| serde_json::json!({"type": "object", "properties": {}}));
+    sanitize_for_kimi(params);
+    match params.as_object_mut() {
+        Some(obj) => {
+            obj.entry("type")
+                .or_insert_with(|| serde_json::Value::String("object".to_string()));
+        }
+        None => {
+            *params = serde_json::json!({"type": "object", "properties": {}});
+        }
+    }
+}
+
 #[cfg(test)]
 mod kimi_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn kimi_normalize_injects_type_on_empty_parameters() {
+        let mut function = json!({
+            "name": "no_args_tool",
+            "description": "takes nothing",
+            "parameters": {}
+        });
+        normalize_kimi_function_parameters(&mut function);
+        assert_eq!(function["parameters"]["type"], "object");
+    }
+
+    #[test]
+    fn kimi_normalize_injects_parameters_when_missing() {
+        let mut function = json!({
+            "name": "bare_tool",
+            "description": "no parameters key at all"
+        });
+        normalize_kimi_function_parameters(&mut function);
+        assert_eq!(function["parameters"]["type"], "object");
+        assert!(function["parameters"]["properties"].is_object());
+    }
+
+    #[test]
+    fn kimi_normalize_keeps_root_object_after_anyof_pushdown() {
+        // A (malformed) root with type + anyOf must still end up typed object
+        // so Moonshot accepts it.
+        let mut function = json!({
+            "name": "union_tool",
+            "parameters": {
+                "type": "object",
+                "anyOf": [
+                    {"properties": {"a": {"type": "string"}}},
+                    {"properties": {"b": {"type": "string"}}}
+                ]
+            }
+        });
+        normalize_kimi_function_parameters(&mut function);
+        assert_eq!(function["parameters"]["type"], "object");
+    }
+
+    #[test]
+    fn kimi_normalize_preserves_valid_object_parameters() {
+        let mut function = json!({
+            "name": "ok_tool",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"]
+            }
+        });
+        normalize_kimi_function_parameters(&mut function);
+        assert_eq!(function["parameters"]["type"], "object");
+        assert_eq!(function["parameters"]["required"], json!(["query"]));
+    }
 
     #[test]
     fn kimi_sanitize_pushes_type_into_anyof_items() {

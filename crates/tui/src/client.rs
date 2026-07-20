@@ -1306,10 +1306,19 @@ pub(super) fn parse_usage(usage: Option<&Value>) -> Usage {
     {
         output_tokens = total_tokens.saturating_sub(input_tokens);
     }
+    // Cache-hit prompt tokens live in different places per provider:
+    // OpenAI / DeepSeek-V4 nest them under `prompt_tokens_details.cached_tokens`,
+    // while Moonshot / Kimi report a top-level `usage.cached_tokens`. Accept
+    // either so cache accounting works for Kimi too.
     let cached_tokens = usage
         .and_then(|u| u.get("prompt_tokens_details"))
         .and_then(|details| details.get("cached_tokens"))
-        .and_then(Value::as_u64);
+        .and_then(Value::as_u64)
+        .or_else(|| {
+            usage
+                .and_then(|u| u.get("cached_tokens"))
+                .and_then(Value::as_u64)
+        });
     let prompt_cache_hit_tokens = usage
         .and_then(|u| u.get("prompt_cache_hit_tokens"))
         .and_then(Value::as_u64)
@@ -3117,6 +3126,24 @@ mod tests {
 
         assert_eq!(usage.input_tokens, 4000);
         assert_eq!(usage.output_tokens, 20);
+        assert_eq!(usage.prompt_cache_hit_tokens, Some(3000));
+        assert_eq!(usage.prompt_cache_miss_tokens, Some(1000));
+    }
+
+    #[test]
+    fn parse_usage_reads_kimi_top_level_cached_tokens() {
+        // Moonshot / Kimi report cache-hit prompt tokens as a top-level
+        // `usage.cached_tokens` field instead of nesting under
+        // `prompt_tokens_details`.
+        let usage = parse_usage(Some(&json!({
+            "prompt_tokens": 4000,
+            "completion_tokens": 21,
+            "total_tokens": 4021,
+            "cached_tokens": 3000
+        })));
+
+        assert_eq!(usage.input_tokens, 4000);
+        assert_eq!(usage.output_tokens, 21);
         assert_eq!(usage.prompt_cache_hit_tokens, Some(3000));
         assert_eq!(usage.prompt_cache_miss_tokens, Some(1000));
     }

@@ -41,7 +41,7 @@ base_url = "https://api.deepseek.com/beta"
 #   arcee-ai/trinity-large-thinking — OpenRouter Arcee Trinity Large Thinking
 #   xiaomi/mimo-v2.5-pro          — OpenRouter Xiaomi MiMo 2.5 Pro
 #   xiaomi/mimo-v2.5              — OpenRouter Xiaomi MiMo 2.5
-#   kimi-k2.6                       — default Moonshot/Kimi model ID
+#   kimi-k3                         — default Moonshot/Kimi model ID (1M context; kimi-k2.6 también disponible)
 #   gpt-4.1                         — default generic OpenAI-compatible model ID
 #   deepseek-ai/deepseek-v4-flash   — default AtlasCloud model ID
 #   deepseek-reasoner               — default Wanjie Ark model ID
@@ -319,7 +319,8 @@ max_subagents = 10 # optional (1-20)
 # Recent large model IDs also accepted here include arcee-ai/trinity-large-thinking,
 # xiaomi/mimo-v2.5-pro, qwen/qwen3.6-flash, qwen/qwen3.6-35b-a3b,
 # qwen/qwen3.6-max-preview, qwen/qwen3.6-27b, qwen/qwen3.6-plus,
-# google/gemma-4-31b-it, z-ai/glm-5.1, z-ai/glm-5.2, z-ai/glm-5-turbo, moonshotai/kimi-k2.6, and
+# google/gemma-4-31b-it, z-ai/glm-5.1, z-ai/glm-5.2, z-ai/glm-5-turbo,
+# moonshotai/kimi-k3, moonshotai/kimi-k2.6, and
 # nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free.
 
 # Xiaomi MiMo OpenAI-compatible endpoint (https://platform.xiaomimimo.com)
@@ -360,7 +361,7 @@ max_subagents = 10 # optional (1-20)
 [providers.moonshot]
 # api_key = "YOUR_MOONSHOT_API_KEY"           # or KIMI_API_KEY
 # base_url = "https://api.moonshot.ai/v1"      # or KIMI_BASE_URL
-# model = "kimi-k2.6"
+# model = "kimi-k3"                            # 1M context (default); "kimi-k2.6" (256K) también disponible
 # # Kimi Code path:
 # # base_url = "https://api.kimi.com/coding/v1"
 # # model = "kimi-for-coding"

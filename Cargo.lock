@@ -1881,7 +1881,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-agent"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "ghosty-config",
  "serde",
@@ -1889,7 +1889,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-app-server"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "axum",
@@ -1914,7 +1914,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-cli"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1941,7 +1941,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-config"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1955,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-core"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1973,7 +1973,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-execpolicy"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "ghosty-protocol",
@@ -1982,7 +1982,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-hooks"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-mcp"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "serde",
@@ -2005,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-protocol"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "serde",
  "serde_json",
@@ -2013,7 +2013,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-release"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "reqwest",
@@ -2024,7 +2024,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-secrets"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "dirs",
  "keyring",
@@ -2037,7 +2037,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-state"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2049,7 +2049,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-tools"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2063,7 +2063,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-tui"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "arboard",
@@ -2132,7 +2132,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-tui-core"
-version = "0.0.11"
+version = "0.0.12"
 
 [[package]]
 name = "globset"

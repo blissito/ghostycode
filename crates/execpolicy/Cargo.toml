@@ -8,5 +8,5 @@ description = "Execution policy and approval model parity for DeepSeek workspace
 
 [dependencies]
 anyhow.workspace = true
-ghosty-protocol = { path = "../protocol", version = "0.0.11" }
+ghosty-protocol = { path = "../protocol", version = "0.0.12" }
 serde.workspace = true

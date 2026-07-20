@@ -8,8 +8,8 @@ description = "Config schema and precedence model for DeepSeek workspace archite
 
 [dependencies]
 anyhow.workspace = true
-ghosty-execpolicy = { path = "../execpolicy", version = "0.0.11" }
-ghosty-secrets = { path = "../secrets", version = "0.0.11" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.12" }
+ghosty-secrets = { path = "../secrets", version = "0.0.12" }
 dirs.workspace = true
 serde.workspace = true
 serde_json.workspace = true

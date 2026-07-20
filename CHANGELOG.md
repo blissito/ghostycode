@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-07-20
+
+### Added
+
+- **Kimi K3 (Moonshot)** support. `kimi-k3` is now the default model for the
+  Moonshot provider (endpoint `api.moonshot.ai/v1`): 1M context window, reasoning
+  always on, 131K max output, native vision. `kimi-k2.6` (256K) is kept and stays
+  selectable at runtime from the `/model` picker and via alias, so both can be
+  switched on the fly. Also routable through OpenRouter as `moonshotai/kimi-k3`.
+  Registered across the config/TUI provider tables, the model registry, and the
+  context/output/reasoning capability tables (both the bare `kimi-k3` id and the
+  `moonshotai/kimi-k3` slug resolve to 1M so context measurement and compaction
+  are correct on the direct and OpenRouter paths).
+
+### Fixed
+
+- **Kimi/Moonshot tool-schema 400** (`tools.function.parameters.type is required
+  and must be "object"`). Tools whose `parameters` arrived without a root
+  `type` — empty or no-arg schemas, common for MCP tools — were rejected by the
+  Moonshot API. The Kimi tool normalizer now guarantees the root `parameters`
+  stays an object typed `"object"` (and injects a default schema when absent).
+- **Kimi/Moonshot cache tokens not counted.** Moonshot reports cache-hit prompt
+  tokens as a top-level `usage.cached_tokens`, not nested under
+  `prompt_tokens_details`; usage parsing now reads either shape so the cache hit
+  rate shows in the footer instead of `Cache: unavailable`.
+- **Kimi/Moonshot reasoning leaked into the answer.** The Moonshot provider now
+  classifies streamed `reasoning_content` as thinking, so it renders as a
+  Thinking cell (respecting `show_thinking`) instead of inlining into the reply.
+- **Language mirroring for bare greetings.** A lone language-neutral greeting or
+  interjection (`hey`, `hi`, `ok`, `thanks`, …) is now treated as ambiguous
+  rather than a decisive English signal, so a one-word greeting no longer flips
+  `reasoning_content` and the reply to English against the session language.
+
+## [0.0.11] - 2026-07-12
+
+### Fixed
+
+- **Stale HTTP connections after microVM suspend/resume.** The LLM HTTP client no
+  longer reuses idle pooled connections (`pool_max_idle_per_host(0)`). In a
+  Firecracker microVM that suspends and resumes (memory snapshot), an idle socket
+  goes stale — the remote closed it during sleep and the guest's monotonic clock
+  freezes, so any `pool_idle_timeout` fails to evict it — and the next request
+  hangs on the dead socket until timeout (the agent "stops responding" after
+  sleeping). Opening a fresh connection per request (~100ms handshake, negligible
+  vs a multi-second LLM turn) fixes this at the root. Does not affect streaming.
+
 ## [0.0.10] - 2026-07-09
 
 ### Added
@@ -5636,6 +5682,8 @@ Welcome — and thank you.
 [0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
 [0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
+[0.0.12]: https://github.com/blissito/ghostycode/releases/tag/v0.0.12
+[0.0.11]: https://github.com/blissito/ghostycode/releases/tag/v0.0.11
 [0.0.10]: https://github.com/blissito/ghostycode/releases/tag/v0.0.10
 [0.0.9]: https://github.com/blissito/ghostycode/releases/tag/v0.0.9
 [0.0.8-preview.0]: https://github.com/blissito/ghostycode/releases/tag/v0.0.8-preview.0

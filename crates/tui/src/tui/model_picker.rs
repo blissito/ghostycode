@@ -419,6 +419,8 @@ fn picker_model_hint(id: &str) -> &'static str {
         "mimo-v2.5-tts-voicedesign" => "voice design",
         "mimo-v2.5-tts-voiceclone" => "voice clone",
         "minimax/minimax-m3" => "1M multimodal",
+        "kimi-k3" | "moonshotai/kimi-k3" => "1M multimodal",
+        "kimi-k2.6" | "moonshotai/kimi-k2.6" => "256K reasoning",
         _ => "provider model",
     }
 }

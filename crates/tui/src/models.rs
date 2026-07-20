@@ -268,6 +268,7 @@ fn known_context_window_for_model(model_lower: &str) -> Option<u32> {
             Some(202_752)
         }
         "z-ai/glm-5.2" | "glm-5.2" => Some(1_000_000),
+        "kimi-k3" | "moonshotai/kimi-k3" | "moonshotai/kimi-k3:free" => Some(1_000_000),
         "minimax/minimax-m3" | "qwen/qwen3.6-flash" | "qwen/qwen3.6-plus" => Some(1_000_000),
         "xiaomi/mimo-v2.5-pro" | "xiaomi/mimo-v2.5" | "mimo-v2.5-pro" | "mimo-v2.5" => {
             Some(1_000_000)
@@ -291,6 +292,7 @@ pub fn max_output_tokens_for_model(model: &str) -> Option<u32> {
         "arcee-ai/trinity-large-thinking" | "trinity-large-thinking" | "moonshotai/kimi-k2.6" => {
             Some(262_144)
         }
+        "kimi-k3" | "moonshotai/kimi-k3" | "moonshotai/kimi-k3:free" => Some(131_072),
         "minimax/minimax-m3" => Some(524_288),
         "qwen/qwen3.6-35b-a3b" | "qwen/qwen3.6-27b" => Some(262_140),
         "qwen/qwen3.6-flash" | "qwen/qwen3.6-max-preview" | "qwen/qwen3.6-plus" => Some(65_536),
@@ -325,6 +327,9 @@ pub fn model_supports_reasoning(model: &str) -> bool {
             | "google/gemma-4-26b-a4b-it:free"
             | "moonshotai/kimi-k2.6"
             | "moonshotai/kimi-k2.6:free"
+            | "kimi-k3"
+            | "moonshotai/kimi-k3"
+            | "moonshotai/kimi-k3:free"
             | "minimax/minimax-m3"
             | "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
             | "qwen/qwen3.6-flash"
@@ -542,6 +547,8 @@ mod tests {
             ("mimo-v2.5", 1_000_000),
             ("minimax/minimax-m3", 1_000_000),
             ("moonshotai/kimi-k2.6", 262_144),
+            ("moonshotai/kimi-k3", 1_000_000),
+            ("kimi-k3", 1_000_000),
             ("google/gemma-4-31b-it", 262_144),
             ("z-ai/glm-5.1", 202_752),
             ("z-ai/glm-5.2", 1_000_000),
@@ -550,6 +557,39 @@ mod tests {
             assert_eq!(context_window_for_model(model), Some(expected_window));
             assert!(model_supports_reasoning(model));
         }
+    }
+
+    #[test]
+    fn kimi_k3_full_capability_chain_direct_and_openrouter() {
+        // Both the direct Moonshot id (used verbatim as session.model since
+        // Moonshot passes the model through) and the OpenRouter slug must
+        // resolve to the same 1M-class capabilities the TUI reads.
+        for model in ["kimi-k3", "moonshotai/kimi-k3", "moonshotai/kimi-k3:free"] {
+            assert_eq!(
+                context_window_for_model(model),
+                Some(1_000_000),
+                "context window for {model}"
+            );
+            assert!(
+                model_supports_reasoning(model),
+                "reasoning support for {model}"
+            );
+        }
+        // Output caps and compaction only need the runtime forms the client
+        // actually sends.
+        assert_eq!(max_output_tokens_for_model("kimi-k3"), Some(131_072));
+        assert_eq!(
+            max_output_tokens_for_model("moonshotai/kimi-k3"),
+            Some(131_072)
+        );
+        // 1M window → compaction at 80% = 800K, and auto-compact stays OFF
+        // (opt-in) like the other 1M-class models, not the 256K default-on set.
+        assert_eq!(
+            compaction_threshold_for_model_at_percent("kimi-k3", 80.0),
+            800_000
+        );
+        assert!(!auto_compact_default_for_model("kimi-k3"));
+        assert!(!auto_compact_default_for_model("moonshotai/kimi-k3"));
     }
 
     #[test]
@@ -595,6 +635,11 @@ mod tests {
             max_output_tokens_for_model("minimax/minimax-m3"),
             Some(524_288)
         );
+        assert_eq!(
+            max_output_tokens_for_model("moonshotai/kimi-k3"),
+            Some(131_072)
+        );
+        assert_eq!(max_output_tokens_for_model("kimi-k3"), Some(131_072));
     }
 
     #[test]
