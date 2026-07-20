@@ -16,19 +16,21 @@ sub-agents through long tool-using sessions with evidence-driven verification.
 Built for developers who want a keyboard-first coding agent with MCP support,
 session persistence, and zero vendor lock-in. Open source (MIT).
 
-> ### ✨ Novedad (0.0.10) — GLM-5.2 directo de Z.AI
+> ### ✨ Novedad (0.0.12) — Kimi K3 de Moonshot
 >
-> Ahora corres **GLM-5.2** con tu token del **Z.AI Coding Plan**, con paridad de
-> cache y razonamiento igual que DeepSeek (thinking preservado para prefix-cache,
-> `reasoning_content` clasificado como thinking). Un comando y listo:
+> Ya corres **Kimi K3** con tu key de **Moonshot**: ventana de **1M de contexto**,
+> razonamiento siempre activo y visión nativa. Es el modelo por defecto del provider
+> Moonshot, y **Kimi K2.6** (256K) se queda disponible para cambiar al vuelo desde
+> el picker de `/model`. Un comando y listo:
 >
 > ```bash
-> ghosty auth set --provider zai --api-key "TU_TOKEN_ZAI"
+> ghosty auth set --provider moonshot --api-key "TU_KEY_MOONSHOT"
 > ```
 >
-> O elige GLM en el wizard de arranque. También disponible vía OpenRouter
-> (`z-ai/glm-5.2`). Además: notificaciones apagadas por default y razonamiento en
-> español para sesiones `es-419`.
+> O elige Moonshot en el picker de `/provider` (te pide la key ahí mismo). También
+> disponible vía OpenRouter (`moonshotai/kimi-k3`). Esta versión además arregla,
+> en la ruta Moonshot/Kimi: el conteo de cache, el 400 de esquemas de tools, y el
+> render del razonamiento como celda de pensamiento aparte.
 
 ## Instalación
 
@@ -57,6 +59,8 @@ El paquete de npm se llama **`ghostycode`**; el comando que instala es **`ghosty
 
 ```bash
 ghosty auth set --provider deepseek --api-key "TU_DEEPSEEK_API_KEY"
+# Kimi K3 directo (Moonshot; 1M contexto)
+ghosty auth set --provider moonshot --api-key "TU_KEY_MOONSHOT"
 # GLM-5.2 directo (Z.AI Coding Plan)
 ghosty auth set --provider zai --api-key "TU_TOKEN_ZAI"
 # EasyBits (revendedor de DeepSeek; la misma key sirve para LLM y MCP)
