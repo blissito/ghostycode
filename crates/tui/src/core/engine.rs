@@ -1441,21 +1441,33 @@ In {new} mode: {policy}\n\n\
         reasoning_effort: Option<&str>,
         reasoning_effort_auto: bool,
     ) -> Message {
+        // Attach the actual bytes of any `[Attached image: …]` reference when
+        // the routed model can see them. Blind models keep only the path in
+        // the text and fall back to `image_analyze` / OCR.
+        let image_blocks = if crate::vision::attach::model_supports_inline_images(routed_model) {
+            crate::vision::attach::inline_image_blocks(&text)
+        } else {
+            Vec::new()
+        };
+
+        let mut content = vec![
+            self.turn_metadata_block(
+                routed_model,
+                mode,
+                auto_model,
+                reasoning_effort,
+                reasoning_effort_auto,
+            ),
+            ContentBlock::Text {
+                text,
+                cache_control: None,
+            },
+        ];
+        content.extend(image_blocks);
+
         Message {
             role: "user".to_string(),
-            content: vec![
-                self.turn_metadata_block(
-                    routed_model,
-                    mode,
-                    auto_model,
-                    reasoning_effort,
-                    reasoning_effort_auto,
-                ),
-                ContentBlock::Text {
-                    text,
-                    cache_control: None,
-                },
-            ],
+            content,
         }
     }
 

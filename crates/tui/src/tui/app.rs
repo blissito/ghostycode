@@ -3471,6 +3471,16 @@ impl App {
         if let Some(pending) = self.paste_burst.flush_before_modified_input() {
             self.insert_str(&pending);
         }
+        // A dragged screenshot arrives as a bare path, usually inside the
+        // OS temp dir that gets purged before the model reads it. Copy it
+        // somewhere durable and record it as an attachment so the bytes
+        // reach vision-capable models (#image-drop).
+        if let Some(dropped) =
+            crate::tui::clipboard::dropped_image_from_text(self.workspace.as_path(), text)
+        {
+            self.apply_clipboard_content(ClipboardContent::Image(dropped));
+            return;
+        }
         let normalized = normalize_paste_text(text);
         if !normalized.is_empty() {
             self.insert_str(&normalized);

@@ -308,6 +308,68 @@ fn clipboard_images_dir_for_home(workspace: &Path, home: Option<&Path>) -> PathB
     workspace.join("clipboard-images")
 }
 
+/// Interpret pasted text as a dropped image file and copy it somewhere
+/// durable.
+///
+/// Dragging a screenshot onto the terminal does not paste pixels — it pastes
+/// a *path*, often into `$TMPDIR` (`/var/folders/…/T/` on macOS), which the
+/// OS purges out from under us. Copying into `~/.ghosty/clipboard-images/`
+/// keeps the file readable for the rest of the session. Returns `None` when
+/// the text is not a single path to an existing image.
+pub fn dropped_image_from_text(workspace: &Path, text: &str) -> Option<PastedImage> {
+    let path = parse_dropped_path(text)?;
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    if !matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tif" | "tiff"
+    ) {
+        return None;
+    }
+    if !path.is_file() {
+        return None;
+    }
+
+    let dir = clipboard_images_dir(workspace);
+    std::fs::create_dir_all(&dir).ok()?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("dropped");
+    let destination = dir.join(format!("dropped-{timestamp}-{stem}.{ext}"));
+    std::fs::copy(&path, &destination).ok()?;
+
+    let byte_len = std::fs::metadata(&destination)
+        .map(|meta| meta.len() as usize)
+        .unwrap_or(0);
+    let (width, height) = image::image_dimensions(&destination).unwrap_or((0, 0));
+    Some(PastedImage {
+        path: destination,
+        width,
+        height,
+        byte_len,
+    })
+}
+
+/// Extract a filesystem path from dropped text: terminals wrap paths with
+/// spaces in quotes, backslash-escape them, or hand over a `file://` URL.
+fn parse_dropped_path(text: &str) -> Option<PathBuf> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || trimmed.contains('\n') {
+        return None;
+    }
+    let unquoted = trimmed.trim_matches('"').trim_matches('\'');
+    let unescaped = unquoted.replace("\\ ", " ");
+    let raw = unescaped
+        .strip_prefix("file://")
+        .map_or(unescaped.as_str(), |rest| rest);
+    let path = PathBuf::from(raw);
+    path.is_absolute().then_some(path)
+}
+
 /// Encode an RGBA `ImageData` from arboard as PNG and persist it. Returns
 /// the resulting path along with metadata used to render the paste hint.
 fn save_image_as_png(workspace: &Path, image: &ImageData) -> Result<PastedImage> {

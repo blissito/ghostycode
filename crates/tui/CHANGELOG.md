@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-07-25
+
+### Added
+
+- **Imágenes inline para el modelo principal.** Las referencias
+  `[Attached image: … at <ruta>]` del composer (pegado, `/attach`, arrastrar)
+  ahora viajan como bloques `image_url` en base64 hacia el modelo ruteado
+  cuando éste tiene visión (`kimi-k3`, `kimi-k2.6`, `glm-5*`, `gpt-4o/5`,
+  `claude-*`, `gemini-*`, `*-vl`, `*vision*`). Antes sólo se enviaba la ruta
+  en texto, así que un modelo con visión quedaba ciego y había que rebotar
+  por `image_analyze` o el OCR de `read_file`. Los modelos sin visión
+  (`deepseek-*`) conservan el comportamiento anterior. Tope de 4 imágenes por
+  mensaje y 5 MB por imagen; lo que no se pueda leer se omite y deja intacto
+  el fallback.
+
+### Fixed
+
+- **Arrastrar una captura al chat ya no pierde la imagen.** El terminal no
+  pega píxeles sino una ruta, normalmente dentro del temporal del sistema
+  (`/var/folders/…/T/` en macOS), que el SO purga antes de que el modelo
+  alcance a leerla. Ahora el archivo se copia a `~/.ghosty/clipboard-images/`
+  al momento de soltarlo y se registra como adjunto. Se manejan rutas entre
+  comillas, con espacios escapados y URLs `file://`.
+
 ## [0.0.12] - 2026-07-20
 
 ### Added
@@ -5682,6 +5706,7 @@ Welcome — and thank you.
 [0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
 [0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
+[0.0.13]: https://github.com/blissito/ghostycode/releases/tag/v0.0.13
 [0.0.12]: https://github.com/blissito/ghostycode/releases/tag/v0.0.12
 [0.0.11]: https://github.com/blissito/ghostycode/releases/tag/v0.0.11
 [0.0.10]: https://github.com/blissito/ghostycode/releases/tag/v0.0.10
