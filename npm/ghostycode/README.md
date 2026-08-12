@@ -5,12 +5,20 @@
 
 Instala y corre Ghosty Code desde los binarios precompilados (Rust) publicados en GitHub Releases.
 
-> **Novedad (0.0.12)** — **Kimi K3** de Moonshot: 1M de contexto, razonamiento siempre
-> activo y visión nativa. Modelo por defecto del provider Moonshot; Kimi K2.6 (256K) se
-> queda para cambiar al vuelo con `/model`. Un comando:
+> **Novedad (0.0.14)** — **la sesión ya no se te olvida.** Desde 0.0.13, los bytes de
+> las capturas que pegabas se quedaban en el historial y se reenviaban cada turno, pero
+> el medidor de contexto los contaba como cero tokens: el proveedor terminaba rechazando
+> la petición y la conversación se resumía de emergencia, en silencio. Ahora las imágenes
+> conservan sus bytes sólo en los 2 mensajes más recientes (las viejas dejan su ruta y el
+> modelo puede releerlas con `image_analyze`), el estimador sí las cobra, y si el contexto
+> se desborda te avisa antes de resumir. Cambiar de modelo tampoco vuelve a apagarte
+> `auto_compact` sin decírtelo.
+>
+> Sigue vigente **Kimi K3** de Moonshot: 1M de contexto, razonamiento siempre activo y
+> visión nativa. Modelo por defecto del provider Moonshot; Kimi K2.6 (256K) se queda para
+> cambiar al vuelo con `/model`. Un comando:
 > `ghosty auth set --provider moonshot --api-key "TU_KEY_MOONSHOT"`.
-> También vía OpenRouter (`moonshotai/kimi-k3`). Incluye fixes de cache, esquemas de
-> tools y render del razonamiento en la ruta Moonshot/Kimi.
+> También vía OpenRouter (`moonshotai/kimi-k3`).
 
 ## Instalación
 

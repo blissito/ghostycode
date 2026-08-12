@@ -16,21 +16,31 @@ sub-agents through long tool-using sessions with evidence-driven verification.
 Built for developers who want a keyboard-first coding agent with MCP support,
 session persistence, and zero vendor lock-in. Open source (MIT).
 
-> ### ✨ Novedad (0.0.12) — Kimi K3 de Moonshot
+> ### 🩹 Novedad (0.0.14) — la sesión ya no se te olvida
 >
-> Ya corres **Kimi K3** con tu key de **Moonshot**: ventana de **1M de contexto**,
-> razonamiento siempre activo y visión nativa. Es el modelo por defecto del provider
-> Moonshot, y **Kimi K2.6** (256K) se queda disponible para cambiar al vuelo desde
-> el picker de `/model`. Un comando y listo:
+> Si pegaste capturas y de pronto Ghosty perdía el hilo de la conversación, era
+> esto: desde 0.0.13 los bytes de las imágenes se quedaban en el historial y se
+> reenviaban en cada turno, pero el medidor de contexto los contaba como **cero
+> tokens**. Cuatro capturas podían meter cientos de miles de tokens invisibles,
+> el proveedor rechazaba la petición y el motor resumía la conversación de
+> emergencia, en silencio.
+>
+> Ahora las imágenes sólo conservan sus bytes en los 2 mensajes más recientes
+> (las viejas dejan su ruta, y el modelo puede releerlas con `image_analyze`),
+> el estimador sí las cobra, y si el contexto se desborda de todos modos, te
+> avisa antes de resumir. Además, cambiar de modelo ya no te apaga `auto_compact`
+> sin decirte nada.
+>
+> Sigue disponible **Kimi K3** con tu key de **Moonshot** (1M de contexto,
+> razonamiento siempre activo, visión nativa) como modelo por defecto de ese
+> provider, con **Kimi K2.6** (256K) a un `/model` de distancia:
 >
 > ```bash
 > ghosty auth set --provider moonshot --api-key "TU_KEY_MOONSHOT"
 > ```
 >
 > O elige Moonshot en el picker de `/provider` (te pide la key ahí mismo). También
-> disponible vía OpenRouter (`moonshotai/kimi-k3`). Esta versión además arregla,
-> en la ruta Moonshot/Kimi: el conteo de cache, el 400 de esquemas de tools, y el
-> render del razonamiento como celda de pensamiento aparte.
+> disponible vía OpenRouter (`moonshotai/kimi-k3`).
 
 ## Instalación
 

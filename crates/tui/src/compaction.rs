@@ -562,12 +562,33 @@ fn estimate_tokens_for_message(message: &Message, include_thinking: bool) -> usi
                 .map(|s| s.len() / 4)
                 .unwrap_or(100),
             ContentBlock::ToolResult { content, .. } => content.len() / 4,
+            ContentBlock::ImageUrl { image_url } => estimate_image_tokens(&image_url.url),
             ContentBlock::ServerToolUse { .. }
             | ContentBlock::ToolSearchToolResult { .. }
-            | ContentBlock::CodeExecutionToolResult { .. }
-            | ContentBlock::ImageUrl { .. } => 0,
+            | ContentBlock::CodeExecutionToolResult { .. } => 0,
         })
         .sum::<usize>()
+}
+
+/// Rough token cost of one inline image.
+///
+/// Counting images as free made the compaction trigger blind to them: a few
+/// pasted screenshots could add hundreds of thousands of real tokens while
+/// the estimate stayed flat, so the first sign of trouble was the provider
+/// rejecting the request. Decode the data URL back to raw bytes and price
+/// them at roughly one vision token per 750 bytes, with a floor so a remote
+/// `http(s)` URL (whose size we can't see here) still costs something.
+fn estimate_image_tokens(url: &str) -> usize {
+    const IMAGE_BYTES_PER_TOKEN: usize = 750;
+    const MIN_IMAGE_TOKENS: usize = 1_000;
+
+    let raw_bytes = url
+        .split_once(";base64,")
+        .map(|(_, payload)| payload.len().saturating_mul(3) / 4);
+    raw_bytes
+        .map(|bytes| bytes / IMAGE_BYTES_PER_TOKEN)
+        .unwrap_or(0)
+        .max(MIN_IMAGE_TOKENS)
 }
 
 pub fn estimate_tokens(messages: &[Message]) -> usize {
@@ -1886,6 +1907,46 @@ mod tests {
         }];
         let tokens = estimate_tokens(&messages);
         assert!(tokens > 0 && tokens < 10);
+    }
+
+    #[test]
+    fn estimate_tokens_prices_inline_images_instead_of_ignoring_them() {
+        // A pasted screenshot used to estimate as zero, so compaction never
+        // fired and the provider was the first to notice the overflow.
+        let payload = "A".repeat(4_000_000); // ~3 MB of image bytes
+        let messages = vec![Message {
+            role: "user".to_string(),
+            content: vec![ContentBlock::ImageUrl {
+                image_url: crate::models::ImageUrlContent {
+                    url: format!("data:image/png;base64,{payload}"),
+                },
+            }],
+        }];
+
+        let tokens = estimate_tokens(&messages);
+        assert!(tokens > 3_000, "3 MB image estimated at only {tokens}");
+
+        // Half the bytes should cost roughly half the tokens.
+        let smaller = vec![Message {
+            role: "user".to_string(),
+            content: vec![ContentBlock::ImageUrl {
+                image_url: crate::models::ImageUrlContent {
+                    url: format!("data:image/png;base64,{}", "A".repeat(2_000_000)),
+                },
+            }],
+        }];
+        assert!(estimate_tokens(&smaller) < tokens);
+
+        // A remote URL still carries the floor rather than nothing.
+        let remote = vec![Message {
+            role: "user".to_string(),
+            content: vec![ContentBlock::ImageUrl {
+                image_url: crate::models::ImageUrlContent {
+                    url: "https://example.com/shot.png".to_string(),
+                },
+            }],
+        }];
+        assert_eq!(estimate_tokens(&remote), 1_000);
     }
 
     #[test]

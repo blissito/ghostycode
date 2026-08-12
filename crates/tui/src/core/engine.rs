@@ -1379,6 +1379,13 @@ In {new} mode: {policy}\n\n\
 
     async fn add_session_message(&mut self, message: Message) {
         self.session.add_message(message);
+        // Image bytes are replayed on every later request. Keep them only on
+        // the newest few messages so a session full of screenshots doesn't
+        // silently eat the provider's context window (and the session file).
+        let pruned = crate::vision::attach::prune_stale_image_blocks(&mut self.session.messages);
+        if pruned > 0 {
+            tracing::debug!(pruned, "dropped stale inline image bytes from history");
+        }
         self.emit_session_updated().await;
     }
 
@@ -2050,6 +2057,16 @@ In {new} mode: {policy}\n\n\
         let id = format!("compact_{}", &uuid::Uuid::new_v4().to_string()[..8]);
         let start_message = format!("Emergency context compaction started ({reason})");
         self.emit_compaction_started(id.clone(), true, start_message)
+            .await;
+        // This path summarizes the conversation behind the user's back to
+        // survive an overflow. Say so plainly: without it, the only symptom
+        // is the assistant suddenly "forgetting" earlier turns.
+        let _ = self
+            .tx_event
+            .send(Event::status(format!(
+                "Context limit reached ({reason}). Summarizing the conversation \
+                 automatically to continue — earlier detail may be condensed."
+            )))
             .await;
 
         let before_tokens = self.estimated_input_tokens();

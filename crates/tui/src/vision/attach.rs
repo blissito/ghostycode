@@ -15,12 +15,21 @@ use std::path::Path;
 
 use base64::Engine as _;
 
-use crate::models::{ContentBlock, ImageUrlContent};
+use crate::models::{ContentBlock, ImageUrlContent, Message};
 use crate::tui::file_mention::media_attachment_references;
 
 /// Maximum number of images attached to a single user message. Beyond this
 /// the request payload grows faster than any answer improves.
 const MAX_INLINE_IMAGES: usize = 4;
+
+/// How many messages keep their image bytes in the session history.
+///
+/// Image blocks are replayed on every subsequent request, so an unbounded
+/// history of them fills the provider's context window with pixels nobody
+/// is looking at any more. Two keeps a before/after comparison working
+/// across turns; everything older falls back to its `[Attached image: …]`
+/// path line.
+pub const MAX_RETAINED_IMAGE_MESSAGES: usize = 2;
 
 /// Maximum size of a single image, in bytes, before base64 expansion.
 /// 5 MB of PNG becomes ~6.7 MB of base64 — already a large upload.
@@ -108,6 +117,38 @@ pub fn inline_image_blocks(text: &str) -> Vec<ContentBlock> {
     blocks
 }
 
+/// Drop the image bytes from every message except the
+/// `MAX_RETAINED_IMAGE_MESSAGES` most recent ones that carry them.
+///
+/// The `[Attached image: … at /path]` line stays in the message text, so
+/// the model keeps the reference and can re-read the file through
+/// `image_analyze` if it needs the pixels again. Returns how many messages
+/// were pruned, so the caller can log it.
+///
+/// Idempotent: a second call on already-pruned history changes nothing.
+pub fn prune_stale_image_blocks(messages: &mut [Message]) -> usize {
+    let mut kept = 0usize;
+    let mut pruned = 0usize;
+    for message in messages.iter_mut().rev() {
+        if !message
+            .content
+            .iter()
+            .any(|block| matches!(block, ContentBlock::ImageUrl { .. }))
+        {
+            continue;
+        }
+        if kept < MAX_RETAINED_IMAGE_MESSAGES {
+            kept += 1;
+            continue;
+        }
+        message
+            .content
+            .retain(|block| !matches!(block, ContentBlock::ImageUrl { .. }));
+        pruned += 1;
+    }
+    pruned
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,6 +177,81 @@ mod tests {
             panic!("expected an image_url block");
         };
         assert!(image_url.url.starts_with("data:image/png;base64,"));
+    }
+
+    fn image_message(label: &str) -> Message {
+        Message {
+            role: "user".to_string(),
+            content: vec![
+                ContentBlock::Text {
+                    text: format!("{label}\n[Attached image: 8x4 PNG at /tmp/{label}.png]"),
+                    cache_control: None,
+                },
+                ContentBlock::ImageUrl {
+                    image_url: ImageUrlContent {
+                        url: format!("data:image/png;base64,{label}"),
+                    },
+                },
+            ],
+        }
+    }
+
+    fn image_block_count(message: &Message) -> usize {
+        message
+            .content
+            .iter()
+            .filter(|block| matches!(block, ContentBlock::ImageUrl { .. }))
+            .count()
+    }
+
+    #[test]
+    fn prune_keeps_bytes_only_on_the_two_newest_image_messages() {
+        let mut messages = vec![
+            image_message("first"),
+            image_message("second"),
+            image_message("third"),
+        ];
+
+        assert_eq!(prune_stale_image_blocks(&mut messages), 1);
+
+        // Oldest lost its pixels but kept the path line as a fallback.
+        assert_eq!(image_block_count(&messages[0]), 0);
+        let ContentBlock::Text { text, .. } = &messages[0].content[0] else {
+            panic!("expected the text block to survive pruning");
+        };
+        assert!(text.contains("[Attached image: 8x4 PNG at /tmp/first.png]"));
+
+        assert_eq!(image_block_count(&messages[1]), 1);
+        assert_eq!(image_block_count(&messages[2]), 1);
+    }
+
+    #[test]
+    fn prune_is_idempotent() {
+        let mut messages = vec![
+            image_message("first"),
+            image_message("second"),
+            image_message("third"),
+        ];
+
+        assert_eq!(prune_stale_image_blocks(&mut messages), 1);
+        // A second pass has nothing left to drop.
+        assert_eq!(prune_stale_image_blocks(&mut messages), 0);
+        assert_eq!(image_block_count(&messages[1]), 1);
+        assert_eq!(image_block_count(&messages[2]), 1);
+    }
+
+    #[test]
+    fn prune_leaves_history_without_images_untouched() {
+        let mut messages = vec![Message {
+            role: "user".to_string(),
+            content: vec![ContentBlock::Text {
+                text: "sin adjuntos".to_string(),
+                cache_control: None,
+            }],
+        }];
+
+        assert_eq!(prune_stale_image_blocks(&mut messages), 0);
+        assert_eq!(messages[0].content.len(), 1);
     }
 
     #[test]

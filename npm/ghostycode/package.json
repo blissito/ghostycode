@@ -1,7 +1,7 @@
 {
   "name": "ghostycode",
-  "version": "0.0.13",
-  "ghostyBinaryVersion": "0.0.13",
+  "version": "0.0.14",
+  "ghostyBinaryVersion": "0.0.14",
   "description": "DeepSeek V4 terminal coding agent & constitutional harness — Rust TUI with MCP, sub-agents, and session persistence",
   "author": "Bliss (blissito)",
   "license": "MIT",

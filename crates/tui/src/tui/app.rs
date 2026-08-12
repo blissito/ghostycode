@@ -4920,12 +4920,14 @@ impl App {
     }
 
     pub fn update_model_compaction_budget(&mut self) {
+        // The threshold follows the model's window, but the on/off flag does
+        // not: switching to (or being upgraded onto) a 1M-context model used
+        // to silently turn auto-compact off for everyone who never set it,
+        // which showed up as long sessions overflowing with no warning. The
+        // per-model default is applied once, at startup.
         let model = self.effective_model_for_budget().to_string();
         self.compact_threshold =
             compaction_threshold_for_model_at_percent(&model, self.auto_compact_threshold_percent);
-        if !self.auto_compact_user_configured {
-            self.auto_compact = auto_compact_default_for_model(&model);
-        }
     }
 
     pub fn set_model_selection(&mut self, model: String) {

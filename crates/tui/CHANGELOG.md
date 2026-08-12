@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-08-12
+
+### Fixed
+
+- **La sesión ya no “olvida” de golpe después de pegar capturas.** Los bytes de
+  las imágenes inline que llegaron en 0.0.13 se quedaban para siempre en el
+  historial y se reenviaban en cada turno, pero el estimador de contexto los
+  contaba como **cero tokens**. Cuatro capturas de 5 MB podían sumar cientos de
+  miles de tokens invisibles: la compactación automática nunca se disparaba, el
+  proveedor rechazaba la petición por límite de contexto y el motor compactaba
+  de emergencia en silencio. El síntoma que veía el usuario era que el asistente
+  perdía de pronto el hilo de la conversación. Ahora:
+  - Los bloques `image_url` sólo conservan sus bytes en los 2 mensajes más
+    recientes que los traen; los anteriores quedan con su línea
+    `[Attached image: … at <ruta>]`, así que el modelo mantiene la referencia y
+    puede releer el archivo con `image_analyze` si la necesita. Esto también
+    baja el peso del archivo de sesión en disco.
+  - El estimador cobra las imágenes que quedan (~1 token por cada 750 bytes
+    reales, con un piso por imagen) en vez de tratarlas como gratis.
+- **La compactación de emergencia ya avisa.** Cuando el contexto se desborda y
+  el motor resume la conversación para poder continuar, se emite un aviso claro
+  antes de reintentar en vez de hacerlo callado.
+- **Cambiar de modelo ya no apaga `auto_compact`.** El default por modelo se
+  aplica una sola vez, al arrancar. Antes, saltar a un modelo de 1M de contexto
+  (o ser actualizado a uno, como pasó con el cambio de `kimi-k2.6` a `kimi-k3`
+  en 0.0.12) apagaba la compactación automática a todo el que nunca la había
+  configurado, sin decir nada. El umbral sí sigue ajustándose a la ventana del
+  modelo activo.
+
 ## [0.0.13] - 2026-07-25
 
 ### Added
@@ -5706,6 +5735,7 @@ Welcome — and thank you.
 [0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
 [0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
+[0.0.14]: https://github.com/blissito/ghostycode/releases/tag/v0.0.14
 [0.0.13]: https://github.com/blissito/ghostycode/releases/tag/v0.0.13
 [0.0.12]: https://github.com/blissito/ghostycode/releases/tag/v0.0.12
 [0.0.11]: https://github.com/blissito/ghostycode/releases/tag/v0.0.11

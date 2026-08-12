@@ -720,9 +720,21 @@ separate:
 For the default V4 path, replacement compaction remains opt-in
 (`auto_compact = false` by default) and fires at the active model's
 compaction threshold when enabled. For 256K-class models, auto-compaction is
-enabled by default unless the user explicitly configures `auto_compact`. The
-Flash seam manager remains opt-in (`[context].enabled = false`), and the
-capacity controller remains disabled unless configured.
+enabled by default unless the user explicitly configures `auto_compact`. That
+per-model default is resolved once, at startup: switching models afterwards
+recomputes the threshold for the new window but never flips `auto_compact` on
+or off behind your back. The Flash seam manager remains opt-in
+(`[context].enabled = false`), and the capacity controller remains disabled
+unless configured.
+
+Inline image attachments are counted against the context budget, and their
+bytes are kept only on the two most recent messages that carry them. Older
+messages keep their `[Attached image: … at <path>]` line, so the model retains
+the reference and can re-read the file through `image_analyze` when it needs
+the pixels again. Without this, replayed screenshots would fill the provider's
+window invisibly. If the context does overflow anyway, the emergency
+compaction that recovers the turn announces itself rather than silently
+summarizing the conversation.
 
 ### Command Migration Notes
 

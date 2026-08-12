@@ -9,13 +9,13 @@ description = "Core runtime boundaries for DeepSeek workspace architecture"
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
-ghosty-agent = { path = "../agent", version = "0.0.13" }
-ghosty-config = { path = "../config", version = "0.0.13" }
-ghosty-execpolicy = { path = "../execpolicy", version = "0.0.13" }
-ghosty-hooks = { path = "../hooks", version = "0.0.13" }
-ghosty-mcp = { path = "../mcp", version = "0.0.13" }
-ghosty-protocol = { path = "../protocol", version = "0.0.13" }
-ghosty-state = { path = "../state", version = "0.0.13" }
-ghosty-tools = { path = "../tools", version = "0.0.13" }
+ghosty-agent = { path = "../agent", version = "0.0.14" }
+ghosty-config = { path = "../config", version = "0.0.14" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.14" }
+ghosty-hooks = { path = "../hooks", version = "0.0.14" }
+ghosty-mcp = { path = "../mcp", version = "0.0.14" }
+ghosty-protocol = { path = "../protocol", version = "0.0.14" }
+ghosty-state = { path = "../state", version = "0.0.14" }
+ghosty-tools = { path = "../tools", version = "0.0.14" }
 serde_json.workspace = true
 uuid.workspace = true
