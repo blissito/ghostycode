@@ -42,9 +42,25 @@ impl ExecPolicyConfig {
     }
 
     pub fn evaluate(&self, command: &str) -> ExecPolicyDecision {
+        // #security: a deny pattern has to be matched against the commands the
+        // shell would actually run, not against the text as written. Quoting,
+        // command substitution (`` `cmd` ``, `$(cmd)`), grouping, chaining and
+        // wrapper payloads (`bash -c …`, `eval …`, `sudo …`) all produce an
+        // invocation whose text differs from the rule while its effect does
+        // not. `expanded_commands` word-splits the way a shell does and returns
+        // every command line involved, so one deny pattern covers all of the
+        // spellings instead of one string pattern per metacharacter.
+        //
+        // Only the deny loop is widened. The allow loop below still matches the
+        // command as written, so a broader expansion can never turn into a
+        // broader auto-approval.
+        let deny_targets = ghosty_execpolicy::shell_expand::expanded_commands(command);
         for (group, rules) in &self.rules {
             for pattern in &rules.deny {
-                if pattern_matches(pattern, command) {
+                if deny_targets
+                    .iter()
+                    .any(|target| pattern_matches(pattern, target))
+                {
                     return ExecPolicyDecision::Deny(format!(
                         "execpolicy denied by {group}: {pattern}"
                     ));
@@ -70,7 +86,7 @@ impl ExecPolicyConfig {
 }
 
 pub fn default_execpolicy_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".deepseek").join("execpolicy.toml"))
+    crate::config::effective_home_dir().map(|home| home.join(".deepseek").join("execpolicy.toml"))
 }
 
 pub fn load_default_policy() -> Result<Option<ExecPolicyConfig>> {
@@ -152,6 +168,76 @@ mod tests {
             config.evaluate("git push origin main"),
             ExecPolicyDecision::AskUser(_)
         ));
+    }
+
+    fn danger_policy() -> ExecPolicyConfig {
+        ExecPolicyConfig {
+            rules: BTreeMap::from([(
+                "danger".to_string(),
+                RuleSet {
+                    allow: vec!["echo *".to_string()],
+                    deny: vec!["rm -rf /".to_string()],
+                },
+            )]),
+        }
+    }
+
+    /// #security: the deny pattern must survive every way a shell can spell the
+    /// command it names. A whole-string match saw only the text as typed.
+    #[test]
+    fn deny_pattern_covers_every_shell_spelling() {
+        let config = danger_policy();
+        let mut evaded = Vec::new();
+        for command in [
+            "rm -rf /",
+            "ls && rm -rf /",
+            "ls & rm -rf /",
+            "true; rm -rf /",
+            "ls | rm -rf /",
+            "ls\nrm -rf /",
+            "(rm -rf /)",
+            "{ rm -rf /; }",
+            "`rm -rf /`",
+            "echo `rm -rf /`",
+            "echo \"`rm -rf /`\"",
+            "$(rm -rf /)",
+            "echo $(rm -rf /)",
+            "x=$(rm -rf /)",
+            "diff <(rm -rf /) b",
+            "rm -rf \"/\"",
+            "rm -rf '/'",
+            "eval 'rm -rf /'",
+            "bash -c 'rm -rf /'",
+            "sh -lc \"rm -rf /\"",
+            "sudo rm -rf /",
+            "env rm -rf /",
+            "timeout 5 rm -rf /",
+            "xargs rm -rf /",
+        ] {
+            if !matches!(config.evaluate(command), ExecPolicyDecision::Deny(_)) {
+                evaded.push(command);
+            }
+        }
+        assert!(evaded.is_empty(), "deny pattern bypassed by: {evaded:#?}");
+    }
+
+    /// The fix must not deny a command merely for containing a metacharacter.
+    #[test]
+    fn deny_pattern_leaves_harmless_metacharacter_uses_alone() {
+        let config = danger_policy();
+        for command in [
+            // Substitution of something the rule does not name.
+            "echo \"built at $(date)\"",
+            "echo `date`",
+            // Single quotes are literal: this prints the text, runs nothing.
+            "echo '`rm -rf /`'",
+            "echo 'rm -rf /'",
+        ] {
+            assert!(
+                !matches!(config.evaluate(command), ExecPolicyDecision::Deny(_)),
+                "harmless command wrongly denied: {command:?}"
+            );
+        }
     }
 
     #[test]

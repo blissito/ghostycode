@@ -7,6 +7,7 @@
 //! tightly controlled workspace-only write access.
 
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -37,7 +38,7 @@ pub enum SandboxPolicy {
 
     /// Indicates the process is already running in an external sandbox.
     ///
-    /// Use this when Ghosty Code is itself running inside a container,
+    /// Use this when GhostyCode is itself running inside a container,
     /// VM, or other sandboxed environment. This avoids double-sandboxing
     /// which can cause issues.
     #[serde(rename = "external-sandbox")]
@@ -71,6 +72,23 @@ pub enum SandboxPolicy {
         #[serde(default)]
         exclude_slash_tmp: bool,
     },
+}
+
+/// Execution boundary available to apply a sandbox policy for this session.
+///
+/// The engine snapshots this once at construction so model-visible turn
+/// metadata stays byte-stable even if a local wrapper is installed or removed
+/// while the session is running. An external backend accepts a raw command and
+/// delegates isolation to its service, so it must not inherit local
+/// workspace/network enforcement claims.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SandboxEnforcement {
+    /// A local OS wrapper (Seatbelt or opt-in bubblewrap) is configured.
+    LocalOs,
+    /// Shell execution is routed to a configured external service.
+    ExternalBackend,
+    /// No local wrapper or external execution backend is available.
+    Unavailable,
 }
 
 impl Default for SandboxPolicy {
@@ -138,6 +156,79 @@ impl SandboxPolicy {
         )
     }
 
+    /// Compact, deterministic posture label for model- and user-facing
+    /// surfaces (`<turn_meta>`, sandbox-denial hints). Byte-stable for a
+    /// given policy so per-turn metadata stays cache-friendly.
+    #[must_use]
+    pub fn posture_label(&self) -> String {
+        match self {
+            SandboxPolicy::DangerFullAccess => "full access (sandbox disabled)".to_string(),
+            SandboxPolicy::ReadOnly => {
+                "read-only (shell writes are blocked; ordinary approval does not change this)"
+                    .to_string()
+            }
+            SandboxPolicy::ExternalSandbox { network_access } => format!(
+                "external sandbox (host-managed; network {})",
+                if *network_access {
+                    "allowed"
+                } else {
+                    "blocked"
+                }
+            ),
+            SandboxPolicy::WorkspaceWrite {
+                writable_roots,
+                network_access,
+                ..
+            } => format!(
+                "workspace-write (writes inside the workspace{}; network {})",
+                if writable_roots.len() > 1 {
+                    " and approved roots"
+                } else {
+                    ""
+                },
+                if *network_access {
+                    "allowed"
+                } else {
+                    "blocked"
+                }
+            ),
+        }
+    }
+
+    /// Render the policy together with the session-pinned execution boundary.
+    ///
+    /// Local wrappers may truthfully retain the policy's concrete filesystem
+    /// and network claims. External backends receive a raw command and delegate
+    /// isolation to their service, so their label names only the requested
+    /// policy and explicitly leaves the actual boundary unverified. When no
+    /// backend exists, restrictive policies are identified as policy-only.
+    #[must_use]
+    pub fn posture_label_with_enforcement(&self, enforcement: SandboxEnforcement) -> String {
+        if enforcement == SandboxEnforcement::ExternalBackend {
+            let requested_policy = match self {
+                SandboxPolicy::DangerFullAccess => "full-access",
+                SandboxPolicy::ReadOnly => "read-only",
+                SandboxPolicy::ExternalSandbox { .. } => "external-sandbox",
+                SandboxPolicy::WorkspaceWrite { .. } => "workspace-write",
+            };
+            return format!(
+                "{requested_policy} policy (external execution backend configured; filesystem/network isolation unverified by Ghosty)"
+            );
+        }
+
+        let label = self.posture_label();
+        match enforcement {
+            SandboxEnforcement::LocalOs if self.should_sandbox() => {
+                format!("{label} (local OS sandbox applied)")
+            }
+            SandboxEnforcement::Unavailable if self.should_sandbox() => {
+                format!("{label} (policy only; no execution sandbox available)")
+            }
+            SandboxEnforcement::LocalOs | SandboxEnforcement::Unavailable => label,
+            SandboxEnforcement::ExternalBackend => unreachable!("handled above"),
+        }
+    }
+
     /// Get the list of writable roots for this policy.
     ///
     /// This includes:
@@ -169,6 +260,14 @@ impl SandboxPolicy {
                     roots.push(canonical_cwd);
                 } else {
                     roots.push(cwd.to_path_buf());
+                }
+
+                // Git worktrees keep mutable metadata outside the worktree
+                // directory. Allow only the gitdir and commondir derived from
+                // a workspace `.git` pointer, preserving the workspace boundary
+                // for all other external paths.
+                for root in roots.clone() {
+                    roots.extend(resolve_git_worktree_writable_roots(&root));
                 }
 
                 // Add /tmp unless excluded
@@ -209,6 +308,104 @@ impl SandboxPolicy {
             }
         }
     }
+}
+
+fn resolve_git_worktree_writable_roots(root: &Path) -> Vec<PathBuf> {
+    let Some(pointer) = resolve_gitdir_pointer(root) else {
+        return Vec::new();
+    };
+    let git_dir = pointer.git_dir;
+    let Some(common_dir) = resolve_git_common_dir(&git_dir) else {
+        return Vec::new();
+    };
+    if !git_dir.starts_with(common_dir.join("worktrees")) {
+        return Vec::new();
+    }
+    if !worktree_metadata_points_back_to_workspace(&git_dir, &pointer.git_file) {
+        return Vec::new();
+    }
+
+    vec![git_dir, common_dir]
+}
+
+#[derive(Debug)]
+struct GitDirPointer {
+    git_dir: PathBuf,
+    git_file: PathBuf,
+}
+
+fn resolve_gitdir_pointer(root: &Path) -> Option<GitDirPointer> {
+    let search_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    for ancestor in search_root.ancestors() {
+        let git_file = ancestor.join(".git");
+        if !git_file.is_file() {
+            continue;
+        }
+
+        let contents = fs::read_to_string(&git_file).ok()?;
+        let value = contents
+            .lines()
+            .find_map(|line| line.strip_prefix("gitdir:"))?
+            .trim();
+        if value.is_empty() {
+            return None;
+        }
+
+        let path = PathBuf::from(value);
+        let resolved = if path.is_absolute() {
+            path
+        } else {
+            ancestor.join(path)
+        };
+
+        return Some(GitDirPointer {
+            git_dir: resolved.canonicalize().ok()?,
+            git_file: git_file.canonicalize().ok()?,
+        });
+    }
+
+    None
+}
+
+fn resolve_git_common_dir(git_dir: &Path) -> Option<PathBuf> {
+    let contents = fs::read_to_string(git_dir.join("commondir")).ok()?;
+    let value = contents.lines().next()?.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    let path = PathBuf::from(value);
+    let resolved = if path.is_absolute() {
+        path
+    } else {
+        git_dir.join(path)
+    };
+
+    resolved.canonicalize().ok()
+}
+
+fn worktree_metadata_points_back_to_workspace(git_dir: &Path, expected_git_file: &Path) -> bool {
+    let Some(actual_git_file) = resolve_gitdir_back_pointer(git_dir) else {
+        return false;
+    };
+    actual_git_file == expected_git_file
+}
+
+fn resolve_gitdir_back_pointer(git_dir: &Path) -> Option<PathBuf> {
+    let contents = fs::read_to_string(git_dir.join("gitdir")).ok()?;
+    let value = contents.lines().next()?.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    let path = PathBuf::from(value);
+    let resolved = if path.is_absolute() {
+        path
+    } else {
+        git_dir.join(path)
+    };
+
+    resolved.canonicalize().ok()
 }
 
 /// A directory tree where writes are allowed, with optional read-only subpaths.
@@ -262,9 +459,9 @@ impl WritableRoot {
 
 /// Unified trait for platform-specific sandbox executors (#2186).
 ///
-/// Each platform module (seatbelt, landlock, windows) provides an
-/// implementation of this trait. The `SandboxManager` dispatches through
-/// the trait instead of calling platform-specific functions directly.
+/// Platform implementations can use this trait to convert a policy into
+/// wrapper-specific rules. The current `SandboxManager` command path does not
+/// dispatch through this trait yet.
 pub trait SandboxExecutor {
     /// Prepare a sandboxed execution environment from a command spec.
     ///
@@ -332,6 +529,83 @@ mod tests {
     }
 
     #[test]
+    fn posture_labels_name_the_binding_fact() {
+        // This label is shared by interactive and non-interactive postures, so
+        // state only the invariant. The denial hint names the Ask-only path.
+        let read_only = SandboxPolicy::ReadOnly.posture_label();
+        assert!(read_only.contains("read-only"), "{read_only}");
+        assert!(read_only.contains("ordinary approval"), "{read_only}");
+
+        assert!(
+            SandboxPolicy::default()
+                .posture_label()
+                .starts_with("workspace-write"),
+        );
+        assert!(
+            SandboxPolicy::DangerFullAccess
+                .posture_label()
+                .contains("full access"),
+        );
+        assert!(
+            SandboxPolicy::ExternalSandbox {
+                network_access: false
+            }
+            .posture_label()
+            .contains("network blocked"),
+        );
+    }
+
+    #[test]
+    fn enforcement_labels_distinguish_local_external_and_unavailable() {
+        let local =
+            SandboxPolicy::default().posture_label_with_enforcement(SandboxEnforcement::LocalOs);
+        assert!(local.starts_with("workspace-write"), "{local}");
+        assert!(local.contains("local OS sandbox applied"), "{local}");
+
+        let unavailable =
+            SandboxPolicy::ReadOnly.posture_label_with_enforcement(SandboxEnforcement::Unavailable);
+        assert!(
+            unavailable.contains("policy only; no execution sandbox available"),
+            "{unavailable}"
+        );
+
+        let external = SandboxPolicy::default()
+            .posture_label_with_enforcement(SandboxEnforcement::ExternalBackend);
+        assert!(external.starts_with("workspace-write policy"), "{external}");
+        assert!(
+            external.contains("external execution backend configured"),
+            "{external}"
+        );
+        assert!(
+            external.contains("isolation unverified by Ghosty"),
+            "{external}"
+        );
+        assert!(
+            !external.contains("writes inside the workspace"),
+            "{external}"
+        );
+        assert!(!external.contains("network allowed"), "{external}");
+
+        let full_external = SandboxPolicy::DangerFullAccess
+            .posture_label_with_enforcement(SandboxEnforcement::ExternalBackend);
+        assert!(
+            full_external.starts_with("full-access policy"),
+            "{full_external}"
+        );
+        assert!(
+            !full_external.contains("sandbox disabled"),
+            "{full_external}"
+        );
+
+        let full_unavailable = SandboxPolicy::DangerFullAccess
+            .posture_label_with_enforcement(SandboxEnforcement::Unavailable);
+        assert_eq!(
+            full_unavailable,
+            SandboxPolicy::DangerFullAccess.posture_label()
+        );
+    }
+
+    #[test]
     fn test_read_only_policy() {
         let policy = SandboxPolicy::ReadOnly;
         assert!(!policy.has_full_disk_write_access());
@@ -344,6 +618,130 @@ mod tests {
         let policy = SandboxPolicy::workspace_with_network();
         assert!(policy.has_network_access());
         assert!(policy.should_sandbox());
+    }
+
+    #[test]
+    fn workspace_write_includes_git_worktree_metadata_roots() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let common_git_dir = tmp.path().join("main-repo").join(".git");
+        let worktree_git_dir = common_git_dir.join("worktrees").join("feature");
+        let worktree = tmp.path().join("feature-worktree");
+        std::fs::create_dir_all(&worktree_git_dir).expect("mkdir gitdir");
+        std::fs::create_dir_all(&worktree).expect("mkdir worktree");
+        std::fs::write(
+            worktree.join(".git"),
+            format!("gitdir: {}\n", worktree_git_dir.display()),
+        )
+        .expect("write git pointer");
+        std::fs::write(worktree_git_dir.join("commondir"), "../..").expect("write commondir");
+        std::fs::write(
+            worktree_git_dir.join("gitdir"),
+            worktree.join(".git").display().to_string(),
+        )
+        .expect("write gitdir back pointer");
+
+        let policy = SandboxPolicy::WorkspaceWrite {
+            writable_roots: vec![worktree.clone()],
+            network_access: true,
+            exclude_tmpdir: true,
+            exclude_slash_tmp: true,
+        };
+
+        let root_paths: Vec<PathBuf> = policy
+            .get_writable_roots(&worktree)
+            .into_iter()
+            .map(|root| root.root)
+            .collect();
+
+        assert!(root_paths.contains(&worktree.canonicalize().expect("canonical worktree")));
+        assert!(root_paths.contains(&worktree_git_dir.canonicalize().expect("canonical gitdir")));
+        assert!(root_paths.contains(&common_git_dir.canonicalize().expect("canonical common git")));
+    }
+
+    #[test]
+    fn workspace_write_resolves_git_worktree_metadata_from_subdirectory() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let common_git_dir = tmp.path().join("main-repo").join(".git");
+        let worktree_git_dir = common_git_dir.join("worktrees").join("feature");
+        let worktree = tmp.path().join("feature-worktree");
+        let nested = worktree.join("crates").join("cli");
+        std::fs::create_dir_all(&worktree_git_dir).expect("mkdir gitdir");
+        std::fs::create_dir_all(&nested).expect("mkdir nested worktree path");
+        std::fs::write(
+            worktree.join(".git"),
+            format!("gitdir: {}\n", worktree_git_dir.display()),
+        )
+        .expect("write git pointer");
+        std::fs::write(worktree_git_dir.join("commondir"), "../..").expect("write commondir");
+        std::fs::write(
+            worktree_git_dir.join("gitdir"),
+            worktree.join(".git").display().to_string(),
+        )
+        .expect("write gitdir back pointer");
+
+        let policy = SandboxPolicy::WorkspaceWrite {
+            writable_roots: vec![],
+            network_access: true,
+            exclude_tmpdir: true,
+            exclude_slash_tmp: true,
+        };
+
+        let root_paths: Vec<PathBuf> = policy
+            .get_writable_roots(&nested)
+            .into_iter()
+            .map(|root| root.root)
+            .collect();
+
+        assert!(root_paths.contains(&nested.canonicalize().expect("canonical nested cwd")));
+        assert!(root_paths.contains(&worktree_git_dir.canonicalize().expect("canonical gitdir")));
+        assert!(root_paths.contains(&common_git_dir.canonicalize().expect("canonical common git")));
+    }
+
+    #[test]
+    fn workspace_write_rejects_non_reciprocal_git_worktree_metadata() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let common_git_dir = tmp.path().join("main-repo").join(".git");
+        let worktree_git_dir = common_git_dir.join("worktrees").join("feature");
+        let worktree = tmp.path().join("feature-worktree");
+        let other_worktree = tmp.path().join("other-worktree");
+        std::fs::create_dir_all(&worktree_git_dir).expect("mkdir gitdir");
+        std::fs::create_dir_all(&worktree).expect("mkdir worktree");
+        std::fs::create_dir_all(&other_worktree).expect("mkdir other worktree");
+        std::fs::write(
+            worktree.join(".git"),
+            format!("gitdir: {}\n", worktree_git_dir.display()),
+        )
+        .expect("write git pointer");
+        std::fs::write(worktree_git_dir.join("commondir"), "../..").expect("write commondir");
+        std::fs::write(
+            worktree_git_dir.join("gitdir"),
+            other_worktree.join(".git").display().to_string(),
+        )
+        .expect("write mismatched gitdir back pointer");
+        std::fs::write(
+            other_worktree.join(".git"),
+            "gitdir: /tmp/not-this-worktree\n",
+        )
+        .expect("write other git pointer");
+
+        let policy = SandboxPolicy::WorkspaceWrite {
+            writable_roots: vec![worktree.clone()],
+            network_access: true,
+            exclude_tmpdir: true,
+            exclude_slash_tmp: true,
+        };
+
+        let root_paths: Vec<PathBuf> = policy
+            .get_writable_roots(&worktree)
+            .into_iter()
+            .map(|root| root.root)
+            .collect();
+
+        assert!(root_paths.contains(&worktree.canonicalize().expect("canonical worktree")));
+        assert!(!root_paths.contains(&worktree_git_dir.canonicalize().expect("canonical gitdir")));
+        assert!(
+            !root_paths.contains(&common_git_dir.canonicalize().expect("canonical common git"))
+        );
     }
 
     #[test]

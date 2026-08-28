@@ -4,8 +4,25 @@
 GitHub repository for users on networks where GitHub is slow or blocked
 (primarily mainland China). The mirror receives every push to `main`, every
 `fix/*`, `rebrand/*`, and `work/v*` branch used for first-party release work,
-every `v*` release tag, and Tencent release-candidate branches used by the
-Lighthouse/Feishu setup.
+and every `v*` release tag.
+
+## Provenance
+
+**GitHub is the sole canonical source.** All releases, tags, and source code
+originate at `github.com/blissito/ghostycode`. The CNB mirror is a read-only
+replica maintained by the `Sync to CNB` workflow — it exists solely to serve
+users behind GFW-blocked or slow GitHub connections.
+
+Every CNB release includes `ghosty-artifacts-sha256.txt` — a SHA256 manifest
+of the CNB-built Linux x64 binaries, generated from the same source commit that
+is tagged on GitHub. (CNB builds from source, so these checksums cover the
+CNB-built artifacts, not GitHub's release assets.) Verify a downloaded binary
+against it:
+
+```bash
+# Verify a downloaded CNB binary against the CNB manifest
+sha256sum -c ghosty-artifacts-sha256.txt --ignore-missing
+```
 
 ## How it works
 
@@ -14,16 +31,14 @@ GitHub Actions workflow:
 
 - **Trigger:** `push` to `main`, `push` of any `v*` tag,
   release work branches matching `work/v*`, first-party fix and rebrand
-  branches matching `fix/*` and `rebrand/*`,
-  Tencent setup branches matching `work/v*-feishu-*` or
-  `work/v*-lighthouse*`, or `workflow_dispatch` for manual recovery.
+  branches matching `fix/*` and `rebrand/*`, or `workflow_dispatch` for manual
+  recovery.
 - **Auth:** HTTPS basic auth as user `cnb` with the `CNB_GIT_TOKEN`
   repository secret as the password.
 - **Scope:** only the ref that triggered the run is pushed. Tag pushes
   push exactly that tag. Branch pushes mirror `main`, first-party
-  `fix/*`/`rebrand/*` branches, or explicitly matched release/Tencent setup
-  branches. Other feature branches and dependabot refs are intentionally
-  *not* mirrored.
+  `fix/*`/`rebrand/*` branches, or explicitly matched release branches. Other
+  feature branches and dependabot refs are intentionally *not* mirrored.
 - **Concurrency:** runs are serialized via a `cnb-sync` concurrency
   group so the back-to-back `main` push and tag push from
   `auto-tag.yml` cannot race each other.
@@ -43,6 +58,8 @@ release assets from source and publishes a CNB release with:
 
 - `ghosty-linux-x64`
 - `ghosty-tui-linux-x64`
+- `ghosty-tui-linux-x64` (compatibility-only release filename; not a third
+  installed command)
 - `ghosty-artifacts-sha256.txt`
 
 This gives users who can reach CNB but not GitHub a CNB-native release path.
@@ -62,7 +79,7 @@ Linux Rust gates run on Tencent-hosted runners instead of GitHub Actions:
 - `cargo build --release --locked -p ghosty-cli -p ghosty-tui`
 - `node scripts/release/npm-wrapper-smoke.js`
 
-Release branches matching `work/v*` also run the Feishu bridge checks and
+Release branches matching `work/v*` also run
 `./scripts/release/publish-crates.sh dry-run`. GitHub Actions keeps the cheap
 drift/fmt statuses plus the macOS and Windows jobs that CNB cannot replace.
 
@@ -89,41 +106,14 @@ gh run list --workflow=sync-cnb.yml --repo blissito/ghostycode --limit 5
 ```
 
 If the most recent run for the release tag is `success`, the mirror
-caught it. If it's `failure`, follow the manual fallback below.
+caught it. If it's `failure`, fix or re-run the mirror workflow before
+directing users to the mirrored tag.
 
 ## Manual fallback
 
-If the workflow fails for any reason (CNB rate-limit, token expired,
-GitHub outage, etc.), the maintainer can push to CNB by hand from
-their local checkout. This works because the CNB token is a personal
-PAT — the same token used by the workflow lives in the maintainer's
-password manager.
-
-### One-time setup
-
-```bash
-# Add the CNB remote alongside origin.
-git remote add cnb https://cnb:${CNB_TOKEN}@cnb.cool/ghosty.net/ghosty.git
-
-# Or, if you don't want the token in your shell history:
-git remote add cnb https://cnb.cool/ghosty.net/ghosty.git
-# (you'll be prompted for username `cnb` and password ${CNB_TOKEN}
-#  on the first push; subsequent pushes use the credential helper.)
-```
-
-### Sync a release manually
-
-```bash
-# Make sure main is current.
-git fetch origin
-git checkout main
-git reset --hard origin/main
-
-# Push main first, then the tag. Order matters: CNB should see the
-# commit before the tag that points at it.
-git push cnb main --force-with-lease
-git push cnb vX.Y.Z
-```
+Manual mirror repair is maintainer-only. Do not put PATs in remote URLs or
+publish force-push recipes in contributor-facing docs. Use the configured
+GitHub Actions secret and the workflow dispatch path whenever possible.
 
 ### Re-trigger the workflow manually
 
@@ -132,12 +122,16 @@ If the workflow is healthy but happened to fail on the release run
 without pushing anything:
 
 ```bash
-gh workflow run sync-cnb.yml --repo blissito/ghostycode
+# Prefer rerunning the existing failed tag run when one exists.
+gh run rerun <failed-tag-run-id> --repo blissito/ghostycode
+
+# If no tag run exists, dispatch from the exact existing release tag.
+gh workflow run sync-cnb.yml --repo blissito/ghostycode --ref vX.Y.Z
 ```
 
-`workflow_dispatch` runs against the workflow's default branch
-(`main`), so this will sync the current `main` to CNB. To re-sync
-a specific tag, the manual `git push cnb` path above is the way.
+Do not omit `--ref` when repairing a tag: a default-branch dispatch syncs
+`main`, not `refs/tags/vX.Y.Z`. Afterward, prove the tag and its Linux x64
+release assets exist before directing users to CNB.
 
 ## Rotating `CNB_GIT_TOKEN`
 
@@ -159,44 +153,97 @@ expired:
 ## Binary release assets and `ghosty update`
 
 CNB now builds Linux x64 assets for `v*` tags from the source-controlled
-`.cnb.yml` pipeline. GitHub remains the canonical macOS/Windows release matrix. Users
-behind GitHub-blocking networks should use one of these paths:
+`.cnb.yml` pipeline. GitHub remains the canonical macOS/Windows release matrix.
+
+### Automatic source selection (Linux x64)
+
+On Linux x64, `ghosty update` picks its asset source before it downloads
+anything large. Once the target tag is known, it requests
+`ghosty-artifacts-sha256.txt` for that exact tag from GitHub Releases and
+from the CNB release **at the same time**, and takes the first source that
+answers with a manifest listing `ghosty-linux-x64`. The straggler's answer is
+discarded.
+
+Three properties this relies on:
+
+- **The manifest is the probe.** It is a few hundred bytes, so a blocked or slow
+  source loses in about the time its connection takes to fail — the user never
+  waits out a stalled multi-megabyte asset download, and no timeout is doing the
+  choosing.
+- **Manifest and binary come from the same source.** CNB builds its own
+  artifacts from the tagged source (musl-static, not GitHub's glibc build), so
+  the two manifests describe different bytes and are not interchangeable. The
+  winning source supplies both, and a checksum mismatch fails the update rather
+  than falling back to the loser.
+- **Selection never changes which release is installed.** The tag still comes
+  from GitHub's stable-release or beta-release lookup, so `--beta` keeps its
+  meaning; only where the bytes for that tag are fetched from is decided by the
+  probe.
+
+`ghosty update` and `ghosty update --check` both print the result as a
+`Release source:` line, and the post-install summary repeats it, so the source a
+given binary came from is recoverable after the fact.
+
+Every other target keeps a single canonical source: CNB publishes Linux x64 and
+nothing else, so macOS, Windows, Android, and Linux arm64 do not race CNB;
+Linux riscv64 remains explicitly unsupported. All supported self-update paths
+are nevertheless checksum-required: the chosen source must publish a valid
+`ghosty-artifacts-sha256.txt` entry for the exact platform binary, or
+`ghosty update` stops before downloading that binary. There is no
+unverified-install fallback.
+
+Setting `GHOSTY_RELEASE_BASE_URL` (or a legacy alias) or
+`GHOSTY_USE_CNB_MIRROR` turns selection off entirely — an explicitly named
+source is used as named, including its own checksum manifest, with
+`GHOSTY_RELEASE_BASE_URL` outranking `GHOSTY_USE_CNB_MIRROR`.
+
+### Manual paths
+
+Users behind GitHub-blocking networks can also select a source explicitly:
 
 - **`cargo install`** from the CNB mirror:
   ```bash
-  cargo install --git https://cnb.cool/ghosty.net/ghosty --tag vX.Y.Z ghosty-cli
-  cargo install --git https://cnb.cool/ghosty.net/ghosty --tag vX.Y.Z ghosty-tui
+  cargo install --git https://cnb.cool/ghosty.net/ghosty --tag vX.Y.Z ghosty-cli --locked
   ```
-  (Both binaries are required — the dispatcher and the TUI ship
-  separately; see `AGENTS.md` for the two-binary install rationale.)
+  The current `ghosty` binary runs the TUI in-process. Cargo users who want
+  the optional short command can add a `ghosty-tui` symlink beside it; a separate
+  `ghosty-tui` install is not required.
+  Linux build-time dependencies (`build-essential`, `pkg-config`,
+  `libdbus-1-dev` on Debian/Ubuntu) are required — see
+  [INSTALL.md](INSTALL.md#4-install-via-cargo-any-tier-1-rust-target).
 
 - **CNB release assets** for Linux x64, when the matching CNB tag pipeline has
-  completed successfully. Download `ghosty-linux-x64`,
-  `ghosty-tui-linux-x64`, and `ghosty-artifacts-sha256.txt` from the CNB
-  release for `vX.Y.Z`, then verify the binaries against the manifest.
+  completed successfully. Download `ghosty-linux-x64`, `ghosty-tui-linux-x64`,
+  and `ghosty-artifacts-sha256.txt` from the CNB release for `vX.Y.Z`, then
+  verify the binaries against the manifest. The published
+  `ghosty-tui-linux-x64` file is a legacy-client bridge and is not required
+  by current installs. On Linux x64 and OpenHarmony x64 the npm wrapper probes
+  that CNB checksum manifest concurrently with GitHub Releases for the exact
+  package version and locks onto the first source whose HTTP response and
+  manifest validate — it does not wait for a slow GitHub binary download. Set
+  `GHOSTY_USE_CNB_MIRROR=1` to force CNB only, or
+  `GHOSTY_RELEASE_BASE_URL` to skip the race. Other platforms must use
+  GitHub or a complete `GHOSTY_RELEASE_BASE_URL` mirror.
 
-- **`DEEPSEEK_TUI_RELEASE_BASE_URL`** environment variable, if a
-  CDN mirror of release assets exists. The npm
-  wrapper installer and `ghosty update` read this variable to redirect
-  binary downloads. For `ghosty update`, also set
-  `DEEPSEEK_TUI_VERSION=X.Y.Z` so the updater can label the mirrored
+- **`GHOSTY_RELEASE_BASE_URL`** environment variable, if a CDN mirror of
+  release assets exists. The npm wrapper installer and `ghosty update` read
+  this variable to redirect binary downloads. For `ghosty update`, also set
+  `GHOSTY_VERSION=X.Y.Z` so the updater can label the mirrored
   release without contacting GitHub. The directory pointed to must contain
   `ghosty-artifacts-sha256.txt` and the platform binaries; format matches
-  a GitHub Release asset directory.
+  a GitHub Release asset directory. The earlier `DEEPSEEK_TUI_*` names remain
+  accepted as compatibility aliases.
 
-## Tencent Cloud remote-first path
+## Clone from CNB
 
-The Lighthouse + Feishu/Lark tutorial uses CNB as the Tencent-side source and
-automation lane. For a stable install, clone `main` or a release tag from:
+For a stable install, clone `main` or a release tag from:
 
 ```bash
 https://cnb.cool/ghosty.net/ghosty.git
 ```
 
-The mirror receives `main`, release tags, and the Tencent setup branch patterns
-used by the Lighthouse/Feishu tutorial. Those CNB refs are the default source
-for Tencent-side bootstrap; GitHub is the fallback when the CNB workflow or
-credentials are unhealthy.
+The mirror receives `main`, release tags, and matched release branches. GitHub
+is the fallback when the CNB workflow or credentials are unhealthy.
 
 CNB deploy-button examples live in `deploy/tencent-lighthouse/cnb/`. They are
 not active until copied into `.cnb.yml` and `.cnb/tag_deploy.yml`, because live

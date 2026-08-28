@@ -50,24 +50,31 @@ impl ToolSpec for ProjectMapTool {
     }
 
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        let max_depth = optional_u64(&input, "max_depth", 3) as usize;
-        let map = generate_project_map(&context.workspace, max_depth)?;
+        let max_depth = optional_u64(&input, "max_depth", 3)? as usize;
+        let map = generate_project_map(&context.workspace, max_depth, context.follow_symlinks)?;
         ToolResult::json(&map).map_err(|e| ToolError::execution_failed(e.to_string()))
     }
 }
 
-fn generate_project_map(root: &std::path::Path, max_depth: usize) -> Result<ProjectMap, ToolError> {
-    let tree = project_tree(root, max_depth);
+fn generate_project_map(
+    root: &std::path::Path,
+    max_depth: usize,
+    follow_symlinks: bool,
+) -> Result<ProjectMap, ToolError> {
+    let tree = project_tree(root, max_depth, follow_symlinks);
     let summary = summarize_project(root);
 
     // For key_files, we can just do a quick scan since summarize_project doesn't return them directly anymore
     let mut key_files = Vec::new();
     let mut builder = ignore::WalkBuilder::new(root);
-    builder.hidden(false).follow_links(false).max_depth(Some(2));
+    builder
+        .hidden(false)
+        .follow_links(follow_symlinks)
+        .max_depth(Some(2));
     let walker = builder.build();
 
     for entry in walker.flatten() {
-        if entry.file_type().is_some_and(|ft| ft.is_symlink()) {
+        if entry.file_type().is_some_and(|ft| ft.is_symlink()) && !follow_symlinks {
             continue;
         }
         if is_key_file(entry.path())

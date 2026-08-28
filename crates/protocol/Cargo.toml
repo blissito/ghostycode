@@ -2,10 +2,16 @@
 name = "ghosty-protocol"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Codex-style app-server protocol frames for DeepSeek workspace architecture"
+description = "App-server protocol frames for Ghosty runtime integrations"
+
+[lints]
+workspace = true
 
 [dependencies]
+chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+uuid.workspace = true

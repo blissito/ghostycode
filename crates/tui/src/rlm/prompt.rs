@@ -1,6 +1,5 @@
 //! RLM system prompt — adapted from the reference implementation
-//! (alexzhang13/rlm) and Zhang & Khattab, "Recursive Language Models"
-//! (https://alexzhang13.github.io/blog/2025/rlm/).
+//! (alexzhang13/rlm) and Zhang et al., arXiv:2512.24601.
 //!
 //! The prompt is deliberately strict: the only way to make progress is
 //! through a `repl` block. There is no fall-through prose path.
@@ -96,6 +95,7 @@ Call `evaluate_progress()` if the answer is not stable. Loop back to Orient or C
 
 Rules
 
+- ` ```repl ` runs; use ` ```python ` (or prose) to illustrate without running.
 - Use the bounded helpers (`context_meta`, `peek`, `search`, `chunk`) to inspect input.
 - Use `sub_query`, `sub_query_batch`, `sub_query_map`, or `sub_rlm` before finalizing unless the task is purely deterministic and fully computed in Python.
 - Batch helpers require an explicit `dependency_mode="independent"` assertion. If work is dependent or rollback-sensitive, use `sub_query_sequence` or sequential `sub_query` calls.

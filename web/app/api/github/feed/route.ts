@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { fetchFeed } from "@/lib/github";
-import { getEnv } from "@/lib/kv";
 
 export const revalidate = 600;
+export const dynamic = "force-static";
 
 export async function GET() {
-  const env = await getEnv();
-  const items = await fetchFeed(env.GITHUB_TOKEN, 50);
+  // This route is public. Never spend the server-held GitHub token on behalf
+  // of an unauthenticated caller; scheduled/private tasks use it separately.
+  const items = await fetchFeed(undefined, 50);
   return NextResponse.json({ items, fetchedAt: new Date().toISOString() });
 }

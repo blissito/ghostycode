@@ -17,7 +17,7 @@ use super::spec::{
     ApprovalRequirement, ToolCapability, ToolContext, ToolError, ToolResult, ToolSpec,
     optional_str, required_str,
 };
-use crate::tui::notifications::{Method, notify_done};
+use crate::tui::notifications::{NotificationPayload, notify_done};
 
 /// Maximum chars passed through for the title — keeps the OSC 9 escape
 /// reasonable on terminals that wrap long titles awkwardly.
@@ -36,16 +36,14 @@ impl ToolSpec for NotifyTool {
     }
 
     fn description(&self) -> &'static str {
-        "Fire a single desktop notification (OSC 9 / terminal bell). Use \
-         sparingly — only when a long-running task completes, when a turn \
-         was waiting on a remote operation that just finished, or when \
-         the user genuinely needs to come back to the terminal. Pass a \
-         short `title` and an optional `body`. Do NOT use this for \
-         routine progress updates, conversational acknowledgements, or \
-         confirmation that the model is alive — that's noise. The user \
-         can disable notifications entirely via \
-         `[notifications].method = \"off\"` in `~/.deepseek/config.toml`; \
-         when disabled this tool is a silent no-op."
+        "Send a desktop notification only when the user must act: a long task \
+         completed, a blocking error needs a decision, or progress cannot \
+         continue without an answer. Never notify for routine progress, \
+         acknowledgements, or liveness. Pass a short `title` and optional \
+         `body`. Users can silence everything with \
+         `[notifications].method = \"off\"` or `[notifications].quiet = true`, \
+         or this category with `[notifications.events].model-notify = false`; \
+         disabled notifications are silent no-ops."
     }
 
     fn input_schema(&self) -> Value {
@@ -79,7 +77,7 @@ impl ToolSpec for NotifyTool {
 
     async fn execute(&self, input: Value, _ctx: &ToolContext) -> Result<ToolResult, ToolError> {
         let title_raw = required_str(&input, "title")?;
-        let body_raw = optional_str(&input, "body").unwrap_or("");
+        let body_raw = optional_str(&input, "body")?.unwrap_or("");
 
         // Char-bounded truncation (not byte-bounded) so we don't slice
         // through a multi-byte sequence and emit invalid UTF-8 to the
@@ -93,11 +91,14 @@ impl ToolSpec for NotifyTool {
             return Err(ToolError::execution_failed("title must not be empty"));
         }
 
-        let msg = if body.is_empty() {
-            title.to_string()
-        } else {
-            format!("{title}: {body}")
-        };
+        // #4834: model-authored text is the least trusted input that can
+        // reach Notification Center, so it goes through the typed payload
+        // like every other event kind — bounded, control-byte-stripped,
+        // and redacted for credentials, absolute paths, and raw tool JSON.
+        let payload = NotificationPayload::model_notify(
+            title,
+            if body.is_empty() { None } else { Some(body) },
+        );
 
         let in_tmux = std::env::var("TMUX")
             .map(|v| !v.is_empty())
@@ -105,15 +106,18 @@ impl ToolSpec for NotifyTool {
 
         // Threshold = 0 so the notification always fires; the model has
         // already decided this is the moment.
-        notify_done(
-            Method::Auto,
+        let outcome = notify_done(
+            crate::tui::notifications::configured_method(),
             in_tmux,
-            &msg,
+            &payload,
             std::time::Duration::ZERO,
             std::time::Duration::from_secs(1),
         );
 
-        Ok(ToolResult::success(format!("notified: {title}")))
+        Ok(ToolResult::success(format!(
+            "{}: {title}",
+            outcome.receipt()
+        )))
     }
 }
 

@@ -205,7 +205,7 @@ impl PythonRuntime {
 
         let mut cmd = crate::dependencies::Python::tokio_command().ok_or_else(|| {
             "no Python interpreter found on PATH (tried python3, python, py -3). \
-             Install Python 3 and restart deepseek-tui."
+             Install Python 3 and restart ghosty."
                 .to_string()
         })?;
         cmd.arg("-u")
@@ -307,6 +307,48 @@ impl PythonRuntime {
     /// `repl` blocks where `llm_query()` should fall back to a sentinel.
     pub async fn execute(&mut self, code: &str) -> Result<ReplRound, String> {
         self.run(code, None::<&dyn RpcDispatcher>).await
+    }
+
+    /// Replace the long context visible to bounded helpers without restarting
+    /// the Python process. User-created variables, imports, and handles stay
+    /// alive across the refresh, which is what lets the normal agent loop use
+    /// one working kernel instead of rebuilding a throwaway REPL each turn.
+    ///
+    /// The payload travels through a temporary file rather than a generated
+    /// Python string so large transcripts neither bloat the command stream nor
+    /// acquire quoting semantics. The old owned file is released only after
+    /// the kernel has successfully loaded the replacement.
+    pub async fn replace_context(&mut self, body: &str) -> Result<(), String> {
+        let path = crate::rlm::session::write_context_file(body)
+            .map_err(|e| format!("write refreshed REPL context: {e}"))?;
+        let path_literal = serde_json::to_string(&path.to_string_lossy())
+            .map_err(|e| format!("encode refreshed REPL context path: {e}"))?;
+        let code = format!("_replace_context_file({path_literal})");
+
+        match self.execute(&code).await {
+            Ok(round) if !round.has_error => {
+                if let Some(previous) = self.context_path.replace(path) {
+                    let _ = tokio::fs::remove_file(previous).await;
+                }
+                Ok(())
+            }
+            Ok(round) => {
+                let _ = tokio::fs::remove_file(&path).await;
+                Err(format!(
+                    "refresh REPL context failed: {}{}",
+                    round.stdout,
+                    if round.stderr.is_empty() {
+                        String::new()
+                    } else {
+                        format!("\nstderr: {}", round.stderr)
+                    }
+                ))
+            }
+            Err(error) => {
+                let _ = tokio::fs::remove_file(&path).await;
+                Err(error)
+            }
+        }
     }
 
     /// Execute a code block, dispatching any sub-LLM RPCs through `bridge`.
@@ -932,9 +974,17 @@ if _ctx_file:
         _sys.stderr.write(f"[bootstrap] failed to load context: {e}\n")
 content = _context
 
+def _replace_context_file(path):
+    """Atomically switch bounded helpers to a freshly written context file."""
+    global _context, content
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        _context = f.read()
+    content = _context
+    return context_meta()
+
 _BOOTSTRAP_NAMES = {
     "_SID","_REQ","_RESP","_FINAL","_ERR","_RUN","_END","_DONE","_READY",
-    "_rpc","_ctx_file","_context","_slice_chars","_slice_lines","_BOOTSTRAP_NAMES","_main_loop",
+    "_rpc","_ctx_file","_context","_slice_chars","_slice_lines","_replace_context_file","_BOOTSTRAP_NAMES","_main_loop",
     "_emit_final","_json_safe","_slice_text","_prompt_with_slice",
     "_normalize_dependency_mode","_batch_dependency_error",
     "llm_query","llm_query_batched","rlm_query","rlm_query_batched",
@@ -1137,6 +1187,31 @@ mod tests {
             .await
             .expect("execute");
         assert!(round.stdout.contains("True False False"));
+        rt.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn replacing_context_keeps_kernel_variables_and_refreshes_helpers() {
+        let mut rt = PythonRuntime::new().await.expect("spawn");
+        rt.execute("remembered = {'answer': 42}")
+            .await
+            .expect("seed persistent variable");
+        rt.replace_context("fresh transcript\nwith a needle")
+            .await
+            .expect("refresh context");
+
+        let round = rt
+            .execute(
+                "print(remembered['answer'])\n\
+                 print(context_meta()['chars'])\n\
+                 print(search('needle')[0]['match'])",
+            )
+            .await
+            .expect("inspect refreshed context");
+
+        assert!(round.stdout.contains("42"), "{}", round.stdout);
+        assert!(round.stdout.contains("30"), "{}", round.stdout);
+        assert!(round.stdout.contains("needle"), "{}", round.stdout);
         rt.shutdown().await;
     }
 

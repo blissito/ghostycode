@@ -20,14 +20,33 @@ use futures_util::future::join_all;
 use tokio::sync::Mutex;
 
 use crate::llm_client::LlmClient;
-use crate::models::{ContentBlock, Message, MessageRequest, MessageResponse, SystemPrompt, Usage};
+use crate::models::Role;
+use crate::models::{
+    ContentBlock, Message, MessageRequest, MessageResponse, SystemPrompt, Usage,
+    is_incomplete_stop_reason, stop_reason_detail,
+};
 use crate::repl::runtime::{BatchResp, RpcDispatcher, RpcRequest, RpcResponse, SingleResp};
 use crate::utils::spawn_supervised;
 
+/// Object-safe runtime-model adapter for a working kernel.
+///
+/// The normal turn loop owns a `SharedModelClient`, while the original RLM
+/// bridge predates that boundary and accepts the concrete [`LlmClient`] trait.
+/// Keeping this small adapter here means a persistent kernel follows exactly
+/// the selected model route (including custom providers) without teaching the
+/// kernel about provider transports or falling back to a side channel.
+pub(crate) struct ModelClientRlmAdapter {
+    client: crate::core::model_client::SharedModelClient,
+}
+
+impl ModelClientRlmAdapter {
+    pub(crate) fn new(client: crate::core::model_client::SharedModelClient) -> Self {
+        Self { client }
+    }
+}
+
 /// Per-child completion timeout — same as the previous sidecar default.
 const CHILD_TIMEOUT_SECS: u64 = 120;
-/// Default `max_tokens` for one-shot child completions.
-const DEFAULT_CHILD_MAX_TOKENS: u32 = 4096;
 /// Hard cap on prompts per batch RPC.
 pub const MAX_BATCH: usize = 16;
 
@@ -37,16 +56,59 @@ pub const MAX_BATCH: usize = 16;
 /// The bridge only needs non-streaming completions, so this boxed-future shim
 /// gives tests a clean mock seam without changing the wider provider trait.
 pub(crate) trait RlmLlmClient: Send + Sync {
+    fn effective_route_envelope(
+        &self,
+        requested_model: &str,
+        dispatched_at: chrono::DateTime<chrono::Utc>,
+    ) -> crate::cost_status::EffectiveRouteEnvelope;
+
+    fn effective_max_output_tokens(&self, requested_model: &str) -> u32;
+
     fn create_message_boxed(
         &self,
         request: MessageRequest,
     ) -> Pin<Box<dyn Future<Output = Result<MessageResponse>> + Send + '_>>;
 }
 
+impl RlmLlmClient for ModelClientRlmAdapter {
+    fn effective_route_envelope(
+        &self,
+        requested_model: &str,
+        dispatched_at: chrono::DateTime<chrono::Utc>,
+    ) -> crate::cost_status::EffectiveRouteEnvelope {
+        self.client
+            .effective_route_envelope(requested_model, dispatched_at)
+    }
+
+    fn effective_max_output_tokens(&self, requested_model: &str) -> u32 {
+        self.client.effective_max_output_tokens(requested_model)
+    }
+
+    fn create_message_boxed(
+        &self,
+        request: MessageRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<MessageResponse>> + Send + '_>> {
+        let client = Arc::clone(&self.client);
+        Box::pin(async move { client.create_message(request).await })
+    }
+}
+
 impl<T> RlmLlmClient for T
 where
     T: LlmClient + Send + Sync,
 {
+    fn effective_route_envelope(
+        &self,
+        requested_model: &str,
+        dispatched_at: chrono::DateTime<chrono::Utc>,
+    ) -> crate::cost_status::EffectiveRouteEnvelope {
+        LlmClient::effective_route_envelope(self, requested_model, dispatched_at)
+    }
+
+    fn effective_max_output_tokens(&self, requested_model: &str) -> u32 {
+        LlmClient::effective_max_output_tokens(self, requested_model)
+    }
+
     fn create_message_boxed(
         &self,
         request: MessageRequest,
@@ -90,6 +152,12 @@ impl RlmBridge {
         max_tokens: Option<u32>,
         system: Option<String>,
     ) -> SingleResp {
+        let request_route = self
+            .client
+            .effective_route_envelope(&self.child_model, chrono::Utc::now());
+        let route_max_tokens = self
+            .client
+            .effective_max_output_tokens(&request_route.model);
         let request = MessageRequest {
             // The Python helper accepts `model=` for older snippets, but it is
             // intentionally not authoritative. RLM child calls are pinned to
@@ -97,13 +165,16 @@ impl RlmBridge {
             // cannot silently upgrade cheap fanout work to an expensive model.
             model: self.child_model.clone(),
             messages: vec![Message {
-                role: "user".to_string(),
+                role: Role::User,
                 content: vec![ContentBlock::Text {
                     text: prompt,
                     cache_control: None,
                 }],
             }],
-            max_tokens: max_tokens.unwrap_or(DEFAULT_CHILD_MAX_TOKENS),
+            // An explicit RLM helper bound remains authoritative, but the
+            // default is the selected route's ordinary allowance rather than
+            // a hidden 4K ceiling.
+            max_tokens: max_tokens.map_or(route_max_tokens, |limit| limit.min(route_max_tokens)),
             system: system.map(SystemPrompt::Text),
             tools: None,
             tool_choice: None,
@@ -111,8 +182,8 @@ impl RlmBridge {
             thinking: None,
             reasoning_effort: None,
             stream: Some(false),
-            temperature: Some(0.4_f32),
-            top_p: Some(0.9_f32),
+            temperature: None,
+            top_p: None,
         };
 
         let fut = self.client.create_message_boxed(request);
@@ -133,6 +204,21 @@ impl RlmBridge {
                 }
             };
 
+        {
+            let mut u = self.usage.lock().await;
+            super::add_usage_with_prompt_cache(&mut u, &response.usage);
+        }
+
+        if is_incomplete_stop_reason(response.stop_reason.as_deref()) {
+            return SingleResp {
+                text: String::new(),
+                error: Some(format!(
+                    "llm_query response incomplete: provider stop reason `{}`; partial output was not accepted.",
+                    stop_reason_detail(response.stop_reason.as_deref())
+                )),
+            };
+        }
+
         let text = response
             .content
             .iter()
@@ -142,11 +228,6 @@ impl RlmBridge {
             })
             .collect::<Vec<_>>()
             .join("\n");
-
-        {
-            let mut u = self.usage.lock().await;
-            super::add_usage_with_prompt_cache(&mut u, &response.usage);
-        }
 
         SingleResp { text, error: None }
     }
@@ -479,6 +560,49 @@ mod tests {
         assert_eq!(usage.output_tokens, 100);
         assert_eq!(usage.prompt_cache_hit_tokens, Some(800));
         assert_eq!(usage.prompt_cache_miss_tokens, Some(200));
+    }
+
+    #[tokio::test]
+    async fn llm_dispatch_rejects_max_tokens_partial_output_after_charging_usage() {
+        let mock = Arc::new(MockLlmClient::new(Vec::new()));
+        let usage = Usage {
+            input_tokens: 23,
+            output_tokens: 4096,
+            reasoning_tokens: Some(4000),
+            ..Usage::default()
+        };
+        let mut response = mock_response_with_usage(
+            "FINAL('partial answer')\n```repl\nFINAL('also partial')\n```",
+            usage.clone(),
+        );
+        response.stop_reason = Some("max_tokens".to_string());
+        mock.push_message_response(response);
+        let bridge = bridge_for(Arc::clone(&mock), 1);
+
+        let response = bridge
+            .dispatch(RpcRequest::Llm {
+                prompt: "child prompt".to_string(),
+                model: None,
+                max_tokens: None,
+                system: None,
+            })
+            .await;
+
+        match response {
+            RpcResponse::Single(single) => {
+                assert!(
+                    single.text.is_empty(),
+                    "partial output must not be accepted"
+                );
+                let error = single.error.expect("truncation must surface as an error");
+                assert!(error.contains("incomplete"), "{error}");
+                assert!(error.contains("max_tokens"), "{error}");
+            }
+            other => panic!("expected single response, got {other:?}"),
+        }
+
+        assert_eq!(*bridge.usage.lock().await, usage);
+        assert_eq!(mock.call_count(), 1, "truncation must not retry");
     }
 
     #[tokio::test]

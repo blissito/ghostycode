@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { getAgentEnv, safeEqual, createSession } from "@/lib/community-agent";
+import { FormBodyError, readBoundedUrlEncodedForm } from "@/lib/bounded-form";
 
 export const dynamic = "force-dynamic";
 
 const ALLOWED_LOCALES = new Set(["en", "zh"]);
+const MAX_LOGIN_BODY_BYTES = 4_096;
+const MAX_TOKEN_CHARS = 512;
 
 function pickLocale(value: string | null | undefined): string {
   if (!value) return "en";
@@ -22,9 +25,26 @@ export async function POST(req: Request) {
     });
   }
 
-  const form = await req.formData();
-  const submitted = String(form.get("token") ?? "");
-  const locale = pickLocale(String(form.get("locale") ?? localeFromQuery));
+  let form: URLSearchParams;
+  try {
+    form = await readBoundedUrlEncodedForm(req, MAX_LOGIN_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof FormBodyError) {
+      return new NextResponse(error.message, {
+        status: error.status,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+    throw error;
+  }
+  const submitted = form.get("token") ?? "";
+  const locale = pickLocale(form.get("locale") ?? localeFromQuery);
+  if (submitted.length > MAX_TOKEN_CHARS) {
+    return new NextResponse("Token too long", {
+      status: 413,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
 
   const valid = await safeEqual(submitted, env.MAINTAINER_TOKEN);
   if (!valid) {

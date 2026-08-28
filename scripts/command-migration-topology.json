@@ -1,0 +1,291 @@
+{
+  "schema_version": 1,
+  "topology": {
+    "utility": {
+      "kind": "group",
+      "scope": [
+        "crates/tui/src/commands/groups/utility/attachment.rs",
+        "crates/tui/src/commands/groups/utility/automation.rs",
+        "crates/tui/src/commands/groups/utility/jobs.rs",
+        "crates/tui/src/commands/groups/utility/mcp.rs",
+        "crates/tui/src/commands/groups/utility/network.rs",
+        "crates/tui/src/commands/groups/utility/task.rs",
+        "crates/tui/src/commands/groups/utility/update.rs"
+      ],
+      "slices": []
+    },
+    "memory": {
+      "kind": "group",
+      "scope": [
+        "crates/tui/src/commands/groups/memory/memory.rs",
+        "crates/tui/src/commands/groups/memory/note.rs"
+      ],
+      "slices": []
+    },
+    "plugins": {
+      "kind": "group",
+      "scope": [
+        "crates/tui/src/commands/groups/plugins/kimi_import.rs",
+        "crates/tui/src/commands/groups/plugins/legacy.rs",
+        "crates/tui/src/commands/groups/plugins/marketplace.rs",
+        "crates/tui/src/commands/groups/plugins/render.rs"
+      ],
+      "slices": []
+    },
+    "project": {
+      "kind": "group",
+      "scope": [
+        "crates/tui/src/commands/groups/project/goal.rs",
+        "crates/tui/src/commands/groups/project/init.rs",
+        "crates/tui/src/commands/groups/project/lsp.rs",
+        "crates/tui/src/commands/groups/project/share.rs"
+      ],
+      "slices": []
+    },
+    "skills": {
+      "kind": "group",
+      "scope": [
+        "crates/tui/src/commands/groups/skills/restore.rs",
+        "crates/tui/src/commands/groups/skills/review.rs",
+        "crates/tui/src/commands/groups/skills/skills.rs"
+      ],
+      "slices": []
+    },
+    "session": {
+      "kind": "group",
+      "scope": [
+        "crates/tui/src/commands/groups/session/branch.rs",
+        "crates/tui/src/commands/groups/session/compact.rs",
+        "crates/tui/src/commands/groups/session/export.rs",
+        "crates/tui/src/commands/groups/session/fork.rs",
+        "crates/tui/src/commands/groups/session/load.rs",
+        "crates/tui/src/commands/groups/session/new.rs",
+        "crates/tui/src/commands/groups/session/purge.rs",
+        "crates/tui/src/commands/groups/session/relay.rs",
+        "crates/tui/src/commands/groups/session/remote_control.rs",
+        "crates/tui/src/commands/groups/session/remote_env.rs",
+        "crates/tui/src/commands/groups/session/rename.rs",
+        "crates/tui/src/commands/groups/session/resume.rs",
+        "crates/tui/src/commands/groups/session/save.rs",
+        "crates/tui/src/commands/groups/session/session.rs",
+        "crates/tui/src/commands/groups/session/sessions.rs",
+        "crates/tui/src/commands/groups/session/structcopy.rs",
+        "crates/tui/src/commands/groups/session/title.rs",
+        "crates/tui/src/commands/groups/session/tree.rs"
+      ],
+      "slices": [
+        {
+          "name": "session::lifecycle",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/session/branch.rs",
+            "crates/tui/src/commands/groups/session/compact.rs",
+            "crates/tui/src/commands/groups/session/fork.rs",
+            "crates/tui/src/commands/groups/session/load.rs",
+            "crates/tui/src/commands/groups/session/new.rs",
+            "crates/tui/src/commands/groups/session/purge.rs",
+            "crates/tui/src/commands/groups/session/save.rs",
+            "crates/tui/src/commands/groups/session/session.rs",
+            "crates/tui/src/commands/groups/session/sessions.rs",
+            "crates/tui/src/commands/groups/session/tree.rs"
+          ]
+        },
+        {
+          "name": "session::control",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/session/relay.rs",
+            "crates/tui/src/commands/groups/session/remote_control.rs",
+            "crates/tui/src/commands/groups/session/remote_env.rs",
+            "crates/tui/src/commands/groups/session/rename.rs",
+            "crates/tui/src/commands/groups/session/resume.rs",
+            "crates/tui/src/commands/groups/session/title.rs"
+          ]
+        },
+        {
+          "name": "session::export",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/session/export.rs"
+          ]
+        },
+        {
+          "name": "session::structcopy",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/session/structcopy.rs"
+          ]
+        }
+      ]
+    },
+    "config": {
+      "kind": "group",
+      "scope": [
+        "crates/tui/src/commands/groups/config/config.rs",
+        "crates/tui/src/commands/groups/config/permissions.rs",
+        "crates/tui/src/commands/groups/config/status.rs"
+      ],
+      "slices": [
+        {
+          "name": "config::policy",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/config/permissions.rs",
+            "crates/tui/src/commands/groups/config/status.rs"
+          ]
+        },
+        {
+          "name": "config::main",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/config/config.rs"
+          ]
+        }
+      ]
+    },
+    "debug": {
+      "kind": "group",
+      "scope": [
+        "crates/tui/src/commands/groups/debug/balance.rs",
+        "crates/tui/src/commands/groups/debug/cache.rs",
+        "crates/tui/src/commands/groups/debug/change.rs",
+        "crates/tui/src/commands/groups/debug/preview_request.rs",
+        "crates/tui/src/commands/groups/debug/tokens.rs",
+        "crates/tui/src/commands/groups/debug/tool_inspection.rs",
+        "crates/tui/src/commands/groups/debug/undo.rs"
+      ],
+      "slices": [
+        {
+          "name": "debug::diagnostics",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/debug/balance.rs",
+            "crates/tui/src/commands/groups/debug/cache.rs",
+            "crates/tui/src/commands/groups/debug/preview_request.rs",
+            "crates/tui/src/commands/groups/debug/tokens.rs",
+            "crates/tui/src/commands/groups/debug/tool_inspection.rs"
+          ]
+        },
+        {
+          "name": "debug::mutation",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/debug/change.rs",
+            "crates/tui/src/commands/groups/debug/undo.rs"
+          ]
+        }
+      ]
+    },
+    "core": {
+      "kind": "group",
+      "scope": [
+        "crates/tui/src/commands/groups/core/advisor.rs",
+        "crates/tui/src/commands/groups/core/agent.rs",
+        "crates/tui/src/commands/groups/core/anchor.rs",
+        "crates/tui/src/commands/groups/core/clear.rs",
+        "crates/tui/src/commands/groups/core/constitution.rs",
+        "crates/tui/src/commands/groups/core/core.rs",
+        "crates/tui/src/commands/groups/core/effort.rs",
+        "crates/tui/src/commands/groups/core/exit.rs",
+        "crates/tui/src/commands/groups/core/feedback.rs",
+        "crates/tui/src/commands/groups/core/fleet.rs",
+        "crates/tui/src/commands/groups/core/help.rs",
+        "crates/tui/src/commands/groups/core/hf.rs",
+        "crates/tui/src/commands/groups/core/home.rs",
+        "crates/tui/src/commands/groups/core/hooks.rs",
+        "crates/tui/src/commands/groups/core/hotbar.rs",
+        "crates/tui/src/commands/groups/core/lane.rs",
+        "crates/tui/src/commands/groups/core/links.rs",
+        "crates/tui/src/commands/groups/core/model.rs",
+        "crates/tui/src/commands/groups/core/modeldb.rs",
+        "crates/tui/src/commands/groups/core/models.rs",
+        "crates/tui/src/commands/groups/core/pin.rs",
+        "crates/tui/src/commands/groups/core/profile.rs",
+        "crates/tui/src/commands/groups/core/provider.rs",
+        "crates/tui/src/commands/groups/core/queue.rs",
+        "crates/tui/src/commands/groups/core/rlm.rs",
+        "crates/tui/src/commands/groups/core/setup.rs",
+        "crates/tui/src/commands/groups/core/stash.rs",
+        "crates/tui/src/commands/groups/core/subagents.rs",
+        "crates/tui/src/commands/groups/core/transcript.rs",
+        "crates/tui/src/commands/groups/core/translate.rs",
+        "crates/tui/src/commands/groups/core/turn.rs",
+        "crates/tui/src/commands/groups/core/util.rs",
+        "crates/tui/src/commands/groups/core/voice.rs",
+        "crates/tui/src/commands/groups/core/workflow.rs",
+        "crates/tui/src/commands/groups/core/workspace.rs"
+      ],
+      "slices": [
+        {
+          "name": "core::navigation",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/core/anchor.rs",
+            "crates/tui/src/commands/groups/core/help.rs",
+            "crates/tui/src/commands/groups/core/home.rs",
+            "crates/tui/src/commands/groups/core/hotbar.rs",
+            "crates/tui/src/commands/groups/core/links.rs",
+            "crates/tui/src/commands/groups/core/transcript.rs",
+            "crates/tui/src/commands/groups/core/translate.rs",
+            "crates/tui/src/commands/groups/core/turn.rs",
+            "crates/tui/src/commands/groups/core/voice.rs",
+            "crates/tui/src/commands/groups/core/workspace.rs"
+          ]
+        },
+        {
+          "name": "core::model-and-setup",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/core/hf.rs",
+            "crates/tui/src/commands/groups/core/model.rs",
+            "crates/tui/src/commands/groups/core/modeldb.rs",
+            "crates/tui/src/commands/groups/core/models.rs",
+            "crates/tui/src/commands/groups/core/profile.rs",
+            "crates/tui/src/commands/groups/core/provider.rs",
+            "crates/tui/src/commands/groups/core/setup.rs"
+          ]
+        },
+        {
+          "name": "core::coordination",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/core/agent.rs",
+            "crates/tui/src/commands/groups/core/fleet.rs",
+            "crates/tui/src/commands/groups/core/hooks.rs",
+            "crates/tui/src/commands/groups/core/lane.rs",
+            "crates/tui/src/commands/groups/core/queue.rs",
+            "crates/tui/src/commands/groups/core/rlm.rs",
+            "crates/tui/src/commands/groups/core/subagents.rs",
+            "crates/tui/src/commands/groups/core/workflow.rs"
+          ]
+        },
+        {
+          "name": "core::policy",
+          "kind": "slice",
+          "scope": [
+            "crates/tui/src/commands/groups/core/advisor.rs",
+            "crates/tui/src/commands/groups/core/clear.rs",
+            "crates/tui/src/commands/groups/core/constitution.rs",
+            "crates/tui/src/commands/groups/core/core.rs",
+            "crates/tui/src/commands/groups/core/effort.rs",
+            "crates/tui/src/commands/groups/core/exit.rs",
+            "crates/tui/src/commands/groups/core/feedback.rs",
+            "crates/tui/src/commands/groups/core/pin.rs",
+            "crates/tui/src/commands/groups/core/stash.rs",
+            "crates/tui/src/commands/groups/core/util.rs"
+          ]
+        }
+      ]
+    }
+  },
+  "frontier": [
+    "config",
+    "core",
+    "debug",
+    "memory",
+    "plugins",
+    "project",
+    "session",
+    "skills"
+  ]
+}

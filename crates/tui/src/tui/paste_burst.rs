@@ -95,7 +95,7 @@ impl PasteBurst {
         None
     }
 
-    pub(crate) fn note_plain_char(&mut self, now: Instant) {
+    pub(crate) fn note_plain_char(&mut self, now: Instant) -> u16 {
         match self.last_plain_char_time {
             Some(prev) if now.duration_since(prev) <= PASTE_BURST_CHAR_INTERVAL => {
                 self.consecutive_plain_char_burst =
@@ -104,6 +104,7 @@ impl PasteBurst {
             _ => self.consecutive_plain_char_burst = 1,
         }
         self.last_plain_char_time = Some(now);
+        self.consecutive_plain_char_burst
     }
 
     pub fn flush_if_due(&mut self, now: Instant) -> FlushResult {
@@ -119,6 +120,14 @@ impl PasteBurst {
         if timed_out && self.is_active_internal() {
             self.active = false;
             let out = std::mem::take(&mut self.buffer);
+            // `burst_window_until` intentionally survives the flush: the idle
+            // timeout is only 8ms, and a paste's trailing newline can land
+            // just after it over a laggy link (SSH/tmux). Dropping the window
+            // here would let that pasted newline submit a partial paste
+            // (#1073). The window stays *bounded* instead: absorbing an Enter
+            // outside an active burst no longer re-arms it, so suppression
+            // always ends `PASTE_ENTER_SUPPRESS_WINDOW` after the last real
+            // keystroke.
             FlushResult::Paste(out)
         } else if timed_out {
             if let Some((ch, _)) = self.pending_first_char.take() {
@@ -237,7 +246,7 @@ impl PasteBurst {
     /// # Panics
     ///
     /// Panics in debug builds if `buffer` is non-empty — the caller must flush
-    /// via [`flush_before_modified_input`] first.
+    /// via `flush_before_modified_input` first.
     pub fn deactivate_keep_window(&mut self) {
         debug_assert!(
             self.buffer.is_empty(),
@@ -265,6 +274,30 @@ impl PasteBurst {
         self.active = false;
         self.buffer.clear();
         self.pending_first_char = None;
+    }
+
+    /// Arm the Enter-suppression window for a non-ASCII character that was
+    /// inserted straight into the composer instead of being buffered (the
+    /// IME / raw-CJK path in `tui::paste`).
+    ///
+    /// `rapid_chars` is the run length reported by [`Self::note_plain_char`].
+    ///
+    /// A *lone* commit only earns a burst-interval window. An IME candidate
+    /// commit is ordinary typing: the user may press Enter to send a
+    /// message ending in a CJK character tens of milliseconds later, and the
+    /// full 120ms window turned that Enter into a stray newline. A real raw
+    /// paste delivers its trailing newline within microseconds of the last
+    /// character, so the short window still absorbs it — including the
+    /// single-character first line of a CJK paste (#1302).
+    ///
+    /// Two or more characters at paste speed mean the stream *is* a paste,
+    /// so the full window applies and later lines stay absorbed.
+    pub fn arm_window_for_direct_char(&mut self, now: Instant, rapid_chars: u16) {
+        if rapid_chars >= 2 {
+            self.extend_window(now);
+        } else {
+            self.burst_window_until = Some(now + PASTE_BURST_CHAR_INTERVAL);
+        }
     }
 }
 
@@ -390,6 +423,132 @@ mod tests {
         assert!(
             !burst.newline_should_insert_instead_of_submit(t_expired),
             "Enter after suppression window expires should submit"
+        );
+    }
+
+    /// The idle flush must NOT drop the Enter-suppression window. The active
+    /// idle timeout is only 8ms, so a paste's trailing newline can easily
+    /// land just after the flush on a laggy link — dropping the window there
+    /// would submit a partial paste (#1073).
+    #[test]
+    fn idle_flush_keeps_enter_suppression_window_alive() {
+        let mut burst = PasteBurst::default();
+        let t0 = Instant::now();
+
+        let _ = burst.on_plain_char('a', t0);
+        let t1 = t0 + Duration::from_millis(1);
+        assert!(matches!(
+            burst.on_plain_char('b', t1),
+            CharDecision::BeginBufferFromPending
+        ));
+        burst.append_char_to_buffer('b', t1);
+
+        let t_flush = t1 + PasteBurst::recommended_active_flush_delay();
+        assert!(matches!(
+            burst.flush_if_due(t_flush),
+            FlushResult::Paste(ref s) if s == "ab"
+        ));
+        assert!(!burst.is_active());
+        assert!(
+            burst.newline_should_insert_instead_of_submit(t_flush),
+            "a trailing pasted newline arriving right after the idle flush \
+             must still be absorbed instead of submitting"
+        );
+    }
+
+    /// …but the window is *bounded*: it expires 120ms after the last real
+    /// keystroke and nothing about the flush re-arms it, so the user's next
+    /// Enter submits.
+    #[test]
+    fn enter_suppression_window_expires_after_the_last_keystroke() {
+        let mut burst = PasteBurst::default();
+        let t0 = Instant::now();
+
+        let _ = burst.on_plain_char('a', t0);
+        let t1 = t0 + Duration::from_millis(1);
+        let _ = burst.on_plain_char('b', t1);
+        burst.append_char_to_buffer('b', t1);
+        let t_flush = t1 + PasteBurst::recommended_active_flush_delay();
+        let _ = burst.flush_if_due(t_flush);
+
+        let t_late = t1 + PASTE_ENTER_SUPPRESS_WINDOW + Duration::from_millis(1);
+        assert!(
+            !burst.newline_should_insert_instead_of_submit(t_late),
+            "Enter more than the suppression window after the paste must submit"
+        );
+    }
+
+    /// A lone IME candidate commit is ordinary typing: it may only hold Enter
+    /// for one burst interval, so a user finishing a CJK sentence and
+    /// pressing Enter actually sends.
+    #[test]
+    fn lone_non_ascii_commit_arms_only_a_burst_interval_window() {
+        let mut burst = PasteBurst::default();
+        let t0 = Instant::now();
+
+        let rapid = burst.note_plain_char(t0);
+        assert_eq!(rapid, 1, "an isolated commit is a run of one");
+        burst.arm_window_for_direct_char(t0, rapid);
+
+        assert!(
+            burst.newline_should_insert_instead_of_submit(t0 + PASTE_BURST_CHAR_INTERVAL),
+            "a raw paste delivers its trailing newline within the burst \
+             interval and must still be absorbed (#1302)"
+        );
+        assert!(
+            !burst.newline_should_insert_instead_of_submit(
+                t0 + PASTE_BURST_CHAR_INTERVAL + Duration::from_millis(1)
+            ),
+            "an IME commit must not swallow the Enter a human presses \
+             tens of milliseconds later"
+        );
+    }
+
+    /// Two non-ASCII characters at paste speed mean the stream is a paste,
+    /// so the full suppression window applies to later lines.
+    #[test]
+    fn rapid_non_ascii_run_arms_the_full_suppression_window() {
+        let mut burst = PasteBurst::default();
+        let t0 = Instant::now();
+
+        let rapid = burst.note_plain_char(t0);
+        burst.arm_window_for_direct_char(t0, rapid);
+        let t1 = t0 + Duration::from_millis(1);
+        let rapid = burst.note_plain_char(t1);
+        assert_eq!(rapid, 2);
+        burst.arm_window_for_direct_char(t1, rapid);
+
+        assert!(
+            burst.newline_should_insert_instead_of_submit(t1 + PASTE_ENTER_SUPPRESS_WINDOW),
+            "a raw CJK paste must keep absorbing its embedded newlines"
+        );
+        assert!(
+            !burst.newline_should_insert_instead_of_submit(
+                t1 + PASTE_ENTER_SUPPRESS_WINDOW + Duration::from_millis(1)
+            ),
+            "even a paste-speed run releases Enter once the window lapses"
+        );
+    }
+
+    /// A slow IME sequence never accumulates a rapid run, so every commit
+    /// re-arms only the short window and Enter stays available throughout.
+    #[test]
+    fn slow_ime_sequence_never_holds_enter() {
+        let mut burst = PasteBurst::default();
+        let t0 = Instant::now();
+
+        // "你好世界" committed one character at a time with human gaps.
+        for i in 0..4u64 {
+            let now = t0 + Duration::from_millis(50 * i);
+            let rapid = burst.note_plain_char(now);
+            assert_eq!(rapid, 1, "50ms gaps are never a paste-speed run");
+            burst.arm_window_for_direct_char(now, rapid);
+        }
+
+        let last = t0 + Duration::from_millis(150);
+        assert!(
+            !burst.newline_should_insert_instead_of_submit(last + Duration::from_millis(30)),
+            "Enter after an IME-typed CJK message must submit"
         );
     }
 }

@@ -98,7 +98,7 @@ export async function runTriage(env: AgentEnv): Promise<Record<string, unknown>>
     let skipped = 0;
 
     for (const issue of newIssues) {
-      if (await hasFreshDraft(env.CURATED_KV, "issue", String(issue.number), issue.updated_at)) {
+      if (await hasFreshDraft(env.CURATED_KV, "triage", String(issue.number), issue.updated_at)) {
         skipped++;
         continue;
       }
@@ -163,7 +163,7 @@ export async function runPrReview(env: AgentEnv): Promise<Record<string, unknown
     let skipped = 0;
 
     for (const pr of prs.slice(0, 10)) {
-      if (await hasFreshDraft(env.CURATED_KV, "pr", String(pr.number), pr.updated_at)) {
+      if (await hasFreshDraft(env.CURATED_KV, "pr-review", String(pr.number), pr.updated_at)) {
         skipped++;
         continue;
       }

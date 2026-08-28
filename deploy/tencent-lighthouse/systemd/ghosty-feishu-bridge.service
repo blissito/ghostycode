@@ -1,5 +1,5 @@
 [Unit]
-Description=Ghosty Code Feishu/Lark Phone Bridge
+Description=GhostyCode Feishu/Lark Phone Bridge
 Wants=network-online.target ghosty-runtime.service
 After=network-online.target ghosty-runtime.service
 

@@ -2,20 +2,68 @@
 //! on first launch.
 
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
-const BUNDLED_SKILL_VERSION: &str = "3";
+/// Bundled catalog generation for the default GhostyCode skill pack (#4691).
+///
+/// Generation 7 adds the explicit-only `help` router (#4698 parity slice).
+/// Generation 8 adds the explicit-only `contributor-onboarding` path
+/// requested by @JayBeest (#4227).
+/// Generation 9 adds the `handoff` workflow skill (baton-pass for
+/// continuous operate-mode operations).
+/// Generation 10 adds the bundled `mcp-discovery` skill (Registry-first
+/// tool selection).
+const BUNDLED_SKILL_VERSION: &str = "10";
+
+// ── system & extension (meta) ───────────────────────────────────────────────
 const SKILL_CREATOR_BODY: &str = include_str!("../../assets/skills/skill-creator/SKILL.md");
 const DELEGATE_BODY: &str = include_str!("../../assets/skills/delegate/SKILL.md");
-const V4_BEST_PRACTICES_BODY: &str = include_str!("../../assets/skills/v4-best-practices/SKILL.md");
 const PLUGIN_CREATOR_BODY: &str = include_str!("../../assets/skills/plugin-creator/SKILL.md");
 const SKILL_INSTALLER_BODY: &str = include_str!("../../assets/skills/skill-installer/SKILL.md");
 const MCP_BUILDER_BODY: &str = include_str!("../../assets/skills/mcp-builder/SKILL.md");
-const DOCUMENTS_BODY: &str = include_str!("../../assets/skills/documents/SKILL.md");
-const PRESENTATIONS_BODY: &str = include_str!("../../assets/skills/presentations/SKILL.md");
-const SPREADSHEETS_BODY: &str = include_str!("../../assets/skills/spreadsheets/SKILL.md");
+const FLEET_MANAGER_BODY: &str = include_str!("../../assets/skills/fleet-manager/SKILL.md");
+const HELP_BODY: &str = include_str!("../../assets/skills/help/SKILL.md");
+
+// ── end-user workflows ──────────────────────────────────────────────────────
+const HANDOFF_BODY: &str = include_str!("../../assets/skills/handoff/SKILL.md");
+const BEST_OF_N_BODY: &str = include_str!("../../assets/skills/best-of-n/SKILL.md");
+const INTERVIEW_BODY: &str = include_str!("../../assets/skills/interview/SKILL.md");
+const PLAN_BODY: &str = include_str!("../../assets/skills/plan/SKILL.md");
+const IMPLEMENT_BODY: &str = include_str!("../../assets/skills/implement/SKILL.md");
+const DEBUG_BODY: &str = include_str!("../../assets/skills/debug/SKILL.md");
+const TEST_BODY: &str = include_str!("../../assets/skills/test/SKILL.md");
+const REVIEW_BODY: &str = include_str!("../../assets/skills/review/SKILL.md");
+const SECURITY_REVIEW_BODY: &str = include_str!("../../assets/skills/security-review/SKILL.md");
+const SIMPLIFY_BODY: &str = include_str!("../../assets/skills/simplify/SKILL.md");
+const VERIFY_BODY: &str = include_str!("../../assets/skills/verify/SKILL.md");
+const RESEARCH_BODY: &str = include_str!("../../assets/skills/research/SKILL.md");
+const FRONTEND_DESIGN_BODY: &str = include_str!("../../assets/skills/frontend-design/SKILL.md");
+const WEBAPP_TESTING_BODY: &str = include_str!("../../assets/skills/webapp-testing/SKILL.md");
+const DOCUMENT_BODY: &str = include_str!("../../assets/skills/document/SKILL.md");
+const DATAVIZ_BODY: &str = include_str!("../../assets/skills/dataviz/SKILL.md");
+const DOCX_BODY: &str = include_str!("../../assets/skills/docx/SKILL.md");
 const PDF_BODY: &str = include_str!("../../assets/skills/pdf/SKILL.md");
+const PPTX_BODY: &str = include_str!("../../assets/skills/pptx/SKILL.md");
+const XLSX_BODY: &str = include_str!("../../assets/skills/xlsx/SKILL.md");
+const DOCUMENTS_ALIAS_BODY: &str = include_str!("../../assets/skills/documents/SKILL.md");
+const PRESENTATIONS_ALIAS_BODY: &str = include_str!("../../assets/skills/presentations/SKILL.md");
+const SPREADSHEETS_ALIAS_BODY: &str = include_str!("../../assets/skills/spreadsheets/SKILL.md");
+
+// ── power / explicit-only ───────────────────────────────────────────────────
+const BATCH_BODY: &str = include_str!("../../assets/skills/batch/SKILL.md");
+const DEPENDENCY_UPDATE_BODY: &str = include_str!("../../assets/skills/dependency-update/SKILL.md");
+const RELEASE_BODY: &str = include_str!("../../assets/skills/release/SKILL.md");
+const CONTRIBUTOR_ONBOARDING_BODY: &str =
+    include_str!("../../assets/skills/contributor-onboarding/SKILL.md");
+
+// Optional integration (not auto-installed for every user): Feishu body kept for
+// digest/migration helpers only.
 const FEISHU_BODY: &str = include_str!("../../assets/skills/feishu/SKILL.md");
+const MCP_DISCOVERY_BODY: &str = include_str!("../../assets/skills/mcp-discovery/SKILL.md");
+
+// Legacy v4 body retained solely for digest-based safe retirement (#4691).
+const V4_BEST_PRACTICES_BODY: &str = include_str!("../../assets/skills/v4-best-practices/SKILL.md");
 
 struct BundledSkill {
     name: &'static str,
@@ -23,7 +71,9 @@ struct BundledSkill {
     introduced_in: u32,
 }
 
+/// Skills auto-installed for every user on fresh install / upgrade.
 const BUNDLED_SKILLS: &[BundledSkill] = &[
+    // System & extension
     BundledSkill {
         name: "skill-creator",
         body: SKILL_CREATOR_BODY,
@@ -33,11 +83,6 @@ const BUNDLED_SKILLS: &[BundledSkill] = &[
         name: "delegate",
         body: DELEGATE_BODY,
         introduced_in: 2,
-    },
-    BundledSkill {
-        name: "v4-best-practices",
-        body: V4_BEST_PRACTICES_BODY,
-        introduced_in: 3,
     },
     BundledSkill {
         name: "plugin-creator",
@@ -55,19 +100,100 @@ const BUNDLED_SKILLS: &[BundledSkill] = &[
         introduced_in: 3,
     },
     BundledSkill {
-        name: "documents",
-        body: DOCUMENTS_BODY,
-        introduced_in: 3,
+        name: "fleet-manager",
+        body: FLEET_MANAGER_BODY,
+        introduced_in: 4,
     },
     BundledSkill {
-        name: "presentations",
-        body: PRESENTATIONS_BODY,
-        introduced_in: 3,
+        name: "help",
+        body: HELP_BODY,
+        introduced_in: 7,
+    },
+    // End-user workflows
+    BundledSkill {
+        name: "handoff",
+        body: HANDOFF_BODY,
+        introduced_in: 9,
     },
     BundledSkill {
-        name: "spreadsheets",
-        body: SPREADSHEETS_BODY,
-        introduced_in: 3,
+        name: "best-of-n",
+        body: BEST_OF_N_BODY,
+        introduced_in: 6,
+    },
+    BundledSkill {
+        name: "interview",
+        body: INTERVIEW_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "plan",
+        body: PLAN_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "implement",
+        body: IMPLEMENT_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "debug",
+        body: DEBUG_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "test",
+        body: TEST_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "review",
+        body: REVIEW_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "security-review",
+        body: SECURITY_REVIEW_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "simplify",
+        body: SIMPLIFY_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "verify",
+        body: VERIFY_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "research",
+        body: RESEARCH_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "frontend-design",
+        body: FRONTEND_DESIGN_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "webapp-testing",
+        body: WEBAPP_TESTING_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "document",
+        body: DOCUMENT_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "dataviz",
+        body: DATAVIZ_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "docx",
+        body: DOCX_BODY,
+        introduced_in: 5,
     },
     BundledSkill {
         name: "pdf",
@@ -75,20 +201,156 @@ const BUNDLED_SKILLS: &[BundledSkill] = &[
         introduced_in: 3,
     },
     BundledSkill {
-        name: "feishu",
-        body: FEISHU_BODY,
+        name: "pptx",
+        body: PPTX_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "xlsx",
+        body: XLSX_BODY,
+        introduced_in: 5,
+    },
+    // Compatibility aliases for pre-v5 artifact names
+    BundledSkill {
+        name: "documents",
+        body: DOCUMENTS_ALIAS_BODY,
         introduced_in: 3,
     },
+    BundledSkill {
+        name: "presentations",
+        body: PRESENTATIONS_ALIAS_BODY,
+        introduced_in: 3,
+    },
+    BundledSkill {
+        name: "spreadsheets",
+        body: SPREADSHEETS_ALIAS_BODY,
+        introduced_in: 3,
+    },
+    // Power / explicit-only
+    BundledSkill {
+        name: "batch",
+        body: BATCH_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "dependency-update",
+        body: DEPENDENCY_UPDATE_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "release",
+        body: RELEASE_BODY,
+        introduced_in: 5,
+    },
+    BundledSkill {
+        name: "contributor-onboarding",
+        body: CONTRIBUTOR_ONBOARDING_BODY,
+        introduced_in: 8,
+    },
+    BundledSkill {
+        name: "mcp-discovery",
+        body: MCP_DISCOVERY_BODY,
+        introduced_in: 10,
+    },
 ];
+
+/// Product-facing grouping for the bundled catalog.
+///
+/// User and compatible skills remain outside these two buckets. The grouping
+/// is deliberately attached to the shipped catalog instead of inferred from
+/// arbitrary community metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BundledSkillTier {
+    CoreAgentic,
+    FormatTooling,
+}
+
+impl BundledSkillTier {
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::CoreAgentic => "core",
+            Self::FormatTooling => "tools",
+        }
+    }
+
+    #[must_use]
+    pub const fn heading(self) -> &'static str {
+        match self {
+            Self::CoreAgentic => "Core agentic",
+            Self::FormatTooling => "Format & tooling",
+        }
+    }
+}
+
+/// Return the curated tier for a bundled skill name.
+#[must_use]
+pub fn bundled_skill_tier(name: &str) -> Option<BundledSkillTier> {
+    if !is_bundled_skill_name(name) {
+        return None;
+    }
+    let tier = match name {
+        "skill-creator" | "plugin-creator" | "skill-installer" | "mcp-builder" | "help"
+        | "frontend-design" | "webapp-testing" | "document" | "dataviz" | "docx" | "pdf"
+        | "pptx" | "xlsx" | "documents" | "presentations" | "spreadsheets" => {
+            BundledSkillTier::FormatTooling
+        }
+        _ => BundledSkillTier::CoreAgentic,
+    };
+    Some(tier)
+}
+
+/// Canonical names of every skill in the shipped starter pack, in bundle order.
+///
+/// Exposed so the catalog fixture matrix (#4698) can assert a *bijection*
+/// between the checked-in fixture and the real bundle: a skill added or removed
+/// without updating the fixture fails the build rather than silently changing
+/// what every user gets installed.
+#[must_use]
+#[cfg(test)]
+pub fn bundled_skill_names() -> Vec<&'static str> {
+    BUNDLED_SKILLS.iter().map(|skill| skill.name).collect()
+}
+
+/// The shipped generation marker written to `.system-installed-version`.
+#[must_use]
+#[cfg(test)]
+pub fn bundled_skill_generation() -> &'static str {
+    BUNDLED_SKILL_VERSION
+}
+
+/// Legacy v4-best-practices body digest helper (not in BUNDLED_SKILLS).
+fn v4_best_practices_body() -> &'static str {
+    V4_BEST_PRACTICES_BODY
+}
+
+fn feishu_body() -> &'static str {
+    FEISHU_BODY
+}
 
 /// Whether a skill name matches one of the bundled first-party skills.
 ///
 /// Used by `/skills` to distinguish user-created skills (which should be
 /// surfaced prominently) from the always-installed bundle (which can be
 /// rendered compactly when many skills are present).
+///
+/// Prefer [`is_exact_bundled_skill`] when classifying audit rows — name-only
+/// matches can collide with user overrides of the same command name.
 #[must_use]
 pub fn is_bundled_skill_name(name: &str) -> bool {
     BUNDLED_SKILLS.iter().any(|s| s.name == name)
+}
+
+/// True when `name` is a bundled skill **and** `skill_md_content` exactly
+/// matches the shipped asset body (byte-for-byte).
+///
+/// Used by the skill audit inventory so a user-edited copy of a bundled name
+/// is not misclassified as built-in.
+#[must_use]
+pub fn is_exact_bundled_skill(name: &str, skill_md_content: &str) -> bool {
+    BUNDLED_SKILLS
+        .iter()
+        .any(|s| s.name == name && s.body == skill_md_content)
 }
 
 /// Attempt to install a single bundled skill into `skills_dir`.
@@ -118,6 +380,15 @@ fn install_one(
     };
 
     if should_install {
+        // Never overwrite a user-modified copy that no longer matches a known
+        // shipped body (#4691 non-destructive upgrade table).
+        if target_file.exists() {
+            let existing = fs::read_to_string(&target_file).unwrap_or_default();
+            if !existing.is_empty() && existing != skill.body {
+                // Preserve user/compatible-root content; skip replace-by-name.
+                return Ok(false);
+            }
+        }
         fs::create_dir_all(&target_dir)?;
         fs::write(&target_file, skill.body)?;
     }
@@ -140,285 +411,78 @@ fn install_one(
 pub fn install_system_skills(skills_dir: &Path) -> std::io::Result<()> {
     let marker = skills_dir.join(".system-installed-version");
 
-    let installed_version = fs::read_to_string(&marker)
-        .ok()
-        .map(|s| s.trim().to_string());
+    // A marker can be left behind as an invalid file (or even as a directory
+    // after an interrupted/manual install). Treat it as an untrusted marker,
+    // but still repair it after reconciling the bundled skills. This keeps
+    // user-edited skill bodies intact while allowing missing skills to be
+    // restored and future upgrades to be versioned again.
+    let (installed_version, repair_marker) = match fs::read_to_string(&marker) {
+        Ok(contents) => match contents.trim().parse::<u32>() {
+            Ok(_) => (Some(contents.trim().to_string()), false),
+            Err(_) => (None, true),
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, false),
+        Err(_) => (None, true),
+    };
 
     let mut changed = false;
     for skill in BUNDLED_SKILLS {
         changed |= install_one(skills_dir, skill, installed_version.as_deref())?;
     }
 
-    if changed {
+    // Safe retirement: remove only an unchanged GhostyCode-owned v4-best-practices.
+    changed |= retire_unchanged_v4_best_practices(skills_dir)?;
+
+    // Feishu is optional: do not install for every user. If an older bundle
+    // installed an exact shipped copy, leave it; never delete by name alone.
+    let _ = feishu_body();
+
+    if changed || repair_marker {
         fs::create_dir_all(skills_dir)?;
-        fs::write(&marker, BUNDLED_SKILL_VERSION)?;
+        if marker.exists() && !marker.is_file() {
+            if marker.is_dir() {
+                fs::remove_dir_all(&marker)?;
+            } else {
+                fs::remove_file(&marker)?;
+            }
+        }
+        write_marker_atomically(&marker, BUNDLED_SKILL_VERSION)?;
     }
     Ok(())
 }
 
-/// Remove all system skills and the version marker.
-///
-/// Intended for tests and `deepseek setup --clean`.  Ignores missing files.
-#[allow(dead_code)]
-pub fn uninstall_system_skills(skills_dir: &Path) -> std::io::Result<()> {
-    let marker = skills_dir.join(".system-installed-version");
+/// Delete `v4-best-practices` only when the installed SKILL.md exactly matches
+/// the last shipped bundled body (byte-for-byte). Modified or user-owned copies
+/// are preserved.
+fn retire_unchanged_v4_best_practices(skills_dir: &Path) -> std::io::Result<bool> {
+    let dir = skills_dir.join("v4-best-practices");
+    let file = dir.join("SKILL.md");
+    if !file.exists() {
+        return Ok(false);
+    }
+    let existing = fs::read_to_string(&file)?;
+    if existing != v4_best_practices_body() {
+        return Ok(false);
+    }
+    fs::remove_dir_all(&dir)?;
+    Ok(true)
+}
 
-    for skill in BUNDLED_SKILLS {
-        let dir = skills_dir.join(skill.name);
-        if dir.exists() {
-            fs::remove_dir_all(&dir)?;
-        }
-    }
+fn write_marker_atomically(marker: &Path, version: &str) -> std::io::Result<()> {
+    let parent = marker
+        .parent()
+        .expect("skill version marker should have a parent directory");
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(version.as_bytes())?;
+    temporary.as_file().sync_all()?;
+    // `rename` atomically replaces a file on Unix. Windows refuses to replace
+    // an existing destination, so remove only this reserved marker first.
+    #[cfg(windows)]
     if marker.exists() {
-        fs::remove_file(&marker)?;
+        fs::remove_file(marker)?;
     }
-    Ok(())
+    fs::rename(temporary.path(), marker)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    fn skill_file(tmp: &TempDir, name: &str) -> std::path::PathBuf {
-        tmp.path().join(name).join("SKILL.md")
-    }
-
-    fn skill_dir(tmp: &TempDir, name: &str) -> std::path::PathBuf {
-        tmp.path().join(name)
-    }
-
-    fn marker_file(tmp: &TempDir) -> std::path::PathBuf {
-        tmp.path().join(".system-installed-version")
-    }
-
-    // ── fresh install ─────────────────────────────────────────────────────────
-
-    #[test]
-    fn fresh_install_creates_bundled_skills_and_marker() {
-        let tmp = TempDir::new().unwrap();
-        install_system_skills(tmp.path()).unwrap();
-
-        for skill in BUNDLED_SKILLS {
-            assert!(
-                skill_file(&tmp, skill.name).exists(),
-                "{} SKILL.md should be created",
-                skill.name
-            );
-        }
-        assert!(marker_file(&tmp).exists(), "marker should be created");
-
-        let ver = fs::read_to_string(marker_file(&tmp)).unwrap();
-        assert_eq!(ver.trim(), BUNDLED_SKILL_VERSION);
-    }
-
-    #[test]
-    fn fresh_install_skills_parse_for_discovery() {
-        let tmp = TempDir::new().unwrap();
-        install_system_skills(tmp.path()).unwrap();
-
-        let registry = crate::skills::SkillRegistry::discover(tmp.path());
-        assert!(
-            registry.warnings().is_empty(),
-            "bundled skills should parse cleanly: {:?}",
-            registry.warnings()
-        );
-
-        for skill in BUNDLED_SKILLS {
-            let parsed = registry
-                .get(skill.name)
-                .unwrap_or_else(|| panic!("{} should be discoverable", skill.name));
-            assert!(
-                !parsed.description.is_empty(),
-                "{} should include model-visible description",
-                skill.name
-            );
-        }
-    }
-
-    // ── idempotence ───────────────────────────────────────────────────────────
-
-    #[test]
-    fn calling_twice_is_idempotent() {
-        let tmp = TempDir::new().unwrap();
-        install_system_skills(tmp.path()).unwrap();
-
-        for skill in BUNDLED_SKILLS {
-            fs::write(
-                skill_file(&tmp, skill.name),
-                format!("{}-sentinel", skill.name),
-            )
-            .unwrap();
-        }
-
-        install_system_skills(tmp.path()).unwrap();
-
-        for skill in BUNDLED_SKILLS {
-            let body = fs::read_to_string(skill_file(&tmp, skill.name)).unwrap();
-            assert_eq!(
-                body,
-                format!("{}-sentinel", skill.name),
-                "second install should not overwrite {}",
-                skill.name
-            );
-        }
-    }
-
-    // ── user deleted a directory ──────────────────────────────────────────────
-
-    #[test]
-    fn user_deleted_dir_is_not_recreated() {
-        let tmp = TempDir::new().unwrap();
-        install_system_skills(tmp.path()).unwrap();
-
-        // Simulate user deliberately removing one skill directory.
-        fs::remove_dir_all(skill_dir(&tmp, "delegate")).unwrap();
-
-        // Re-launch must NOT recreate the deleted directory.
-        install_system_skills(tmp.path()).unwrap();
-
-        assert!(
-            !skill_file(&tmp, "delegate").exists(),
-            "delegate must not be recreated after user deleted it"
-        );
-        assert!(
-            skill_file(&tmp, "skill-creator").exists(),
-            "skill-creator should still be present (not deleted by user)"
-        );
-    }
-
-    #[test]
-    fn user_deleted_all_dirs_are_not_recreated() {
-        let tmp = TempDir::new().unwrap();
-        install_system_skills(tmp.path()).unwrap();
-
-        for skill in BUNDLED_SKILLS {
-            fs::remove_dir_all(skill_dir(&tmp, skill.name)).unwrap();
-        }
-
-        install_system_skills(tmp.path()).unwrap();
-
-        for skill in BUNDLED_SKILLS {
-            assert!(
-                !skill_file(&tmp, skill.name).exists(),
-                "{} must not be recreated after user deletion",
-                skill.name
-            );
-        }
-    }
-
-    // ── version bump re-installs ──────────────────────────────────────────────
-
-    #[test]
-    fn outdated_marker_triggers_reinstall_of_existing_skills() {
-        let tmp = TempDir::new().unwrap();
-
-        // Simulate a previous install at a lower version with all skills present.
-        for skill in BUNDLED_SKILLS {
-            fs::create_dir_all(skill_dir(&tmp, skill.name)).unwrap();
-            fs::write(skill_file(&tmp, skill.name), format!("old-{}", skill.name)).unwrap();
-        }
-        fs::write(marker_file(&tmp), "0").unwrap(); // older than BUNDLED_SKILL_VERSION
-
-        install_system_skills(tmp.path()).unwrap();
-
-        for skill in BUNDLED_SKILLS {
-            let body = fs::read_to_string(skill_file(&tmp, skill.name)).unwrap();
-            assert_ne!(
-                body,
-                format!("old-{}", skill.name),
-                "outdated {} should be overwritten",
-                skill.name
-            );
-            assert_eq!(body, skill.body);
-        }
-
-        let ver = fs::read_to_string(marker_file(&tmp)).unwrap();
-        assert_eq!(ver.trim(), BUNDLED_SKILL_VERSION);
-    }
-
-    // ── partial previous install ─────────────────────────────────────────────
-
-    #[test]
-    fn version_bump_adds_skills_introduced_after_marker() {
-        let tmp = TempDir::new().unwrap();
-
-        // Simulate state from v2: v1/v2 skills exist, v3 skills do not.
-        for skill in BUNDLED_SKILLS
-            .iter()
-            .filter(|skill| skill.introduced_in <= 2)
-        {
-            fs::create_dir_all(skill_dir(&tmp, skill.name)).unwrap();
-            fs::write(skill_file(&tmp, skill.name), format!("old-{}", skill.name)).unwrap();
-        }
-        fs::write(marker_file(&tmp), "2").unwrap();
-
-        install_system_skills(tmp.path()).unwrap();
-
-        for skill in BUNDLED_SKILLS {
-            assert_eq!(
-                fs::read_to_string(skill_file(&tmp, skill.name)).unwrap(),
-                skill.body,
-                "{} should be installed or refreshed",
-                skill.name
-            );
-        }
-    }
-
-    #[test]
-    fn version_bump_respects_deleted_existing_skill_while_adding_new_skill() {
-        let tmp = TempDir::new().unwrap();
-
-        // Simulate v2 where older bundled skills had been deliberately removed
-        // before v3 introduced more system skills.
-        fs::write(marker_file(&tmp), "2").unwrap();
-
-        install_system_skills(tmp.path()).unwrap();
-
-        assert!(
-            !skill_file(&tmp, "skill-creator").exists(),
-            "version bump should not recreate deleted skill-creator"
-        );
-        assert!(
-            !skill_file(&tmp, "delegate").exists(),
-            "version bump should not recreate deleted delegate"
-        );
-        for skill in BUNDLED_SKILLS
-            .iter()
-            .filter(|skill| skill.introduced_in > 2)
-        {
-            assert!(
-                skill_file(&tmp, skill.name).exists(),
-                "version bump should install newly introduced {}",
-                skill.name
-            );
-        }
-        let ver = fs::read_to_string(marker_file(&tmp)).unwrap();
-        assert_eq!(ver.trim(), BUNDLED_SKILL_VERSION);
-    }
-
-    // ── uninstall ─────────────────────────────────────────────────────────────
-
-    #[test]
-    fn uninstall_removes_bundled_skills_and_marker() {
-        let tmp = TempDir::new().unwrap();
-        install_system_skills(tmp.path()).unwrap();
-        uninstall_system_skills(tmp.path()).unwrap();
-
-        for skill in BUNDLED_SKILLS {
-            assert!(
-                !skill_file(&tmp, skill.name).exists(),
-                "{} should be removed",
-                skill.name
-            );
-        }
-        assert!(!marker_file(&tmp).exists(), "marker should be removed");
-    }
-
-    #[test]
-    fn uninstall_on_clean_dir_is_a_noop() {
-        let tmp = TempDir::new().unwrap();
-        // Must not panic or error.
-        uninstall_system_skills(tmp.path()).unwrap();
-    }
-}
+mod tests;

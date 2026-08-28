@@ -2,7 +2,7 @@
 //!
 //! This mirrors the CLI `speech` / `tts` command as a first-class API tool so
 //! the TUI model can generate narrated audio without shelling out to a nested
-//! Ghosty Code process.
+//! GhostyCode process.
 
 use std::path::{Path, PathBuf};
 
@@ -147,7 +147,7 @@ impl ToolSpec for SpeechTool {
             )
         })?;
 
-        let requested_format_raw = optional_str(&input, "format")
+        let requested_format_raw = optional_str(&input, "format")?
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .unwrap_or(DEFAULT_FORMAT);
@@ -157,12 +157,12 @@ impl ToolSpec for SpeechTool {
                 SUPPORTED_SPEECH_FORMATS.join(", ")
             ))
         })?;
-        if optional_bool(&input, "stream", false) {
+        if optional_bool(&input, "stream", false)? {
             return Err(ToolError::invalid_input(
                 "stream=true low-latency speech output is not implemented in the direct tool yet; use stream=false to generate a complete audio file",
             ));
         }
-        let output_raw = optional_str(&input, "output")
+        let output_raw = optional_str(&input, "output")?
             .map(str::trim)
             .filter(|value| !value.is_empty());
         let output_path = resolve_speech_output_path(
@@ -176,19 +176,19 @@ impl ToolSpec for SpeechTool {
             .map(str::to_string)
             .unwrap_or_else(|| output_path.display().to_string());
 
-        let raw_voice = optional_str(&input, "voice")
+        let raw_voice = optional_str(&input, "voice")?
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
-        let raw_instruction = optional_str(&input, "instruction")
+        let raw_instruction = optional_str(&input, "instruction")?
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
-        let voice_prompt = optional_str(&input, "voice_prompt")
+        let voice_prompt = optional_str(&input, "voice_prompt")?
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
-        let clone_voice = optional_str(&input, "clone_voice")
+        let clone_voice = optional_str(&input, "clone_voice")?
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
@@ -202,7 +202,7 @@ impl ToolSpec for SpeechTool {
             ));
         }
         let model = infer_speech_model(
-            optional_str(&input, "model"),
+            optional_str(&input, "model")?,
             clone_voice.is_some() || voice_is_data_uri,
             voice_prompt.is_some(),
         );
@@ -367,7 +367,7 @@ fn resolve_speech_output_path(
     }
 
     let filename = default_speech_output_name(format);
-    if let Some(output_dir) = optional_str(input, "output_dir")
+    if let Some(output_dir) = optional_str(input, "output_dir")?
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {

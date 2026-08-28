@@ -7,7 +7,6 @@
 //! tested in isolation.
 
 use crate::models::Usage;
-use crate::tui::app::App;
 
 /// Build the multi-line "Cache warmup complete: …" status message
 /// shown after a prefix-cache warmup turn finishes. Handles all four
@@ -27,37 +26,6 @@ pub(super) fn cache_warmup_result(usage: &Usage) -> String {
     format!(
         "{cache}\nNote: the first warmup is usually a miss. Later requests that reuse the same stable prefix may hit the provider cache; a hit is not guaranteed."
     )
-}
-
-/// Format prefix stability info for the opt-in TUI footer chip.
-pub(super) fn prefix_stability_chip(app: &App) -> Option<(String, ratatui::style::Color)> {
-    let pct = app.prefix_stability_pct?;
-    let changes = app.prefix_change_count;
-
-    let color = if changes == 0 {
-        // Perfect stability: green
-        ratatui::style::Color::Green
-    } else if pct >= 95 {
-        // Excellent: green
-        ratatui::style::Color::Green
-    } else if pct >= 80 {
-        // Good: yellow
-        ratatui::style::Color::Yellow
-    } else {
-        // Poor: red — cache is churning
-        ratatui::style::Color::Red
-    };
-
-    let label = if changes == 0 {
-        format!("cache prefix {pct}%")
-    } else {
-        format!(
-            "cache prefix {pct}% ({changes} change{})",
-            if changes == 1 { "" } else { "s" }
-        )
-    };
-
-    Some((label, color))
 }
 
 /// Render the response body for `/models` / `models list` — the current

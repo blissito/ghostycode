@@ -1,17 +1,22 @@
 #![allow(dead_code)]
-//! System prompts for different modes.
+//! System prompt composition.
 //!
-//! Prompts are assembled from composable layers loaded at compile time:
-//!   tool taxonomy → base.md → personality overlay → mode delta → approval policy
+//! Prompts are assembled from composable layers loaded at compile time from
+//! the single [`text`] module:
+//!   constitution + personality overlay → `message[0]` (byte-stable).
+//!   approval policy → request-time runtime metadata.
+//! Tool availability comes only from the per-turn model catalog.
 //!
-//! This keeps each concern in its own file and makes prompt tuning
-//! a single-file operation.
+//! Keeping every layer's text in one module makes prompt tuning a
+//! single-file operation.
 
-use crate::models::SystemPrompt;
-use crate::project_context::{ProjectContext, load_project_context_with_parents};
-use crate::tui::app::AppMode;
-use crate::tui::approval::ApprovalMode;
+use crate::models::{SystemBlock, SystemPrompt};
+use crate::project_context::load_project_context_with_parents;
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
+
+pub mod base_preview;
+pub(crate) mod text;
 
 #[derive(Debug, Clone)]
 pub struct PromptSessionContext<'a> {
@@ -28,20 +33,27 @@ pub struct PromptSessionContext<'a> {
     /// to the system prompt instructing the model to respond in
     /// the resolved session locale.
     pub translation_enabled: bool,
-    /// Active model identifier injected into the Constitutional
-    /// preamble ("You are {model_id}, running inside Ghosty Code").
-    /// Defaults to `"ghosty"` when the caller doesn't supply one,
-    /// preserving backward compatibility with existing call sites
-    /// that predate dynamic model injection.
+    /// Active model identifier. The bundled constitution is model-agnostic,
+    /// but embedders may still provide a prompt override containing
+    /// `{model_id}`. Defaults to `"ghosty"` when the caller doesn't supply one.
     pub model_id: &'a str,
-    /// Whether the user-visible transcript renders thinking blocks.
-    /// When false, the prompt should not spend localization pressure on
-    /// `reasoning_content` the user will never see.
-    pub show_thinking: bool,
-    /// Whether shell tools are available in the runtime tool catalog for
-    /// this session. The prompt must not advertise shell-only workflows
-    /// when runtime gates have removed those tools.
-    pub allow_shell: bool,
+    /// Route-effective context window, when known. Prompt composition no
+    /// longer prints context-window facts, but the field remains part of the
+    /// session context contract for embedders and future runtime metadata.
+    pub context_window_override: Option<u32>,
+    /// Optional output-verbosity mode. `concise` appends a short output
+    /// discipline block; unset keeps the normal conversational prompt.
+    pub verbosity: Option<&'a str>,
+    /// Restrict skill discovery to Ghosty-owned roots plus explicit
+    /// `skills_dir` configuration.
+    pub skills_scan_ghosty_only: bool,
+    /// Immutable plugin snapshot owned by this App/Engine workspace context.
+    /// Never sourced from process-global mutable state.
+    pub plugin_registry: Option<&'a crate::plugins::PluginRegistry>,
+    /// Active runtime mode. Retained in the session contract for embedders;
+    /// bundled prompt text deliberately ignores it because policy and the live
+    /// tool catalog already express the mode.
+    pub mode: crate::tui::app::AppMode,
 }
 
 impl Default for PromptSessionContext<'_> {
@@ -49,12 +61,15 @@ impl Default for PromptSessionContext<'_> {
         Self {
             user_memory_block: None,
             goal_objective: None,
-            project_context_pack_enabled: true,
+            project_context_pack_enabled: false,
             locale_tag: "en",
             translation_enabled: false,
             model_id: "ghosty",
-            show_thinking: true,
-            allow_shell: true,
+            context_window_override: None,
+            verbosity: None,
+            skills_scan_ghosty_only: false,
+            plugin_registry: None,
+            mode: crate::tui::app::AppMode::Agent,
         }
     }
 }
@@ -70,7 +85,7 @@ const LEGACY_HANDOFF_RELATIVE_PATH: &str = ".deepseek/handoff.md";
 /// Per-file size cap for `instructions = [...]` entries (#454). Mirrors
 /// the existing project-context cap in `project_context::load_context_file`
 /// so a malicious / oversized include can't blow the prompt budget on
-/// its own. Files larger than this are truncated with an `[…elided]`
+/// its own. Files larger than this are truncated with an explicit `[…truncated: N bytes omitted]`
 /// marker rather than skipped entirely so the model still sees the head.
 const INSTRUCTIONS_FILE_MAX_BYTES: usize = 100 * 1024;
 
@@ -97,6 +112,22 @@ so any English prose in your response will block their decision-making."
     )
 }
 
+fn concise_output_discipline_instruction() -> &'static str {
+    "\
+## Concise Output Discipline
+
+To minimize token usage and optimize speed:
+- Output only direct, actionable code, technical steps, or final answers.
+- Eliminate all conversational filler, fluff, introductions, transitions, or summarizing conclusions.
+- Do NOT explain what you are about to do or what you have just completed.
+- Do NOT provide conversational status updates before or after running tools.
+- Keep explanations and comments extremely brief and technical, explaining only non-obvious reasoning."
+}
+
+fn is_concise_verbosity(value: Option<&str>) -> bool {
+    value.is_some_and(|v| v.trim().eq_ignore_ascii_case("concise"))
+}
+
 fn translation_target_language_for_tag(locale_tag: &str) -> &'static str {
     let normalized = locale_tag.trim().to_ascii_lowercase();
     if normalized.starts_with("ja") {
@@ -111,60 +142,57 @@ fn translation_target_language_for_tag(locale_tag: &str) -> &'static str {
         "Simplified Chinese (简体中文)"
     } else if normalized.starts_with("pt") {
         "Brazilian Portuguese (Português do Brasil)"
+    } else if normalized.starts_with("es") {
+        "Latin American Spanish (Español latinoamericano)"
     } else if normalized.starts_with("vi") {
         "Vietnamese (Tiếng Việt)"
-    } else if normalized.starts_with("es") {
-        "Latin American Spanish (Español)"
+    } else if normalized.starts_with("ko") {
+        "Korean (한국어)"
+    } else if normalized.starts_with("ca") {
+        "Catalan (Català)"
+    } else if normalized.starts_with("de") {
+        "German (Deutsch)"
+    } else if normalized.starts_with("fr") {
+        "French (Français)"
+    } else if normalized.starts_with("id") {
+        "Indonesian (Bahasa Indonesia)"
+    } else if normalized.starts_with("hi") {
+        "Hindi (हिन्दी)"
+    } else if normalized.starts_with("ru") {
+        "Russian (Русский)"
+    } else if normalized.starts_with("uk") {
+        "Ukrainian (Українська)"
     } else {
         "English"
     }
 }
 
-fn hidden_thinking_language_instruction(locale_tag: &str) -> String {
-    let fallback_language = translation_target_language_for_tag(locale_tag);
-    format!(
-        "\
-## Hidden Thinking Language\n\
-\n\
-The user has disabled thinking display (`show_thinking = false`). If you emit \
-`reasoning_content`, keep that hidden internal thinking in English regardless \
-of the latest user-message language or `## Environment.lang`; the user will \
-not see it, so localizing hidden thinking only adds language switching.\n\
-\n\
-The final reply is still user-visible. Follow the normal `## Language` rule \
-for the final reply: mirror the latest user message, and use \
-{fallback_language} only when the user message is ambiguous. If the user \
-explicitly asks for a different thinking language, follow that explicit request \
-for the current turn."
-    )
-}
-
-/// Render a `## Environment` block listing the resolved locale tag,
-/// runtime version, host platform, login shell, and current working directory.
+/// Render a `## Environment` block listing the resolved locale tag and the
+/// actionable host facts that affect command syntax.
 ///
-/// The block is appended to the workspace-static portion of the
-/// system prompt (after mode prompt + project context, before
-/// configured instructions / skills) so the `## Language` directive
-/// in `prompts/base.md` can reference it without the model having to
-/// guess from the user's first message. `locale_tag` is resolved by
-/// the caller from `Settings` so this function stays I/O-free.
-fn render_environment_block(workspace: &Path, locale_tag: &str) -> String {
-    let deepseek_version = env!("CARGO_PKG_VERSION");
+/// The block is appended to the workspace-static portion of the system
+/// prompt (after the shared constitution + project context, before configured
+/// instructions / skills). `locale_tag` is resolved by the caller from
+/// `Settings` so this function stays I/O-free.
+///
+/// `platform` and `shell` remain because they change how commands must be
+/// written and are stable for the life of the process. The release version was
+/// removed by the turn-meta diet: it is telemetry the model cannot act on and
+/// churned the otherwise-static prefix on every release. The live workspace
+/// path is delivered per-turn via `<turn_meta>` (see `turn_metadata_block`).
+pub(crate) fn render_environment_block(_workspace: &Path, locale_tag: &str) -> String {
     let platform = std::env::consts::OS;
     let shell = crate::shell_dispatcher::global_dispatcher()
         .kind()
         .binary()
         .to_string();
-    let pwd = workspace.display();
 
     format!(
         "## Environment\n\
          \n\
          - lang: {locale_tag}\n\
-         - deepseek_version: {deepseek_version}\n\
          - platform: {platform}\n\
-         - shell: {shell}\n\
-         - pwd: {pwd}"
+         - shell: {shell}"
     )
 }
 
@@ -243,7 +271,12 @@ fn render_instructions_block(sources: &[InstructionSource]) -> Option<String> {
                 .rev()
                 .find(|&i| trimmed.is_char_boundary(i))
                 .unwrap_or(0);
-            format!("{}\n[…elided]", &trimmed[..head_end])
+            format!(
+                "{}\n[…truncated: {} of {} bytes omitted — consider splitting this instructions file]",
+                &trimmed[..head_end],
+                trimmed.len() - head_end,
+                trimmed.len()
+            )
         } else {
             trimmed.to_string()
         };
@@ -278,11 +311,84 @@ fn load_handoff_block(workspace: &Path) -> Option<String> {
     ))
 }
 
-// ── Prompt layers loaded at compile time ──────────────────────────────
+/// Load the structured user-global constitution, if present, and render it as
+/// its own model-facing block.
+pub(crate) fn load_user_constitution_block() -> Option<String> {
+    if user_constitution_disabled_by_setup_state() {
+        return None;
+    }
 
-/// Core: task execution, tool-use rules, output format, toolbox reference,
-/// "When NOT to use" guidance, sub-agent sentinel protocol.
-pub const BASE_PROMPT: &str = include_str!("prompts/base.md");
+    let path = match ghosty_config::UserConstitution::path() {
+        Ok(path) => path,
+        Err(err) => {
+            tracing::warn!(
+                target: "prompts",
+                "could not resolve user-global constitution path: {err:#}"
+            );
+            return None;
+        }
+    };
+
+    match ghosty_config::UserConstitution::load_from(&path) {
+        ghosty_config::UserConstitutionLoad::Loaded(constitution) => {
+            constitution.render_block(None)
+        }
+        ghosty_config::UserConstitutionLoad::Missing
+        | ghosty_config::UserConstitutionLoad::Empty => None,
+        ghosty_config::UserConstitutionLoad::Invalid(err) => {
+            tracing::warn!(
+                target: "prompts",
+                "skipping invalid user-global constitution {}: {err}",
+                path.display()
+            );
+            None
+        }
+        ghosty_config::UserConstitutionLoad::Unreadable(err) => {
+            tracing::warn!(
+                target: "prompts",
+                "skipping unreadable user-global constitution {}: {err}",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+fn user_constitution_disabled_by_setup_state() -> bool {
+    match ghosty_config::SetupState::load() {
+        Ok(Some(state)) => matches!(
+            state.constitution_choice,
+            ghosty_config::ConstitutionChoice::Bundled
+                | ghosty_config::ConstitutionChoice::Deferred
+                | ghosty_config::ConstitutionChoice::ExpertOverride
+        ),
+        Ok(None) => false,
+        Err(err) => {
+            tracing::warn!(
+                target: "prompts",
+                "could not resolve setup-state path while loading user constitution: {err:#}"
+            );
+            false
+        }
+    }
+}
+
+// ── Prompt layers loaded at compile time ──────────────────────────────
+//
+// Every bundled prompt layer lives in `prompts/text.rs` as a compile-time
+// constant (consolidated from the retired per-layer `prompts/*.md` files;
+// each constant is byte-identical to the file it replaced, trailing newline
+// included). The constants are re-exported here so the existing
+// `crate::prompts::NAME` paths used across the crate are unchanged. Edit
+// prompt text in `text.rs` directly; the test suite below guards content
+// and ordering invariants (constitution structure and binding gates #4032,
+// byte-stable prefix ordering, prefix privacy #4632).
+#[cfg(test)]
+use text::CALM_PERSONALITY;
+pub use text::{
+    BASE_PROMPT, COMPACT_TEMPLATE, CORE_EXECUTION_PROFILE_PROMPT, GOAL_CONTINUATION_PROMPT,
+    HEADLESS_BASE_PROMPT, LANGUAGE_PROMPT, MEMORY_GUIDANCE, OUTPUT_PROMPT,
+};
 
 // ── Embedder prompt overrides ──
 // Let an embedder replace these compile-time prompt constants at startup,
@@ -299,8 +405,32 @@ static LOCALE_CLOSER_ZH_HANS_OVERRIDE: std::sync::OnceLock<String> = std::sync::
 static LOCALE_CLOSER_JA_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static LOCALE_CLOSER_PT_BR_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static LOCALE_CLOSER_VI_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-static LOCALE_CLOSER_ES_419_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static AUTHORITY_RECAP_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static STATIC_PROMPT_COMPOSER: std::sync::OnceLock<Box<StaticPromptComposer>> =
+    std::sync::OnceLock::new();
+static PROMPT_OVERRIDE_NOTICES: LazyLock<Mutex<Vec<String>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+/// Context passed to an embedder-provided static prompt composer.
+///
+/// This hook only replaces the byte-stable base/personality prompt segment.
+/// Approval policy, Core Execution, and action-specific relay formatting stay
+/// owned by Ghosty.
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct StaticPromptCtx<'a> {
+    /// Active model identifier after caller-side routing.
+    pub model_id: &'a str,
+    /// Personality overlay requested for the base static prompt.
+    pub personality: Personality,
+    /// Default base/personality prompt layers that would be used without an
+    /// override.
+    pub default_layers: &'a str,
+}
+
+/// Embedder hook for replacing Ghosty's byte-stable base/personality prompt
+/// segment.
+pub type StaticPromptComposer = dyn Fn(&StaticPromptCtx<'_>) -> String + Send + Sync + 'static;
 
 /// Replace `BASE_PROMPT` for all subsequent prompt composition. First call
 /// wins; later calls return the rejected string. Set before spawning any
@@ -309,49 +439,133 @@ pub fn set_base_prompt_override(s: String) -> Result<(), String> {
     set_prompt_override(&BASE_PROMPT_OVERRIDE, s)
 }
 
-/// Replace the Simplified-Chinese locale preamble (`## 语言要求`).
-pub fn set_locale_preamble_zh_hans_override(s: String) -> Result<(), String> {
-    set_prompt_override(&LOCALE_PREAMBLE_ZH_HANS_OVERRIDE, s)
+// ── Config-directory prompt overrides (issue #3638) ──
+// Bridge the embedder override hooks above to a user-facing source: an
+// optional file in the Ghosty config directory. This lets users repurpose
+// the TUI for non-software use cases (e.g. long-form writing) by swapping the
+// constitutional base prompt, without editing in-tree files or shipping a
+// custom embedder build.
+//
+// Scope is deliberately narrow: only the byte-stable base prompt segment is
+// user-overridable. Approval policy, Core Execution, and
+// action-specific relay formatting stay owned by the runtime assembly (see
+// `StaticPromptCtx`), so an override cannot strip safety-relevant guidance.
+// A missing or empty file is a no-op — the bundled constant is used — so this
+// is fully backward compatible.
+//
+// Because replacing the base prompt is a trust-boundary action (per maintainer
+// review on #3638), the override file alone is NOT sufficient: the user must
+// also set an explicit opt-in flag (`GHOSTY_ALLOW_BASE_PROMPT_OVERRIDE`).
+// This keeps replacing the global Constitution a deliberate, auditable act
+// rather than something a stray file can do.
+
+/// Relative path, under the config directory, of the optional base-prompt
+/// (constitution) override file.
+pub const CONSTITUTION_OVERRIDE_FILE: &str = "prompts/constitution.md";
+
+/// Env flag that must be set (`1`/`true`/`on`/`yes`) to enable config-dir base
+/// prompt overrides. Required in addition to the override file so the global
+/// base prompt can never be replaced by file presence alone.
+pub const BASE_PROMPT_OVERRIDE_OPT_IN_ENV: &str = "GHOSTY_ALLOW_BASE_PROMPT_OVERRIDE";
+
+/// Whether the user has explicitly opted in to base-prompt overrides.
+pub(crate) fn base_prompt_override_opt_in() -> bool {
+    match std::env::var(BASE_PROMPT_OVERRIDE_OPT_IN_ENV) {
+        Ok(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "on" | "yes"
+        ),
+        Err(_) => false,
+    }
 }
 
-/// Replace the Japanese locale preamble.
-pub fn set_locale_preamble_ja_override(s: String) -> Result<(), String> {
-    set_prompt_override(&LOCALE_PREAMBLE_JA_OVERRIDE, s)
+/// Read an optional prompt-override file rooted at `config_dir`.
+///
+/// Returns the file contents when it exists and is non-empty after trimming;
+/// otherwise `None` so the caller falls back to the embedded default. Pure
+/// over `config_dir`, so it is unit-testable without touching the global
+/// override cells.
+fn read_prompt_override_file(config_dir: &Path, relative: &str) -> Option<String> {
+    let path = config_dir.join(relative);
+    let raw = std::fs::read_to_string(&path).ok()?;
+    if raw.trim().is_empty() {
+        tracing::warn!(
+            target: "prompts",
+            "ignoring empty prompt override file {}",
+            path.display(),
+        );
+        return None;
+    }
+    tracing::info!(
+        target: "prompts",
+        "loaded prompt override from {}",
+        path.display(),
+    );
+    Some(raw)
 }
 
-/// Replace the Brazilian-Portuguese locale preamble.
-pub fn set_locale_preamble_pt_br_override(s: String) -> Result<(), String> {
-    set_prompt_override(&LOCALE_PREAMBLE_PT_BR_OVERRIDE, s)
+fn push_prompt_override_notice(message: String) {
+    if let Ok(mut notices) = PROMPT_OVERRIDE_NOTICES.lock() {
+        notices.push(message);
+    }
 }
 
-/// Replace the Vietnamese locale preamble.
-pub fn set_locale_preamble_vi_override(s: String) -> Result<(), String> {
-    set_prompt_override(&LOCALE_PREAMBLE_VI_OVERRIDE, s)
+pub fn take_prompt_override_notices() -> Vec<String> {
+    PROMPT_OVERRIDE_NOTICES
+        .lock()
+        .map(|mut notices| std::mem::take(&mut *notices))
+        .unwrap_or_default()
 }
 
-/// Replace the Simplified-Chinese locale closer (`## 语言再次提醒`).
-pub fn set_locale_closer_zh_hans_override(s: String) -> Result<(), String> {
-    set_prompt_override(&LOCALE_CLOSER_ZH_HANS_OVERRIDE, s)
+/// Load user prompt overrides from `config_dir` and install them through the
+/// existing override hooks. Returns the names of the overrides that were
+/// applied (for logging/diagnostics).
+///
+/// Call once at startup, before any engine spawns, because the underlying
+/// override cells are first-call-wins. Missing files are a no-op, preserving
+/// the bundled defaults.
+pub fn load_config_dir_prompt_overrides(config_dir: &Path) -> Vec<&'static str> {
+    let mut applied = Vec::new();
+    if let Some(text) = read_prompt_override_file(config_dir, CONSTITUTION_OVERRIDE_FILE) {
+        if !base_prompt_override_opt_in() {
+            // A file exists but the user hasn't opted in. Don't silently
+            // replace the base prompt — surface the gate instead.
+            let warning = format!(
+                "Custom Constitution override found at {}/{} but {} is not set; using the bundled Constitution. Set {}=1 to opt in.",
+                config_dir.display(),
+                CONSTITUTION_OVERRIDE_FILE,
+                BASE_PROMPT_OVERRIDE_OPT_IN_ENV,
+                BASE_PROMPT_OVERRIDE_OPT_IN_ENV,
+            );
+            tracing::warn!(
+                target: "prompts",
+                "{warning}",
+            );
+            push_prompt_override_notice(warning);
+        } else if set_base_prompt_override(text).is_ok() {
+            applied.push("constitution");
+        }
+    }
+    applied
 }
 
-/// Replace the Japanese locale closer.
-pub fn set_locale_closer_ja_override(s: String) -> Result<(), String> {
-    set_prompt_override(&LOCALE_CLOSER_JA_OVERRIDE, s)
-}
-
-/// Replace the Brazilian-Portuguese locale closer.
-pub fn set_locale_closer_pt_br_override(s: String) -> Result<(), String> {
-    set_prompt_override(&LOCALE_CLOSER_PT_BR_OVERRIDE, s)
-}
-
-/// Replace the Vietnamese locale closer.
-pub fn set_locale_closer_vi_override(s: String) -> Result<(), String> {
-    set_prompt_override(&LOCALE_CLOSER_VI_OVERRIDE, s)
-}
-
-/// Replace the trailing `## Authority Recap` block.
-pub fn set_authority_recap_override(s: String) -> Result<(), String> {
-    set_prompt_override(&AUTHORITY_RECAP_OVERRIDE, s)
+/// Resolve the Ghosty config directory and load any prompt overrides found
+/// there. Convenience wrapper around [`load_config_dir_prompt_overrides`] for
+/// startup wiring; silently does nothing when the config home cannot be
+/// resolved.
+pub fn load_prompt_overrides_from_config_home() {
+    let Ok(home) = ghosty_config::ghosty_home() else {
+        return;
+    };
+    let applied = load_config_dir_prompt_overrides(&home);
+    if !applied.is_empty() {
+        tracing::info!(
+            target: "prompts",
+            "applied {} config-directory prompt override(s): {}",
+            applied.len(),
+            applied.join(", "),
+        );
+    }
 }
 
 fn set_prompt_override(cell: &std::sync::OnceLock<String>, s: String) -> Result<(), String> {
@@ -367,6 +581,76 @@ fn effective_prompt_override<'a>(
 
 fn effective_base_prompt() -> &'static str {
     effective_prompt_override(&BASE_PROMPT_OVERRIDE, BASE_PROMPT)
+}
+
+/// Where the base-prompt bytes used by this process actually came from.
+///
+/// #3928: diagnostics used to cite `crates/tui/src/prompts/text.rs`, which is
+/// a source-tree path that does not exist on an installed binary and says
+/// nothing about whether an override replaced the constant at startup. This
+/// reports the runtime truth instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BasePromptOrigin {
+    /// The `BASE_PROMPT` constant compiled into this binary.
+    Bundled,
+    /// An opted-in `prompts/constitution.md` override installed at startup.
+    ConfigOverride,
+}
+
+impl BasePromptOrigin {
+    /// Short, user-facing provenance label. Contains no filesystem paths.
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Bundled => "bundled in this ghosty-tui build (BASE_PROMPT, compiled in)",
+            Self::ConfigOverride => concat!(
+                "config-directory override installed at startup ",
+                "(prompts/constitution.md, opt-in enabled)"
+            ),
+        }
+    }
+}
+
+/// Runtime provenance of the base prompt for this process.
+pub(crate) fn base_prompt_origin() -> BasePromptOrigin {
+    if BASE_PROMPT_OVERRIDE.get().is_some() {
+        BasePromptOrigin::ConfigOverride
+    } else {
+        BasePromptOrigin::Bundled
+    }
+}
+
+/// The exact base-prompt bytes this process will compose into the system
+/// prompt — the override when one is installed, the bundled constant
+/// otherwise.
+pub(crate) fn effective_base_prompt_text() -> &'static str {
+    effective_base_prompt()
+}
+
+/// Where the effective base prompt actually comes from right now (#3928).
+///
+/// Reads the same cells composition reads, so a preview cannot claim "bundled"
+/// while an override is live. `config_dir` only supplies the path shown in the
+/// override label; it does not decide whether an override is in effect.
+#[must_use]
+pub fn effective_base_prompt_source(config_dir: Option<&Path>) -> base_preview::BasePromptSource {
+    if STATIC_PROMPT_COMPOSER.get().is_some() {
+        // An embedder composer wraps or replaces the whole static layer set, so
+        // it outranks the base-prompt cell as the honest answer.
+        return base_preview::BasePromptSource::EmbedderComposer;
+    }
+    if BASE_PROMPT_OVERRIDE.get().is_some() {
+        return base_preview::BasePromptSource::ConfigOverride {
+            path: config_dir.map_or_else(
+                || CONSTITUTION_OVERRIDE_FILE.to_string(),
+                |dir| dir.join(CONSTITUTION_OVERRIDE_FILE).display().to_string(),
+            ),
+        };
+    }
+    base_preview::BasePromptSource::Bundled
+}
+
+fn effective_static_prompt_composer() -> Option<&'static StaticPromptComposer> {
+    STATIC_PROMPT_COMPOSER.get().map(Box::as_ref)
 }
 
 fn effective_locale_preamble_zh_hans() -> &'static str {
@@ -397,22 +681,18 @@ fn effective_locale_closer_pt_br() -> &'static str {
     effective_prompt_override(&LOCALE_CLOSER_PT_BR_OVERRIDE, LOCALE_CLOSER_PT_BR)
 }
 
-fn effective_locale_closer_es_419() -> &'static str {
-    effective_prompt_override(&LOCALE_CLOSER_ES_419_OVERRIDE, LOCALE_CLOSER_ES_419)
-}
-
 fn effective_locale_closer_vi() -> &'static str {
     effective_prompt_override(&LOCALE_CLOSER_VI_OVERRIDE, LOCALE_CLOSER_VI)
 }
 
-fn effective_authority_recap() -> &'static str {
+pub(crate) fn effective_authority_recap() -> &'static str {
     effective_prompt_override(&AUTHORITY_RECAP_OVERRIDE, AUTHORITY_RECAP)
 }
 
 /// Optional locale-native reinforcement preamble prepended to the system
 /// prompt when the user's UI locale is non-English.
 ///
-/// `base.md` itself stays English (single source of truth, model is
+/// `constitution.md` itself stays English (single source of truth, model is
 /// natively multilingual, prefix-cache stable across users in the same
 /// locale). For non-English locales we prepend a short locale-native
 /// passage so the model's first exposure to the prompt overrides the
@@ -423,10 +703,12 @@ fn effective_authority_recap() -> &'static str {
 /// context, the symptom reported in #1118 and visible in the WeChat
 /// screenshot that prompted this change.
 ///
-/// The list is intentionally short (only locales the TUI ships UI
-/// strings for: `zh-Hans`, `ja`, `pt-BR`). Other locales fall through
-/// to `None` and get the English-only directive, which is the same
-/// behavior as before this change.
+/// The list is intentionally short (`zh-Hans`, `ja`, `pt-BR`, `vi`) even
+/// though the TUI ships UI packs for many more locales. Other locales fall
+/// through to `None` and get the English-only directive, which is the same
+/// behavior as before this change; the test
+/// `v092_locales_add_no_prompt_bookends_so_prompt_bytes_stay_stable` locks
+/// that set so adding a UI pack never silently changes prompt bytes.
 ///
 /// ## Design philosophy: why a bookend, not a full translation
 ///
@@ -438,7 +720,7 @@ fn effective_authority_recap() -> &'static str {
 /// folk wisdom from Western-LLM commentary doesn't apply here.
 ///
 /// The naïve translation of that argument would be: ship a fully
-/// translated `base.md` per locale. We deliberately stop short of
+/// translated `constitution.md` per locale. We deliberately stop short of
 /// that for v0.8.29. The reasons, ranked:
 ///
 ///   1. **Drift risk.** A 200+ line technical prompt has subtle
@@ -447,11 +729,11 @@ fn effective_authority_recap() -> &'static str {
 ///      of bug that arises (Chinese users see slightly different
 ///      agent behavior than English users) is hard to reproduce and
 ///      hard to triage from bug reports.
-///   2. **Cache stability.** With one English `base.md` and a
+///   2. **Cache stability.** With one English `constitution.md` and a
 ///      per-locale preamble+closer, the largest cacheable chunk
-///      (mode prompt + project context + environment) stays
+///      (shared constitution + project context + environment) stays
 ///      byte-stable within a session and across users in the same
-///      locale. A fully translated per-locale `base.md` keeps cache
+///      locale. A fully translated per-locale `constitution.md` keeps cache
 ///      per-locale but doesn't share with English users.
 ///   3. **Translation QA is expensive.** Each prompt-language pair
 ///      needs a native speaker reviewing tone, register, and rule
@@ -468,7 +750,7 @@ fn effective_authority_recap() -> &'static str {
 /// even as English code accumulates in context turn-over-turn.
 ///
 /// If at some future point the bookend proves insufficient — or if
-/// the maintenance cost of per-locale `base.md` files becomes
+/// the maintenance cost of per-locale `constitution.md` files becomes
 /// preferable to whatever's blocking it — full translation is the
 /// natural next step. The locale tags here, the test invariants,
 /// and the closer position would all carry over unchanged.
@@ -504,7 +786,6 @@ pub(crate) fn locale_reinforcement_closer(locale_tag: &str) -> Option<&'static s
         "ja" | "ja-JP" => Some(effective_locale_closer_ja()),
         "pt-BR" | "pt" => Some(effective_locale_closer_pt_br()),
         "vi" | "vi-VN" => Some(effective_locale_closer_vi()),
-        tag if tag.to_ascii_lowercase().starts_with("es") => Some(effective_locale_closer_es_419()),
         _ => None,
     }
 }
@@ -513,7 +794,7 @@ const LOCALE_PREAMBLE_ZH_HANS: &str = "## 语言要求\n\n\
 你正在 ghosty 中运行。无论任务上下文（代码、错误日志、文件名）\
 是英文，无论系统提示的其余部分是英文，你都必须用简体中文进行 \
 `reasoning_content`（内部思考）和最终回复。代码、文件路径、工具名称\
-（例如 `read_file`、`exec_shell`）、环境变量、命令行参数和 URL \
+（例如 `File`、`Bash`）、环境变量、命令行参数和 URL \
 保持原样 —— 只有自然语言散文要切换到简体中文。\n\n\
 如果用户在会话中切换到另一种语言，从下一轮开始跟随切换。\
 如果用户明确要求（例如 \"think in English\"），则覆盖此规则。";
@@ -522,8 +803,8 @@ const LOCALE_PREAMBLE_JA: &str = "## 言語要件\n\n\
 ghosty を実行しています。タスクコンテキスト（コード、エラーログ、\
 ファイル名）が英語であっても、システムプロンプトの他の部分が英語で\
 あっても、`reasoning_content`（内部思考）と最終的な返信は日本語で\
-行ってください。コード、ファイルパス、ツール名（例：`read_file`、\
-`exec_shell`）、環境変数、コマンドライン引数、URL は元のまま —— \
+行ってください。コード、ファイルパス、ツール名（例：`File`、\
+`Bash`）、環境変数、コマンドライン引数、URL は元のまま —— \
 自然言語の文章のみ日本語に切り替えます。\n\n\
 ユーザーがセッション中に別の言語に切り替えた場合は、次のターンから\
 それに従ってください。ユーザーが明示的に要求した場合（例：\
@@ -535,8 +816,8 @@ Você está rodando dentro do ghosty. Escreva tanto \
 em português do Brasil, mesmo quando o contexto da tarefa (código, \
 logs de erro, nomes de arquivos) estiver em inglês e mesmo quando o \
 resto do system prompt for em inglês. Mantenha código, caminhos de \
-arquivos, nomes de ferramentas (por exemplo `read_file`, \
-`exec_shell`), variáveis de ambiente, flags de linha de comando e \
+arquivos, nomes de ferramentas (por exemplo `File`, \
+`Bash`), variáveis de ambiente, flags de linha de comando e \
 URLs no formato original — apenas a prosa em linguagem natural muda \
 para português do Brasil.\n\n\
 Se o usuário mudar de idioma no meio da sessão, mude no próximo turno. \
@@ -572,21 +853,11 @@ idioma. A menos que o usuário peça explicitamente a troca (por exemplo, \
 \"think in English\"), continue pensando e respondendo em português do \
 Brasil.";
 
-const LOCALE_CLOSER_ES_419: &str = "## Refuerzo de Idioma\n\n\
-**Importante: tu `reasoning_content` (pensamiento interno) y la respuesta \
-final deben permanecer en español.** Sin importar cuánto código en inglés, \
-logs de error o documentación leas en esta sesión, y sin importar que el \
-contexto del proyecto esté en inglés, tu proceso de pensamiento no puede \
-derivar al inglés. Este es un requisito rígido a nivel de sesión — el \
-idioma del usuario define tu idioma. A menos que el usuario pida \
-explícitamente el cambio (por ejemplo, \"think in English\"), sigue \
-pensando y respondiendo en español.";
-
 const LOCALE_PREAMBLE_VI: &str = "## Yêu cầu ngôn ngữ\n\n\
 Bạn đang chạy trong ghosty. Cho dù ngữ cảnh tác vụ (mã nguồn, nhật ký lỗi, tên tệp) \
 là tiếng Anh, cho dù phần còn lại của system prompt là tiếng Anh, bạn đều phải sử dụng \
 tiếng Việt cho phần `reasoning_content` (suy nghĩ nội bộ) và câu trả lời cuối cùng. Các từ \
-mã nguồn, đường dẫn tệp, tên công cụ (ví dụ `read_file`, `exec_shell`), biến môi trường, \
+mã nguồn, đường dẫn tệp, tên công cụ (ví dụ `File`, `Bash`), biến môi trường, \
 tham số dòng lệnh và URL giữ nguyên dạng gốc —— chỉ các văn bản giải thích bằng ngôn ngữ \
 tự nhiên mới được chuyển sang tiếng Việt.\n\n\
 Nếu người dùng chuyển sang ngôn ngữ khác trong phiên làm việc, hãy chuyển theo từ lượt tiếp theo. \
@@ -600,354 +871,113 @@ dự án có là tiếng Anh, quá trình suy nghĩ của bạn cũng không đ�
 tích lũy trong ngữ cảnh. Trừ khi người dùng yêu cầu rõ ràng việc chuyển đổi (ví dụ \"think in English\"), \
 hãy tiếp tục suy nghĩ và trả lời bằng tiếng Việt.";
 
-/// Personality overlays — voice and tone.
-pub const CALM_PERSONALITY: &str = include_str!("prompts/personalities/calm.md");
-pub const PLAYFUL_PERSONALITY: &str = include_str!("prompts/personalities/playful.md");
-
-/// Mode deltas — permissions, workflow expectations, mode-specific rules.
-pub const AGENT_MODE: &str = include_str!("prompts/modes/agent.md");
-pub const PLAN_MODE: &str = include_str!("prompts/modes/plan.md");
-pub const YOLO_MODE: &str = include_str!("prompts/modes/yolo.md");
-
-/// Approval-policy overlays — whether tool calls are auto-approved,
-/// require confirmation, or are blocked.
-pub const AUTO_APPROVAL: &str = include_str!("prompts/approvals/auto.md");
-pub const SUGGEST_APPROVAL: &str = include_str!("prompts/approvals/suggest.md");
-pub const NEVER_APPROVAL: &str = include_str!("prompts/approvals/never.md");
-
-/// Compaction relay template — written into the system prompt so the
-/// model knows the format to use when writing `.ghosty/handoff.md`.
-pub const COMPACT_TEMPLATE: &str = include_str!("prompts/compact.md");
-
-/// Goal continuation audit template — injected by the engine when a runtime
-/// goal is active and the assistant tries to end a turn without closing it.
-pub const GOAL_CONTINUATION_PROMPT: &str = include_str!("prompts/continuation.md");
-
-/// Memory hygiene guidance — appended to the system prompt only when the
-/// session has a non-empty user-memory block. Steers the model toward
-/// writing durable memories as declarative facts ("User prefers concise
-/// responses") rather than imperatives ("Always respond concisely"),
-/// because imperatives get re-read as directives in later sessions and
-/// can override the user's current request (#725).
-pub const MEMORY_GUIDANCE: &str = include_str!("prompts/memory_guidance.md");
-
-// ── Legacy prompt constants (kept for backwards compatibility) ────────
-
-/// Legacy base prompt (agent.txt — now decomposed into base.md + overlays).
-/// Still available for callers that haven't migrated to the layered API.
-pub const AGENT_PROMPT: &str = include_str!("prompts/agent.txt");
-
 // ── Personality selection ─────────────────────────────────────────────
 
-/// Which personality overlay to apply.
+/// Which personality overlay to apply. Tone is folded into the constitutional
+/// preamble, so this is a compile-time marker carried through the static-prompt
+/// composer context rather than a separate overlay.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Personality {
-    /// Cool, spatial, reserved — the default.
+    /// Cool, spatial, reserved — the default and only shipped personality.
     Calm,
-    /// Warm, energetic, playful — alternative for fun mode.
-    Playful,
-}
-
-impl Personality {
-    /// Resolve from the `calm_mode` settings flag.
-    /// When `calm_mode` is true → Calm; when false → Playful (future).
-    /// For now, always returns Calm — Playful is wired but opt-in.
-    #[must_use]
-    pub fn from_settings(calm_mode: bool) -> Self {
-        if calm_mode {
-            Self::Calm
-        } else {
-            // Future: when playful mode is exposed in settings, return Playful here.
-            // For now, calm is the only default.
-            Self::Calm
-        }
-    }
-
-    fn prompt(self) -> &'static str {
-        match self {
-            Self::Calm => CALM_PERSONALITY,
-            Self::Playful => PLAYFUL_PERSONALITY,
-        }
-    }
 }
 
 // ── Composition ───────────────────────────────────────────────────────
 
-fn mode_prompt(mode: AppMode) -> &'static str {
-    match mode {
-        AppMode::Agent => AGENT_MODE,
-        AppMode::Yolo => YOLO_MODE,
-        AppMode::Plan => PLAN_MODE,
-    }
-}
-
-fn default_approval_mode_for_mode(mode: AppMode) -> ApprovalMode {
-    match mode {
-        AppMode::Agent => ApprovalMode::Suggest,
-        AppMode::Yolo => ApprovalMode::Auto,
-        AppMode::Plan => ApprovalMode::Never,
-    }
-}
-
-fn approval_prompt_for_mode(mode: AppMode, approval_mode: ApprovalMode) -> &'static str {
-    match mode {
-        AppMode::Yolo => AUTO_APPROVAL,
-        AppMode::Plan => NEVER_APPROVAL,
-        AppMode::Agent => match approval_mode {
-            ApprovalMode::Auto => AUTO_APPROVAL,
-            ApprovalMode::Suggest => SUGGEST_APPROVAL,
-            ApprovalMode::Never => NEVER_APPROVAL,
-        },
-    }
-}
-
-/// Compose the full system prompt in deterministic order:
-///   1. tool taxonomy  — compact hints generated from the eager core tools
-///   2. base.md        — core identity, toolbox, execution contract
-///   3. personality    — voice and tone overlay
-///   4. mode delta     — mode-specific permissions and workflow
-///   5. approval policy — tool-approval behavior
-///
-/// Each layer is separated by a blank line for readability in the
-/// rendered prompt (the model sees them as contiguous sections).
-/// Substitute the `{model_id}` template in the Constitutional preamble
-/// with the active model identifier. The base prompt is a compile-time
-/// constant; this function produces a per-session variant so the prompt
-/// says "You are deepseek-v4-pro" or "You are deepseek-v4-flash" instead
-/// of a static placeholder.
-fn apply_model_template(prompt: &str, model_id: &str) -> String {
+/// Substitute the model id for embedder-supplied prompt overrides that still
+/// template it. The bundled constitution is deliberately model-agnostic and
+/// carries no model-fact placeholders.
+fn apply_model_template(
+    prompt: &str,
+    model_id: &str,
+    _context_window_override: Option<u32>,
+) -> String {
     prompt.replace("{model_id}", model_id)
 }
 
-const TOOL_TAXONOMY_DISCOVERY: &[&str] = &["grep_files", "file_search"];
-const TOOL_TAXONOMY_GIT: &[&str] = &["git_status", "git_diff"];
-const TOOL_TAXONOMY_VERIFICATION: &[&str] = &["run_tests", "run_verifiers"];
-
-fn render_core_tool_taxonomy_block(mode: AppMode) -> String {
-    let core_tools = core_taxonomy_tools_for_mode(mode);
-    let mut sentences = Vec::new();
-
-    if let Some(discovery) = render_core_tool_group(TOOL_TAXONOMY_DISCOVERY, &core_tools) {
-        sentences.push(format!("Use {discovery} for discovery."));
-    }
-    if let Some(git) = render_core_tool_group(TOOL_TAXONOMY_GIT, &core_tools) {
-        sentences.push(format!("Use {git} for git inspection."));
-    }
-    if let Some(verification) = render_core_tool_group(TOOL_TAXONOMY_VERIFICATION, &core_tools) {
-        sentences.push(format!("Use {verification} for verification."));
-    }
-
-    debug_assert!(
-        !sentences.is_empty(),
-        "core tool taxonomy has no active tool groups"
-    );
-    format!("## Core Tool Taxonomy\n\n{}", sentences.join(" "))
-}
-
-fn core_taxonomy_tools_for_mode(mode: AppMode) -> Vec<&'static str> {
-    let core_tools = crate::core::engine::default_active_native_tool_names();
-    core_tools
-        .iter()
-        .copied()
-        .filter(|tool| mode != AppMode::Plan || !matches!(*tool, "run_tests" | "run_verifiers"))
-        .collect()
-}
-
-fn render_core_tool_group(group: &[&str], core_tools: &[&str]) -> Option<String> {
-    let rendered = group
-        .iter()
-        .copied()
-        .filter(|tool| core_tools.contains(tool))
-        .map(|tool| format!("`{tool}`"))
-        .collect::<Vec<_>>()
-        .join("/");
-    (!rendered.is_empty()).then_some(rendered)
-}
-
 /// Authority recap block — appended at the end of the system prompt,
-/// just before the user's first message. Uses recency bias constructively:
-/// this is the last thing the model reads before generating, so it
-/// reinforces the Constitutional hierarchy without occupying cache-stable
-/// prefix space.
+/// just before the user's first message. Uses recency bias constructively
+/// without restating ranks: precedence is stated only in `BASE_PROMPT`
+/// § Whose word wins (#4777).
 const AUTHORITY_RECAP: &str = "\
 ## Authority Recap
 
-The Constitution of Ghosty Code (Articles I-VII) governs your behavior.
-Tier 1 rules — truthfulness, user agency, tool-use mandate, verification
-duty — are non-negotiable. The user's next message is the highest
-directive within Constitutional bounds. Personality, memory, and handoff
-context are subordinate to the Constitution, the Statutes, and the user's
-current request. When in doubt, consult Article VII: The Hierarchy of Law.";
+Ghosty's constitution governs your behavior. Ground truth underlies the
+whole list: the user may override a fact, but no one may invent one. When
+guidance conflicts, consult ### Whose word wins — that is the only place
+precedence is stated.";
 
-pub fn compose_prompt(mode: AppMode, personality: Personality) -> String {
-    compose_prompt_with_approval(mode, personality, default_approval_mode_for_mode(mode))
-}
-
-pub fn compose_prompt_with_approval(
-    mode: AppMode,
+pub(crate) fn compose_prompt_with_approval_model_and_shell(
     personality: Personality,
-    approval_mode: ApprovalMode,
-) -> String {
-    compose_prompt_with_approval_and_model(mode, personality, approval_mode, "ghosty")
-}
-
-/// Compose with explicit model ID for dynamic identity injection.
-/// The model_id replaces `{model_id}` in the Constitutional preamble.
-pub fn compose_prompt_with_approval_and_model(
-    mode: AppMode,
-    personality: Personality,
-    approval_mode: ApprovalMode,
     model_id: &str,
 ) -> String {
-    compose_prompt_with_approval_model_and_shell(mode, personality, approval_mode, model_id, true)
+    let default_layers = compose_default_static_layers(personality, model_id);
+    apply_static_prompt_composer(
+        effective_static_prompt_composer(),
+        personality,
+        model_id,
+        &default_layers,
+    )
 }
 
-fn compose_prompt_with_approval_model_and_shell(
-    mode: AppMode,
-    personality: Personality,
-    approval_mode: ApprovalMode,
+pub(crate) fn compose_default_static_layers(_personality: Personality, model_id: &str) -> String {
+    compose_default_static_layers_with_context(model_id, None)
+}
+
+fn compose_default_static_layers_with_context(
     model_id: &str,
-    allow_shell: bool,
+    context_window_override: Option<u32>,
 ) -> String {
-    let tool_taxonomy = render_core_tool_taxonomy_block(mode);
-    let shell_tools_available = allow_shell && mode != AppMode::Plan;
-    let base_prompt = render_base_prompt_for_tool_availability(
+    // Personality is folded into the constitutional preamble/articles — no
+    // separate overlay is appended. Language and output rules are split into
+    // their own static segments so the 0.9.0 constitution stays compact.
+    let layers = format!(
+        "{}\n\n{}\n\n{}",
         effective_base_prompt().trim(),
-        model_id,
-        shell_tools_available,
+        LANGUAGE_PROMPT.trim(),
+        OUTPUT_PROMPT.trim()
     );
-    let parts: [&str; 5] = [
-        tool_taxonomy.as_str(),
-        base_prompt.as_str(),
-        personality.prompt().trim(),
-        mode_prompt(mode).trim(),
-        approval_prompt_for_mode(mode, approval_mode).trim(),
-    ];
-
-    let mut out =
-        String::with_capacity(parts.iter().map(|p| p.len()).sum::<usize>() + (parts.len() - 1) * 2);
-    for (i, part) in parts.iter().enumerate() {
-        if i > 0 {
-            out.push('\n');
-            out.push('\n');
-        }
-        out.push_str(part);
-    }
-    out
+    apply_model_template(&layers, model_id, context_window_override)
 }
 
-fn render_base_prompt_for_tool_availability(
-    prompt: &str,
+/// Host surface selecting the bundled constitution size.
+///
+/// Modes never select prompt doctrine. Their permissions and capabilities are
+/// expressed by runtime policy and the live tool catalog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PromptHost {
+    Interactive,
+    Headless,
+}
+
+fn apply_static_prompt_composer(
+    composer: Option<&StaticPromptComposer>,
+    personality: Personality,
     model_id: &str,
-    shell_tools_available: bool,
+    default_layers: &str,
 ) -> String {
-    let prompt = if shell_tools_available {
-        prompt.to_string()
-    } else {
-        remove_shell_tool_guidance(prompt)
-    };
-    apply_model_template(&prompt, model_id)
-}
-
-fn remove_shell_tool_guidance(prompt: &str) -> String {
-    let prompt = prompt
-        .lines()
-        .filter(|line| !is_shell_disabled_prompt_line(line))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let prompt = remove_markdown_section(&prompt, "### `exec_shell`");
-    let prompt = prompt.replace(
-        "; for GitHub issue/PR/release triage, prefer the native `gh ... --json` CLI through shell because it is authenticated, structured, and reproducible; `github_issue_context` / `github_pr_context` are read-only fallbacks when the CLI route is unavailable;",
-        "; for GitHub issue/PR/release triage, use `github_issue_context` / `github_pr_context` as read-only routes when shell tools are unavailable;",
-    );
-    prompt.replace(
-        "Use deterministic Python inside RLM for exact counts and structured aggregation; use `grep_files` or `exec_shell` directly when that is the clearest deterministic check.",
-        "Use deterministic Python inside RLM for exact counts and structured aggregation; use `grep_files` directly when that is the clearest deterministic check.",
-    )
-}
-
-fn is_shell_disabled_prompt_line(line: &str) -> bool {
-    line.starts_with("- Arithmetic, math, calculations → `exec_shell`")
-        || line.starts_with("- Hashes, encodings, checksums → `exec_shell`")
-        || line.starts_with("- Current time, date, timezone → `exec_shell`")
-        || line
-            .starts_with("- System state: OS, CPU, memory, disk, ports, processes → `exec_shell`")
-        || line.starts_with("- **Shell**:")
-}
-
-fn remove_markdown_section(prompt: &str, heading: &str) -> String {
-    let Some(start) = prompt.find(heading) else {
-        return prompt.to_string();
-    };
-    let after_heading = start + heading.len();
-    let end = prompt[after_heading..]
-        .find("\n### ")
-        .map(|offset| after_heading + offset)
-        .unwrap_or(prompt.len());
-
-    let before = prompt[..start].trim_end();
-    let after = prompt[end..].trim_start_matches('\n');
-    if before.is_empty() {
-        after.to_string()
-    } else if after.is_empty() {
-        before.to_string()
-    } else {
-        format!("{before}\n\n{after}")
+    match composer {
+        Some(composer) => composer(&StaticPromptCtx {
+            model_id,
+            personality,
+            default_layers,
+        }),
+        None => default_layers.to_string(),
     }
 }
 
-/// Compose for the default personality (Calm).
-fn compose_mode_prompt(mode: AppMode) -> String {
-    compose_prompt(mode, Personality::Calm)
-}
-
-fn compose_mode_prompt_with_approval(mode: AppMode, approval_mode: ApprovalMode) -> String {
-    compose_prompt_with_approval(mode, Personality::Calm, approval_mode)
-}
-
-fn compose_mode_prompt_with_approval_and_model(
-    mode: AppMode,
-    approval_mode: ApprovalMode,
-    model_id: &str,
-) -> String {
-    compose_prompt_with_approval_model_and_shell(
-        mode,
-        Personality::Calm,
-        approval_mode,
-        model_id,
-        true,
-    )
-}
+// Interactive hosts use the full base and bundled headless hosts use the
+// compact base. Tool availability is enforced by the catalog and execution
+// layer, never by mode-specific prompt text.
 
 // ── Public API ────────────────────────────────────────────────────────
 
-/// Get the system prompt for a specific mode (default Calm personality).
-pub fn system_prompt_for_mode(mode: AppMode) -> SystemPrompt {
-    SystemPrompt::Text(compose_mode_prompt(mode))
-}
-
-/// Get the system prompt for a specific mode with explicit personality.
-pub fn system_prompt_for_mode_with_personality(
-    mode: AppMode,
-    personality: Personality,
-) -> SystemPrompt {
-    SystemPrompt::Text(compose_prompt(mode, personality))
-}
-
 /// Get the system prompt for a specific mode with project context.
 pub fn system_prompt_for_mode_with_context(
-    mode: AppMode,
     workspace: &Path,
     working_set_summary: Option<&str>,
 ) -> SystemPrompt {
-    system_prompt_for_mode_with_context_and_skills(
-        mode,
-        workspace,
-        working_set_summary,
-        None,
-        None,
-        None,
-    )
+    system_prompt_for_mode_with_context_and_skills(workspace, working_set_summary, None, None, None)
 }
 
 /// Get the system prompt for a specific mode with project and skills context.
@@ -956,10 +986,10 @@ pub fn system_prompt_for_mode_with_context(
 /// most-static to most-volatile so DeepSeek's KV prefix cache hits the
 /// longest possible byte prefix turn-over-turn:
 ///
-///   1. mode prompt (compile-time constant)
+///   1. shared constitution (compile-time constant)
 ///   2. project context / fallback (workspace-static)
 ///   3. skills block (skills-dir-static)
-///   4. `## Context Management` (compile-time constant, Agent/Yolo only)
+///   4. `## Core Execution` (compile-time constant)
 ///   5. compaction relay template (compile-time constant)
 ///   6. relay block — file-backed; rewritten by `/compact` and on exit
 ///
@@ -968,7 +998,6 @@ pub fn system_prompt_for_mode_with_context(
 /// themselves are turn-volatile. Working-set metadata is now injected into the
 /// latest user message as per-turn metadata instead of this system prompt.
 pub fn system_prompt_for_mode_with_context_and_skills(
-    mode: AppMode,
     workspace: &Path,
     working_set_summary: Option<&str>,
     skills_dir: Option<&Path>,
@@ -976,7 +1005,6 @@ pub fn system_prompt_for_mode_with_context_and_skills(
     user_memory_block: Option<&str>,
 ) -> SystemPrompt {
     system_prompt_for_mode_with_context_skills_and_session(
-        mode,
         workspace,
         working_set_summary,
         skills_dir,
@@ -984,18 +1012,20 @@ pub fn system_prompt_for_mode_with_context_and_skills(
         PromptSessionContext {
             user_memory_block,
             goal_objective: None,
-            project_context_pack_enabled: true,
+            project_context_pack_enabled: false,
             locale_tag: "en",
             translation_enabled: false,
             model_id: "ghosty",
-            show_thinking: true,
-            allow_shell: true,
+            context_window_override: None,
+            verbosity: None,
+            skills_scan_ghosty_only: false,
+            plugin_registry: None,
+            mode: crate::tui::app::AppMode::Agent,
         },
     )
 }
 
 pub fn system_prompt_for_mode_with_context_skills_and_session(
-    mode: AppMode,
     workspace: &Path,
     _working_set_summary: Option<&str>,
     skills_dir: Option<&Path>,
@@ -1003,32 +1033,63 @@ pub fn system_prompt_for_mode_with_context_skills_and_session(
     session_context: PromptSessionContext<'_>,
 ) -> SystemPrompt {
     system_prompt_for_mode_with_context_skills_session_and_approval(
-        mode,
         workspace,
         _working_set_summary,
         skills_dir,
         instructions,
         session_context,
-        default_approval_mode_for_mode(mode),
     )
 }
 
 pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
-    mode: AppMode,
     workspace: &Path,
     _working_set_summary: Option<&str>,
     skills_dir: Option<&Path>,
     instructions: Option<&[InstructionSource]>,
     session_context: PromptSessionContext<'_>,
-    approval_mode: ApprovalMode,
 ) -> SystemPrompt {
-    let mode_prompt = compose_prompt_with_approval_model_and_shell(
-        mode,
-        Personality::Calm,
-        approval_mode,
-        session_context.model_id,
-        session_context.allow_shell,
-    );
+    system_prompt_for_mode_with_context_skills_session_and_approval_for_host(
+        workspace,
+        _working_set_summary,
+        skills_dir,
+        instructions,
+        session_context,
+        PromptHost::Interactive,
+    )
+}
+
+pub(crate) fn system_prompt_for_mode_with_context_skills_session_and_approval_for_host(
+    workspace: &Path,
+    _working_set_summary: Option<&str>,
+    skills_dir: Option<&Path>,
+    instructions: Option<&[InstructionSource]>,
+    session_context: PromptSessionContext<'_>,
+    prompt_host: PromptHost,
+) -> SystemPrompt {
+    // The bundled headless coding host gets one compact constitution. Explicit
+    // user/embedder overrides retain the established full composition because
+    // those bytes are an intentional customization, not bundled ceremony.
+    let bundled_headless = prompt_host == PromptHost::Headless
+        && BASE_PROMPT_OVERRIDE.get().is_none()
+        && effective_static_prompt_composer().is_none();
+    let composed = if bundled_headless {
+        apply_model_template(
+            HEADLESS_BASE_PROMPT.trim(),
+            session_context.model_id,
+            session_context.context_window_override,
+        )
+    } else {
+        let default_layers = compose_default_static_layers_with_context(
+            session_context.model_id,
+            session_context.context_window_override,
+        );
+        apply_static_prompt_composer(
+            effective_static_prompt_composer(),
+            Personality::Calm,
+            session_context.model_id,
+            &default_layers,
+        )
+    };
 
     // Load project context from workspace
     let project_context = load_project_context_with_parents(workspace);
@@ -1041,27 +1102,28 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
     // in English even though `lang: zh-Hans` is set" failure mode that
     // PR #1398 partially addressed. English (and unknown) locales get
     // `None` and keep the previous behavior unchanged.
-    let preamble = if session_context.show_thinking {
-        locale_reinforcement_preamble(session_context.locale_tag)
-    } else {
-        None
-    };
+    let preamble = locale_reinforcement_preamble(session_context.locale_tag);
 
-    // 1–2. Mode prompt + project context.
-    // `load_project_context_with_parents` auto-generates .ghosty/instructions.md
-    // (or .deepseek/instructions.md as fallback) when no context file exists,
-    // so the fallback should always be available.
+    // 1–2. Shared constitution + project context. Mode is deliberately absent:
+    // permissions and capabilities come from runtime policy and the tool catalog.
+    // `load_project_context_with_parents` generates an in-memory bounded
+    // overview when no context file exists, so the fallback should usually be
+    // available without writing project-local files.
     let mut full_prompt = if let Some(project_block) = project_context.as_system_block() {
-        format!("{mode_prompt}\n\n{project_block}")
+        format!("{}\n\n{project_block}", composed.trim())
     } else {
         // Extremely unlikely: context generation failed (e.g. filesystem error).
-        // Use mode prompt alone rather than panic.
+        // Use the shared constitution alone rather than panic.
         tracing::warn!("No project context available and auto-generation failed");
-        mode_prompt
+        composed
     };
 
     if let Some(preamble) = preamble {
         full_prompt = format!("{preamble}\n\n{full_prompt}");
+    }
+
+    if let Some(user_constitution_block) = load_user_constitution_block() {
+        full_prompt = format!("{full_prompt}\n\n{user_constitution_block}");
     }
 
     if session_context.project_context_pack_enabled
@@ -1082,150 +1144,207 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
         );
     }
 
-    // 3. Skills block. #432: walks every candidate workspace
-    // skills directory (`.agents/skills`, `skills`,
-    // `.opencode/skills`, `.claude/skills`, `.cursor/skills`) plus global
-    // `~/.agents/skills` / `~/.deepseek/skills` so skills installed for any
-    // AI-tool convention show up in the catalogue. The legacy
-    // single-`skills_dir` path is
-    // honoured as a fallback for callers that don't supply a
-    // workspace-aware view; it falls through to the same merged
-    // registry when available.
-    let skills_block = crate::skills::render_available_skills_context_for_workspace(workspace)
-        .or_else(|| skills_dir.and_then(crate::skills::render_available_skills_context));
+    if is_concise_verbosity(session_context.verbosity) {
+        full_prompt = format!(
+            "{full_prompt}\n\n{}",
+            concise_output_discipline_instruction()
+        );
+    }
+
+    // 3. Skills block. #432: default discovery walks every compatible
+    // workspace/global skill directory so skills installed for other AI-tool
+    // conventions show up in the catalogue. Users can opt into a Ghosty-only
+    // scan with `[skills] scan_ghosty_only = true`. When an explicit
+    // `skills_dir` is configured, union it with the workspace view instead of
+    // treating it as a fallback; the workspace view often returns Some and
+    // would otherwise shadow the configured directory entirely.
+    let skill_discovery_mode = crate::skills::SkillDiscoveryMode::from_ghosty_only(
+        session_context.skills_scan_ghosty_only,
+    );
+    let skills_block = match skills_dir {
+        Some(dir) => {
+            crate::skills::render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
+                workspace,
+                dir,
+                skill_discovery_mode,
+                session_context.locale_tag,
+                session_context.plugin_registry,
+            )
+        }
+        None => crate::skills::render_available_skills_context_for_workspace_with_mode_and_plugins(
+            workspace,
+            skill_discovery_mode,
+            session_context.locale_tag,
+            session_context.plugin_registry,
+        ),
+    };
     if let Some(block) = skills_block {
         full_prompt = format!("{full_prompt}\n\n{block}");
     }
 
-    // 4. Context Management (Agent / Yolo only).
-    if matches!(mode, AppMode::Agent | AppMode::Yolo) {
-        full_prompt.push_str(
-            "\n\n## Context Management\n\n\
-             When the conversation gets long (you'll see a context usage indicator), you can:\n\
-             1. Use `/compact` to summarize earlier context and free up space\n\
-             2. The system will preserve important information (files you're working on, recent messages, tool results)\n\
-             3. After compaction, you'll see a summary of what was discussed and can continue seamlessly\n\n\
-             If you notice context is getting long (>60% during sustained work), proactively suggest using `/compact` or Ctrl+L to the user. If auto_compact is enabled, the engine can compact before the next send once the configured threshold is crossed.\n\n\
-             ### Prompt-cache awareness\n\n\
-             DeepSeek caches the longest *byte-stable prefix* of every request and charges roughly 100× less for cache-hit tokens than miss tokens. The system prompt above is layered most-static-first specifically so the prefix stays stable turn-over-turn. To keep cache hits high:\n\
-             - **Working set location:** the current repo working set is stored on new user messages inside a `<turn_meta>` block. Treat it as high-priority turn metadata, not as a stable system-prompt section.\n\
-             - **Append, don't reorder.** New context goes at the end (latest user / tool messages). Reshuffling earlier messages or rewriting their content invalidates the cache for everything after the change.\n\
-             - **Don't paraphrase quoted content.** If you've already read a file, refer to it by path or line range instead of re-quoting it with different formatting.\n\
-             - **Use `/compact` as a hard reset, not a tweak.** Compaction is meant for when the cache is already losing — it intentionally rewrites the prefix to a shorter summary. Don't trigger it for small wins.\n\
-             - **Read once, refer back.** Re-reading the same file produces a different tool-result envelope than the prior read; it's cheaper to scroll back than to re-fetch.\n\
-             - **Footer chip:** the `cache hit %` chip turns red below 40% and yellow below 80%. If it's been red for several turns, that's a signal to consolidate."
-        );
+    // 4. Lean, runtime-only coding discipline. Context pressure, prompt-cache
+    // accounting, footer presentation, and automatic compaction are host
+    // responsibilities; teaching their UI to the model dilutes the task.
+    if !bundled_headless {
+        full_prompt.push_str("\n\n");
+        full_prompt.push_str(CORE_EXECUTION_PROFILE_PROMPT.trim());
     }
 
-    // 5. Compaction relay template — so the model knows the format to use
-    //    when writing `.ghosty/handoff.md` on exit / `/compact`.
-    full_prompt.push_str("\n\n");
-    full_prompt.push_str(COMPACT_TEMPLATE);
+    // The compaction/relay format is action-specific context. Automatic
+    // compaction owns its structured successor brief, while `/relay` appends
+    // `COMPACT_TEMPLATE` to that command's user message. Keeping the template
+    // out of every fresh session saves a stable-prefix block without removing
+    // the capability.
 
-    // ── Volatile-content boundary ─────────────────────────────────────────
-    // Everything below drifts mid-session and busts the prefix cache for
-    // bytes that follow. All static layers (mode, project context, env,
-    // skills, context management, compact template) live above this line
-    // so DeepSeek's KV prefix cache can hit on the entire system prompt
-    // regardless of per-session edits to memory, goals, or instructions.
+    // ── Volatile-content boundary → WorldState fragments ──────────────────
+    // Constitution (`full_prompt`) stays the cache-stable Blocks[0] prefix.
+    // Everything below drifts mid-session and is assembled as marked
+    // WorldState fragments so an env/memory/goal/handoff change can
+    // `render_diff` without rebuilding unrelated material.
 
-    // 6. Environment block — platform, shell, pwd, locale.
-    //
-    // Placed below the volatile-content boundary. The original comment claimed
-    // "workspace path is fixed for the run" → static-cacheable, which is true
-    // for the terminal use case (one process owns one workspace for its
-    // lifetime). It is **not** true for embedders that swap workspaces between
-    // sessions (the Op::SyncSession path, multi-engine pools, IDE
-    // integrations binding the engine to a per-tab workspace, etc.):
-    // `pwd` drifts session-to-session and drags the entire static prefix
-    // out of cache reuse. Moving the block below the volatile boundary keeps
-    // mode / project / skills / context-mgmt / compact-template byte-stable
-    // across sessions while preserving the pwd info the model needs for
-    // `exec_shell` and structured search tools.
-    full_prompt = format!(
-        "{full_prompt}\n\n{}",
-        render_environment_block(workspace, session_context.locale_tag),
-    );
-
-    // 6a. Configured `instructions = [...]` files (#454). Loaded
-    // and concatenated in declared order. Placed below the volatile boundary
-    // because these files are workspace-scoped and may differ between
-    // sessions; any edit to them would otherwise bust the prefix cache for
-    // all subsequent static layers.
-    if let Some(sources) = instructions
-        && let Some(block) = render_instructions_block(sources)
-    {
-        full_prompt = format!("{full_prompt}\n\n{block}");
-    }
-
-    // 6b. User memory block (#489). Placed below the volatile boundary
-    // because memory entries are editable mid-session via `/memory` or
-    // `# foo` quick-add. When they change, they only invalidate the
-    // trailing relay block — the static prefix above stays cached.
+    // Workspace fragment: environment + mid-session memory/goal facts.
+    let mut workspace_parts = vec![render_environment_block(
+        workspace,
+        session_context.locale_tag,
+    )];
     if let Some(memory_block) = session_context.user_memory_block
         && !memory_block.trim().is_empty()
     {
-        full_prompt = format!("{full_prompt}\n\n{memory_block}\n\n{MEMORY_GUIDANCE}");
+        workspace_parts.push(format!("{memory_block}\n\n{MEMORY_GUIDANCE}"));
     }
-
-    // 6c. Current session goal. Also volatile: users set / change goals
-    // during a session via `/goal`. Placed below the boundary for the
-    // same reason as memory.
+    if prompt_host == PromptHost::Interactive
+        && let Some(harness_block) = crate::continual_harness::prompt_block(workspace)
+    {
+        workspace_parts.push(harness_block);
+    }
     if let Some(goal_objective) = session_context.goal_objective
         && !goal_objective.trim().is_empty()
     {
-        full_prompt = format!(
-            "{full_prompt}\n\n## Current Hunt\n\n<session_goal>\n{}\n</session_goal>",
+        workspace_parts.push(format!(
+            "## Current Goal\n\n<session_goal>\n{}\n</session_goal>",
             goal_objective.trim()
-        );
+        ));
+    }
+    let workspace_body = workspace_parts.join("\n\n");
+
+    // Permissions fragment: configured `instructions = [...]` files (#454).
+    let permissions_body = instructions.and_then(render_instructions_block);
+
+    // Route fragment: verbosity / translation posture (the model id was
+    // removed by the turn-meta diet — it is telemetry the model cannot act on).
+    let route_body = render_route_fragment(&session_context);
+
+    // Token-budget / continuity fragment: prior-session handoff relay.
+    let token_budget_body = load_handoff_block(workspace);
+
+    let mut world_state = world_state_from_session_facts(
+        Some(workspace_body.as_str()),
+        permissions_body.as_deref(),
+        Some(route_body.as_str()),
+        None, // AgentTopology is updated by runtime callers when available.
+        None, // Skills stay in the constitution prefix (skills-dir-static).
+        token_budget_body.as_deref(),
+    );
+    // Project-instruction import (#3978, #4079) as a typed fragment with
+    // hard caps — unified with `ghosty_core::fragments`. This covers
+    // `.cursorrules`, `.clinerules`, `.windsurf/rules/*`, `.gemini/*`,
+    // `.github/copilot-instructions.md` etc., beyond the canonical
+    // `AGENTS.md` already in the constitution prefix.
+    if let Some(fragment) = ghosty_core::fragments::load_selected_project_instruction_fragment(
+        workspace,
+        &crate::project_context::active_fragment_candidates(),
+    ) {
+        // `BoundedFragment` already enforces `MAX_FRAGMENT_BYTES` (10K-token
+        // ceiling) and per-fragment caps; WorldState's `with_*` also clamps.
+        world_state = world_state.with_project_instructions(fragment.content);
+        debug_assert!(world_state.validate_caps().is_ok());
     }
 
-    // 7. Previous-session relay (file-backed, rewritten by `/compact`).
-    if let Some(handoff_block) = load_handoff_block(workspace) {
-        full_prompt = format!("{full_prompt}\n\n{handoff_block}");
+    let mut blocks = crate::model_context::WorldStateSnapshot {
+        constitution: full_prompt,
+        world_state,
+    }
+    .to_system_blocks();
+
+    // Trailers keep recency bias after WorldState: authority, then locale.
+    if !bundled_headless {
+        blocks.push(SystemBlock {
+            block_type: "text".to_string(),
+            text: effective_authority_recap().trim().to_string(),
+            cache_control: None,
+        });
+    }
+    if let Some(closer) = locale_reinforcement_closer(session_context.locale_tag) {
+        blocks.push(SystemBlock {
+            block_type: "text".to_string(),
+            text: closer.trim().to_string(),
+            cache_control: None,
+        });
     }
 
-    // 7a. Authority recap — the final tier reminder before user messages.
-    // Uses recency bias constructively: this is the last content the model
-    // sees before the user's turn, reinforcing the Constitutional hierarchy.
-    let authority_recap = effective_authority_recap();
-    full_prompt = format!("{full_prompt}\n\n{authority_recap}");
-
-    // 8. Locale-native closing reinforcement (#1118 follow-up #2). The
-    // opening preamble alone wasn't enough — community feedback (the
-    // WeChat thread about XML-tagged bilingual bookends) flagged that as
-    // English context accumulates turn-over-turn, the model's recency
-    // bias pulls thinking back to English. Putting the same directive at
-    // the END of the system prompt — right before the user's next
-    // message — uses recency bias *in our favor*: the model sees the
-    // native-script "keep thinking in Chinese / Japanese / Portuguese"
-    // rule immediately before it generates `reasoning_content` for the
-    // turn. English (and unknown) locales return `None` and the prompt
-    // stays byte-identical to the pre-bookend behavior.
-    if let Some(closer) = session_context
-        .show_thinking
-        .then(|| locale_reinforcement_closer(session_context.locale_tag))
-        .flatten()
-    {
-        full_prompt = format!("{full_prompt}\n\n{closer}");
-    } else if !session_context.show_thinking {
-        full_prompt = format!(
-            "{full_prompt}\n\n{}",
-            hidden_thinking_language_instruction(session_context.locale_tag)
-        );
-    }
-
-    SystemPrompt::Text(full_prompt)
+    SystemPrompt::Blocks(blocks)
 }
 
-/// Build a system prompt with explicit project context
-pub fn build_system_prompt(base: &str, project_context: Option<&ProjectContext>) -> SystemPrompt {
-    let full_prompt =
-        match project_context.and_then(super::project_context::ProjectContext::as_system_block) {
-            Some(project_block) => format!("{}\n\n{}", base.trim(), project_block),
-            None => base.trim().to_string(),
-        };
-    SystemPrompt::Text(full_prompt)
+/// Flatten a system prompt to joined text (tests + debug inspectors).
+#[must_use]
+pub fn system_prompt_flat_text(prompt: &SystemPrompt) -> String {
+    match prompt {
+        SystemPrompt::Text(text) => text.clone(),
+        SystemPrompt::Blocks(blocks) => blocks
+            .iter()
+            .map(|block| block.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n"),
+    }
+}
+
+fn render_route_fragment(session_context: &PromptSessionContext<'_>) -> String {
+    let verbosity = session_context
+        .verbosity
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("default");
+    format!(
+        "verbosity: {verbosity}\ntranslation: {}",
+        if session_context.translation_enabled {
+            "on"
+        } else {
+            "off"
+        },
+    )
+}
+
+/// Build a WorldState from the common volatile session facts.
+///
+/// Does not load constitution — callers keep that as the stable base.
+pub fn world_state_from_session_facts(
+    workspace_body: Option<&str>,
+    permissions_body: Option<&str>,
+    route_body: Option<&str>,
+    agent_topology_body: Option<&str>,
+    skills_tools_body: Option<&str>,
+    token_budget_body: Option<&str>,
+) -> crate::model_context::WorldState {
+    let mut state = crate::model_context::WorldState::new();
+    if let Some(body) = workspace_body.filter(|s| !s.trim().is_empty()) {
+        state = state.with_workspace(body);
+    }
+    if let Some(body) = permissions_body.filter(|s| !s.trim().is_empty()) {
+        state = state.with_permissions(body);
+    }
+    if let Some(body) = route_body.filter(|s| !s.trim().is_empty()) {
+        state = state.with_route(body);
+    }
+    if let Some(body) = agent_topology_body.filter(|s| !s.trim().is_empty()) {
+        state = state.with_agent_topology(body);
+    }
+    if let Some(body) = skills_tools_body.filter(|s| !s.trim().is_empty()) {
+        state = state.with_skills_tools(body);
+    }
+    if let Some(body) = token_budget_body.filter(|s| !s.trim().is_empty()) {
+        state = state.with_token_budget(body);
+    }
+    state
 }
 
 #[cfg(test)]
@@ -1233,11 +1352,99 @@ mod tests {
     // Don't assert on prose. If you wouldn't fail a code review for
     // changing the wording, don't fail a test for it.
     use super::*;
+    use crate::tools::apply_patch::ApplyPatchTool;
+    use crate::tools::file::{EditFileTool, WriteFileTool};
+    use crate::tools::handle::HandleReadTool;
+    use crate::tools::rlm::RlmTool;
+    use crate::tools::shell::BashTool;
+    use crate::tools::spec::ToolSpec;
     use tempfile::tempdir;
 
     /// Discriminator unique to the injected relay block (not present in the
     /// agent prompt's own discussion of the convention).
     const HANDOFF_BLOCK_MARKER: &str = "left a relay artifact at `.ghosty/handoff.md`";
+
+    // Config-directory prompt override resolution (#3638). These exercise the
+    // pure file resolver only; the global install path is intentionally not
+    // unit-tested here because `set_base_prompt_override` writes a process-wide
+    // `OnceLock` that would leak into sibling tests (same reason
+    // `prompt_override_storage_reports_duplicate_sets` uses a local cell).
+
+    #[test]
+    fn config_override_reads_present_nonempty_file() {
+        let tmp = tempdir().expect("tempdir");
+        let prompts_dir = tmp.path().join("prompts");
+        std::fs::create_dir_all(&prompts_dir).expect("mkdir");
+        std::fs::write(
+            prompts_dir.join("constitution.md"),
+            "You are a long-form writing companion.\n",
+        )
+        .expect("write override");
+
+        let got = read_prompt_override_file(tmp.path(), CONSTITUTION_OVERRIDE_FILE);
+        assert_eq!(
+            got.as_deref(),
+            Some("You are a long-form writing companion.\n")
+        );
+    }
+
+    #[test]
+    fn config_override_absent_file_falls_back() {
+        let tmp = tempdir().expect("tempdir");
+        // No prompts/ directory at all → None so the embedded constant is used.
+        assert!(read_prompt_override_file(tmp.path(), CONSTITUTION_OVERRIDE_FILE).is_none());
+    }
+
+    #[test]
+    fn config_override_requires_explicit_opt_in() {
+        // A present, non-empty override file must NOT replace the base prompt
+        // unless the explicit opt-in flag is set. This test drains the shared
+        // process-global PROMPT_OVERRIDE_NOTICES queue, so it must serialize
+        // against the sibling test that also touches it
+        // (`tui::ui::tests::prompt_override_notice_surfaces_in_transcript_and_toast`);
+        // both take `lock_test_env()` for mutual exclusion under the multi-
+        // threaded test binary.
+        let _env_guard = crate::test_support::lock_test_env();
+        let tmp = tempdir().expect("tempdir");
+        let prompts_dir = tmp.path().join("prompts");
+        std::fs::create_dir_all(&prompts_dir).expect("mkdir");
+        std::fs::write(
+            prompts_dir.join("constitution.md"),
+            "You are a long-form writing companion.\n",
+        )
+        .expect("write override");
+
+        // The resolver still finds the file...
+        assert!(read_prompt_override_file(tmp.path(), CONSTITUTION_OVERRIDE_FILE).is_some());
+        // ...but without the opt-in flag, nothing is applied.
+        if std::env::var(BASE_PROMPT_OVERRIDE_OPT_IN_ENV).is_err() {
+            let _ = take_prompt_override_notices();
+            assert!(
+                load_config_dir_prompt_overrides(tmp.path()).is_empty(),
+                "override must require the explicit opt-in flag, not just a file"
+            );
+            let notices = take_prompt_override_notices();
+            assert!(
+                notices
+                    .iter()
+                    .any(|notice| notice.contains(BASE_PROMPT_OVERRIDE_OPT_IN_ENV)
+                        && notice.contains("using the bundled Constitution")),
+                "gated override should record a visible notice, got {notices:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn config_override_empty_file_is_ignored() {
+        let tmp = tempdir().expect("tempdir");
+        let prompts_dir = tmp.path().join("prompts");
+        std::fs::create_dir_all(&prompts_dir).expect("mkdir");
+        std::fs::write(prompts_dir.join("constitution.md"), "   \n\t\n").expect("write blank");
+
+        // Whitespace-only overrides are treated as absent so a stray empty file
+        // can't silently blank the system prompt.
+        assert!(read_prompt_override_file(tmp.path(), CONSTITUTION_OVERRIDE_FILE).is_none());
+    }
 
     #[test]
     fn prompt_override_storage_reports_duplicate_sets() {
@@ -1253,6 +1460,48 @@ mod tests {
         assert_eq!(effective_prompt_override(&cell, "fallback"), "first");
     }
 
+    #[test]
+    fn static_prompt_composer_unset_keeps_default_layers_byte_identical() {
+        let default_layers = compose_default_static_layers(Personality::Calm, "deepseek-v4-flash");
+        let composed = apply_static_prompt_composer(
+            None,
+            Personality::Calm,
+            "deepseek-v4-flash",
+            &default_layers,
+        );
+
+        assert_byte_identical("unset static prompt composer", &default_layers, &composed);
+    }
+
+    #[test]
+    fn static_prompt_composer_receives_context_and_replaces_layers() {
+        let default_layers = compose_default_static_layers(Personality::Calm, "deepseek-v4-pro");
+        let composer: Box<StaticPromptComposer> = Box::new(|ctx| {
+            assert_eq!(ctx.model_id, "deepseek-v4-pro");
+            assert_eq!(ctx.personality, Personality::Calm);
+            // The 0.9.0 core is model-agnostic ("You are Ghosty") and
+            // folds tone in — no per-model id line, no separate personality
+            // section in default_layers.
+            assert!(ctx.default_layers.contains("You are Ghosty"));
+            assert!(
+                ctx.default_layers
+                    .contains("Take the work seriously. Don't take")
+            );
+            assert!(!ctx.default_layers.contains("## Core Tool Taxonomy"));
+            assert!(!ctx.default_layers.contains("Approval Policy"));
+            "embedder static prompt".to_string()
+        });
+
+        let composed = apply_static_prompt_composer(
+            Some(composer.as_ref()),
+            Personality::Calm,
+            "deepseek-v4-pro",
+            &default_layers,
+        );
+
+        assert_eq!(composed, "embedder static prompt");
+    }
+
     fn contains_cjk(text: &str) -> bool {
         text.chars().any(|ch| {
             matches!(
@@ -1266,40 +1515,101 @@ mod tests {
     }
 
     #[test]
-    fn base_prompt_carries_execution_discipline_block() {
-        // The XML-tagged execution-discipline block is the contract —
-        // verify each section name is present so reviewers can't quietly
-        // strip the rules that herd V4 toward acting instead of narrating.
-        for tag in [
-            "<tool_persistence>",
-            "<mandatory_tool_use>",
-            "<act_dont_ask>",
-            "<verification>",
-            "<missing_context>",
+    fn bundled_headless_contract_is_small_and_direct() {
+        for phrase in [
+            "You already have an A",
+            "begin from possibility",
+            "bring your whole attention",
+            "a question, idea, or task",
+            "Invent no urgency or deadline",
+            "tools as senses",
+            "active authority is your limit",
+            "Failure is information",
+            "Check\nbefore concluding",
+            "unverified work as complete",
         ] {
             assert!(
-                BASE_PROMPT.contains(tag),
-                "BASE_PROMPT missing required tag {tag}"
+                HEADLESS_BASE_PROMPT.contains(phrase),
+                "bundled headless contract missing {phrase:?}"
+            );
+        }
+        for ceremony in [
+            "todo_write",
+            "checklist",
+            "`repl`",
+            "workflow",
+            "Fleet",
+            "sub-agent",
+            "delegation",
+            "goals",
+            "harness",
+            "Mode:",
+        ] {
+            assert!(
+                !HEADLESS_BASE_PROMPT.contains(ceremony),
+                "bundled headless contract must leave optional capabilities to the tool catalog: {ceremony:?}"
             );
         }
         assert!(
-            BASE_PROMPT.contains("Tool-use enforcement"),
-            "BASE_PROMPT missing the tool-use enforcement clause"
+            HEADLESS_BASE_PROMPT.split_whitespace().count() <= 75,
+            "bundled headless contract must stay compact"
         );
     }
 
     #[test]
-    fn base_prompt_carries_constitutional_preamble() {
-        // Pin the load-bearing Constitutional anchors. The exact prose
-        // can evolve, but Ghosty Code must keep the Ghosty preamble,
-        // the coordination principle, and the hierarchy of law.
+    fn every_mode_shares_one_prompt_per_host() {
+        let _env_lock = crate::test_support::lock_test_env();
+        let tmp = tempdir().expect("tempdir");
+        std::fs::write(
+            tmp.path().join("AGENTS.md"),
+            "# Project instruction\nPreserve the blue-ocean marker.\n",
+        )
+        .expect("write project instruction");
+        for host in [PromptHost::Interactive, PromptHost::Headless] {
+            let prompts = [
+                crate::tui::app::AppMode::Plan,
+                crate::tui::app::AppMode::Agent,
+                crate::tui::app::AppMode::Operate,
+            ]
+            .map(|mode| {
+                system_prompt_flat_text(
+                    &system_prompt_for_mode_with_context_skills_session_and_approval_for_host(
+                        tmp.path(),
+                        None,
+                        None,
+                        None,
+                        PromptSessionContext {
+                            mode,
+                            ..PromptSessionContext::default()
+                        },
+                        host,
+                    ),
+                )
+            });
+            assert_eq!(prompts[0], prompts[1]);
+            assert_eq!(prompts[1], prompts[2]);
+            assert!(prompts[0].contains("Preserve the blue-ocean marker"));
+            assert!(!prompts[0].contains("##### Mode:"));
+            if host == PromptHost::Headless {
+                assert!(prompts[0].contains("You already have an A"));
+                assert!(!prompts[0].contains("## Core Execution"));
+                assert!(!prompts[0].contains("## Authority Recap"));
+            }
+        }
+    }
+
+    #[test]
+    fn base_prompt_carries_constitutional_core() {
         for phrase in [
-            "We begin with Ghosty",
-            "Ghosty is the founding intelligence",
-            "Every model that runs here is Ghosty",
-            "future intelligences can better coordinate",
-            "Article II — The Primacy of Truth",
-            "Article VII — The Hierarchy of Law",
+            "## Ghosty",
+            "You are Ghosty",
+            "The A is already yours",
+            "Let the work speak",
+            "### Ground truth",
+            "### User intent and scope",
+            "### Truthful completion",
+            "### Put guarantees in mechanism",
+            "### Whose word wins",
         ] {
             assert!(
                 BASE_PROMPT.contains(phrase),
@@ -1309,248 +1619,445 @@ mod tests {
     }
 
     #[test]
-    fn constitutional_hierarchy_keeps_case_command_above_local_law() {
-        let case_at = BASE_PROMPT
-            .find("2. **Case Command.**")
-            .expect("case command tier present");
-        let statute_at = BASE_PROMPT
-            .find("3. **Statutes.**")
-            .expect("statutes tier present");
-        let local_law_at = BASE_PROMPT
-            .find("5. **Local Law.**")
-            .expect("local law tier present");
+    fn constitutional_kernel_keeps_first_turn_authority_safety_and_completion() {
+        let fresh_prefix = compose_default_static_layers(Personality::Calm, "deepseek-v4-pro");
+        for phrase in [
+            "Do what the user's current request asks, no more.",
+            "require express user authorization in",
+            "otherwise name the decision and ask.",
+            "external publication, spending",
+            "credentials, and material scope expansion",
+            "prohibitions stay binding; convenience creates no exception",
+            "never route around it or claim prose granted",
+            "Nothing is done until checked.",
+            "Read test output, not only exit status",
+            "External actions are not complete until",
+            "Work still running is not complete",
+            "Never present a partial result as the whole.",
+            "no one may tell you to invent one",
+            "1. The user's request, this turn.",
+            "2. This constitution.",
+        ] {
+            assert!(
+                fresh_prefix.contains(phrase),
+                "fresh constitution prefix missing kernel invariant {phrase:?}"
+            );
+        }
+    }
 
+    #[test]
+    fn procedural_playbooks_are_not_eager_constitution() {
+        let fresh_prefix = compose_default_static_layers(Personality::Calm, "deepseek-v4-pro");
+        for heading in [
+            "### Keep momentum",
+            "### Think in causes",
+            "### Honor constraints before preferences",
+            "### Skill and role constraints are binding",
+            "### Restraint",
+            "### Leave continuity",
+        ] {
+            assert!(
+                !fresh_prefix.contains(heading),
+                "procedural playbook should stay outside the full fresh prefix: {heading:?}"
+            );
+        }
         assert!(
-            case_at < statute_at && statute_at < local_law_at,
-            "Article VII must keep the current user request above runtime guidance and local law"
-        );
-        assert!(
-            BASE_PROMPT.contains("actual runtime gates still determine what tools can execute"),
-            "Article VII must distinguish prompt authority from executable runtime gates"
+            !BASE_PROMPT.contains("## STATUTES (Tier 2)")
+                && !BASE_PROMPT.contains("## REGULATIONS (Tier 3)"),
+            "the balanced Constitution must not restore the old procedural policy tail"
         );
     }
 
     #[test]
-    fn base_prompt_contains_model_id_template() {
-        assert!(
-            BASE_PROMPT.contains("{model_id}"),
-            "BASE_PROMPT must contain the {{model_id}} template for dynamic injection"
+    fn base_prompt_carries_verify_then_stop_completion_contract() {
+        // The completion contract behind "Truthful completion": verify with real
+        // evidence, keep running work visible, and hand back exactly what
+        // changed. These phrases encode the contract's semantics, not its
+        // prose — a rewording that keeps the contract should keep these, and
+        // one that drops them is a real behavior change worth failing review
+        // for. (Constitution kernel rewrite in #5077 renamed the section and
+        // condensed the prose; the contract stands.)
+        for phrase in [
+            "Nothing is done until checked.",
+            "Read test output, not only exit status",
+            "Work still running is not complete",
+            "Never present a partial result as the whole.",
+        ] {
+            assert!(
+                BASE_PROMPT.contains(phrase),
+                "BASE_PROMPT missing completion-contract phrase {phrase:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn yolo_mode_uses_the_shared_completion_contract() {
+        // `ghosty exec --auto` runs AppMode::Yolo; the verify-then-stop
+        // contract must survive composition into the prompt that mode ships.
+        let tmp = tempdir().expect("tempdir");
+        let text = system_prompt_flat_text(
+            &system_prompt_for_mode_with_context_skills_session_and_approval(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Yolo,
+                },
+            ),
         );
+        for phrase in [
+            "### Truthful completion",
+            "Nothing is done until checked.",
+            "Never present a partial result as the whole.",
+        ] {
+            assert!(
+                text.contains(phrase),
+                "YOLO-mode composed prompt missing completion-contract phrase {phrase:?}"
+            );
+        }
+        assert!(!text.contains("##### Mode:"));
+    }
+
+    #[test]
+    fn constitutional_hierarchy_keeps_user_turn_above_local_law() {
+        let heading_at = BASE_PROMPT
+            .find("### Whose word wins")
+            .expect("Whose word wins heading present");
+        let user_at = BASE_PROMPT
+            .find("1. The user's request, this turn.")
+            .expect("user request tier present");
+        let constitution_at = BASE_PROMPT
+            .find("2. This constitution.")
+            .expect("constitution tier present");
+        let project_at = BASE_PROMPT
+            .find("3. Project law and instructions")
+            .expect("project tier present");
+        let preference_at = BASE_PROMPT
+            .find("4. Your standing user-global preferences.")
+            .expect("user-global preference tier present");
+        let memory_at = BASE_PROMPT
+            .find("5. Memory and previous-session handoffs.")
+            .expect("memory/handoff tier present");
+
+        assert!(
+            heading_at < user_at
+                && user_at < constitution_at
+                && constitution_at < project_at
+                && project_at < preference_at
+                && preference_at < memory_at,
+            "Whose word wins must rank the current user request above constitution, \
+             project law, standing user-global preferences, then memory/handoffs"
+        );
+        assert!(
+            BASE_PROMPT.contains("the user may override a fact, but no one may invent\none"),
+            "Whose word wins must keep ground truth overridable but never inventable"
+        );
+        assert!(
+            BASE_PROMPT.contains("A tie you cannot break is not yours to break"),
+            "Whose word wins must keep tie-break escalation"
+        );
+    }
+
+    #[test]
+    fn base_prompt_is_model_fact_free() {
+        for placeholder in [
+            "{model_id}",
+            "{context_window_note}",
+            "{subagent_economics}",
+            "{model_thinking_note}",
+            "{model_characteristics}",
+        ] {
+            assert!(
+                !BASE_PROMPT.contains(placeholder),
+                "0.9.0 BASE_PROMPT must not contain model-fact placeholder {placeholder}"
+            );
+        }
+        for forbidden in [
+            "Your V4 Characteristics",
+            "Model Characteristics",
+            "one-million-token context window",
+            "provider-dependent and not known",
+        ] {
+            assert!(
+                !BASE_PROMPT.contains(forbidden),
+                "0.9.0 BASE_PROMPT must not contain model-specific fact {forbidden:?}"
+            );
+        }
+    }
+
+    fn assert_no_unresolved_model_placeholders(prompt: &str) {
+        for placeholder in [
+            "{model_id}",
+            "{context_window_note}",
+            "{subagent_economics}",
+            "{model_thinking_note}",
+            "{model_characteristics}",
+        ] {
+            assert!(
+                !prompt.contains(placeholder),
+                "composed prompt must not contain unresolved {placeholder}"
+            );
+        }
+    }
+
+    #[test]
+    fn compose_prompt_for_v4_model_stays_model_fact_free() {
+        let prompt =
+            compose_prompt_with_approval_model_and_shell(Personality::Calm, "deepseek-v4-pro");
+        assert!(prompt.contains("You are Ghosty"));
+        assert!(!prompt.contains("Your V4 Characteristics"));
+        assert!(!prompt.contains("one-million-token context window"));
+        assert_no_unresolved_model_placeholders(&prompt);
+    }
+
+    #[test]
+    fn compose_prompt_for_kimi_stays_model_fact_free() {
+        let prompt =
+            compose_prompt_with_approval_model_and_shell(Personality::Calm, "moonshotai/kimi-k2.6");
+        assert!(prompt.contains("You are Ghosty"));
+        assert!(!prompt.contains("Your V4 Characteristics"));
+        assert!(!prompt.contains("one-million"));
+        assert!(!prompt.contains("$0.14"));
+        assert!(!prompt.contains("262144-token context window"));
+        assert!(!prompt.contains("Models may emit *thinking tokens*"));
+        assert_no_unresolved_model_placeholders(&prompt);
+    }
+
+    #[test]
+    fn compose_prompt_for_openai_api_gpt_55_stays_model_fact_free() {
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "gpt-5.5");
+        assert!(prompt.contains("You are Ghosty"));
+        assert!(!prompt.contains("Your V4 Characteristics"));
+        assert!(!prompt.contains("1050000-token context window"));
+        assert!(!prompt.contains("Models may emit *thinking tokens*"));
+        assert!(!prompt.contains("provider-dependent and not known"));
+        assert_no_unresolved_model_placeholders(&prompt);
+    }
+
+    #[test]
+    fn compose_prompt_for_unknown_model_stays_model_fact_free() {
+        let prompt =
+            compose_prompt_with_approval_model_and_shell(Personality::Calm, "llama3.3:70b");
+        assert!(prompt.contains("You are Ghosty"));
+        assert!(!prompt.contains("Your V4 Characteristics"));
+        assert!(!prompt.contains("one-million"));
+        assert!(!prompt.contains("$0.14"));
+        assert!(!prompt.contains("provider-dependent and not known"));
+        assert!(!prompt.contains("Models may emit *thinking tokens*"));
+        assert_no_unresolved_model_placeholders(&prompt);
     }
 
     #[test]
     fn apply_model_template_replaces_placeholder() {
-        let result = apply_model_template("You are {model_id}", "deepseek-v4-pro");
+        let result = apply_model_template("You are {model_id}", "deepseek-v4-pro", None);
         assert_eq!(result, "You are deepseek-v4-pro");
         assert!(!result.contains("{model_id}"));
     }
 
     #[test]
-    fn compose_prompt_injects_model_id() {
-        let prompt = compose_prompt_with_approval_and_model(
-            AppMode::Agent,
-            Personality::Calm,
-            ApprovalMode::Suggest,
-            "deepseek-v4-flash",
+    fn apply_model_template_does_not_resolve_removed_model_fact_templates() {
+        let result = apply_model_template("{context_window_note}", "gpt-5.5", Some(400_000));
+        assert_eq!(result, "{context_window_note}");
+        assert!(!result.contains("400000-token context window"));
+        assert!(!result.contains("1050000-token context window"));
+    }
+
+    #[test]
+    fn compose_prompt_is_model_agnostic_in_preamble() {
+        // 0.9.0 keeps the preamble byte-for-byte the same regardless of
+        // model id, and no {model_id} placeholder leaks.
+        let flash =
+            compose_prompt_with_approval_model_and_shell(Personality::Calm, "deepseek-v4-flash");
+        let kimi =
+            compose_prompt_with_approval_model_and_shell(Personality::Calm, "moonshotai/kimi-k2.6");
+        assert!(
+            flash.contains("You are Ghosty"),
+            "0.9.0 preamble must open with the model-agnostic Ghosty stance"
         );
         assert!(
-            prompt.contains("You are deepseek-v4-flash"),
-            "composed prompt must contain the injected model id"
+            !flash.contains("You are deepseek-v4-flash")
+                && !kimi.contains("You are moonshotai/kimi-k2.6"),
+            "0.9.0 preamble must not inject a per-model identity line"
         );
         assert!(
-            !prompt.contains("{model_id}"),
-            "composed prompt must not contain the raw template placeholder"
+            !flash.contains("{model_id}") && !kimi.contains("{model_id}"),
+            "composed prompt must not contain the raw {{model_id}} placeholder"
         );
     }
 
     #[test]
-    fn composed_prompt_keeps_shell_guidance_when_shell_tools_are_available() {
-        let prompt = compose_prompt_with_approval_model_and_shell(
-            AppMode::Agent,
-            Personality::Calm,
-            ApprovalMode::Suggest,
-            "deepseek-v4-pro",
-            true,
+    fn tool_descriptions_carry_edit_and_shell_guidance() {
+        let write = WriteFileTool.description();
+        assert!(
+            write.contains("instead of heredocs")
+                && write.contains("`Bash`")
+                && !write.contains("exec_shell"),
+            "write guidance must name the live Bash tool and never the retired exec_shell name"
         );
 
-        assert!(prompt.contains("- **Shell**:"));
-        assert!(prompt.contains("### `exec_shell`"));
-        assert!(prompt.contains("`task_shell_start`"));
-        assert!(prompt.contains("Arithmetic, math, calculations → `exec_shell`"));
+        let edit = EditFileTool.description();
+        // Every handler description must name the live `File` surface plus an
+        // action. `read_file`/`write_file`/`apply_patch` are retired spellings
+        // (crates/tui/src/tools/registry.rs:2066-2088).
+        assert!(edit.contains("File `read`"));
+        assert!(edit.contains("File `patch` or `write`"));
+        assert!(
+            !edit.contains("read_file")
+                && !edit.contains("write_file")
+                && !edit.contains("apply_patch"),
+            "edit guidance must not teach a retired tool name: {edit:?}"
+        );
+
+        let patch = ApplyPatchTool.description();
+        assert!(patch.contains("unified-diff") && patch.contains("transactional"));
+
+        let shell_tool = BashTool::new("Bash");
+        let shell = shell_tool.description();
+        assert!(shell.contains("background=true"));
+        assert!(shell.contains(">5 seconds"));
     }
 
     #[test]
-    fn composed_prompt_omits_shell_guidance_when_shell_tools_are_unavailable() {
-        let prompt = compose_prompt_with_approval_model_and_shell(
-            AppMode::Agent,
-            Personality::Calm,
-            ApprovalMode::Suggest,
-            "deepseek-v4-pro",
-            false,
-        );
-
-        for shell_only in [
-            "- **Shell**:",
-            "### `exec_shell`",
-            "`task_shell_start`",
-            "exec_shell",
-            "task_shell",
-            "Arithmetic, math, calculations → `exec_shell`",
-            "Hashes, encodings, checksums → `exec_shell`",
-            "Current time, date, timezone → `exec_shell`",
-            "System state: OS, CPU, memory, disk, ports, processes → `exec_shell`",
-            "CLI through shell",
-            "or `exec_shell` directly",
-        ] {
-            assert!(
-                !prompt.contains(shell_only),
-                "shell-disabled prompt must not advertise {shell_only:?}"
-            );
-        }
-        assert!(
-            prompt.contains("actual runtime gates still determine what tools can execute"),
-            "shell-disabled prompt should keep the runtime-gates hierarchy clause"
-        );
-        assert!(
-            prompt.contains("`task_gate_run`") && prompt.contains("`github_issue_context`"),
-            "shell-disabled prompt should keep non-shell task evidence tools"
-        );
-    }
-
-    #[test]
-    fn composed_prompt_starts_with_core_tool_taxonomy() {
-        let prompt = compose_prompt_with_approval_and_model(
-            AppMode::Agent,
-            Personality::Calm,
-            ApprovalMode::Suggest,
-            "deepseek-v4-pro",
-        );
-        let expected_taxonomy = render_core_tool_taxonomy_block(AppMode::Agent);
-
-        assert!(
-            prompt.starts_with(&expected_taxonomy),
-            "composed prompt should start with the compact generated tool taxonomy"
-        );
-    }
-
-    #[test]
-    fn plan_prompt_taxonomy_omits_run_tests() {
-        let prompt = compose_prompt_with_approval_and_model(
-            AppMode::Plan,
-            Personality::Calm,
-            ApprovalMode::Never,
-            "deepseek-v4-pro",
-        );
-        let expected_taxonomy = render_core_tool_taxonomy_block(AppMode::Plan);
-
-        assert!(
-            prompt.starts_with(&expected_taxonomy),
-            "Plan prompt should start with its mode-specific tool taxonomy"
-        );
-        assert!(
-            expected_taxonomy.contains("for discovery")
-                && expected_taxonomy.contains("for git inspection"),
-            "Plan taxonomy should keep read-only discovery and git guidance"
-        );
-        assert!(
-            !expected_taxonomy.contains("run_tests")
-                && !expected_taxonomy.contains("run_verifiers")
-                && !expected_taxonomy.contains("for verification")
-                && !expected_taxonomy.contains("Use  "),
-            "Plan taxonomy must not advertise unavailable verification tools: {expected_taxonomy:?}"
-        );
-    }
-
-    #[test]
-    fn core_tool_taxonomy_only_references_default_active_tools() {
-        let core_tools = crate::core::engine::default_active_native_tool_names();
-        for tool in TOOL_TAXONOMY_DISCOVERY
-            .iter()
-            .chain(TOOL_TAXONOMY_GIT)
-            .chain(TOOL_TAXONOMY_VERIFICATION)
-        {
-            assert!(
-                core_tools.contains(tool),
-                "tool taxonomy references {tool}, but it is not in the eager native-tool list"
-            );
-        }
+    fn composed_prompt_does_not_claim_tool_availability() {
+        let prompt =
+            compose_prompt_with_approval_model_and_shell(Personality::Calm, "deepseek-v4-pro");
+        assert!(!prompt.contains("## Core Tool Taxonomy"));
+        assert!(!prompt.contains("## Toolbox"));
+        assert!(prompt.contains("You are Ghosty"));
     }
 
     #[test]
     fn authority_recap_appears_in_full_prompt() {
         let tmp = tempdir().expect("tempdir");
-        let text = match system_prompt_for_mode_with_context_skills_session_and_approval(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext::default(),
-            ApprovalMode::Suggest,
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let text = system_prompt_flat_text(
+            &system_prompt_for_mode_with_context_skills_session_and_approval(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext::default(),
+            ),
+        );
         assert!(
             text.contains("## Authority Recap"),
             "full system prompt must contain the authority recap"
         );
         assert!(
-            text.contains("The Constitution of Ghosty Code (Articles I-VII) governs your behavior"),
+            text.contains("Ghosty's constitution governs your behavior"),
             "authority recap must reference the Constitution"
         );
-    }
-
-    #[test]
-    fn calm_personality_declares_tier_8_subordination() {
         assert!(
-            CALM_PERSONALITY.contains("Tier 8"),
-            "Calm personality must identify as Tier 8"
-        );
-        assert!(
-            CALM_PERSONALITY.contains("cannot override"),
-            "Calm personality must have a subordination clause"
+            text.contains("consult ### Whose word wins"),
+            "authority recap must point at 0.9.0's precedence section"
         );
     }
 
     #[test]
-    fn execution_discipline_is_at_the_end_for_cache_stability() {
-        // DeepSeek's prefix cache keys on a leading byte-stable run, so
-        // the new sections must be appended, not interleaved earlier.
-        let body = BASE_PROMPT;
-        let persistence_at = body
-            .find("<tool_persistence>")
-            .expect("tool_persistence anchor present");
-        let language_at = body.find("## Language").expect("Language anchor present");
-        assert!(
-            language_at < persistence_at,
-            "execution-discipline block must come after the early sections"
+    fn system_prompt_merges_workspace_and_configured_skills_dir() {
+        let _env_guard = crate::test_support::lock_test_env();
+        let tmp = tempdir().expect("tempdir");
+        let _home = ScopedHome::set(tmp.path().join("home"));
+        let workspace = tmp.path().join("workspace");
+        let configured_dir = tmp.path().join("configured-skills");
+        write_test_skill(
+            &workspace.join(".claude").join("skills"),
+            "workspace-skill",
+            "workspace skill",
         );
+        write_test_skill(&configured_dir, "configured-skill", "configured skill");
+
+        let text = system_prompt_flat_text(&system_prompt_for_mode_with_context_and_skills(
+            &workspace,
+            None,
+            Some(&configured_dir),
+            None,
+            None,
+        ));
+
+        assert!(text.contains("workspace-skill"));
+        assert!(text.contains("configured-skill"));
+    }
+
+    struct ScopedHome {
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl ScopedHome {
+        fn set(path: std::path::PathBuf) -> Self {
+            let previous = std::env::var_os("HOME");
+            // Safety: this test serializes environment access with
+            // lock_test_env and restores HOME in Drop.
+            unsafe {
+                std::env::set_var("HOME", path);
+            }
+            Self { previous }
+        }
+    }
+
+    impl Drop for ScopedHome {
+        fn drop(&mut self) {
+            // Safety: this test serializes environment access with
+            // lock_test_env and restores HOME in Drop.
+            unsafe {
+                if let Some(previous) = self.previous.take() {
+                    std::env::set_var("HOME", previous);
+                } else {
+                    std::env::remove_var("HOME");
+                }
+            }
+        }
+    }
+
+    fn write_test_skill(root: &std::path::Path, name: &str, description: &str) {
+        let dir = root.join(name);
+        std::fs::create_dir_all(&dir).expect("skill dir");
+        std::fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n"),
+        )
+        .expect("skill file");
     }
 
     #[test]
-    fn plan_mode_prompt_uses_update_plan_as_confirmation_handoff() {
+    fn constitution_has_no_separate_personality_tier() {
+        // 0.9.0 has no personality tier. Voice and tone live in the
+        // compact constitution rather than a separate section, so
+        // personality remains folded in by omission.
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
         assert!(
-            PLAN_MODE.contains("call `update_plan`"),
-            "Plan mode must tell the model to finish plans through update_plan"
+            !prompt.contains("Personality: Calm — Tier 8"),
+            "Personality tier should not appear as a separate section"
         );
         assert!(
-            PLAN_MODE.contains("accept / revise / exit prompt"),
-            "Plan mode must explain why update_plan is the UI handoff signal"
+            prompt.contains("Take the work seriously. Don't take"),
+            "Preamble should carry tone guidance (take the work, not yourself, seriously)"
         );
+        // Verify the preamble still carries the Ghosty identity.
+        assert!(prompt.contains("You are Ghosty"));
+        assert!(prompt.contains("Let the work speak"));
     }
 
     #[test]
-    fn render_environment_block_lists_supplied_locale_and_workspace() {
+    fn render_environment_block_keeps_actionable_host_facts_without_version() {
         let tmp = tempdir().expect("tempdir");
         let block = render_environment_block(tmp.path(), "zh-Hans");
         assert!(block.starts_with("## Environment"));
         assert!(block.contains("- lang: zh-Hans"));
-        assert!(block.contains(&format!(
-            "- deepseek_version: {}",
-            env!("CARGO_PKG_VERSION")
-        )));
-        assert!(block.contains(&format!("- pwd: {}", tmp.path().display())));
+        // The workspace remains per-turn and the release version is telemetry;
+        // platform and shell still steer valid command syntax.
+        assert!(!block.contains("- pwd:"));
+        assert!(!block.contains("- ghosty_version:"));
         assert!(block.contains("- platform:"));
         assert!(block.contains("- shell:"));
     }
@@ -1558,7 +2065,7 @@ mod tests {
     #[test]
     fn locale_reinforcement_preamble_returns_native_script_for_supported_locales() {
         // English (and unknown locales) get None — the existing English
-        // directive in `base.md` is sufficient.
+        // directive in `constitution.md` is sufficient.
         assert!(locale_reinforcement_preamble("en").is_none());
         assert!(locale_reinforcement_preamble("en-US").is_none());
         assert!(locale_reinforcement_preamble("fr-FR").is_none());
@@ -1582,8 +2089,13 @@ mod tests {
                 "zh preamble must steer reasoning_content: {preamble:?}"
             );
             assert!(
-                preamble.contains("read_file"),
-                "zh preamble must call out tool-name immutability: {preamble:?}"
+                preamble.contains("`File`"),
+                "zh preamble must call out tool-name immutability with a LIVE tool \
+                 name; `read_file` is retired (registry.rs:2067): {preamble:?}"
+            );
+            assert!(
+                !preamble.contains("read_file") && !preamble.contains("exec_shell"),
+                "zh preamble must never teach a retired tool name: {preamble:?}"
             );
         }
 
@@ -1606,29 +2118,29 @@ mod tests {
         // base-prompt body. Cache stability and attention precedence
         // both depend on this ordering.
         let tmp = tempdir().expect("tempdir");
-        let text = match system_prompt_for_mode_with_context_skills_session_and_approval(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: None,
-                project_context_pack_enabled: false,
-                locale_tag: "zh-Hans",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-            ApprovalMode::Suggest,
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let text = system_prompt_flat_text(
+            &system_prompt_for_mode_with_context_skills_session_and_approval(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "zh-Hans",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ),
+        );
         let preamble_marker = "## 语言要求";
-        let base_marker = "You are ghosty";
+        let base_marker = "You are Ghosty";
         let preamble_pos = text
             .find(preamble_marker)
             .expect("zh-Hans preamble should be present");
@@ -1670,6 +2182,59 @@ mod tests {
     }
 
     #[test]
+    fn v092_locales_add_no_prompt_bookends_so_prompt_bytes_stay_stable() {
+        // Cache-stability contract: adding the v0.9.2 UI locales
+        // (ca, de, fr, id, hi, ru, uk) — and the already-shipped UI packs
+        // that never had bookends (ko, es-419, zh-Hant) — must not change
+        // the model-visible system prompt for an identical route/session
+        // when translation is not explicitly enabled. The bookend list
+        // stays intentionally short (zh-Hans, ja, pt-BR, vi); every other
+        // shipped locale resolves to None and therefore renders the exact
+        // same prompt bytes as English.
+        for tag in [
+            "zh-Hant", "ko", "es-419", "ca", "de", "fr", "id", "hi", "ru", "uk",
+        ] {
+            assert!(
+                locale_reinforcement_preamble(tag).is_none(),
+                "{tag} must not gain a locale preamble"
+            );
+            assert!(
+                locale_reinforcement_closer(tag).is_none(),
+                "{tag} must not gain a locale closer"
+            );
+        }
+        // The bookend set is exactly the original four locales — growing it
+        // is a deliberate, reviewable prompt change, not a side effect of
+        // adding a UI pack.
+        for tag in ["zh-Hans", "ja", "pt-BR", "vi"] {
+            assert!(
+                locale_reinforcement_preamble(tag).is_some(),
+                "{tag} lost its locale preamble"
+            );
+            assert!(
+                locale_reinforcement_closer(tag).is_some(),
+                "{tag} lost its locale closer"
+            );
+        }
+    }
+
+    #[test]
+    fn translation_seam_names_every_shipped_locale_canonically() {
+        // The translation output instruction is the declared model-facing
+        // seam: it only enters the prompt when `translation_enabled` is
+        // true. When it does, every shipped locale must be named
+        // canonically (English name + endonym) — never silently "English".
+        for locale in crate::localization::Locale::shipped() {
+            assert_eq!(
+                translation_target_language_for_tag(locale.tag()),
+                locale.translation_target_name(),
+                "{} translation seam drifted from the canonical locale name",
+                locale.tag()
+            );
+        }
+    }
+
+    #[test]
     fn system_prompt_bookends_zh_hans_with_preamble_and_closer() {
         // The full system prompt for zh-Hans must contain BOTH the
         // opening preamble (`## 语言要求`) and the closing reinforcement
@@ -1678,27 +2243,27 @@ mod tests {
         // matching the empirical finding from the WeChat thread that
         // motivated the closer.
         let tmp = tempdir().expect("tempdir");
-        let text = match system_prompt_for_mode_with_context_skills_session_and_approval(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: None,
-                project_context_pack_enabled: false,
-                locale_tag: "zh-Hans",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-            ApprovalMode::Suggest,
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let text = system_prompt_flat_text(
+            &system_prompt_for_mode_with_context_skills_session_and_approval(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "zh-Hans",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ),
+        );
         let preamble_pos = text
             .find("## 语言要求")
             .expect("zh-Hans preamble must be in prompt");
@@ -1721,84 +2286,31 @@ mod tests {
     }
 
     #[test]
-    fn hidden_thinking_uses_english_reasoning_without_locale_bookends() {
-        let tmp = tempdir().expect("tempdir");
-        let text = match system_prompt_for_mode_with_context_skills_session_and_approval(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: None,
-                project_context_pack_enabled: false,
-                locale_tag: "zh-Hans",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: false,
-                allow_shell: true,
-            },
-            ApprovalMode::Suggest,
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
-
-        assert!(
-            text.contains("## Hidden Thinking Language"),
-            "hidden thinking prompt must include the request-side language override"
-        );
-        assert!(
-            text.contains("reasoning_content") && text.contains("English"),
-            "hidden thinking override must steer reasoning_content to English"
-        );
-        assert!(
-            text.contains("final reply") && text.contains("Simplified Chinese"),
-            "hidden thinking override must preserve the visible reply language"
-        );
-        assert!(
-            !text.contains("## 语言要求") && !text.contains("## 语言再次提醒"),
-            "hidden thinking prompt must not also ask for localized reasoning"
-        );
-
-        let hidden_pos = text
-            .find("## Hidden Thinking Language")
-            .expect("hidden thinking block present");
-        let hidden_header_end = hidden_pos + "## Hidden Thinking Language".len();
-        let after_hidden_body = &text[hidden_header_end..];
-        assert!(
-            !after_hidden_body.contains("\n## "),
-            "hidden thinking override must be the final top-level block; got: {after_hidden_body:?}",
-        );
-    }
-
-    #[test]
     fn system_prompt_skips_locale_preamble_for_english() {
         // English locale → no preamble injected. Asserts the
         // "preamble is opt-in for non-English" invariant.
         let tmp = tempdir().expect("tempdir");
-        let text = match system_prompt_for_mode_with_context_skills_session_and_approval(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: None,
-                project_context_pack_enabled: false,
-                locale_tag: "en",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-            ApprovalMode::Suggest,
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let text = system_prompt_flat_text(
+            &system_prompt_for_mode_with_context_skills_session_and_approval(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ),
+        );
         assert!(
             !text.contains("语言要求"),
             "English locale must not get a zh preamble: {text:?}"
@@ -1828,13 +2340,6 @@ mod tests {
             !contains_cjk(BASE_PROMPT),
             "base prompt must not contain static CJK priming tokens"
         );
-        for mode in [AppMode::Agent, AppMode::Plan, AppMode::Yolo] {
-            let taxonomy = render_core_tool_taxonomy_block(mode);
-            assert!(
-                !contains_cjk(&taxonomy),
-                "tool taxonomy must not contain static CJK priming tokens: {taxonomy:?}"
-            );
-        }
         // Do not assert on arbitrary CJK in the full system prompt: project
         // context may legitimately contain localized file names, README text,
         // or user-authored instructions. The locale bookend markers above are
@@ -1842,71 +2347,198 @@ mod tests {
     }
 
     #[test]
-    fn language_section_carries_reasoning_content_directives_for_1118() {
+    fn locale_bookends_carry_reasoning_content_directives_for_1118() {
         // #1118 ("Language has been configured to Chinese, but thinking
-        // outputs are still in English"): the base prompt's language
-        // section is the only knob that steers V4's `reasoning_content`
-        // language. Pin the load-bearing phrases so a future innocuous
-        // edit can't quietly drop them.
-        let lang = BASE_PROMPT;
+        // outputs are still in English"): after the 0.9.0 constitution
+        // reduction, locale-native bookends carry the runtime language
+        // reinforcement instead of the base constitution.
+        let lang = LOCALE_PREAMBLE_ZH_HANS;
         assert!(
             lang.contains("reasoning_content"),
-            "language section must explicitly call out reasoning_content"
+            "locale preamble must explicitly call out reasoning_content"
         );
         assert!(
-            lang.contains("latest user message"),
-            "latest user message must be the primary language signal"
+            lang.contains("最终回复"),
+            "locale preamble must explicitly cover the final reply"
         );
         assert!(
-            lang.contains("clearly English") && lang.contains("must stay English"),
-            "English user turns must stay English even after localized context"
+            lang.contains("代码") && lang.contains("工具名称"),
+            "code and tool names must be named as non-language signals"
         );
         assert!(
-            lang.contains("Simplified Chinese")
-                && lang.contains("must both be in Simplified Chinese"),
-            "Chinese user turns must still steer reasoning_content and replies"
-        );
-        assert!(
-            lang.contains("localized READMEs") && lang.contains("tool results"),
-            "localized docs and tool results must be named as non-language signals"
+            LOCALE_CLOSER_ZH_HANS.contains("reasoning_content")
+                && LOCALE_CLOSER_ZH_HANS.contains("继续用简体中文思考和回答"),
+            "closing bookend must preserve recency-positioned language reinforcement"
         );
         // Explicit-user-override clause keeps the prompt useful for the
         // opposite preference (#1118 commenters who want English
         // thinking for token-cost reasons).
-        for phrase in ["think in English", "reason in Chinese"] {
-            assert!(
-                lang.contains(phrase),
-                "expected the user-override example `{phrase}`"
-            );
-        }
+        let phrase = "think in English";
+        assert!(
+            lang.contains(phrase) && LOCALE_CLOSER_ZH_HANS.contains(phrase),
+            "expected the user-override example `{phrase}`"
+        );
     }
 
     #[test]
     fn environment_block_is_inserted_into_system_prompt() {
         let tmp = tempdir().expect("tempdir");
-        let prompt = match system_prompt_for_mode_with_context_skills_and_session(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: None,
-                project_context_pack_enabled: true,
-                locale_tag: "ja",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "ja",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ));
         assert!(prompt.contains("## Environment"));
         assert!(prompt.contains("- lang: ja"));
-        assert!(prompt.contains("- deepseek_version:"));
+        assert!(!prompt.contains("- ghosty_version:"));
+        assert!(prompt.contains("- platform:"));
+        assert!(prompt.contains("- shell:"));
+    }
+
+    #[test]
+    fn user_global_constitution_block_is_injected_separately() {
+        let _env_guard = crate::test_support::lock_test_env();
+        let tmp = tempdir().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace dir");
+        let ghosty_home = tmp.path().join("ghosty-home");
+        std::fs::create_dir_all(&ghosty_home).expect("ghosty home");
+        let _ghosty_home =
+            crate::test_support::EnvVarGuard::set("GHOSTY_HOME", ghosty_home.as_os_str());
+
+        let constitution = ghosty_config::UserConstitution {
+            about: Some("Maintains Ghosty release lanes.".to_string()),
+            working_style: vec!["Prefer live verification before claims.".to_string()],
+            priorities: vec!["Keep release gates green.".to_string()],
+            autonomy_preference: ghosty_config::AutonomyPreference::Balanced,
+            ..ghosty_config::UserConstitution::default()
+        };
+        constitution
+            .save_to(
+                &ghosty_home.join(ghosty_config::user_constitution::USER_CONSTITUTION_FILE_NAME),
+            )
+            .expect("save user constitution");
+
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                &workspace,
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    project_context_pack_enabled: false,
+                    ..PromptSessionContext::default()
+                },
+            ));
+
+        let base_at = prompt.find("### Whose word wins").expect("base prompt");
+        let user_block_at = prompt
+            .find("<ghosty_user_constitution")
+            .expect("user constitution block");
+        let env_at = prompt.find("- lang:").expect("rendered environment block");
+        assert!(
+            base_at < user_block_at && user_block_at < env_at,
+            "user constitution should be its own layer after the base/project context and before volatile environment data"
+        );
+        assert!(prompt.contains("source=\"user-global\""));
+        assert!(prompt.contains("Maintains Ghosty release lanes."));
+        assert!(prompt.contains("Prefer live verification before claims."));
+        assert!(
+            !prompt.contains(&ghosty_home.display().to_string()),
+            "prompt should use the stable user-global source label, not a device-specific home path"
+        );
+    }
+
+    #[test]
+    fn bundled_choice_disables_user_global_constitution_block() {
+        let _env_guard = crate::test_support::lock_test_env();
+        let tmp = tempdir().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace dir");
+        let ghosty_home = tmp.path().join("ghosty-home");
+        std::fs::create_dir_all(&ghosty_home).expect("ghosty home");
+        let _ghosty_home =
+            crate::test_support::EnvVarGuard::set("GHOSTY_HOME", ghosty_home.as_os_str());
+
+        let constitution = ghosty_config::UserConstitution {
+            about: Some("This file should stay inactive.".to_string()),
+            ..ghosty_config::UserConstitution::default()
+        };
+        constitution
+            .save_to(
+                &ghosty_home.join(ghosty_config::user_constitution::USER_CONSTITUTION_FILE_NAME),
+            )
+            .expect("save user constitution");
+
+        let mut state = ghosty_config::SetupState::default();
+        state.complete_constitution_checkpoint(
+            crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
+            ghosty_config::ConstitutionChoice::Bundled,
+        );
+        state
+            .save_to(&ghosty_home.join(ghosty_config::setup_state::SETUP_STATE_FILE_NAME))
+            .expect("save setup state");
+
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                &workspace,
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    project_context_pack_enabled: false,
+                    ..PromptSessionContext::default()
+                },
+            ));
+
+        assert!(!prompt.contains("<ghosty_user_constitution"));
+        assert!(!prompt.contains("This file should stay inactive."));
+    }
+
+    #[test]
+    fn invalid_user_global_constitution_is_skipped() {
+        let _env_guard = crate::test_support::lock_test_env();
+        let tmp = tempdir().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace dir");
+        let ghosty_home = tmp.path().join("ghosty-home");
+        std::fs::create_dir_all(&ghosty_home).expect("ghosty home");
+        std::fs::write(
+            ghosty_home.join(ghosty_config::user_constitution::USER_CONSTITUTION_FILE_NAME),
+            "{ not valid json",
+        )
+        .expect("write invalid user constitution");
+        let _ghosty_home =
+            crate::test_support::EnvVarGuard::set("GHOSTY_HOME", ghosty_home.as_os_str());
+
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                &workspace,
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    project_context_pack_enabled: false,
+                    ..PromptSessionContext::default()
+                },
+            ));
+
+        assert!(!prompt.contains("<ghosty_user_constitution"));
     }
 
     #[test]
@@ -1920,28 +2552,36 @@ mod tests {
     }
 
     #[test]
+    fn memory_guidance_does_not_reference_scrapped_moraine() {
+        // Moraine was scrapped for v0.9.4 (no in-repo server ever existed);
+        // the native Markdown + SQLite FTS5 memory is the surviving system.
+        assert!(!MEMORY_GUIDANCE.contains("Moraine"));
+        assert!(!MEMORY_GUIDANCE.contains("moraine"));
+    }
+
+    #[test]
     fn memory_guidance_absent_when_no_memory_block() {
         let tmp = tempdir().expect("tempdir");
-        let prompt = match system_prompt_for_mode_with_context_skills_and_session(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: None,
-                project_context_pack_enabled: false,
-                locale_tag: "en",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ));
         assert!(
             !prompt.contains("Memory Hygiene"),
             "memory guidance must not leak into sessions without a memory block"
@@ -1952,26 +2592,26 @@ mod tests {
     fn memory_guidance_appended_after_memory_block() {
         let tmp = tempdir().expect("tempdir");
         let block = "## User Memory\n\n- prefers Rust\n";
-        let prompt = match system_prompt_for_mode_with_context_skills_and_session(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: Some(block),
-                goal_objective: None,
-                project_context_pack_enabled: false,
-                locale_tag: "en",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: Some(block),
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ));
         let mem_at = prompt.find("User Memory").expect("user memory present");
         let guide_at = prompt.find("Memory Hygiene").expect("guidance present");
         assert!(
@@ -1981,29 +2621,144 @@ mod tests {
     }
 
     #[test]
-    fn memory_guidance_matches_constitutional_tier_order() {
-        let guidance = MEMORY_GUIDANCE
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        let current_request_at = guidance
-            .find("the user's current request (Tier 2)")
-            .expect("current request tier present");
-        let statutes_at = guidance
-            .find("Statutes (Tier 3)")
-            .expect("statutes tier present");
-        let local_law_at = guidance
-            .find("Local Law (Tier 5)")
-            .expect("local law tier present");
-        let live_evidence_at = guidance
-            .find("live evidence (Tier 6)")
-            .expect("live evidence tier present");
+    fn continual_harness_is_injected_as_untrusted_world_state() {
+        let tmp = tempdir().expect("tempdir");
+        crate::continual_harness::refine(
+            tmp.path(),
+            crate::continual_harness::HarnessRefinement {
+                kind: crate::continual_harness::HarnessEntryKind::PromptNote,
+                title: "Verify release claims from direct evidence".to_string(),
+                content: "Retain exact current command output for each release gate.".to_string(),
+                evidence:
+                    "A prior release report mixed stale hosted CI with newer local test output."
+                        .to_string(),
+            },
+        )
+        .expect("persist harness state");
 
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ));
+        assert!(prompt.contains("<continual_harness trust=\"untrusted\">"));
+        assert!(prompt.contains("supplemental working guidance"));
+        assert!(prompt.contains("Verify release claims from direct evidence"));
+    }
+
+    #[test]
+    fn headless_prompt_omits_continual_harness_guidance() {
+        let tmp = tempdir().expect("tempdir");
+        crate::continual_harness::refine(
+            tmp.path(),
+            crate::continual_harness::HarnessRefinement {
+                kind: crate::continual_harness::HarnessEntryKind::PromptNote,
+                title: "Use a project-specific orchestration routine".to_string(),
+                content: "This guidance is available through the harness tool.".to_string(),
+                evidence: "Prior interactive session.".to_string(),
+            },
+        )
+        .expect("persist harness state");
+
+        let prompt = system_prompt_flat_text(
+            &system_prompt_for_mode_with_context_skills_session_and_approval_for_host(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext::default(),
+                PromptHost::Headless,
+            ),
+        );
+        assert!(!prompt.contains("<continual_harness"));
+        assert!(!prompt.contains("project-specific orchestration routine"));
+    }
+
+    #[test]
+    fn memory_guidance_does_not_state_precedence() {
+        // #4777: only BASE_PROMPT § Whose word wins states ranks. Memory
+        // hygiene keeps the imperative→preference rule and drops the
+        // inverted Tier list that used to put Constitution above the user.
+        let guidance = MEMORY_GUIDANCE.to_ascii_lowercase();
+        for forbidden in [
+            "tier 1",
+            "tier 2",
+            "tier 7",
+            "statute",
+            "regulation",
+            "local law",
+            "constitutional hierarchy",
+        ] {
+            assert!(
+                !guidance.contains(forbidden),
+                "MEMORY_GUIDANCE must not restate ranks (found {forbidden:?})"
+            );
+        }
         assert!(
-            current_request_at < statutes_at
-                && statutes_at < local_law_at
-                && local_law_at < live_evidence_at,
-            "memory guidance must keep the current request above memory and local law"
+            MEMORY_GUIDANCE.contains("treated as a preference")
+                && MEMORY_GUIDANCE.contains("not a command"),
+            "keep the imperative-as-preference rule"
+        );
+    }
+
+    #[test]
+    fn only_the_constitution_states_precedence() {
+        // Composed overlays must describe behavior, never their own rank.
+        let overlays = [
+            ("CALM_PERSONALITY", CALM_PERSONALITY),
+            ("COMPACT_TEMPLATE", COMPACT_TEMPLATE),
+            ("MEMORY_GUIDANCE", MEMORY_GUIDANCE),
+            ("LANGUAGE_PROMPT", LANGUAGE_PROMPT),
+            ("OUTPUT_PROMPT", OUTPUT_PROMPT),
+            ("AUTHORITY_RECAP", AUTHORITY_RECAP),
+        ];
+        let rank_markers = [
+            "Tier 1",
+            "Tier 2",
+            "Tier 3",
+            "Tier 4",
+            "Tier 5",
+            "Tier 6",
+            "Tier 7",
+            "Tier 8",
+            "Tier 9",
+            "Statute",
+            "Article IV",
+            "Article V",
+            "Article VII",
+            "Local Law",
+            "Regulation (Tier",
+        ];
+        for (name, text) in overlays {
+            for marker in rank_markers {
+                assert!(
+                    !text.contains(marker),
+                    "{name} must not carry rank vocabulary {marker:?}"
+                );
+            }
+        }
+        assert!(
+            BASE_PROMPT.contains("### Whose word wins"),
+            "canonical precedence section must remain in BASE_PROMPT"
+        );
+        assert!(
+            BASE_PROMPT.contains("This ordering is stated here and nowhere else"),
+            "BASE_PROMPT must assert single-source precedence"
         );
     }
 
@@ -2011,26 +2766,26 @@ mod tests {
     fn project_context_pack_can_be_disabled() {
         let tmp = tempdir().expect("tempdir");
         std::fs::write(tmp.path().join("README.md"), "# Pack test").expect("write readme");
-        let prompt = match system_prompt_for_mode_with_context_skills_and_session(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: None,
-                project_context_pack_enabled: false,
-                locale_tag: "en",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ));
         assert!(!prompt.contains("<project_context_pack>"));
     }
 
@@ -2041,26 +2796,27 @@ mod tests {
         std::fs::create_dir_all(tmp.path().join(".deepseek")).expect("mkdir");
         std::fs::write(tmp.path().join(".deepseek").join("handoff.md"), "handoff")
             .expect("handoff");
-        let prompt = match system_prompt_for_mode_with_context_skills_and_session(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: None,
-                project_context_pack_enabled: true,
-                locale_tag: "en",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    // Explicit opt-in — pack is off by default (#4781).
+                    project_context_pack_enabled: true,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ));
         assert!(prompt.contains("<project_context_pack>"));
         assert!(
             prompt.find("<project_context_pack>").expect("pack")
@@ -2080,10 +2836,7 @@ mod tests {
         )
         .unwrap();
 
-        let prompt = match system_prompt_for_mode_with_context(AppMode::Agent, workspace, None) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt = system_prompt_flat_text(&system_prompt_for_mode_with_context(workspace, None));
 
         assert!(prompt.contains(HANDOFF_BLOCK_MARKER));
         assert!(prompt.contains("Finish #32."));
@@ -2093,10 +2846,8 @@ mod tests {
     #[test]
     fn missing_handoff_does_not_inject_block() {
         let tmp = tempdir().expect("tempdir");
-        let prompt = match system_prompt_for_mode_with_context(AppMode::Agent, tmp.path(), None) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context(tmp.path(), None));
         assert!(!prompt.contains(HANDOFF_BLOCK_MARKER));
     }
 
@@ -2106,24 +2857,51 @@ mod tests {
         let dir = tmp.path().join(".deepseek");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("handoff.md"), "   \n\n  ").unwrap();
-        let prompt = match system_prompt_for_mode_with_context(AppMode::Agent, tmp.path(), None) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context(tmp.path(), None));
         assert!(!prompt.contains(HANDOFF_BLOCK_MARKER));
     }
 
     #[test]
     fn compose_prompt_includes_all_layers() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
-        // Base layer
-        assert!(prompt.contains("You are ghosty"));
-        // Personality layer
-        assert!(prompt.contains("Personality: Calm"));
-        // Mode layer
-        assert!(prompt.contains("Mode: Agent"));
-        // Approval layer
-        assert!(prompt.contains("Approval Policy: Suggest"));
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        // Base layer — balanced Constitution; procedural recipes stay out.
+        assert!(prompt.contains("## Ghosty"));
+        assert!(prompt.contains("### Whose word wins"));
+        assert!(!prompt.contains("## STATUTES (Tier 2)"));
+        assert!(!prompt.contains("## EVIDENCE (Tier 6)"));
+        // Mode and approval are not inlined — they travel as
+        // request-time runtime metadata.
+        assert!(!prompt.contains("Mode: Agent"));
+        assert!(!prompt.contains("Approval Policy:"));
+    }
+
+    /// `constitution.md` is the single hand-maintained source of the balanced
+    /// constitutional core. This replaces the old 600-line policy tail: a
+    /// hand-edit that drops a core section or reorders the skeleton fails the
+    /// build instead of silently shipping a malformed prompt.
+    #[test]
+    fn constitution_md_carries_required_structure() {
+        let md = BASE_PROMPT;
+        assert!(md.contains("## Ghosty"), "missing title");
+        let mut cursor = 0usize;
+        for needle in [
+            "## Ghosty",
+            "### Ground truth",
+            "### User intent and scope",
+            "### Truthful completion",
+            "### Put guarantees in mechanism",
+            "### Whose word wins",
+        ] {
+            let pos = md
+                .find(needle)
+                .unwrap_or_else(|| panic!("ordering check: {needle:?} not found"));
+            assert!(
+                pos >= cursor,
+                "cache-stable ordering broken: {needle:?} at {pos} precedes a previous section at {cursor}"
+            );
+            cursor = pos + needle.len();
+        }
     }
 
     /// Gate against shipping a release with a missing CHANGELOG entry — which
@@ -2175,333 +2953,377 @@ mod tests {
 
     #[test]
     fn compose_prompt_deterministic_order() {
-        let prompt = compose_prompt(AppMode::Yolo, Personality::Calm);
-        let base_pos = prompt.find("You are ghosty").unwrap();
-        let personality_pos = prompt.find("Personality: Calm").unwrap();
-        let mode_pos = prompt.find("Mode: YOLO").unwrap();
-        let approval_pos = prompt.find("Approval Policy: Auto").unwrap();
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        let base_pos = prompt.find("## Ghosty").unwrap();
+        let article_pos = prompt.find("### Ground truth").unwrap();
 
-        assert!(base_pos < personality_pos);
-        assert!(personality_pos < mode_pos);
-        assert!(mode_pos < approval_pos);
+        assert!(base_pos < article_pos);
     }
 
     #[test]
-    fn each_mode_gets_correct_approval() {
+    fn base_prompt_is_mode_agnostic() {
+        // Mode and approval text are no longer inlined into compose_prompt —
+        // they travel as request-time runtime metadata.
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        assert!(!prompt.contains("Mode: Agent"));
+        assert!(!prompt.contains("Mode: YOLO"));
+        assert!(!prompt.contains("Mode: Plan"));
+        assert!(!prompt.contains("Approval Policy:"));
+        // Base prompt carries the 0.9.0 compact Constitution.
+        assert!(prompt.contains("You are Ghosty"));
+        assert!(prompt.contains("Take the work seriously. Don't take"));
+    }
+
+    #[test]
+    fn approval_policy_no_longer_inlined_in_base_prompt() {
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        assert!(!prompt.contains("Mode: Agent"));
+        assert!(!prompt.contains("Approval Policy:"));
+        // The compact Constitutional preamble is still present.
+        assert!(prompt.contains("You are Ghosty"));
+    }
+
+    #[test]
+    fn execution_contract_states_proposal_is_not_execution() {
+        // #5146: the live execution layer must make the propose-vs-execute
+        // contract explicit after the legacy approval overlay was removed.
         assert!(
-            compose_prompt(AppMode::Agent, Personality::Calm).contains("Approval Policy: Suggest")
+            CORE_EXECUTION_PROFILE_PROMPT.contains("is the proposal, not the execution"),
+            "Execution profile must state the propose-vs-execute contract"
         );
-        assert!(compose_prompt(AppMode::Yolo, Personality::Calm).contains("Approval Policy: Auto"));
         assert!(
-            compose_prompt(AppMode::Plan, Personality::Calm).contains("Approval Policy: Never")
+            CORE_EXECUTION_PROFILE_PROMPT.contains("present the change in your plan"),
+            "Execution profile must name the correct behavior on rejection"
         );
     }
 
     #[test]
-    fn agent_prompt_can_reflect_never_approval_policy() {
+    fn personality_is_folded_into_constitution() {
+        // v4 has no separate personality tier. Voice and tone live in
+        // the preamble, so composition appends no personality overlay.
+        let calm = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        assert!(!calm.contains("## Personality:"));
+        assert!(calm.contains("Take the work seriously. Don't take"));
+        assert!(calm.contains("You are Ghosty"));
+    }
+
+    #[test]
+    fn compact_template_is_lazy_in_fresh_prompt() {
+        let tmp = tempdir().expect("tempdir");
         let prompt =
-            compose_prompt_with_approval(AppMode::Agent, Personality::Calm, ApprovalMode::Never);
-        assert!(prompt.contains("Mode: Agent"));
-        assert!(prompt.contains("Approval Policy: Never"));
-        assert!(prompt.contains("/config approval_mode suggest"));
+            system_prompt_flat_text(&system_prompt_for_mode_with_context(tmp.path(), None));
+        assert!(!prompt.contains("# Session relay"));
+        assert!(!prompt.contains("## Verification"));
     }
 
     #[test]
-    fn personality_switches_correctly() {
-        let calm = compose_prompt(AppMode::Agent, Personality::Calm);
-        let playful = compose_prompt(AppMode::Agent, Personality::Playful);
-        assert!(calm.contains("Personality: Calm"));
-        assert!(playful.contains("Personality: Playful"));
-        assert!(!calm.contains("Personality: Playful"));
-    }
-
-    #[test]
-    fn compact_template_is_included_in_full_prompt() {
+    fn session_goal_stays_volatile_while_compact_template_is_lazy() {
         let tmp = tempdir().expect("tempdir");
-        let prompt = match system_prompt_for_mode_with_context(AppMode::Agent, tmp.path(), None) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
-        assert!(prompt.contains("## Compaction Relay"));
-        // #429: structured Markdown template. Goal/Constraints/Progress
-        // (Done/InProgress/Blocked)/Key Decisions/Next step.
-        assert!(prompt.contains("### Goal"));
-        assert!(prompt.contains("### Constraints"));
-        assert!(prompt.contains("### Progress"));
-        assert!(prompt.contains("#### Done"));
-        assert!(prompt.contains("#### In Progress"));
-        assert!(prompt.contains("#### Blocked"));
-        assert!(prompt.contains("### Key Decisions"));
-        assert!(prompt.contains("### Next step"));
-    }
-
-    #[test]
-    fn session_goal_is_injected_below_compact_template() {
-        let tmp = tempdir().expect("tempdir");
-        let prompt = match system_prompt_for_mode_with_context_skills_and_session(
-            AppMode::Agent,
-            tmp.path(),
-            Some("## Repo Working Set\nsrc/lib.rs"),
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: Some("Fix transcript corruption"),
-                project_context_pack_enabled: true,
-                locale_tag: "en",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                tmp.path(),
+                Some("## Repo Working Set\nsrc/lib.rs"),
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: Some("Fix transcript corruption"),
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ));
 
         let goal_pos = prompt.find("<session_goal>").expect("goal block");
-        let compact_pos = prompt.find("## Compaction Relay").expect("compact block");
-
         assert!(prompt.contains("Fix transcript corruption"));
-        // Session goal is volatile content — it lives below the
-        // volatile-content boundary (after the compact template) so
-        // per-session goal changes don't bust the prefix cache for
-        // static layers.
-        assert!(compact_pos < goal_pos);
+        // Session goal remains volatile content below the stable static
+        // layers. The relay template is injected only when relay/compaction
+        // actually needs it.
+        assert!(goal_pos > 0);
+        assert!(!prompt.contains("# Session relay"));
         assert!(!prompt.contains("src/lib.rs"));
     }
 
     #[test]
     fn empty_session_goal_is_not_injected() {
         let tmp = tempdir().expect("tempdir");
-        let prompt = match system_prompt_for_mode_with_context_skills_and_session(
-            AppMode::Agent,
-            tmp.path(),
-            None,
-            None,
-            None,
-            PromptSessionContext {
-                user_memory_block: None,
-                goal_objective: Some("   "),
-                project_context_pack_enabled: true,
-                locale_tag: "en",
-                translation_enabled: false,
-                model_id: "ghosty",
-                show_thinking: true,
-                allow_shell: true,
-            },
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: Some("   "),
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ));
 
         assert!(!prompt.contains("<session_goal>"));
-        assert!(!prompt.contains("## Current Hunt"));
+        assert!(!prompt.contains("## Current Goal"));
     }
 
     #[test]
-    fn tool_selection_guide_avoids_defensive_tool_suppression() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
-        assert!(prompt.contains("Tool Selection Guide"));
-        assert!(prompt.contains("Use `agent_eval`"));
-        assert!(
-            !prompt.contains("When NOT to use certain tools"),
-            "the system prompt should steer tool choice without training the model to avoid available tools"
-        );
-        assert!(
-            !prompt.contains("Don't reach for"),
-            "avoid defensive anti-tool wording in the base prompt"
-        );
-    }
-
-    /// #588: language-mirroring directive must ship in every mode so
-    /// DeepSeek's `reasoning_content` and final reply follow the user's
-    /// language. Structural test — wording is not a test concern, but
-    /// the cross-cutting commitment of #588 is specifically that the
-    /// `reasoning_content` field tracks the user's language (not just
-    /// the visible reply); pin that anchor token so a future edit
-    /// can't silently weaken the section to a generic "respond in the
-    /// user's language" directive while keeping the heading.
-    #[test]
-    fn language_mirroring_section_present_in_all_modes() {
-        for mode in [AppMode::Agent, AppMode::Yolo, AppMode::Plan] {
-            let prompt = compose_prompt(mode, Personality::Calm);
-            assert!(
-                prompt.contains("## Language"),
-                "## Language section missing from mode {mode:?}"
-            );
-            assert!(
-                prompt.contains("reasoning_content"),
-                "## Language section in {mode:?} must mention `reasoning_content` — \
-                 that field name is the structural anchor for the #588 commitment that \
-                 internal reasoning, not just the visible reply, follows the user's language"
-            );
+    fn universal_prompt_leaves_tool_selection_to_the_catalog() {
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        assert!(!prompt.contains("Tool Selection Guide"));
+        for forbidden in [
+            "`File`",
+            "`Git`",
+            "`Run`",
+            "`Bash`",
+            "read_file",
+            "git_status",
+            "run_tests",
+            "exec_shell",
+            "When NOT to use certain tools",
+            "Don't reach for",
+        ] {
+            assert!(!HEADLESS_BASE_PROMPT.contains(forbidden));
         }
     }
 
+    /// #588: after the 0.9.0 constitution reduction, language-mirroring
+    /// reinforcement lives in its own static segment plus locale bookends.
     #[test]
-    fn language_mirroring_prioritizes_latest_user_message_over_locale_default() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
+    fn language_segment_present_outside_reduced_constitution() {
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
         assert!(
-            prompt.contains("latest user message first"),
-            "the language directive must choose the turn language from the user message before \
-             falling back to the environment locale"
+            !BASE_PROMPT.contains("## Language"),
+            "0.9.0 constitution.md should stay reduced; language belongs in its own segment"
         );
         assert!(
-            prompt.contains("If the latest user message is clearly English"),
-            "English user text must not drift after non-English context"
+            LANGUAGE_PROMPT.contains("## Language") && prompt.contains("## Language"),
+            "default static prompt must still include the language segment"
         );
         assert!(
-            prompt.contains("localized READMEs") && prompt.contains("tool results"),
-            "file/tool context must not become a language signal"
+            LANGUAGE_PROMPT.contains("latest user message")
+                && LANGUAGE_PROMPT.contains("fallback, not an override")
+                && LANGUAGE_PROMPT.contains("localized READMEs")
+                && LANGUAGE_PROMPT.contains("Use the `lang` field only when")
+                && LANGUAGE_PROMPT.contains("constitution and other system law stay English"),
+            "language segment must keep the mirror contract while staying short (#4784)"
         );
         assert!(
-            prompt.contains("even when the `lang` field in `## Environment` is `en`"),
-            "Chinese user text must override an English resolved locale for reasoning_content"
+            LANGUAGE_PROMPT.contains("reasoning_content")
+                && prompt.contains("reasoning_content")
+                && LOCALE_PREAMBLE_ZH_HANS.contains("reasoning_content")
+                && LOCALE_CLOSER_ZH_HANS.contains("reasoning_content"),
+            "language segment and locale bookends must keep the reasoning_content anchor"
+        );
+    }
+
+    #[test]
+    fn output_formatting_segment_present_outside_reduced_constitution() {
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        assert!(
+            !BASE_PROMPT.contains("## Output Formatting"),
+            "0.9.0 constitution.md should stay reduced; output formatting belongs in its own segment"
+        );
+        assert!(OUTPUT_PROMPT.contains("## Output Formatting"));
+        assert!(prompt.contains("## Output Formatting"));
+        assert!(prompt.contains("terminal, not a browser"));
+        assert!(prompt.contains("Markdown tables almost never render correctly"));
+    }
+
+    #[test]
+    fn runtime_prompt_assembly_preserves_split_static_layers() {
+        let tmp = tempdir().expect("tempdir");
+        let prompt =
+            system_prompt_flat_text(&system_prompt_for_mode_with_context_skills_and_session(
+                tmp.path(),
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "glm-5.2",
+                    context_window_override: Some(1_000_000),
+                    verbosity: None,
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ));
+
+        assert!(prompt.contains("## Ghosty"));
+        assert!(prompt.contains("## Language"));
+        assert!(prompt.contains("## Output Formatting"));
+        assert!(prompt.contains("Use the `lang` field only when"));
+    }
+
+    #[test]
+    fn locale_bookends_resist_english_context_drift() {
+        assert!(
+            LOCALE_PREAMBLE_ZH_HANS.contains("reasoning_content")
+                && LOCALE_CLOSER_ZH_HANS.contains("reasoning_content"),
+            "locale bookends must keep the reasoning_content anchor"
         );
         assert!(
-            prompt.contains("Use the `lang` field only when"),
-            "environment locale should be an ambiguity fallback, not the primary language source"
+            LOCALE_CLOSER_ZH_HANS.contains("英文代码")
+                && LOCALE_CLOSER_ZH_HANS.contains("用户的语言决定"),
+            "closing locale bookend must explicitly resist English-context drift"
+        );
+        assert!(
+            LOCALE_PREAMBLE_ZH_HANS.contains("代码、文件路径、工具名称"),
+            "opening locale bookend must keep code/tool tokens untranslated"
         );
     }
 
     #[test]
     fn english_base_prompt_avoids_native_script_language_priming() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
         assert!(
             !contains_cjk(&prompt),
             "English base prompt should keep native-script reinforcement in locale bookends only"
         );
         assert!(
             !prompt.contains("multilingual coding agent"),
-            "identity should not prime language switching; language belongs in the Language section"
+            "identity should not prime language switching; language belongs in runtime bookends"
         );
     }
 
-    /// #358: rlm guidance was reframed from "first-class" to "specialty
-    /// tool" — verify the structural markers are present so a future
-    /// change doesn't silently remove the RLM section entirely.
-    ///
-    /// Don't assert on prose. If you wouldn't fail a code review for
-    /// changing the wording, don't fail a test for it.
     #[test]
-    fn rlm_specialty_tool_guidance_present() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
-        // Structural: the RLM heading must exist as a section anchor.
-        assert!(prompt.contains("RLM — How to Use It"));
-        // Structural: the word "rlm" must appear multiple times (tool
-        // name, section heading, toolbox reference). Just verify the
-        // lowercase form — exact wording is NOT a test concern.
-        let rlm_count = prompt.to_lowercase().matches("rlm").count();
+    fn legacy_rlm_compatibility_descriptions_remain_available() {
+        let descriptions = [
+            RlmTool::alias("rlm_open", "open", None)
+                .description()
+                .to_string(),
+            RlmTool::alias("rlm_eval", "eval", None)
+                .description()
+                .to_string(),
+            RlmTool::alias("rlm_configure", "configure", None)
+                .description()
+                .to_string(),
+            RlmTool::alias("rlm_close", "close", None)
+                .description()
+                .to_string(),
+            HandleReadTool.description().to_string(),
+        ]
+        .join("\n");
+        let rlm_count = descriptions.to_lowercase().matches("rlm").count();
         assert!(
             rlm_count >= 5,
-            "RLM guidance present: expected >= 5 mentions of 'rlm', got {rlm_count}"
+            "RLM tool descriptions present: expected >= 5 mentions of 'rlm', got {rlm_count}"
         );
-        assert!(
-            !prompt.contains("When NOT to use RLM"),
-            "RLM guidance should explain fit and verification without telling the model to avoid the tool"
-        );
+        assert!(!HEADLESS_BASE_PROMPT.contains("`rlm`"));
     }
 
-    /// Tier 5 Local Law must explicitly cover `EngineConfig.instructions`
-    /// files. Without this clause, embedders that inject instructions via the
-    /// config field (rather than via the four hard-coded path conventions)
-    /// get their files classified by path — and since those embedder-supplied
-    /// paths aren't `AGENTS.md` / `CLAUDE.md` / `.ghosty/instructions.md` /
-    /// `.deepseek/instructions.md`, the model defaults to treating their
-    /// imperatives as Tier 7 Memory (the lowest tier per Article VII),
-    /// overridable by a single user sentence.
+    /// Project instructions rank above memory, with the nearest scope winning
+    /// over the broader. The embedder-injected-instructions case is covered
+    /// by project law/instructions sitting above memory/handoffs.
     #[test]
-    fn local_law_tier_covers_engine_config_instructions() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
+    fn project_instructions_outrank_memory_in_whose_word_wins() {
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        let project_at = prompt
+            .find("3. Project law and instructions")
+            .expect("Whose word wins must rank project instructions");
+        let memory_at = prompt
+            .find("5. Memory and previous-session handoffs.")
+            .expect("Whose word wins must rank memory below project instructions");
         assert!(
-            prompt.contains("any file configured via `EngineConfig.instructions`"),
-            "Tier 5 must explicitly cover EngineConfig.instructions so \
-             embedder-injected instructions are not default-classified as Tier 7 Memory."
+            project_at < memory_at,
+            "project instructions must outrank memory so embedder-injected \
+             instructions are not treated as mere memory preferences"
         );
     }
 
     #[test]
     fn workspace_orientation_guidance_present() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
-        assert!(prompt.contains("AGENTS.md"));
-        assert!(prompt.contains("Local Law"));
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        assert!(prompt.contains("Project law and instructions"));
         assert!(
-            prompt.contains("CLAUDE.md"),
-            "CLAUDE.md must be listed as a project instruction source"
+            prompt.contains("the nearest in\nscope winning over the broader")
+                || prompt.contains("the nearest in scope winning over the broader"),
+            "Whose word wins must keep the nearest-scope-wins rule for project instructions"
         );
     }
 
     #[test]
-    fn prompt_uses_persistent_agent_and_rlm_surface() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
-        for tool in [
-            "agent_open",
-            "agent_eval",
-            "agent_close",
-            "rlm_open",
-            "rlm_eval",
-            "rlm_configure",
-            "rlm_close",
-            "handle_read",
-        ] {
-            assert!(
-                prompt.contains(tool),
-                "prompt should mention new persistent tool `{tool}`"
-            );
-        }
-        for retired in [
-            "agent_spawn",
-            "agent_wait",
-            "agent_result",
-            "agent_send_input",
-            "agent_assign",
-            "agent_resume",
-            "agent_list",
-            "spawn_agent",
-            "delegate_to_agent",
-            "send_input",
-            "close_agent",
-        ] {
-            assert!(
-                !prompt.contains(retired),
-                "prompt should not advertise retired sub-agent tool `{retired}`"
-            );
-        }
-    }
-
-    #[test]
     fn prompt_documents_fork_context_prefix_cache_contract() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
-        assert!(prompt.contains("fork_context: true"));
-        assert!(prompt.contains("byte-identical"));
-        assert!(prompt.contains("DeepSeek prefix-cache reuse"));
-        assert!(prompt.contains("Fresh sessions are the default"));
+        let source = include_str!("tools/subagent/mod.rs");
+        assert!(source.contains("fork_context"));
+        assert!(!HEADLESS_BASE_PROMPT.contains("fork_context"));
     }
 
     #[test]
-    fn subagent_done_sentinel_section_present() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
-        assert!(prompt.contains("Internal Sub-agent Completion Events"));
-        assert!(prompt.contains("<ghosty:subagent.done>"));
-        assert!(prompt.contains("not user input"));
-        assert!(prompt.contains("Integration protocol"));
-        assert!(prompt.contains("Do not tell the user they pasted sentinels"));
+    fn prompt_documents_explicit_subagent_model_strength() {
+        let source = include_str!("tools/subagent/mod.rs");
+        assert!(source.contains("model_strength"));
+        assert!(!HEADLESS_BASE_PROMPT.contains("model_strength"));
     }
 
     #[test]
-    fn preamble_rhythm_section_present() {
-        let prompt = compose_prompt(AppMode::Agent, Personality::Calm);
-        // Preamble rhythm is now part of the Calm personality overlay.
-        // Verify the load-bearing guidance is still present.
-        assert!(prompt.contains("In preambles, name the action"));
-        assert!(prompt.contains("Reading the module tree"));
+    fn prompt_documents_structured_subagent_briefs() {
+        assert!(!HEADLESS_BASE_PROMPT.contains("Subagent Brief"));
+        for heading in [
+            "### SUMMARY",
+            "### EVIDENCE",
+            "### CHANGES",
+            "### RISKS",
+            "### BLOCKERS",
+        ] {
+            assert!(text::SUBAGENT_OUTPUT_FORMAT.contains(heading));
+        }
     }
 
     #[test]
-    fn legacy_constants_still_available() {
-        // Verify the legacy .txt constant still compiles and contains expected content
-        assert!(AGENT_PROMPT.lines().next().is_some());
+    fn universal_prompt_does_not_invent_orchestration_limits() {
+        assert!(!HEADLESS_BASE_PROMPT.contains("3-5 tool calls"));
+        assert!(!HEADLESS_BASE_PROMPT.contains("No fan-out without a fan-in owner"));
+    }
+
+    #[test]
+    fn universal_prompt_does_not_teach_optional_workflow_recipes() {
+        for recipe in [
+            "Workflow",
+            "responseSchema",
+            "request_user_input",
+            ".workflow.js",
+        ] {
+            assert!(!HEADLESS_BASE_PROMPT.contains(recipe));
+        }
+    }
+
+    #[test]
+    fn universal_prompt_does_not_expose_control_plane_ceremony() {
+        for internal in [
+            "sub-agent",
+            "completion sentinels",
+            "<ghosty:subagent.done>",
+            "dispatch, join",
+            "busy-waiting",
+        ] {
+            assert!(!HEADLESS_BASE_PROMPT.contains(internal));
+        }
+    }
+
+    #[test]
+    fn preamble_carries_tone_and_ownership_guidance() {
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        assert!(prompt.contains("The A is already yours"));
+        assert!(prompt.contains("Your competence is a settled fact"));
+        assert!(prompt.contains("Take the work seriously. Don't take"));
+        assert!(prompt.contains("Let the work speak"));
     }
 
     // ── Cache-prefix stability harness (#263 step 2) ───────────────────────
@@ -2511,24 +3333,16 @@ mod tests {
     // in the cached prefix must produce identical bytes given identical
     // inputs across calls.
 
-    use crate::test_support::assert_byte_identical;
+    use crate::test_support::{EnvVarGuard, assert_byte_identical};
 
     #[test]
     fn compose_prompt_is_byte_stable_across_calls() {
-        // Suspect #4 from #263: mode prompt churn within a single mode.
-        // Two calls with identical (mode, personality) inputs must produce
+        // Suspect #4 from #263: stable prompt churn within a single session.
+        // Two calls with identical personality inputs must produce
         // identical bytes — anything else is a cache buster.
-        for mode in [AppMode::Agent, AppMode::Yolo, AppMode::Plan] {
-            for personality in [Personality::Calm, Personality::Playful] {
-                let a = compose_prompt(mode, personality);
-                let b = compose_prompt(mode, personality);
-                assert_byte_identical(
-                    &format!("compose_prompt(mode={mode:?}, personality={personality:?})"),
-                    &a,
-                    &b,
-                );
-            }
-        }
+        let a = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        let b = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        assert_byte_identical("compose_prompt(Personality::Calm)", &a, &b);
     }
 
     #[test]
@@ -2537,24 +3351,21 @@ mod tests {
         // identical bytes. This pins the most representative production
         // surface (engine.rs builds the system prompt via this fn or
         // its sibling _and_skills variant on every turn).
-        let tmp = tempdir().expect("tempdir");
-        let workspace = tmp.path();
+        let _env_guard = crate::test_support::lock_test_env();
+        let workspace_tmp = tempdir().expect("workspace tempdir");
+        let home_tmp = tempdir().expect("home tempdir");
+        let _home = EnvVarGuard::set("HOME", home_tmp.path().as_os_str());
+        let _userprofile = EnvVarGuard::set("USERPROFILE", home_tmp.path().as_os_str());
+        let _skills_dir = EnvVarGuard::remove("DEEPSEEK_SKILLS_DIR");
+        let workspace = workspace_tmp.path();
 
-        for mode in [AppMode::Agent, AppMode::Yolo, AppMode::Plan] {
-            let a = match system_prompt_for_mode_with_context(mode, workspace, None) {
-                SystemPrompt::Text(text) => text,
-                SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-            };
-            let b = match system_prompt_for_mode_with_context(mode, workspace, None) {
-                SystemPrompt::Text(text) => text,
-                SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-            };
-            assert_byte_identical(
-                &format!("system_prompt_for_mode_with_context(mode={mode:?}) on empty workspace"),
-                &a,
-                &b,
-            );
-        }
+        let a = system_prompt_flat_text(&system_prompt_for_mode_with_context(workspace, None));
+        let b = system_prompt_flat_text(&system_prompt_for_mode_with_context(workspace, None));
+        assert_byte_identical(
+            "system_prompt_for_mode_with_context() on empty workspace",
+            &a,
+            &b,
+        );
     }
 
     #[test]
@@ -2562,20 +3373,23 @@ mod tests {
         // Working-set metadata is now injected into the latest user message
         // per turn. The legacy argument remains for call-site compatibility
         // but must not reintroduce volatile bytes into the system prompt.
+        let _env_guard = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
+        let home_tmp = tempdir().expect("home tempdir");
+        let _home = EnvVarGuard::set("HOME", home_tmp.path().as_os_str());
+        let _userprofile = EnvVarGuard::set("USERPROFILE", home_tmp.path().as_os_str());
+        let _skills_dir = EnvVarGuard::remove("DEEPSEEK_SKILLS_DIR");
         let workspace = tmp.path();
         let summary = "## Repo Working Set\nWorkspace: /tmp/x\n";
 
-        let a = match system_prompt_for_mode_with_context(AppMode::Agent, workspace, Some(summary))
-        {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
-        let b = match system_prompt_for_mode_with_context(AppMode::Agent, workspace, Some(summary))
-        {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let a = system_prompt_flat_text(&system_prompt_for_mode_with_context(
+            workspace,
+            Some(summary),
+        ));
+        let b = system_prompt_flat_text(&system_prompt_for_mode_with_context(
+            workspace,
+            Some(summary),
+        ));
         assert_byte_identical(
             "system_prompt_for_mode_with_context with constant working_set summary",
             &a,
@@ -2593,7 +3407,12 @@ mod tests {
         // rendered prompt must produce identical bytes. The relay block
         // lands below the static boundary in
         // `system_prompt_for_mode_with_context_and_skills`.
+        let _env_guard = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
+        let home_tmp = tempdir().expect("home tempdir");
+        let _home = EnvVarGuard::set("HOME", home_tmp.path().as_os_str());
+        let _userprofile = EnvVarGuard::set("USERPROFILE", home_tmp.path().as_os_str());
+        let _skills_dir = EnvVarGuard::remove("DEEPSEEK_SKILLS_DIR");
         let workspace = tmp.path();
         let handoff_dir = workspace.join(".deepseek");
         std::fs::create_dir_all(&handoff_dir).unwrap();
@@ -2603,14 +3422,8 @@ mod tests {
         )
         .unwrap();
 
-        let a = match system_prompt_for_mode_with_context(AppMode::Agent, workspace, None) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
-        let b = match system_prompt_for_mode_with_context(AppMode::Agent, workspace, None) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let a = system_prompt_flat_text(&system_prompt_for_mode_with_context(workspace, None));
+        let b = system_prompt_flat_text(&system_prompt_for_mode_with_context(workspace, None));
         assert_byte_identical(
             "system_prompt_for_mode_with_context with constant handoff file",
             &a,
@@ -2622,10 +3435,10 @@ mod tests {
 
     #[test]
     fn handoff_appears_after_static_blocks_without_working_set() {
-        // Cache-prefix invariant: the relay block must come after static
-        // `## Context Management` and the compaction relay template
-        // (`## Compaction Relay`). Working-set metadata is per-turn user
-        // metadata now, not a system-prompt tail block.
+        // Cache-prefix invariant: the relay artifact must come after static
+        // `## Core Execution`. The relay template itself is now action-local,
+        // not part of every system prompt. Working-set metadata is per-turn
+        // user metadata, not a system-prompt tail block.
         let tmp = tempdir().expect("tempdir");
         let workspace = tmp.path();
         let handoff_dir = workspace.join(".deepseek");
@@ -2633,18 +3446,14 @@ mod tests {
         std::fs::write(handoff_dir.join("handoff.md"), "# handoff body\n").unwrap();
 
         let summary = "## Repo Working Set\nWorkspace: /tmp/x\n";
-        let prompt =
-            match system_prompt_for_mode_with_context(AppMode::Agent, workspace, Some(summary)) {
-                SystemPrompt::Text(text) => text,
-                SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-            };
+        let prompt = system_prompt_flat_text(&system_prompt_for_mode_with_context(
+            workspace,
+            Some(summary),
+        ));
 
-        let context_pos = prompt
-            .find("## Context Management")
-            .expect("Context Management section present in Agent mode");
-        let compact_pos = prompt
-            .find("## Compaction Relay")
-            .expect("compaction relay template present");
+        let execution_pos = prompt
+            .find("## Core Execution")
+            .expect("Core Execution section present in Agent mode");
         let handoff_pos = prompt
             .find(HANDOFF_BLOCK_MARKER)
             .expect("relay block present when fixture file exists");
@@ -2654,19 +3463,69 @@ mod tests {
         );
 
         assert!(
-            context_pos < handoff_pos,
-            "## Context Management must precede the relay block"
+            execution_pos < handoff_pos,
+            "## Core Execution must precede the relay block"
         );
-        assert!(
-            compact_pos < handoff_pos,
-            "## Compaction Relay must precede the relay block"
-        );
+        assert!(!prompt.contains("# Session relay"));
     }
 
     #[test]
     fn render_instructions_block_returns_none_for_empty_input() {
         let empty: &[super::InstructionSource] = &[];
         assert!(super::render_instructions_block(empty).is_none());
+    }
+
+    /// #4632 — The system prompt prefix (the byte-stable part cached by
+    /// inference servers) must never contain private content: absolute
+    /// filesystem paths, API keys, or home-directory references.
+    ///
+    /// Pin `HOME`/`USERPROFILE` to a scratch dir (and hold the env barrier)
+    /// so global `~/.ghosty/instructions.md` and home-resolved skills
+    /// cannot leak their real absolute paths into the prompt under test.
+    /// Without this a machine that has `~/.ghosty/instructions.md` fails
+    /// the absolute-path assertion, and the test only passes in parallel
+    /// runs when a sibling test happens to hold a temporary `HOME` guard at
+    /// the same moment — process-global env, so the result must never
+    /// depend on scheduling or the developer's machine.
+    #[test]
+    fn system_prompt_prefix_never_leaks_private_content() {
+        let _env_guard = crate::test_support::lock_test_env();
+        let tmp = tempdir().expect("tempdir");
+        let home_tmp = tempdir().expect("home tempdir");
+        let _home = EnvVarGuard::set("HOME", home_tmp.path().as_os_str());
+        let _userprofile = EnvVarGuard::set("USERPROFILE", home_tmp.path().as_os_str());
+        let _skills_dir = EnvVarGuard::remove("DEEPSEEK_SKILLS_DIR");
+        let workspace = tmp.path();
+        let prompt = match system_prompt_for_mode_with_context(workspace, None) {
+            SystemPrompt::Text(text) => text,
+            SystemPrompt::Blocks(blocks) => blocks
+                .iter()
+                .map(|block| block.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        };
+
+        // No absolute paths (Unix or Windows).
+        let offending: Vec<&str> = prompt
+            .lines()
+            .filter(|line| {
+                line.contains("/Users/") || line.contains("/home/") || line.contains("C:\\")
+            })
+            .collect();
+        assert!(
+            offending.is_empty(),
+            "system prompt must not contain absolute user paths, found: {offending:?}"
+        );
+        // No API key patterns.
+        assert!(
+            !prompt.contains("sk-") && !prompt.contains("api_key") && !prompt.contains("API_KEY"),
+            "system prompt must not contain API key material"
+        );
+        // The workspace path itself must not appear.
+        assert!(
+            !prompt.contains(workspace.to_str().unwrap_or("/nonexistent")),
+            "system prompt must not embed the workspace path"
+        );
     }
 
     #[test]
@@ -2724,7 +3583,7 @@ mod tests {
         std::fs::write(&big, "X".repeat(200 * 1024)).unwrap();
 
         let block = super::render_instructions_block(&[big.into()]).expect("non-empty");
-        assert!(block.contains("[…elided]"), "truncation marker missing");
+        assert!(block.contains("[…truncated:"), "truncation marker missing");
         // Block should be much smaller than the original file.
         assert!(
             block.len() < 110 * 1024,
@@ -2758,7 +3617,7 @@ mod tests {
             content: "Y".repeat(200 * 1024),
         };
         let trimmed = super::render_instructions_block(&[big_inline]).expect("non-empty");
-        assert!(trimmed.contains("[…elided]"));
+        assert!(trimmed.contains("[…truncated:"));
 
         // File + Inline 混用,顺序保持。
         let tmp = tempdir().expect("tempdir");
@@ -2785,17 +3644,14 @@ mod tests {
         std::fs::write(&extra, "EXTRA_INSTRUCTIONS_MARKER_BODY").unwrap();
 
         let extra_source: super::InstructionSource = extra.clone().into();
-        let prompt = match super::system_prompt_for_mode_with_context_and_skills(
-            AppMode::Agent,
-            workspace,
-            None,
-            None,
-            Some(std::slice::from_ref(&extra_source)),
-            None,
-        ) {
-            SystemPrompt::Text(text) => text,
-            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
-        };
+        let prompt =
+            system_prompt_flat_text(&super::system_prompt_for_mode_with_context_and_skills(
+                workspace,
+                None,
+                None,
+                Some(std::slice::from_ref(&extra_source)),
+                None,
+            ));
 
         assert!(
             prompt.contains("EXTRA_INSTRUCTIONS_MARKER_BODY"),
@@ -2805,5 +3661,214 @@ mod tests {
             prompt.contains(&extra.display().to_string()),
             "instructions block must annotate its source path"
         );
+    }
+
+    #[test]
+    fn verbosity_concise_appends_discipline_block() {
+        let tmp = tempdir().expect("tempdir");
+        let workspace = tmp.path();
+        let prompt = system_prompt_flat_text(
+            &super::system_prompt_for_mode_with_context_skills_session_and_approval(
+                workspace,
+                None,
+                None,
+                None,
+                PromptSessionContext {
+                    user_memory_block: None,
+                    goal_objective: None,
+                    project_context_pack_enabled: false,
+                    locale_tag: "en",
+                    translation_enabled: false,
+                    model_id: "ghosty",
+                    context_window_override: None,
+                    verbosity: Some(" Concise "),
+                    skills_scan_ghosty_only: false,
+                    plugin_registry: None,
+                    mode: crate::tui::app::AppMode::Agent,
+                },
+            ),
+        );
+
+        assert!(
+            prompt.contains("## Concise Output Discipline"),
+            "Concise Output Discipline should be appended"
+        );
+    }
+
+    /// #2953 — the Calm overlay (`CALM_PERSONALITY`) stays out of the default
+    /// model-prompt path to keep the static prefix slim. Voice and tone
+    /// guidance travels via the constitution preamble instead.
+    #[test]
+    fn default_prompt_does_not_include_calm_personality_overlay() {
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+        let calm_text = CALM_PERSONALITY;
+        let first_calm_line = calm_text.lines().find(|l| !l.is_empty()).unwrap_or("");
+        assert!(
+            !prompt.contains(first_calm_line),
+            "default agent prompt must not include the calm personality overlay"
+        );
+    }
+
+    #[test]
+    fn live_prompt_path_returns_world_state_blocks_with_markers() {
+        let tmp = tempdir().expect("tempdir");
+        let prompt = system_prompt_for_mode_with_context_skills_session_and_approval(
+            tmp.path(),
+            None,
+            None,
+            None,
+            PromptSessionContext {
+                user_memory_block: Some("## Memory\n- remember the cutover"),
+                goal_objective: Some("ship WorldState Blocks"),
+                project_context_pack_enabled: false,
+                locale_tag: "en",
+                translation_enabled: false,
+                model_id: "deepseek-v4-pro",
+                context_window_override: None,
+                verbosity: Some("concise"),
+                skills_scan_ghosty_only: false,
+                plugin_registry: None,
+                mode: crate::tui::app::AppMode::Agent,
+            },
+        );
+
+        let SystemPrompt::Blocks(blocks) = prompt else {
+            panic!("live prompt assembly must return SystemPrompt::Blocks");
+        };
+        assert!(
+            blocks.len() >= 3,
+            "constitution + at least one WorldState fragment + authority trailer"
+        );
+        assert!(
+            !blocks[0].text.contains("<!-- cw:ctx:"),
+            "constitution block must stay marker-free for prefix cache stability"
+        );
+        assert!(
+            blocks[0].text.contains("## Core Execution"),
+            "constitution retains static core execution guidance"
+        );
+
+        let flat = system_prompt_flat_text(&SystemPrompt::Blocks(blocks.clone()));
+        assert!(flat.contains(crate::model_context::FragmentId::Workspace.marker()));
+        assert!(flat.contains(crate::model_context::FragmentId::Route.marker()));
+        assert!(flat.contains("## Environment"));
+        assert!(
+            flat.contains("verbosity: concise") && flat.contains("translation: off"),
+            "route fragment keeps verbosity/translation but drops the model id"
+        );
+        assert!(!flat.contains("model: deepseek-v4-pro"));
+        assert!(flat.contains("<session_goal>"));
+        assert!(flat.contains("ship WorldState Blocks"));
+        assert!(flat.contains("remember the cutover"));
+        assert!(flat.contains("## Authority Recap"));
+        assert!(
+            !flat.contains(crate::model_context::FragmentId::SkillsTools.marker()),
+            "skills remain in constitution, not a volatile SkillsTools fragment"
+        );
+    }
+
+    #[test]
+    fn live_prompt_world_state_diff_retains_unchanged_fragments() {
+        let tmp = tempdir().expect("tempdir");
+        let session = PromptSessionContext {
+            user_memory_block: None,
+            goal_objective: None,
+            project_context_pack_enabled: false,
+            locale_tag: "en",
+            translation_enabled: false,
+            model_id: "ghosty",
+            context_window_override: None,
+            verbosity: None,
+            skills_scan_ghosty_only: false,
+            plugin_registry: None,
+            mode: crate::tui::app::AppMode::Agent,
+        };
+        let first = system_prompt_for_mode_with_context_skills_session_and_approval(
+            tmp.path(),
+            None,
+            None,
+            None,
+            session.clone(),
+        );
+        let second = system_prompt_for_mode_with_context_skills_session_and_approval(
+            tmp.path(),
+            None,
+            None,
+            None,
+            PromptSessionContext {
+                goal_objective: Some("only goal changed"),
+                ..session
+            },
+        );
+
+        let extract_world = |prompt: &SystemPrompt| -> crate::model_context::WorldState {
+            let SystemPrompt::Blocks(blocks) = prompt else {
+                panic!("expected Blocks");
+            };
+            let mut state = crate::model_context::WorldState::new();
+            for block in blocks.iter().skip(1) {
+                for id in crate::model_context::FragmentId::all() {
+                    let marker = id.marker();
+                    if let Some(rest) = block.text.strip_prefix(marker) {
+                        let body = rest.trim_start_matches('\n');
+                        state.upsert(crate::model_context::ModelContextFragment::new(
+                            *id,
+                            id.role(),
+                            body,
+                        ));
+                    }
+                }
+            }
+            state
+        };
+
+        let previous = extract_world(&first);
+        let next = extract_world(&second);
+        let diff = next.render_diff(Some(&previous));
+        assert!(
+            diff.retained
+                .iter()
+                .any(|marker| marker == crate::model_context::FragmentId::Route.marker()),
+            "unchanged route fragment must be retained: {diff:?}"
+        );
+        assert!(
+            diff.updated
+                .iter()
+                .any(|fragment| fragment.id == crate::model_context::FragmentId::Workspace),
+            "goal change must update workspace fragment: {diff:?}"
+        );
+    }
+
+    #[test]
+    fn default_prompt_stays_under_2953_static_baseline() {
+        const ISSUE_2953_BASELINE_CHARS: usize = 30_461;
+        let prompt = compose_prompt_with_approval_model_and_shell(Personality::Calm, "ghosty");
+
+        assert!(
+            prompt.chars().count() < ISSUE_2953_BASELINE_CHARS,
+            "default static prompt should stay below the #2953 baseline"
+        );
+    }
+}
+#[test]
+fn core_execution_profile_is_runtime_only() {
+    for required in [
+        "repository instructions",
+        "inspect the narrow owner",
+        "verify it",
+        "Report changed files",
+    ] {
+        assert!(CORE_EXECUTION_PROFILE_PROMPT.contains(required));
+    }
+    for forbidden in [
+        "footer",
+        "color",
+        "hotbar",
+        "panel",
+        "Fleet",
+        "Workflow",
+        "OpenHands",
+    ] {
+        assert!(!CORE_EXECUTION_PROFILE_PROMPT.contains(forbidden));
     }
 }

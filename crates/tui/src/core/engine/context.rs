@@ -4,63 +4,19 @@
 //! engine session maintenance code. Keeping them here prevents the top-level
 //! engine module from accumulating unrelated context-policy details.
 
-use crate::compaction::estimate_tokens;
-use crate::error_taxonomy::ErrorCategory;
-use crate::models::{Message, SystemPrompt, context_window_for_model};
+use crate::config::ApiProvider;
+use crate::context_budget::ContextBudget;
+use crate::models::SystemPrompt;
+#[cfg(test)]
+pub(super) use crate::route_budget::effective_max_output_tokens;
+pub(super) use crate::route_budget::effective_max_output_tokens_for_route;
 use crate::tools::spec::ToolResult;
+use ghosty_config::route::RouteLimits;
 use serde_json::Value;
-
-/// Max output tokens requested for normal agent turns. Generous on purpose:
-/// V4 thinking models can produce tens of thousands of reasoning tokens on
-/// hard prompts before the visible reply, and DeepSeek V4 ships with a 1M
-/// context window. v0.7.5 keeps this cap fixed instead of silently lowering
-/// `max_tokens` near pressure; hard-cycle/preflight checks reserve this budget
-/// plus safety headroom before sending the next request.
-pub(super) const TURN_MAX_OUTPUT_TOKENS: u32 = 262_144;
-
-/// Safe max output tokens sent in the API request. This must be low enough to
-/// work with providers that have smaller context limits than the model's native
-/// window (e.g., self-hosted vLLM/SGLang with `--max-model-len 131072`).
-/// DeepSeek's API will still produce as many tokens as needed for thinking;
-/// this cap just prevents HTTP 400 from providers with tight limits.
-const API_MAX_OUTPUT_TOKENS: u32 = 65_536;
-
-/// Compute the effective `max_tokens` to send in the API request for a given
-/// model. Uses `API_MAX_OUTPUT_TOKENS` (64K) which fits within common provider
-/// limits (128K+ total). For non-V4 models with smaller context windows, caps
-/// at half the context window.
-///
-/// Override: when the env var `DEEPSEEK_MAX_OUTPUT_TOKENS` is set to a positive
-/// integer, this function returns that value directly. Use this for self-hosted
-/// providers (vLLM/SGLang) whose `max-model-len` is tight and where the
-/// model-table heuristic above would over-allocate. Example: vLLM serving
-/// Qwen3.6 with `--max-model-len 65536` should set
-/// `DEEPSEEK_MAX_OUTPUT_TOKENS=16384` so input + output stays well under the
-/// provider's hard limit.
-pub(super) fn effective_max_output_tokens(model: &str) -> u32 {
-    if let Ok(raw) = std::env::var("DEEPSEEK_MAX_OUTPUT_TOKENS")
-        && let Ok(n) = raw.trim().parse::<u32>()
-        && n > 0
-    {
-        return n;
-    }
-    let window = context_window_for_model(model).unwrap_or(128_000);
-    if window >= 500_000 {
-        // V4-class models on large-context providers: use 64K which is safe
-        // for most deployments while still allowing substantial output.
-        API_MAX_OUTPUT_TOKENS
-    } else {
-        // Smaller models: cap at half the context window (leave room for input)
-        let capped = window / 2;
-        capped.min(API_MAX_OUTPUT_TOKENS)
-    }
-}
 /// Keep this many most recent messages when emergency trimming is required.
 pub(super) const MIN_RECENT_MESSAGES_TO_KEEP: usize = 4;
 /// Allow a few emergency recovery attempts before failing the turn.
 pub(super) const MAX_CONTEXT_RECOVERY_ATTEMPTS: u8 = 2;
-/// Reserve additional headroom to avoid hitting provider hard limits.
-const CONTEXT_HEADROOM_TOKENS: usize = 1024;
 /// Hard cap for any tool output inserted into model context.
 const TOOL_RESULT_CONTEXT_HARD_LIMIT_CHARS: usize = 12_000;
 /// Soft cap for known noisy tools inserted into model context.
@@ -68,17 +24,18 @@ const TOOL_RESULT_CONTEXT_SOFT_LIMIT_CHARS: usize = 2_000;
 /// Snippet length kept when compacting tool output for model context.
 const TOOL_RESULT_CONTEXT_SNIPPET_CHARS: usize = 900;
 /// Hard cap for tool output inserted into a large-context model.
-const LARGE_CONTEXT_TOOL_RESULT_HARD_LIMIT_CHARS: usize = 180_000;
+const LARGE_CONTEXT_TOOL_RESULT_HARD_LIMIT_CHARS: usize = 48_000;
 /// Soft cap for known noisy tools inserted into a large-context model.
-const LARGE_CONTEXT_TOOL_RESULT_SOFT_LIMIT_CHARS: usize = 60_000;
-/// Snippet length kept when compacting large-context tool output.
-const LARGE_CONTEXT_TOOL_RESULT_SNIPPET_CHARS: usize = 40_000;
+const LARGE_CONTEXT_TOOL_RESULT_SOFT_LIMIT_CHARS: usize = 8_000;
+/// Snippet length kept when compacting large-context noisy output.
+const LARGE_CONTEXT_TOOL_RESULT_SNIPPET_CHARS: usize = 4_000;
 /// Context window size at which tool output limits can be relaxed.
 const LARGE_CONTEXT_WINDOW_TOKENS: u32 = 500_000;
 /// Max chars to keep from metadata-provided output summaries.
 const TOOL_RESULT_METADATA_SUMMARY_CHARS: usize = 320;
 
-pub(super) const COMPACTION_SUMMARY_MARKER: &str = "Conversation Summary (Auto-Generated)";
+#[cfg(test)]
+pub(super) use crate::compaction::COMPACTION_SUMMARY_MARKER;
 
 #[derive(Debug, Clone, Copy)]
 struct ToolResultContextLimits {
@@ -134,7 +91,10 @@ fn tool_result_is_noisy(tool_name: &str) -> bool {
             | "run_verifiers"
             | "task_gate_run"
             | "multi_tool_use.parallel"
+            | "Web"
             | "web_search"
+            | "web.run"
+            | "fetch_url"
     )
 }
 
@@ -227,16 +187,7 @@ fn summarize_subagent_snapshot(snapshot: &serde_json::Value, index: usize) -> St
 }
 
 fn compact_subagent_tool_result_for_context(tool_name: &str, raw: &str) -> Option<String> {
-    if !matches!(
-        tool_name,
-        "agent_open"
-            | "agent_eval"
-            | "agent_close"
-            | "agent_result"
-            | "agent_wait"
-            | "tool_agent"
-            | "wait"
-    ) {
+    if tool_name != "agent" {
         return None;
     }
 
@@ -249,9 +200,9 @@ fn compact_subagent_tool_result_for_context(tool_name: &str, raw: &str) -> Optio
 
     let mut out = String::from("[sub-agent result summarized for parent context]\n");
     out.push_str(
-        "Child results are self-reports; verify side effects with tools like read_file or list_dir before claiming success.\n",
+        "Child results are self-reports; verify side effects with `File` actions like `read` or `list` before claiming success.\n",
     );
-    out.push_str("Use `agent_eval` for a fresh projection or `handle_read` on `transcript_handle` for bounded transcript slices.\n");
+    out.push_str("Use `handle_read` on `transcript_handle` for bounded transcript slices when the returned summary is not enough.\n");
     for (idx, snapshot) in snapshots.iter().enumerate() {
         if idx >= 8 {
             out.push_str(&format!(
@@ -434,16 +385,20 @@ fn compact_structured_tool_result_for_context(tool_name: &str, raw: &str) -> Opt
     match tool_name {
         "run_tests" => compact_run_tests_result_for_context(raw),
         "run_verifiers" => compact_run_verifiers_result_for_context(raw),
-        "task_gate_run" => compact_task_gate_run_result_for_context(raw),
+        // `tasks` is the unified durable-task tool (piagent phase B); its
+        // gate_run action emits the same gate payload as the legacy
+        // `task_gate_run` alias. The compactor returns None unless the
+        // content actually parses as a gate result, so non-gate `tasks`
+        // results fall through to the generic limits unchanged.
+        "task_gate_run" | "tasks" => compact_task_gate_run_result_for_context(raw),
         _ => None,
     }
 }
 
-fn tool_result_context_limits_for_model(model: &str) -> ToolResultContextLimits {
-    let is_large_context =
-        context_window_for_model(model).is_some_and(|window| window >= LARGE_CONTEXT_WINDOW_TOKENS);
+fn tool_result_context_limits_for_window(context_window: u32) -> ToolResultContextLimits {
+    let is_large_context = context_window >= LARGE_CONTEXT_WINDOW_TOKENS;
 
-    if is_large_context {
+    let mut limits = if is_large_context {
         ToolResultContextLimits {
             hard_limit_chars: LARGE_CONTEXT_TOOL_RESULT_HARD_LIMIT_CHARS,
             noisy_soft_limit_chars: LARGE_CONTEXT_TOOL_RESULT_SOFT_LIMIT_CHARS,
@@ -455,17 +410,53 @@ fn tool_result_context_limits_for_model(model: &str) -> ToolResultContextLimits 
             noisy_soft_limit_chars: TOOL_RESULT_CONTEXT_SOFT_LIMIT_CHARS,
             snippet_chars: TOOL_RESULT_CONTEXT_SNIPPET_CHARS,
         }
+    };
+    if let Some(bytes) =
+        crate::tools::large_output_router::WorkshopConfig::active_tool_result_max_bytes()
+    {
+        // Opt-in long-context profiles may raise the model-visible budget.
+        // Never lower the compile-time floor; cap at 2 MiB (#5367).
+        let raised = bytes.clamp(limits.hard_limit_chars, 2 * 1024 * 1024);
+        limits.hard_limit_chars = raised;
+        limits.snippet_chars = (raised / 3).max(limits.snippet_chars);
+        limits.noisy_soft_limit_chars = limits.noisy_soft_limit_chars.max(raised / 6);
     }
+    limits
 }
 
+#[cfg(test)]
 pub(crate) fn compact_tool_result_for_context(
     model: &str,
+    tool_name: &str,
+    output: &ToolResult,
+) -> String {
+    compact_tool_result_for_route(ApiProvider::Deepseek, model, None, tool_name, output)
+}
+
+pub(crate) fn compact_tool_result_for_route(
+    provider: ApiProvider,
+    model: &str,
+    route_limits: Option<RouteLimits>,
     tool_name: &str,
     output: &ToolResult,
 ) -> String {
     let raw = output.content.trim();
     if raw.is_empty() {
         return String::new();
+    }
+
+    // A result already bounded by the adaptive evidence envelope is an
+    // honest, context-sized preview whose footer names the artifact path and
+    // a recovery instruction. Re-compacting it would strip that recovery
+    // contract and double-truncate the output, so pass it through unchanged.
+    if output
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("evidence_available"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        return raw.to_string();
     }
 
     if let Some(summary) = compact_subagent_tool_result_for_context(tool_name, raw) {
@@ -476,7 +467,9 @@ pub(crate) fn compact_tool_result_for_context(
         return summary;
     }
 
-    let limits = tool_result_context_limits_for_model(model);
+    let context_window =
+        crate::route_budget::route_context_window_tokens(provider, model, route_limits);
+    let limits = tool_result_context_limits_for_window(context_window);
     let raw_chars = raw.chars().count();
     let should_compact = raw_chars > limits.hard_limit_chars
         || (tool_result_is_noisy(tool_name) && raw_chars > limits.noisy_soft_limit_chars);
@@ -502,90 +495,76 @@ pub(crate) fn compact_tool_result_for_context(
 pub(super) fn extract_compaction_summary_prompt(
     prompt: Option<SystemPrompt>,
 ) -> Option<SystemPrompt> {
-    match prompt {
-        Some(SystemPrompt::Blocks(blocks)) => {
-            let summary_blocks: Vec<_> = blocks
-                .into_iter()
-                .filter(|block| block.text.contains(COMPACTION_SUMMARY_MARKER))
-                .collect();
-            if summary_blocks.is_empty() {
-                None
-            } else {
-                Some(SystemPrompt::Blocks(summary_blocks))
-            }
-        }
-        Some(SystemPrompt::Text(text)) => {
-            if text.contains(COMPACTION_SUMMARY_MARKER) {
-                Some(SystemPrompt::Text(text))
-            } else {
-                None
-            }
-        }
-        None => None,
-    }
+    crate::compaction::extract_compaction_summary(prompt.as_ref())
 }
 
-fn estimate_text_tokens_conservative(text: &str) -> usize {
-    text.chars().count().div_ceil(3)
-}
-
-fn estimate_system_tokens_conservative(system: Option<&SystemPrompt>) -> usize {
-    match system {
-        Some(SystemPrompt::Text(text)) => estimate_text_tokens_conservative(text),
-        Some(SystemPrompt::Blocks(blocks)) => blocks
-            .iter()
-            .map(|block| estimate_text_tokens_conservative(&block.text))
-            .sum(),
-        None => 0,
-    }
-}
-
-pub(super) fn estimate_input_tokens_conservative(
-    messages: &[Message],
-    system: Option<&SystemPrompt>,
-) -> usize {
-    let message_tokens = estimate_tokens(messages).saturating_mul(3).div_ceil(2);
-    let system_tokens = estimate_system_tokens_conservative(system);
-    let framing_overhead = messages.len().saturating_mul(12).saturating_add(48);
-    message_tokens
-        .saturating_add(system_tokens)
-        .saturating_add(framing_overhead)
-}
-
-/// Context windows at or above this size reserve the full
-/// [`TURN_MAX_OUTPUT_TOKENS`] (262K) when computing the internal input budget,
-/// leaving room for V4-class interleaved thinking. Below it, the reservation
-/// falls back to [`effective_max_output_tokens`] so a smaller self-hosted
-/// window does not underflow to a negative budget.
-const INTERNAL_BUDGET_LARGE_WINDOW_THRESHOLD: u32 = 500_000;
-
-/// Internal input-side token budget for a model: `window - reserved_output -
-/// headroom`. Used by the preflight check, emergency recovery, and capacity
-/// trimming to decide when to compact.
+/// Internal input-side token budget for a provider/model route:
+/// `window - reserved_output - headroom`. Used by the preflight check,
+/// emergency recovery, and capacity trimming to decide when to compact.
+/// Unknown model ids fall back to the provider's conservative default instead
+/// of disabling preflight; custom long-context deployments can still advertise
+/// their window with a `-256k`/`-1024k` model suffix.
 ///
-/// The reserved-output term is window-dependent:
-///   * `window >= 500K` (V4-class large-context) -> [`TURN_MAX_OUTPUT_TOKENS`]
-///     (262K). Preserves the "leave room for interleaved thinking" contract.
-///   * `window < 500K` (smaller / self-hosted, e.g. a 256K vLLM Qwen window)
-///     -> [`effective_max_output_tokens`], i.e. what the API actually caps
-///     output at. Reserving the full 262K here would compute
-///     `256K - 262K - 1K`, which underflows `checked_sub` to `None` and
-///     *silently disables every preflight and emergency recovery path* — the
-///     session then runs until the provider hard-rejects on context length.
-pub(super) fn context_input_budget(model: &str) -> Option<usize> {
-    let window_tokens = context_window_for_model(model)?;
-    let window = usize::try_from(window_tokens).ok()?;
-    let reserved_output = if window_tokens >= INTERNAL_BUDGET_LARGE_WINDOW_THRESHOLD {
-        TURN_MAX_OUTPUT_TOKENS
-    } else {
-        effective_max_output_tokens(model)
-    };
-    let output = usize::try_from(reserved_output).ok()?;
-    window
-        .checked_sub(output)
-        .and_then(|v| v.checked_sub(CONTEXT_HEADROOM_TOKENS))
+/// The reserved-output term is the route-effective request cap: exactly what
+/// the API can receive after explicit overrides, compatibility/route ceilings,
+/// and the route window are intersected. A second hidden reasoning reserve
+/// would make preflight disagree with the wire request and can cause premature
+/// compaction on otherwise valid large-window inputs.
+#[cfg(test)]
+pub(super) fn context_input_budget_for_provider(
+    provider: ApiProvider,
+    model: &str,
+) -> Option<usize> {
+    context_input_budget_for_route(provider, model, None, 0)
+}
+
+/// Public so external callers (e.g. a host/bridge deriving its own compaction
+/// trigger line) can reuse the *exact* same internal input-budget math — window
+/// minus the route-effective output reservation
+/// (`route_output_reservation`) minus headroom —
+/// instead of re-deriving those constants and silently drifting from the engine.
+/// Pass `input_tokens = 0` to get the full emergency input budget for the route.
+pub fn context_input_budget_for_route(
+    provider: ApiProvider,
+    model: &str,
+    route_limits: Option<RouteLimits>,
+    input_tokens: usize,
+) -> Option<usize> {
+    route_context_budget_for_route(provider, model, route_limits, input_tokens)
+        .and_then(|budget| usize::try_from(budget.available_input_tokens).ok())
+}
+
+#[cfg(test)]
+pub(super) fn route_context_budget_for_provider(
+    provider: ApiProvider,
+    model: &str,
+    input_tokens: usize,
+) -> Option<ContextBudget> {
+    route_context_budget_for_route(provider, model, None, input_tokens)
+}
+
+pub(super) fn route_context_budget_for_route(
+    provider: ApiProvider,
+    model: &str,
+    route_limits: Option<RouteLimits>,
+    input_tokens: usize,
+) -> Option<ContextBudget> {
+    crate::route_budget::route_context_budget(provider, model, route_limits, input_tokens)
 }
 
 pub(super) fn is_context_length_error_message(message: &str) -> bool {
-    crate::error_taxonomy::classify_error_message(message) == ErrorCategory::InvalidInput
+    // Only genuine context-length rejections may drive the bounded
+    // context-recovery retry. The broader `InvalidInput` bucket also holds
+    // wrong-model rejections ("Model not exist."), malformed requests, and
+    // truncated-output terminations, where re-sending a compacted history
+    // cannot help and would hide the real error.
+    let lower = message.to_lowercase();
+    lower.contains("model output truncated")
+        || lower.contains("model response incomplete")
+        || lower.contains("maximum context length")
+        || lower.contains("context length")
+        || lower.contains("context_length")
+        || lower.contains("prompt is too long")
+        || lower.contains("context window")
+        || (lower.contains("requested") && lower.contains("tokens") && lower.contains("maximum"))
 }

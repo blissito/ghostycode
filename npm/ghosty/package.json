@@ -1,0 +1,60 @@
+{
+  "name": "ghostycode",
+  "version": "0.0.15",
+  "ghostyBinaryVersion": "0.0.15",
+  "description": "Terminal coding agent for supported hosted and local models. One runtime on your machine. Rust, MIT.",
+  "author": "Hmbown",
+  "license": "MIT",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/Hmbown"
+    },
+    {
+      "type": "buymeacoffee",
+      "url": "https://www.buymeacoffee.com/hmbown"
+    }
+  ],
+  "homepage": "https://github.com/blissito/ghostycode",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blissito/ghostycode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blissito/ghostycode/issues"
+  },
+  "keywords": [
+    "ghosty",
+    "deepseek",
+    "cli",
+    "tui",
+    "rust",
+    "binary",
+    "terminal"
+  ],
+  "type": "commonjs",
+  "bin": {
+    "ghosty": "bin/ghosty.js"
+  },
+  "scripts": {
+    "release:check": "node scripts/verify-release-assets.js",
+    "postinstall": "node scripts/install.js --optional",
+    "prepublishOnly": "bash ../../scripts/release/require-release-tag-checkout.sh && bash ../../scripts/release/verify-release-assets.sh",
+    "prepack": "node scripts/install.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "preferGlobal": true,
+  "files": [
+    "bin/*.js",
+    "scripts/*.js",
+    "test/*.js",
+    "README.md",
+    "package.json"
+  ]
+}

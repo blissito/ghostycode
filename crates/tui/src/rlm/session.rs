@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -346,7 +345,7 @@ fn compact_content_block(block: &ContentBlock) -> Value {
             "type": "text",
             "text": text,
         }),
-        ContentBlock::Thinking { thinking } => json!({
+        ContentBlock::Thinking { thinking, .. } => json!({
             "type": "thinking",
             "redacted": true,
             "chars": thinking.chars().count(),
@@ -358,6 +357,7 @@ fn compact_content_block(block: &ContentBlock) -> Value {
             name,
             input,
             caller,
+            ..
         } => json!({
             "type": "tool_use",
             "id": id,
@@ -382,7 +382,9 @@ fn compact_content_block(block: &ContentBlock) -> Value {
                 "content_chars": chars,
                 "content_sha256": sha256_hex(content.as_bytes()),
                 "content_redacted": large,
-                "content_blocks": content_blocks,
+                "content_blocks": crate::image_attach::safe_tool_result_content_blocks(
+                    content_blocks.as_deref(),
+                ),
             })
         }
         ContentBlock::ServerToolUse { id, name, input } => json!({
@@ -451,14 +453,13 @@ pub fn derive_session_name(source_hint: Option<&str>) -> String {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    crate::hashing::sha256_hex(bytes)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::Role;
 
     #[test]
     fn derive_session_name_slugifies_path() {
@@ -487,7 +488,7 @@ mod tests {
             PathBuf::from("/tmp/work"),
             Some(SystemPrompt::Text("system body".to_string())),
             vec![Message {
-                role: "user".to_string(),
+                role: Role::User,
                 content: vec![ContentBlock::Text {
                     text: "hello RLM".to_string(),
                     cache_control: None,
@@ -522,7 +523,7 @@ mod tests {
             PathBuf::from("/tmp/work"),
             None,
             vec![Message {
-                role: "user".to_string(),
+                role: Role::User,
                 content: vec![ContentBlock::ToolResult {
                     tool_use_id: "call_1".to_string(),
                     content: large.clone(),

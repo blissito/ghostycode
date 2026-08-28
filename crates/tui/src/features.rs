@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Write as _};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 
 /// Lifecycle stage for a feature flag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +46,8 @@ pub enum Feature {
     ExecPolicy,
     /// Enable vision model for image analysis.
     VisionModel,
+    /// Enable the agent-callable `verify` adversarial self-critique tool (#4196).
+    Verify,
 }
 
 impl fmt::Display for Stage {
@@ -157,10 +159,50 @@ pub fn render_feature_table(features: &Features) -> String {
 }
 
 /// Deserializable features table for TOML.
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[derive(Serialize, Debug, Clone, Default, PartialEq)]
 pub struct FeaturesToml {
     #[serde(flatten)]
     pub entries: BTreeMap<String, bool>,
+}
+
+impl<'de> Deserialize<'de> for FeaturesToml {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = BTreeMap::<String, toml::Value>::deserialize(deserializer)?;
+        let mut entries = BTreeMap::new();
+
+        for (key, value) in raw {
+            match value {
+                toml::Value::Boolean(enabled) => {
+                    entries.insert(key, enabled);
+                }
+                toml::Value::Table(table) if key == "enabled" => {
+                    for (feature_key, feature_value) in table {
+                        match feature_value {
+                            toml::Value::Boolean(enabled) => {
+                                entries.insert(feature_key, enabled);
+                            }
+                            other => {
+                                return Err(de::Error::custom(format!(
+                                    "features.enabled.{feature_key} must be a boolean, got {other:?}"
+                                )));
+                            }
+                        }
+                    }
+                }
+                other if is_known_feature_key(&key) => {
+                    return Err(de::Error::custom(format!(
+                        "features.{key} must be a boolean, got {other:?}"
+                    )));
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Self { entries })
+    }
 }
 
 /// Single registry of all feature definitions.
@@ -182,38 +224,44 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::Subagents,
         key: "subagents",
-        stage: Stage::Experimental,
+        stage: Stage::Stable,
         default_enabled: true,
     },
     FeatureSpec {
         id: Feature::WebSearch,
         key: "web_search",
-        stage: Stage::Experimental,
+        stage: Stage::Stable,
         default_enabled: true,
     },
     FeatureSpec {
         id: Feature::ApplyPatch,
         key: "apply_patch",
-        stage: Stage::Experimental,
+        stage: Stage::Stable,
         default_enabled: true,
     },
     FeatureSpec {
         id: Feature::Mcp,
         key: "mcp",
-        stage: Stage::Experimental,
+        stage: Stage::Stable,
         default_enabled: true,
     },
     FeatureSpec {
         id: Feature::ExecPolicy,
         key: "exec_policy",
-        stage: Stage::Experimental,
+        stage: Stage::Stable,
         default_enabled: true,
     },
     FeatureSpec {
         id: Feature::VisionModel,
         key: "vision_model",
-        stage: Stage::Experimental,
+        stage: Stage::Beta,
         default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::Verify,
+        key: "verify_tool",
+        stage: Stage::Stable,
+        default_enabled: true,
     },
 ];
 
@@ -247,6 +295,6 @@ mod tests {
 
         assert_eq!(lines.first(), Some(&"feature\tstage\tenabled"));
         assert!(lines.contains(&"shell_tool\tstable\ttrue"));
-        assert!(lines.contains(&"mcp\texperimental\tfalse"));
+        assert!(lines.contains(&"mcp\tstable\tfalse"));
     }
 }

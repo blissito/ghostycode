@@ -105,7 +105,7 @@ else
   fail=1
 fi
 
-crates_user_agent="Ghosty Code release check (https://github.com/blissito/ghostycode)"
+crates_user_agent="GhostyCode release check (https://github.com/blissito/ghostycode)"
 for crate in "${release_crates[@]}"; do
   if curl -fsSL -A "${crates_user_agent}" "https://crates.io/api/v1/crates/${crate}/${version}" >/dev/null 2>&1; then
     echo "crates.io ${crate}@${version} is published."

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#020711">
+    <title>Ghosty</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/assets/ghosty-web.css">
+    <script type="module" src="/assets/ghosty-web.js"></script>
+  </head>
+  <body>
+    <div class="shell" id="app-shell">
+      <aside class="rail" id="thread-rail" aria-label="Threads" tabindex="-1">
+        <div class="rail-brand">
+          <img class="brand-mark" src="/assets/ghosty-192.png" alt="">
+          <div>
+            <p class="brand-name">Ghosty</p>
+            <p class="brand-context">Local runtime</p>
+          </div>
+          <button class="quiet-button rail-close" id="rail-close" type="button" aria-label="Close threads">Close</button>
+        </div>
+
+        <button class="primary-button new-thread" id="new-thread" type="button">
+          New thread
+        </button>
+
+        <label class="search-field">
+          <span class="sr-only">Search threads</span>
+          <input id="thread-search" type="search" autocomplete="off" placeholder="Search threads">
+        </label>
+
+        <nav class="thread-list" id="thread-list" aria-label="Live threads"></nav>
+
+        <!-- Read-only peek for a selected saved session. Bounded and redacted
+             server-side by GET /v1/sessions/{id}?peek=true; this pane never
+             receives a full transcript and never offers a composer. -->
+        <!-- (rendered into #session-peek in the main column) -->
+
+        <!-- Saved sessions come from GET /v1/sessions/summary, the same
+             projection the terminal's session rail renders. Resuming one goes
+             through POST /v1/sessions/{id}/resume-thread, so the dashboard
+             never gets a second session backend. -->
+        <section class="saved-sessions" id="saved-sessions" hidden>
+          <h2 class="rail-section-title" id="saved-sessions-title">Saved sessions</h2>
+          <nav class="thread-list" id="session-list" aria-labelledby="saved-sessions-title"></nav>
+        </section>
+
+        <div class="rail-footer">
+          <span class="connection-dot" id="connection-dot" aria-hidden="true"></span>
+          <span class="connection-copy">
+            <span id="connection-label">Connecting to local runtime…</span>
+            <span class="runtime-provenance" id="runtime-provenance">version unknown · source unknown</span>
+          </span>
+        </div>
+      </aside>
+
+      <button class="rail-scrim" id="rail-scrim" type="button" aria-label="Close threads" tabindex="-1" hidden></button>
+
+      <main class="session">
+        <header class="session-header">
+          <div class="session-heading">
+            <button class="quiet-button rail-open" id="rail-open" type="button" aria-controls="thread-rail" aria-expanded="false">Threads</button>
+            <div class="title-stack">
+              <p class="eyebrow" id="session-kicker">Local runtime</p>
+              <h1 id="session-title">Choose a thread</h1>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button class="quiet-button" id="rename-thread" type="button" disabled>Rename</button>
+            <button class="quiet-button danger" id="archive-thread" type="button" disabled>Archive</button>
+          </div>
+          <div class="session-facts" id="session-facts" aria-label="Session details"></div>
+        </header>
+
+        <div class="status-banner" id="status-banner" role="status" aria-live="polite" hidden></div>
+
+        <section class="session-peek" id="session-peek" aria-label="Saved session preview" hidden></section>
+
+        <section class="transcript" id="transcript" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions" aria-atomic="false">
+          <div class="empty-state">
+            <img class="empty-mark" src="/assets/ghosty-192.png" alt="">
+            <h2>Your local agent, in the browser.</h2>
+            <p>Create a thread or choose one from the rail. This client uses the same Runtime as the terminal.</p>
+          </div>
+        </section>
+
+        <section class="attention" id="attention" role="region" aria-label="Items requiring attention" aria-live="assertive" aria-relevant="additions" aria-atomic="false" hidden></section>
+
+        <footer class="composer-wrap">
+          <form class="composer" id="composer">
+            <label class="sr-only" for="composer-input">Message Ghosty</label>
+            <textarea id="composer-input" rows="1" placeholder="Ask Ghosty to work in this repository…" disabled></textarea>
+            <div class="composer-bar">
+              <span class="composer-hint">Enter send · Shift+Enter newline</span>
+              <div class="composer-actions">
+                <button class="quiet-button" id="interrupt-turn" type="button" hidden>Stop</button>
+                <button class="send-button" id="send-message" type="submit" disabled>Send</button>
+              </div>
+            </div>
+          </form>
+        </footer>
+      </main>
+    </div>
+
+    <dialog class="rename-dialog new-thread-dialog" id="new-thread-dialog" tabindex="-1" aria-labelledby="new-thread-title" aria-describedby="new-thread-help">
+      <form id="new-thread-form">
+        <p class="eyebrow">New thread</p>
+        <h2 id="new-thread-title">Choose a provider and model</h2>
+        <p class="dialog-copy" id="new-thread-help">This choice applies only to the new thread. It does not change your Runtime defaults.</p>
+
+        <label class="dialog-field">
+          <span class="dialog-label">Provider</span>
+          <select id="new-thread-provider" required disabled></select>
+        </label>
+
+        <label class="dialog-field" id="new-thread-model-select-field">
+          <span class="dialog-label">Model</span>
+          <select id="new-thread-model" required disabled></select>
+        </label>
+
+        <label class="dialog-field" id="new-thread-model-input-field" hidden>
+          <span class="dialog-label">Model</span>
+          <input id="new-thread-model-input" type="text" autocomplete="off" spellcheck="false" required disabled>
+        </label>
+
+        <p class="model-capability" id="new-thread-capability" data-state="unknown" aria-live="polite"></p>
+        <p class="dialog-status" id="new-thread-status" role="status" aria-live="polite"></p>
+
+        <div class="dialog-actions">
+          <button class="quiet-button" id="new-thread-cancel" type="button" autofocus>Cancel</button>
+          <button class="primary-button" id="new-thread-create" type="submit" disabled>Create thread</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="rename-dialog" id="rename-dialog">
+      <form method="dialog" id="rename-form">
+        <p class="eyebrow">Thread title</p>
+        <h2>Rename this thread</h2>
+        <label>
+          <span class="sr-only">New thread title</span>
+          <input id="rename-input" type="text" maxlength="160" required autocomplete="off">
+        </label>
+        <div class="dialog-actions">
+          <button class="quiet-button" value="cancel" type="submit">Cancel</button>
+          <button class="primary-button" value="save" type="submit">Save title</button>
+        </div>
+      </form>
+    </dialog>
+
+    <noscript>Ghosty web requires JavaScript to connect to the local Runtime API.</noscript>
+  </body>
+</html>

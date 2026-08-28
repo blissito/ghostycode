@@ -1,363 +1,256 @@
 import Link from "next/link";
-import { InstallCodeBlock } from "@/components/install-code-block";
-import { Seal } from "@/components/seal";
+import { buildPageMetadata } from "@/lib/page-meta";
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const isZh = locale === "zh";
-  return {
-    title: isZh ? "参与贡献 · Ghosty Code" : "Contribute · Ghosty Code",
+  return buildPageMetadata({
+    path: "/contribute",
+    locale,
+    title: isZh ? "参与贡献 · Ghosty" : "Contribute · Ghosty",
     description: isZh
-      ? "如何提交议题、发送合并请求、加入 Ghosty Code 社区。"
-      : "How to file issues, send pull requests, and join the Ghosty Code community.",
-  };
+      ? "提交 issue、改进翻译和文档、发送 pull request，参与 Ghosty 国际开源社区。"
+      : "File issues, improve translations and documentation, and send pull requests to the international Ghosty community.",
+  });
 }
 
 const stepsEn = [
   {
-    n: "①",
-    title: "Find a thread to pull",
-    cn: "选择切入点",
-    body: "Browse open issues. The good first issue label means the path is clear. The help wanted label means the path is open but contested. Anything else, ask first.",
-    cta: { label: "Open issues", href: "https://github.com/blissito/ghostycode/issues" },
+    n: "01",
+    title: "Choose one clear problem",
+    body: "Browse open issues, especially good first issue and help wanted. If the behavior is not tracked yet, open an issue with a reproduction before starting a large change.",
+    cta: { label: "Browse open issues", href: "https://github.com/blissito/ghostycode/issues" },
   },
   {
-    n: "②",
-    title: "Fork and branch",
-    cn: "复刻并分支",
-    body: "git clone your fork, then git checkout -b feat/short-name or fix/short-name. We use conventional commits — feat:, fix:, docs:, refactor:, test:, chore:.",
-    cta: { label: "Repo on GitHub", href: "https://github.com/blissito/ghostycode" },
+    n: "02",
+    title: "Fork and create a branch",
+    body: "Clone your fork and use a short branch name such as fix/provider-timeout or docs/fleet-example. Keep unrelated changes in separate pull requests.",
+    cta: { label: "Open the repository", href: "https://github.com/blissito/ghostycode" },
   },
   {
-    n: "③",
-    title: "Match the local checks",
-    cn: "本地检查",
-    body: "CI runs cargo fmt --all -- --check, cargo clippy --workspace --all-targets --all-features --locked -- -D warnings, and cargo test --workspace --all-features --locked. Run them before you push.",
-    cta: { label: "Contributing guide", href: "https://github.com/blissito/ghostycode/blob/main/CONTRIBUTING.md" },
+    n: "03",
+    title: "Test the behavior you changed",
+    body: "Run the smallest relevant test first, then formatting and the broader checks required for the part of the repository you touched.",
+    cta: { label: "Read the contributor guide", href: "https://github.com/blissito/ghostycode/blob/main/CONTRIBUTING.md" },
   },
   {
-    n: "④",
-    title: "Open the PR",
-    cn: "提交合并",
-    body: "PR description should explain WHY, not WHAT (the diff covers what). Link the issue. The maintainer reviews everything personally — response times vary.",
-    cta: { label: "PR template", href: "https://github.com/blissito/ghostycode/blob/main/.github/PULL_REQUEST_TEMPLATE.md" },
+    n: "04",
+    title: "Explain the result in the PR",
+    body: "Describe the problem, the reason for the change, the checks you ran, and any remaining risk. Link the issue when one exists.",
+    cta: { label: "View open pull requests", href: "https://github.com/blissito/ghostycode/pulls" },
   },
 ];
 
 const stepsZh = [
   {
-    n: "①",
-    title: "选择切入点",
-    cn: "Find a thread",
-    body: "浏览 open issues。good first issue 标签意味着路径清晰。help wanted 标签意味着路径开放但有争议。其他情况请先询问。",
-    cta: { label: "查看议题", href: "https://github.com/blissito/ghostycode/issues" },
+    n: "01",
+    title: "选择一个明确的问题",
+    body: "先浏览 open issues，尤其是 good first issue 和 help wanted。如果问题尚未记录，请在开始大改动前提交带复现步骤的 issue。",
+    cta: { label: "浏览 open issues", href: "https://github.com/blissito/ghostycode/issues" },
   },
   {
-    n: "②",
-    title: "复刻并创建分支",
-    cn: "Fork & branch",
-    body: "git clone 你的复刻，然后 git checkout -b feat/short-name 或 fix/short-name。使用约定式提交——feat:、fix:、docs:、refactor:、test:、chore:。",
-    cta: { label: "GitHub 仓库", href: "https://github.com/blissito/ghostycode" },
+    n: "02",
+    title: "Fork 并创建分支",
+    body: "克隆你的 fork，并使用简短的分支名，例如 fix/provider-timeout 或 docs/fleet-example。无关修改请拆成不同的 pull request。",
+    cta: { label: "打开仓库", href: "https://github.com/blissito/ghostycode" },
   },
   {
-    n: "③",
-    title: "通过本地检查",
-    cn: "Local checks",
-    body: "CI 运行 cargo fmt --all -- --check、cargo clippy --workspace --all-targets --all-features --locked -- -D warnings 和 cargo test --workspace --all-features --locked。推送前请先运行。",
-    cta: { label: "贡献指南", href: "https://github.com/blissito/ghostycode/blob/main/CONTRIBUTING.md" },
+    n: "03",
+    title: "测试你修改的行为",
+    body: "先运行最小相关测试，再执行格式检查和你所修改部分需要的更完整检查。",
+    cta: { label: "阅读贡献指南", href: "https://github.com/blissito/ghostycode/blob/main/CONTRIBUTING.md" },
   },
   {
-    n: "④",
-    title: "提交 PR",
-    cn: "Open the PR",
-    body: "PR 描述应说明「为什么」而非「做了什么」（diff 已经展示了做了什么）。关联相关 issue。维护者亲自审查所有 PR——响应时间视情况而定。",
-    cta: { label: "PR 模板", href: "https://github.com/blissito/ghostycode/blob/main/.github/PULL_REQUEST_TEMPLATE.md" },
+    n: "04",
+    title: "在 PR 中说明结果",
+    body: "说明问题、修改原因、已运行的检查和剩余风险；如果已有 issue，请在 PR 中关联。",
+    cta: { label: "查看 open pull requests", href: "https://github.com/blissito/ghostycode/pulls" },
   },
 ];
-
-const recursivePromptEn = `You are running inside Ghosty Code on DeepSeek V4 Pro.
-
-Improve Ghosty Code itself by finding exactly one small, reviewable friction point in the harness, docs, tests, or contributor workflow.
-
-Prefer bug fixes, regression tests, clearer docs, sharper error messages, or one narrow contributor-experience improvement. Do not change product direction, provider policy, telemetry, sponsorship, branding, auth, sandbox, release/publishing, or global prompts unless the maintainer explicitly asked for that exact scope.
-
-Working rules:
-1. Inspect the repo and current open issues before editing.
-2. Choose one issue, TODO, failing test, docs ambiguity, confusing error, or repeated papercut.
-3. State the exact target and why it is small enough to review.
-4. Reproduce the problem when possible.
-5. Make the minimum patch.
-6. Run the smallest relevant checks first.
-7. Stop after one patch.
-
-Output: issue summary, files changed, checks run, risks or follow-up, and a suggested PR title.`;
-
-const recursivePromptZh = `你正在 DeepSeek V4 Pro 驱动的 Ghosty Code 中运行。
-
-请改进 Ghosty Code 本身：只找一个很小、可审查的摩擦点，范围可以是智能体框架、文档、测试或贡献流程。
-
-优先处理 bug 修复、回归测试、文档澄清、错误信息改进，或一个很窄的贡献者体验问题。除非维护者明确要求，否则不要改产品方向、提供商策略、遥测、赞助、品牌、认证、沙箱、发布流程或全局提示词。
-
-工作规则：
-1. 编辑前先阅读仓库和当前 open issues。
-2. 只选择一个 issue、TODO、失败测试、文档歧义、错误信息或重复出现的小摩擦点。
-3. 先说明目标是什么，以及为什么它足够小、适合审查。
-4. 尽可能复现问题。
-5. 写最小补丁。
-6. 先运行最小相关检查。
-7. 一个补丁完成后就停止。
-
-输出：发现的问题摘要、修改文件、已运行检查、风险或后续事项，以及建议的 PR 标题。`;
 
 export default async function ContributePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const isZh = locale === "zh";
   const steps = isZh ? stepsZh : stepsEn;
-  const recursivePrompt = isZh ? recursivePromptZh : recursivePromptEn;
+
+  const paths = isZh
+    ? [
+        {
+          title: "报告 bug 或兼容性问题",
+          body: "提供系统信息、Ghosty 版本、复现步骤、期望行为和可公开的日志。",
+          label: "提交 issue",
+          href: "https://github.com/blissito/ghostycode/issues/new/choose",
+        },
+        {
+          title: "改进代码或测试",
+          body: "选择一个边界清楚的问题，提交最小补丁，并用回归测试证明修改后的行为。",
+          label: "查看待处理 issues",
+          href: "https://github.com/blissito/ghostycode/issues",
+        },
+        {
+          title: "改进文档或翻译",
+          body: "修正不准确的说明、补充实际示例，或帮助完整语言包保持自然且与英文键一致。",
+          label: "阅读本地化指南",
+          href: "https://github.com/blissito/ghostycode/blob/main/docs/LOCALIZATION.md",
+        },
+        {
+          title: "复现和审查现有工作",
+          body: "验证 issue 或 pull request 在你的平台和提供商上的行为，并分享准确的测试结果。",
+          label: "浏览 pull requests",
+          href: "https://github.com/blissito/ghostycode/pulls",
+        },
+      ]
+    : [
+        {
+          title: "Report a bug or compatibility problem",
+          body: "Include your system, Ghosty version, reproduction steps, expected behavior, and any logs you can share safely.",
+          label: "File an issue",
+          href: "https://github.com/blissito/ghostycode/issues/new/choose",
+        },
+        {
+          title: "Improve code or tests",
+          body: "Choose a well-bounded problem, make the smallest useful patch, and add a regression test that proves the changed behavior.",
+          label: "Browse open issues",
+          href: "https://github.com/blissito/ghostycode/issues",
+        },
+        {
+          title: "Improve documentation or translations",
+          body: "Correct inaccurate guidance, add a practical example, or help a complete language pack stay natural and aligned with the English keys.",
+          label: "Read the localization guide",
+          href: "https://github.com/blissito/ghostycode/blob/main/docs/LOCALIZATION.md",
+        },
+        {
+          title: "Reproduce and review existing work",
+          body: "Verify an issue or pull request with your platform and provider, then share the exact checks and results.",
+          label: "Browse pull requests",
+          href: "https://github.com/blissito/ghostycode/pulls",
+        },
+      ];
+
+  const reviewNotes = isZh
+    ? [
+        "一个 PR 只解决一个问题，便于测试、审查和保留贡献者署名。",
+        "新增行为应有测试；修正文档时，请核对实际命令、配置名和当前版本。",
+        "修改认证、凭据、沙箱、发布流程、品牌或全局提示词前，请先提交 issue 并确认范围。",
+        "如果维护者需要整理或摘取补丁，原作者仍会在提交、CHANGELOG 和贡献者名单中获得署名。",
+      ]
+    : [
+        "Keep one problem per pull request so the change is easy to test, review, and credit.",
+        "Add tests for new behavior. For documentation fixes, verify commands, configuration names, and the current version against the repository.",
+        "Open an issue before changing authentication, credentials, sandbox policy, release plumbing, branding, or global prompts.",
+        "If a maintainer needs to adapt or harvest a patch, the original contributor remains credited in the commit, changelog, and contributor list.",
+      ];
 
   return (
-    <>
-      {isZh ? (
-        <>
-          <section className="mx-auto max-w-[1400px] px-6 pt-12 pb-8">
-            <div className="flex items-baseline gap-4 mb-3">
-              <Seal char="参" />
-              <div className="eyebrow">参与 · Contribute</div>
+    <div className="contribute-page">
+      <section className="hero">
+        <div className="portal-current" aria-hidden="true" />
+        <div className="portal-container community-welcome-inner">
+          <div className="eyebrow">{isZh ? "参与国际开源社区" : "Contribute to an international open-source project"}</div>
+          <h1>{isZh ? "从一个具体的改进开始。" : "Start with one concrete improvement."}</h1>
+          <p>
+            {isZh
+              ? "Ghosty 欢迎来自不同国家、语言、平台和经验水平的贡献者。清楚的 bug 报告、复现结果、文档修正、翻译和小而完整的代码补丁都会直接帮助项目。"
+              : "Ghosty welcomes contributors across countries, languages, platforms, and experience levels. Clear bug reports, reproduction results, documentation corrections, translations, and small complete patches all move the project forward."}
+          </p>
+          <div className="portal-actions">
+            <Link href="https://github.com/blissito/ghostycode/issues/new/choose" className="portal-button portal-button-primary">
+              {isZh ? "提交 issue" : "File an issue"}
+            </Link>
+            <Link href="https://github.com/blissito/ghostycode/pulls" className="portal-button portal-button-secondary">
+              {isZh ? "查看 pull requests" : "Browse pull requests"}
+            </Link>
+            <Link href="https://github.com/blissito/ghostycode/blob/main/CONTRIBUTING.md" className="portal-button portal-button-secondary">
+              {isZh ? "打开完整贡献指南" : "Open the full contributor guide"}
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="portal-section">
+        <div className="portal-container">
+          <div className="portal-docs-heading">
+            <div>
+              <span>{isZh ? "现在就可以参与" : "Ways to help now"}</span>
+              <h2>{isZh ? "选择适合你的贡献方式。" : "Choose the contribution that fits."}</h2>
             </div>
-            <h1 className="font-display tracking-crisp">参与贡献</h1>
-            <p className="mt-5 max-w-3xl text-ink-soft text-lg leading-[1.9] tracking-wide">
-              无 CLA，无赞助商优先通道，维护者只有一人。小而聚焦的 PR 最容易合并——附上真实测试，以及能告诉审查者你在想什么的文字。
+          </div>
+          <div className="contribute-path-grid">
+            {paths.map((path) => (
+              <article key={path.title}>
+                <h3>{path.title}</h3>
+                <p>{path.body}</p>
+                <Link href={path.href}>{path.label} →</Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="portal-section portal-section-muted">
+        <div className="portal-container">
+          <div className="portal-docs-heading">
+            <div>
+              <span>{isZh ? "Pull request 流程" : "Pull request workflow"}</span>
+              <h2>{isZh ? "从问题到可审查的补丁。" : "From a problem to a reviewable patch."}</h2>
+            </div>
+          </div>
+          <ol className="contribute-steps">
+            {steps.map((step) => (
+              <li key={step.n}>
+                <span>{step.n}</span>
+                <div>
+                  <h3>{step.title}</h3>
+                  <p>{step.body}</p>
+                  <Link href={step.cta.href}>{step.cta.label} →</Link>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className="portal-section">
+        <div className="portal-container portal-section-grid">
+          <div className="portal-section-copy">
+            <span>{isZh ? "审查准备" : "Prepare for review"}</span>
+            <h2>{isZh ? "让修改容易验证。" : "Make the change easy to verify."}</h2>
+            <p>
+              {isZh
+                ? "审查者需要看到问题、修改理由、测试证据和剩余风险。范围越清楚，反馈通常越快。"
+                : "A reviewer needs the problem, the reason for the change, test evidence, and remaining risk. Clear scope usually leads to clearer feedback."}
             </p>
-          </section>
+          </div>
+          <ul className="contribute-review-list">
+            {reviewNotes.map((note) => <li key={note}>{note}</li>)}
+          </ul>
+        </div>
+      </section>
 
-          <section className="mx-auto max-w-[1400px] px-6 pb-16 hairline-t hairline-b">
-            <ol className="grid md:grid-cols-2 lg:grid-cols-4 gap-0 col-rule">
-              {steps.map((s) => (
-                <li key={s.n} className="p-7">
-                  <div className="font-display text-5xl text-indigo mb-3">{s.n}</div>
-                  <div className="eyebrow mb-2">{s.cn}</div>
-                  <h3 className="font-display text-xl mb-3 leading-tight">{s.title}</h3>
-                  <p className="text-sm text-ink-soft leading-[1.9] tracking-wide mb-4">{s.body}</p>
-                  <Link href={s.cta.href} className="font-mono text-[0.72rem] uppercase tracking-wider text-indigo hover:underline">
-                    {s.cta.label} →
-                  </Link>
-                </li>
-              ))}
-            </ol>
-          </section>
+      <section className="contribute-dev-loop">
+        <div className="portal-container portal-section-grid min-w-0">
+          <div className="portal-section-copy">
+            <span>{isZh ? "本地开发" : "Local development"}</span>
+            <h2>{isZh ? "构建并运行相关检查。" : "Build and run the relevant checks."}</h2>
+            <p>
+              {isZh
+                ? "仓库使用 stable Rust。先运行你所修改部分的测试，再运行格式检查、Clippy 和完整工作区测试。"
+                : "The repository uses stable Rust. Run the focused test for your change first, followed by formatting, Clippy, and the workspace suite."}
+            </p>
+          </div>
+          <pre className="code-block">
+{`git clone https://github.com/YOUR_USERNAME/GhostyCode.git
+cd GhostyCode
+git checkout -b fix/your-change
 
-          <section id="recursive-harness" className="mx-auto max-w-[1400px] px-6 py-16 grid lg:grid-cols-12 gap-10 min-w-0">
-            <div className="lg:col-span-4 min-w-0">
-              <Seal char="递" />
-              <div className="eyebrow mt-5 mb-3">100:1 模型 · Recursive harness</div>
-              <h2 className="font-display text-3xl">让 Ghosty Code 改进 Ghosty Code</h2>
-              <p className="mt-4 text-ink-soft leading-[1.9] tracking-wide">
-                100:1 提示词把 DeepSeek V4 Pro 的缓存注意力、工具调用与子智能体，凝结为一个可审查的小补丁——而不是一堆点子。
-              </p>
-              <Link href="https://github.com/blissito/ghostycode/blob/main/docs/RECURSIVE_SELF_IMPROVEMENT.md" className="inline-block mt-5 font-mono text-[0.72rem] uppercase tracking-wider text-indigo hover:underline">
-                完整多语言提示词 →
-              </Link>
-            </div>
-            <div className="lg:col-span-8 min-w-0">
-              <InstallCodeBlock cmd={recursivePrompt} copyLabel="复制" copiedLabel="已复制" />
-            </div>
-          </section>
-
-          {/* 规约 */}
-          <section className="mx-auto max-w-[1400px] px-6 py-16 grid lg:grid-cols-12 gap-10">
-            <div className="lg:col-span-5">
-              <Seal char="规" />
-              <h2 className="font-display text-3xl mt-4">
-                规约 <span className="font-cjk text-indigo text-2xl ml-2">House rules</span>
-              </h2>
-              <p className="text-ink-soft mt-4 leading-[1.9] tracking-wide">
-                简而言之：做实事，别折腾元数据。完整的
-                <Link href="https://github.com/blissito/ghostycode/blob/main/CODE_OF_CONDUCT.md" className="body-link mx-1">行为准则</Link>
-                是详细版。
-              </p>
-            </div>
-            <div className="lg:col-span-7">
-              <ul className="space-y-3">
-                {[
-                  { k: "欢迎", v: "附带复现步骤的 bug 报告、说明权衡的重构、修复真实歧义的文档 PR。" },
-                  { k: "欢迎", v: "能复现 bug 的测试——甚至比修复本身更有价值。" },
-                  { k: "欢迎", v: "在 Discussions 中提出有深度的问题。带数据更佳。" },
-                  { k: "不欢迎", v: "不理解 diff 的 AI 生成补丁。" },
-                  { k: "不欢迎", v: "在代码库或文档中添加托管 SaaS 依赖、遥测或推荐链接。" },
-                  { k: "不欢迎", v: "按个人偏好跨仓库重命名。" },
-                ].map((r, i) => (
-                  <li key={i} className="flex gap-4 hairline-b pb-3">
-                    <span className={`font-mono text-[0.72rem] uppercase tracking-widest pt-1 w-10 shrink-0 ${r.k === "欢迎" ? "text-jade" : "text-indigo"}`}>
-                      {r.k}
-                    </span>
-                    <span className="text-sm text-ink-soft leading-[1.9] tracking-wide">{r.v}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-
-          {/* 开发循环 */}
-          <section className="bg-paper-deep hairline-t hairline-b">
-            <div className="mx-auto max-w-[1400px] px-6 py-16 grid lg:grid-cols-12 gap-10 min-w-0">
-              <div className="lg:col-span-4 min-w-0">
-                <div className="eyebrow mb-3">开发循环 · The dev loop</div>
-                <h2 className="font-display text-3xl">从克隆到合并</h2>
-                <p className="mt-4 text-ink-soft leading-[1.9] tracking-wide">
-                  完整流程，可直接复制粘贴。仅限 stable Rust——切勿使用 nightly 特性。
-                </p>
-              </div>
-              <div className="lg:col-span-8 min-w-0">
-                <pre className="code-block">
-{`# 在 GitHub 上 fork，然后：
-git clone git@github.com:YOU/ghostycode
-cd ghostycode
-git checkout -b feat/your-thing
-
-# 本地构建运行
 cargo build
-cargo run --bin ghosty
-
-# 检查（与 CI 完全一致）
+cargo test -p <owning-crate> --locked
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --all-features --locked
-
-# 一致性验证
-cargo test -p ghosty-tui-core --test snapshot --locked
-cargo test -p ghosty-protocol --test parity_protocol --locked
-cargo test -p ghosty-state --test parity_state --locked
-
-# 提交 + 推送 + PR
-git commit -m "feat: short subject in conventional-commit form"
-git push -u origin feat/your-thing
-gh pr create --fill`}
-                </pre>
-              </div>
-            </div>
-          </section>
-
-        </>
-      ) : (
-        <>
-          <section className="mx-auto max-w-[1400px] px-6 pt-12 pb-8">
-            <div className="flex items-baseline gap-4 mb-3">
-              <Seal char="参" />
-              <div className="eyebrow">Contribute · 参与</div>
-            </div>
-            <h1 className="font-display tracking-crisp">Contribute</h1>
-            <p className="mt-5 max-w-3xl text-ink-soft text-lg leading-relaxed">
-              No CLA. No sponsor lockouts. One maintainer. Small, focused PRs land fastest — please bring real test coverage and prose that tells the reviewer what you were thinking.
-            </p>
-          </section>
-
-          <section className="mx-auto max-w-[1400px] px-6 pb-16 hairline-t hairline-b">
-            <ol className="grid md:grid-cols-2 lg:grid-cols-4 gap-0 col-rule">
-              {steps.map((s) => (
-                <li key={s.n} className="p-7">
-                  <div className="font-display text-5xl text-indigo mb-3">{s.n}</div>
-                  <div className="eyebrow mb-2">{s.cn}</div>
-                  <h3 className="font-display text-xl mb-3 leading-tight">{s.title}</h3>
-                  <p className="text-sm text-ink-soft leading-relaxed mb-4">{s.body}</p>
-                  <Link href={s.cta.href} className="font-mono text-[0.72rem] uppercase tracking-wider text-indigo hover:underline">
-                    {s.cta.label} →
-                  </Link>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          <section id="recursive-harness" className="mx-auto max-w-[1400px] px-6 py-16 grid lg:grid-cols-12 gap-10 min-w-0">
-            <div className="lg:col-span-4 min-w-0">
-              <Seal char="递" />
-              <div className="eyebrow mt-5 mb-3">100-to-1 model · 递归框架</div>
-              <h2 className="font-display text-3xl">Let Ghosty Code improve Ghosty Code</h2>
-              <p className="mt-4 text-ink-soft leading-relaxed">
-                The 100-to-1 prompt turns DeepSeek V4 Pro's cached attention, tool use, and sub-agents into one small, reviewable patch — not a pile of ideas.
-              </p>
-              <Link href="https://github.com/blissito/ghostycode/blob/main/docs/RECURSIVE_SELF_IMPROVEMENT.md" className="inline-block mt-5 font-mono text-[0.72rem] uppercase tracking-wider text-indigo hover:underline">
-                Full multilingual prompt →
-              </Link>
-            </div>
-            <div className="lg:col-span-8 min-w-0">
-              <InstallCodeBlock cmd={recursivePrompt} />
-            </div>
-          </section>
-
-          <section className="mx-auto max-w-[1400px] px-6 py-16 grid lg:grid-cols-12 gap-10">
-            <div className="lg:col-span-5">
-              <Seal char="规" />
-              <h2 className="font-display text-3xl mt-4">
-                House rules <span className="font-cjk text-indigo text-2xl ml-2">规约</span>
-              </h2>
-              <p className="text-ink-soft mt-4 leading-relaxed">
-                Short version: build the thing, don't polish the meta. The full
-                <Link href="https://github.com/blissito/ghostycode/blob/main/CODE_OF_CONDUCT.md" className="body-link mx-1">Code of Conduct</Link>
-                is the long version.
-              </p>
-            </div>
-            <div className="lg:col-span-7">
-              <ul className="space-y-3">
-                {[
-                  { k: "Yes", v: "Bug reports with reproductions, refactors that explain the trade-off, docs PRs that fix a real ambiguity." },
-                  { k: "Yes", v: "Tests that demonstrate the bug — even better than fixes." },
-                  { k: "Yes", v: "Hard questions in Discussions. Even better if you bring data." },
-                  { k: "No", v: "Drive-by AI-generated patches with no understanding of the diff." },
-                  { k: "No", v: "Adding hosted SaaS dependencies, telemetry, or referral links to the codebase or docs." },
-                  { k: "No", v: "Renaming things across the repo to match your preferences." },
-                ].map((r, i) => (
-                  <li key={i} className="flex gap-4 hairline-b pb-3">
-                    <span className={`font-mono text-[0.72rem] uppercase tracking-widest pt-1 w-10 shrink-0 ${r.k === "Yes" ? "text-jade" : "text-indigo"}`}>
-                      {r.k}
-                    </span>
-                    <span className="text-sm text-ink-soft leading-relaxed">{r.v}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-
-          <section className="bg-paper-deep hairline-t hairline-b">
-            <div className="mx-auto max-w-[1400px] px-6 py-16 grid lg:grid-cols-12 gap-10 min-w-0">
-              <div className="lg:col-span-4 min-w-0">
-                <div className="eyebrow mb-3">The dev loop · 开发循环</div>
-                <h2 className="font-display text-3xl">From clone to merged</h2>
-                <p className="mt-4 text-ink-soft leading-relaxed">
-                  The full sequence, copy-pasteable. Stable Rust only — never reach for nightly features.
-                </p>
-              </div>
-              <div className="lg:col-span-8 min-w-0">
-                <pre className="code-block">
-{`# fork on github, then:
-git clone git@github.com:YOU/ghostycode
-cd ghostycode
-git checkout -b feat/your-thing
-
-# build and run locally
-cargo build
-cargo run --bin ghosty
-
-# checks (matches CI exactly)
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --all-features --locked
-
-# parity gates
-cargo test -p ghosty-tui-core --test snapshot --locked
-cargo test -p ghosty-protocol --test parity_protocol --locked
-cargo test -p ghosty-state --test parity_state --locked
-
-# commit + push + PR
-git commit -m "feat: short subject in conventional-commit form"
-git push -u origin feat/your-thing
-gh pr create --fill`}
-                </pre>
-              </div>
-            </div>
-          </section>
-
-        </>
-      )}
-    </>
+cargo test --workspace --all-features --locked`}
+          </pre>
+        </div>
+      </section>
+    </div>
   );
 }

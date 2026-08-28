@@ -13,6 +13,7 @@ pub enum ErrorCategory {
     Authorization,
     RateLimit,
     Timeout,
+    Budget,
     InvalidInput,
     Parse,
     Tool,
@@ -48,6 +49,7 @@ impl fmt::Display for ErrorCategory {
             Self::Authorization => "authorization",
             Self::RateLimit => "rate_limit",
             Self::Timeout => "timeout",
+            Self::Budget => "budget",
             Self::InvalidInput => "invalid_input",
             Self::Parse => "parse",
             Self::Tool => "tool",
@@ -179,9 +181,10 @@ impl ErrorEnvelope {
         let category = classify_error_message(&message);
         let severity = match category {
             ErrorCategory::Authentication => ErrorSeverity::Critical,
-            ErrorCategory::RateLimit | ErrorCategory::Timeout | ErrorCategory::Network => {
-                ErrorSeverity::Warning
-            }
+            ErrorCategory::RateLimit
+            | ErrorCategory::Timeout
+            | ErrorCategory::Network
+            | ErrorCategory::Budget => ErrorSeverity::Warning,
             ErrorCategory::InvalidInput | ErrorCategory::Authorization | ErrorCategory::Parse => {
                 ErrorSeverity::Error
             }
@@ -203,6 +206,33 @@ impl ErrorEnvelope {
     }
 }
 
+/// Classify a boundary error from the typed [`LlmError`] when one is
+/// available, keeping the caller's display message.
+///
+/// Boundaries that only have an `anyhow::Error` historically stringified it
+/// and classified the *string* with `recoverable = true`. That downgraded
+/// terminal provider rejections such as `Model error: Model not exist.`
+/// (typed `LlmError::ModelError` → InvalidInput / `Error` severity /
+/// not recoverable) into `Internal` + `Warning` + recoverable noise, so the
+/// transcript showed a dismissable "Warn" row for a failure that actually
+/// ended the turn. When the typed error survives to the boundary, preserve
+/// its category, severity, and recovery contract verbatim; only genuinely
+/// untyped errors fall back to string classification.
+#[must_use]
+pub fn envelope_for_llm_error(error: anyhow::Error, display_message: String) -> ErrorEnvelope {
+    match error.downcast::<LlmError>() {
+        Ok(llm) => {
+            let mut envelope = ErrorEnvelope::from(llm);
+            envelope.message = display_message;
+            envelope
+        }
+        Err(error) => {
+            drop(error);
+            ErrorEnvelope::classify(display_message, true)
+        }
+    }
+}
+
 impl From<LlmError> for ErrorEnvelope {
     fn from(value: LlmError) -> Self {
         match value {
@@ -212,6 +242,15 @@ impl From<LlmError> for ErrorEnvelope {
                 true,
                 "llm_rate_limited",
                 message,
+            ),
+            // Keep the broad wire-compatible category while making the typed
+            // code and recovery contract distinct from an ordinary 429.
+            LlmError::QuotaExhausted(error) => Self::new(
+                ErrorCategory::RateLimit,
+                ErrorSeverity::Error,
+                false,
+                "llm_quota_exhausted",
+                error.into_message(),
             ),
             LlmError::ServerError { status, message } => Self::new(
                 ErrorCategory::Internal,
@@ -234,12 +273,12 @@ impl From<LlmError> for ErrorEnvelope {
                 "llm_timeout",
                 format!("Request timed out after {duration:?}"),
             ),
-            LlmError::AuthenticationError(message) => Self::new(
+            LlmError::AuthenticationError(auth) => Self::new(
                 ErrorCategory::Authentication,
                 ErrorSeverity::Critical,
                 false,
                 "llm_auth_error",
-                message,
+                auth.to_user_message(),
             ),
             LlmError::AuthorizationError(message) => Self::new(
                 ErrorCategory::Authorization,
@@ -302,12 +341,24 @@ impl From<LlmError> for ErrorEnvelope {
 pub fn classify_error_message(message: &str) -> ErrorCategory {
     let lower = message.to_lowercase();
 
-    if lower.contains("maximum context length")
+    if lower.contains("maximum model steps") || lower.contains("step budget exhausted") {
+        return ErrorCategory::Budget;
+    }
+    if lower.contains("model output truncated")
+        || lower.contains("model response incomplete")
+        || lower.contains("maximum context length")
         || lower.contains("context length")
         || lower.contains("context_length")
         || lower.contains("prompt is too long")
         || (lower.contains("requested") && lower.contains("tokens") && lower.contains("maximum"))
         || lower.contains("context window")
+        || lower.contains("model not exist")
+        || lower.contains("model not found")
+        || lower.contains("no such model")
+        || lower.contains("unknown model")
+        || lower.contains("invalid model")
+        || lower.contains("model does not exist")
+        || lower.starts_with("model error:")
     {
         return ErrorCategory::InvalidInput;
     }
@@ -315,6 +366,7 @@ pub fn classify_error_message(message: &str) -> ErrorCategory {
         || lower.contains("too many requests")
         || lower.contains("429")
         || lower.contains("quota")
+        || lower.contains("usage limit")
     {
         return ErrorCategory::RateLimit;
     }
@@ -342,6 +394,10 @@ pub fn classify_error_message(message: &str) -> ErrorCategory {
     if lower.contains("network")
         || lower.contains("connection")
         || lower.contains("dns")
+        || lower.contains("stream read error")
+        || lower.contains("error decoding response body")
+        || lower.contains("chunk decode error")
+        || lower.contains("body decode")
         || lower.contains("temporarily unavailable")
         || lower.contains(" 502 ")
         || lower.contains(" 503 ")
@@ -411,6 +467,13 @@ impl From<ToolError> for ErrorEnvelope {
                 true,
                 "tool_timeout",
                 format!("Tool timed out after {seconds}s"),
+            ),
+            ToolError::Cancelled { message } => Self::new(
+                ErrorCategory::Tool,
+                ErrorSeverity::Info,
+                false,
+                "tool_cancelled",
+                message,
             ),
             ToolError::NotAvailable { message } => Self::new(
                 ErrorCategory::State,
@@ -496,6 +559,10 @@ impl fmt::Display for StreamError {
 impl std::error::Error for StreamError {}
 
 #[cfg(test)]
+#[path = "error_taxonomy/tests.rs"]
+mod quota_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -524,28 +591,28 @@ mod tests {
     }
 
     #[test]
-    fn rate_limit_catches_429_and_quota_phrasings() {
-        for msg in [
-            "Rate limit reached for gpt-4",
-            "Too Many Requests",
-            "HTTP 429 from upstream",
-            "Your quota has been exceeded",
-        ] {
-            assert_eq!(
-                classify(msg),
-                ErrorCategory::RateLimit,
-                "expected RateLimit for `{msg}`",
-            );
-        }
-    }
-
-    #[test]
     fn timeout_catches_both_spellings() {
         assert_eq!(classify("connection timeout"), ErrorCategory::Timeout);
         assert_eq!(
             classify("request timed out after 30s"),
             ErrorCategory::Timeout
         );
+    }
+
+    #[test]
+    fn network_catches_stream_body_decode_failures() {
+        for msg in [
+            "Warn Stream read error: error decoding response body",
+            "Stream read error: error decoding response body",
+            "chunk decode error",
+            "provider body decode failed mid-stream",
+        ] {
+            assert_eq!(
+                classify(msg),
+                ErrorCategory::Network,
+                "expected Network for `{msg}`",
+            );
+        }
     }
 
     #[test]

@@ -32,6 +32,10 @@
 //! * No `+x` is granted on extracted files. The optional `/skill trust <name>`
 //!   command writes a `.trusted` marker; tool-execution gating is a separate
 //!   concern that lives next to the tool registry.
+//! * Claude Code plugin archives that contain multiple skills are rejected with
+//!   an explicit migration message. Ghosty can install individual
+//!   `SKILL.md` bundles, including `.claude/skills/<name>/SKILL.md`, but it
+//!   does not execute `plugin.json` plugin runtimes or custom command bundles.
 
 use std::fs;
 use std::io::{Read, Write};
@@ -39,18 +43,25 @@ use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use flate2::read::GzDecoder;
+use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::network_policy::{Decision, NetworkPolicy, host_from_url};
 
+fn reqwest_client() -> reqwest::Client {
+    ghosty_release::platform_http_client_builder()
+        .build()
+        .expect("build platform HTTP client")
+}
+
 /// Cache directory for registry-synced skills.
 ///
 /// Lives at `~/.ghosty/cache/skills/` so it's separate from user-installed
 /// skills and can be blown away without losing anything irreplaceable.
 pub fn default_cache_skills_dir() -> PathBuf {
-    dirs::home_dir().map_or_else(
+    crate::config::effective_home_dir().map_or_else(
         || PathBuf::from("/tmp/ghosty/cache/skills"),
         |p| p.join(".ghosty").join("cache").join("skills"),
     )
@@ -59,11 +70,12 @@ pub fn default_cache_skills_dir() -> PathBuf {
 /// Default registry. Falls back to a community-curated `index.json` hosted on
 /// GitHub raw; users can override via `[skills] registry_url` in config.toml.
 pub const DEFAULT_REGISTRY_URL: &str =
-    "https://raw.githubusercontent.com/blissito/deepseek-skills/main/index.json";
+    "https://raw.githubusercontent.com/blissito/ghostycode/main/index.json";
 
 /// Default per-skill size cap (5 MiB). Honored at unpack time so a malicious
 /// gzip bomb can't blow up RAM.
 pub const DEFAULT_MAX_SIZE_BYTES: u64 = 5 * 1024 * 1024;
+const SYNC_REGISTRY_CONCURRENCY: usize = 8;
 
 /// File written under each installed skill so [`update`] / [`uninstall`] can
 /// recover the original [`InstallSource`] without re-parsing user input.
@@ -108,7 +120,7 @@ impl InstallSource {
         if let Some(rest) = trimmed.strip_prefix("github:") {
             let rest = rest.trim();
             // Reject obviously bogus values up front. We intentionally accept
-            // case-insensitive owner/repo so `github:blissito/Foo` works.
+            // case-insensitive owner/repo so `github:Hmbown/Foo` works.
             let (owner, repo) = rest.split_once('/').with_context(|| {
                 format!("github source must be 'github:owner/repo' (got {spec})")
             })?;
@@ -221,6 +233,10 @@ pub enum InstallError {
     MissingFrontmatterField(&'static str),
     #[error("symlinks are not allowed in skill tarballs")]
     SymlinkRejected,
+    #[error(
+        "Claude Code plugin archive contains multiple SKILL.md entries; Ghosty installs one SKILL.md bundle at a time and does not run plugin.json/custom-command runtimes. Install or migrate an individual skills/<name> directory instead"
+    )]
+    ClaudePluginBundle,
     #[error("skill '{0}' is already installed; use update or remove it first")]
     AlreadyInstalled(String),
     #[error("skill '{0}' was not installed via /skill install (no .installed-from marker)")]
@@ -300,24 +316,31 @@ pub async fn install_with_registry(
 
     // Compute a checksum before unpacking so [`update`] can detect upstream
     // no-op changes without redoing the extract.
-    let mut hasher = Sha256::new();
-    hasher.update(&bytes);
-    let checksum = format!("{:x}", hasher.finalize());
+    let checksum = sha256_hex(&bytes);
 
     let staged = stage_tarball(&bytes, skills_dir, max_size)?;
 
     // Move the staged dir into its final location. If `update` is set and the
     // destination exists, replace it; otherwise reject.
+    // Keep any backup until content digest + marker write succeed so a failed
+    // finalize can restore the previous install.
     let final_path = skills_dir.join(&staged.skill_name);
+    let mut backup_path: Option<PathBuf> = None;
     if final_path.exists() {
         if !update {
             // Clean up the staging dir before returning the error.
             let _ = fs::remove_dir_all(&staged.staged_path);
             return Err(InstallError::AlreadyInstalled(staged.skill_name).into());
         }
-        // Best-effort backup-then-replace; on failure we restore the original.
+        // Same ownership gate as plugins/install/place.rs: an update may only
+        // replace a tree this installer created. The tarball's top-level name
+        // is not proof of ownership — without the marker we would delete a
+        // user-authored or system skill that happened to share the name.
+        if let Err(err) = reject_unmarked_update(&final_path, &staged.skill_name) {
+            let _ = fs::remove_dir_all(&staged.staged_path);
+            return Err(err.into());
+        }
         let backup = skills_dir.join(format!("{}.bak", staged.skill_name));
-        // If a previous failed update left a stale `.bak/`, drop it.
         if backup.exists() {
             fs::remove_dir_all(&backup).ok();
         }
@@ -328,12 +351,10 @@ pub async fn install_with_registry(
             )
         })?;
         if let Err(err) = fs::rename(&staged.staged_path, &final_path) {
-            // Roll back: restore the backup so the user isn't left with an
-            // empty skill directory.
             fs::rename(&backup, &final_path).ok();
             return Err(err).context("failed to install staged skill");
         }
-        fs::remove_dir_all(&backup).ok();
+        backup_path = Some(backup);
     } else {
         if let Some(parent) = final_path.parent() {
             fs::create_dir_all(parent).with_context(|| {
@@ -344,19 +365,37 @@ pub async fn install_with_registry(
     }
 
     // Write the marker last so a partial install never leaves a stale
-    // .installed-from on disk.
-    let marker_body = serde_json::json!({
-        "spec": source_spec_string(&source),
-        "url": source_url,
-        "checksum": checksum,
-    })
-    .to_string();
-    fs::write(final_path.join(INSTALLED_FROM_MARKER), marker_body).with_context(|| {
-        format!(
-            "failed to write {} marker for skill {}",
-            INSTALLED_FROM_MARKER, staged.skill_name
-        )
-    })?;
+    // .installed-from on disk. Prefer v2 with package content digest.
+    let spec = source_spec_string(&source);
+    let content_digest = match super::package_digest::compute_package_digest(&final_path) {
+        Ok(digest) => digest,
+        Err(err) => {
+            let _ = fs::remove_dir_all(&final_path);
+            if let Some(backup) = backup_path.take() {
+                let _ = fs::rename(&backup, &final_path);
+            }
+            return Err(anyhow::anyhow!(
+                "installed package failed content digest validation: {err}"
+            ));
+        }
+    };
+    if let Err(err) = write_installed_from_v2(
+        &final_path,
+        &spec,
+        Some(&source_url),
+        &checksum,
+        &content_digest,
+        &staged.skill_name,
+    ) {
+        let _ = fs::remove_dir_all(&final_path);
+        if let Some(backup) = backup_path.take() {
+            let _ = fs::rename(&backup, &final_path);
+        }
+        return Err(err);
+    }
+    if let Some(backup) = backup_path {
+        fs::remove_dir_all(&backup).ok();
+    }
 
     Ok(InstallOutcome::Installed(InstalledSkill {
         name: staged.skill_name,
@@ -403,6 +442,13 @@ pub async fn update_with_registry(
         .with_context(|| format!("failed to read {}", marker_path.display()))?;
     let marker: InstalledFromMarker = serde_json::from_str(&marker_body)
         .with_context(|| format!("malformed {INSTALLED_FROM_MARKER} for {name}"))?;
+    if !is_registry_updatable_spec(&marker.spec) {
+        bail!(
+            "skill '{name}' was imported locally (spec '{}') and cannot be updated from a registry; \
+             re-import or remove it first",
+            marker.spec
+        );
+    }
 
     // Re-resolve the URL, taking the existing checksum as a short-circuit hint:
     // we still hit the network so the user gets a useful "no upstream change"
@@ -419,17 +465,26 @@ pub async fn update_with_registry(
         DownloadOutcome::Denied(host) => return Ok(UpdateResult::NetworkDenied(host)),
     };
 
-    let mut hasher = Sha256::new();
-    hasher.update(&bytes);
-    let checksum = format!("{:x}", hasher.finalize());
-    if checksum == marker.checksum {
+    let checksum = sha256_hex(&bytes);
+    if checksum == marker.source_checksum() {
         return Ok(UpdateResult::NoChange);
     }
 
     // Bytes changed — fall back to the regular install path with `update = true`
-    // so we get the same atomic-replace semantics.
+    // so we get the same atomic-replace semantics. Content updates must not
+    // inherit a previous trust marker.
+    let trust_path = target.join(TRUSTED_MARKER);
+    let had_trust = trust_path.exists();
     let outcome =
         install_with_registry(source, skills_dir, max_size, network, true, registry_url).await?;
+    match &outcome {
+        InstallOutcome::Installed(installed) => {
+            if had_trust {
+                let _ = fs::remove_file(installed.path.join(TRUSTED_MARKER));
+            }
+        }
+        InstallOutcome::NeedsApproval(_) | InstallOutcome::NetworkDenied(_) => {}
+    }
     match outcome {
         InstallOutcome::Installed(installed) => Ok(UpdateResult::Updated(installed)),
         InstallOutcome::NeedsApproval(host) => Ok(UpdateResult::NeedsApproval(host)),
@@ -455,12 +510,12 @@ pub fn uninstall(name: &str, skills_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Mark a community-installed skill as trusted. Currently a marker file only;
-/// callers that wire tool execution against `<name>/scripts/` consult the file
-/// before invoking anything. No-op if already trusted.
+/// Mark a community-installed skill as trusted, binding the marker to the
+/// current package content digest (schema v2).
 ///
 /// Refuses to mark system skills (no `.installed-from`) so the bundled
 /// `skill-creator` doesn't accidentally inherit elevated tool privileges.
+#[cfg(test)]
 pub fn trust(name: &str, skills_dir: &Path) -> Result<()> {
     let target = skill_target_path(name, skills_dir)?;
     if !target.exists() {
@@ -470,14 +525,9 @@ pub fn trust(name: &str, skills_dir: &Path) -> Result<()> {
     if !target.join(INSTALLED_FROM_MARKER).exists() {
         return Err(InstallError::NotInstalledHere(name.to_string()).into());
     }
-    let marker = target.join(TRUSTED_MARKER);
-    if !marker.exists() {
-        fs::write(
-            &marker,
-            "Skill scripts/ are user-trusted. Delete this file to revoke.\n",
-        )
-        .with_context(|| format!("failed to write {}", marker.display()))?;
-    }
+    let content_digest = super::package_digest::compute_package_digest(&target)
+        .with_context(|| format!("cannot compute content digest for {}", target.display()))?;
+    write_trust_v2(&target, &content_digest)?;
     Ok(())
 }
 
@@ -497,7 +547,9 @@ pub async fn fetch_registry(
         Decision::Deny => return Ok(RegistryFetchResult::Denied(host)),
         Decision::Prompt => return Ok(RegistryFetchResult::NeedsApproval(host)),
     }
-    let body = reqwest::get(registry_url)
+    let body = reqwest_client()
+        .get(registry_url)
+        .send()
         .await
         .with_context(|| format!("failed to fetch registry {registry_url}"))?
         .error_for_status()
@@ -580,12 +632,11 @@ pub async fn sync_registry(
         }
     };
 
-    let mut outcomes = Vec::new();
-
-    for (name, entry) in &doc.skills {
-        let outcome = sync_one_skill(name, entry, network, cache_dir, max_size).await;
-        outcomes.push(outcome);
-    }
+    let outcomes = stream::iter(doc.skills.iter())
+        .map(|(name, entry)| sync_one_skill(name, entry, network, cache_dir, max_size))
+        .buffered(SYNC_REGISTRY_CONCURRENCY)
+        .collect()
+        .await;
 
     Ok(SyncResult::Done { outcomes })
 }
@@ -665,7 +716,7 @@ async fn sync_one_skill(
             .flatten();
 
         // Build the request — add If-None-Match if we have a cached ETag.
-        let client = reqwest::Client::new();
+        let client = reqwest_client();
         let mut req = client.get(url);
         if let Some(ref meta) = existing_meta
             && let Some(ref etag) = meta.etag
@@ -730,9 +781,7 @@ async fn sync_one_skill(
         }
 
         // Compute SHA-256 of the downloaded bytes.
-        let mut hasher = Sha256::new();
-        hasher.update(&bytes);
-        let sha256 = format!("{:x}", hasher.finalize());
+        let sha256 = sha256_hex(&bytes);
 
         // Short-circuit: if the hash matches the cached one, we're fresh even
         // without a 304 (some CDNs strip ETags on redirects).
@@ -823,10 +872,79 @@ async fn sync_one_skill(
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
-struct InstalledFromMarker {
-    spec: String,
+pub(crate) struct InstalledFromMarker {
+    pub(crate) spec: String,
+    /// v1 download checksum field.
     #[serde(default)]
     checksum: String,
+    #[serde(default)]
+    source_checksum: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    schema_version: Option<u32>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    content_digest: Option<String>,
+}
+
+impl InstalledFromMarker {
+    pub(crate) fn source_checksum(&self) -> &str {
+        self.source_checksum
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(self.checksum.as_str())
+    }
+}
+
+/// Remote/registry update is only valid for install specs that are not local imports.
+#[must_use]
+pub fn is_registry_updatable_spec(spec: &str) -> bool {
+    let spec = spec.trim();
+    !spec.is_empty() && !spec.starts_with("import:")
+}
+
+/// Write schema-v2 `.installed-from` metadata (last step of a successful install).
+pub fn write_installed_from_v2(
+    skill_dir: &Path,
+    spec: &str,
+    url: Option<&str>,
+    source_checksum: &str,
+    content_digest: &str,
+    installed_name: &str,
+) -> Result<()> {
+    let body = serde_json::json!({
+        "schema_version": 2,
+        "spec": spec,
+        "url": url,
+        "source_checksum": source_checksum,
+        "content_digest": content_digest,
+        "installed_name": installed_name,
+        "registry_version": null,
+    });
+    fs::write(skill_dir.join(INSTALLED_FROM_MARKER), body.to_string()).with_context(|| {
+        format!(
+            "failed to write {} for {}",
+            INSTALLED_FROM_MARKER,
+            skill_dir.display()
+        )
+    })?;
+    Ok(())
+}
+
+/// Write schema-v2 `.trusted` bound to a package content digest.
+pub fn write_trust_v2(skill_dir: &Path, content_digest: &str) -> Result<()> {
+    let body = serde_json::json!({
+        "schema_version": 2,
+        "content_digest": content_digest,
+    });
+    fs::write(skill_dir.join(TRUSTED_MARKER), body.to_string()).with_context(|| {
+        format!(
+            "failed to write {} for {}",
+            TRUSTED_MARKER,
+            skill_dir.display()
+        )
+    })?;
+    Ok(())
 }
 
 /// Curated-registry document. The shape is intentionally minimal so adding
@@ -838,8 +956,8 @@ pub struct RegistryDocument {
     pub skills: std::collections::BTreeMap<String, RegistryEntry>,
 }
 
-/// One row in the curated registry. `description` is optional so old indices
-/// keep parsing.
+/// One row in the curated registry. Descriptive matching metadata is optional
+/// so old indices keep parsing and new registries can publish it gradually.
 #[derive(Debug, Clone, Deserialize)]
 pub struct RegistryEntry {
     /// Source spec (e.g. `github:owner/repo`).
@@ -847,6 +965,12 @@ pub struct RegistryEntry {
     /// Optional human-readable description.
     #[serde(default)]
     pub description: Option<String>,
+    /// Task phrases that should rank this skill above description fallbacks.
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    /// Relevant web domains, optionally written as full URLs by the registry.
+    #[serde(default)]
+    pub domains: Vec<String>,
 }
 
 /// Successful registry fetch result. Same shape as [`InstallOutcome`] for the
@@ -868,6 +992,44 @@ enum DownloadOutcome {
     Bytes { bytes: Vec<u8>, url: String },
     NeedsApproval(String),
     Denied(String),
+}
+
+/// Outcome of [`fetch_tarball`], shared with the plugin installer (#5182) so
+/// both route `Prompt`/`Deny` hosts through their own approval flows instead
+/// of growing a second download path.
+#[derive(Debug)]
+pub(crate) enum FetchOutcome {
+    Bytes { bytes: Vec<u8>, url: String },
+    NeedsApproval(String),
+    Denied(String),
+}
+
+/// Resolve a *remote* [`InstallSource`] (GitHub repo or direct tarball URL)
+/// and download the first reachable candidate under the network policy.
+/// Registry sources are rejected: skill registry resolution stays inside
+/// [`candidate_urls`], and the plugin install on-ramp has no registry index.
+pub(crate) async fn fetch_tarball(
+    source: &InstallSource,
+    network: &NetworkPolicy,
+    max_size: u64,
+) -> Result<FetchOutcome> {
+    let urls = match source {
+        InstallSource::GitHubRepo(repo) => vec![
+            format!("https://github.com/{repo}/archive/refs/heads/main.tar.gz"),
+            format!("https://github.com/{repo}/archive/refs/heads/master.tar.gz"),
+        ],
+        InstallSource::DirectUrl(url) => vec![url.clone()],
+        InstallSource::Registry(name) => {
+            bail!("registry source '{name}' cannot be fetched as a plain tarball")
+        }
+    };
+    Ok(
+        match download_first_success(&urls, network, max_size).await? {
+            DownloadOutcome::Bytes { bytes, url } => FetchOutcome::Bytes { bytes, url },
+            DownloadOutcome::NeedsApproval(host) => FetchOutcome::NeedsApproval(host),
+            DownloadOutcome::Denied(host) => FetchOutcome::Denied(host),
+        },
+    )
 }
 
 /// Resolve the source spec into one or more candidate URLs to try in order.
@@ -981,7 +1143,9 @@ enum DownloadAttempt {
 /// would push the buffer over `max_size * 4` (the *4 accounts for compression;
 /// the unpack step still enforces `max_size` on the *uncompressed* bytes).
 async fn download_with_cap(url: &str, max_size: u64) -> Result<DownloadAttempt> {
-    let resp = reqwest::get(url)
+    let resp = reqwest_client()
+        .get(url)
+        .send()
         .await
         .with_context(|| format!("failed to GET {url}"))?;
     let status = resp.status();
@@ -1071,6 +1235,8 @@ fn scan_tarball(bytes: &[u8], max_size: u64) -> Result<TarballScan> {
     let mut total_size: u64 = 0;
     let mut prefix: Option<String> = None;
     let mut skill_md_relative: Option<(SkillMdCandidate, Vec<u8>)> = None;
+    let mut skill_md_candidate_count: usize = 0;
+    let mut has_claude_plugin_manifest = false;
     let mut link_paths: Vec<String> = Vec::new();
 
     for entry in archive
@@ -1087,6 +1253,9 @@ fn scan_tarball(bytes: &[u8], max_size: u64) -> Result<TarballScan> {
         let path_str = path.to_string_lossy().into_owned();
         if !is_safe_path(&path) {
             return Err(InstallError::PathTraversal(path_str).into());
+        }
+        if is_claude_plugin_manifest_path(&path) {
+            has_claude_plugin_manifest = true;
         }
 
         // Track total size against `max_size` (uncompressed). We honor `header
@@ -1134,6 +1303,7 @@ fn scan_tarball(bytes: &[u8], max_size: u64) -> Result<TarballScan> {
         if entry_type.is_file() {
             let stripped = strip_prefix(&path_str, prefix.as_deref().unwrap_or(""));
             if let Some(candidate) = skill_md_candidate(&stripped) {
+                skill_md_candidate_count += 1;
                 let mut buf = Vec::new();
                 entry
                     .read_to_end(&mut buf)
@@ -1152,6 +1322,9 @@ fn scan_tarball(bytes: &[u8], max_size: u64) -> Result<TarballScan> {
     }
 
     let prefix = prefix.unwrap_or_default();
+    if has_claude_plugin_manifest && skill_md_candidate_count > 1 {
+        return Err(InstallError::ClaudePluginBundle.into());
+    }
     let (skill_md, skill_md_bytes) = skill_md_relative
         .ok_or(InstallError::MissingSkillMd)
         .map_err(anyhow::Error::from)?;
@@ -1220,6 +1393,21 @@ fn skill_md_candidate(stripped_path: &str) -> Option<SkillMdCandidate> {
     }
 
     None
+}
+
+fn is_claude_plugin_manifest_path(path: &Path) -> bool {
+    let parts: Vec<String> = path
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(part) => Some(part.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect();
+
+    parts.windows(2).any(|window| {
+        window[0].eq_ignore_ascii_case(".claude-plugin")
+            && window[1].eq_ignore_ascii_case("plugin.json")
+    })
 }
 
 fn extract_into(scan: &TarballScan, bytes: &[u8], dest: &Path, max_size: u64) -> Result<()> {
@@ -1334,7 +1522,7 @@ fn is_within_selected_root(path: &str, prefix: &str, skill_root: &str) -> bool {
 }
 
 /// Ensure a tar path has no `..` segments and is not absolute.
-fn is_safe_path(path: &Path) -> bool {
+pub(crate) fn is_safe_path(path: &Path) -> bool {
     if path.is_absolute() {
         return false;
     }
@@ -1353,7 +1541,7 @@ fn skill_target_path(name: &str, skills_dir: &Path) -> Result<PathBuf> {
     Ok(skills_dir.join(name))
 }
 
-fn validate_skill_name_segment(name: &str) -> Result<&str> {
+pub(crate) fn validate_skill_name_segment(name: &str) -> Result<&str> {
     if name.is_empty() || name.trim() != name || name.chars().any(char::is_whitespace) {
         bail!("skill name must be a single path-safe segment (got '{name}')");
     }
@@ -1439,12 +1627,34 @@ fn parse_frontmatter_name(bytes: &[u8]) -> Result<String> {
     Ok(name)
 }
 
-fn source_spec_string(source: &InstallSource) -> String {
+fn reject_unmarked_update(final_path: &Path, name: &str) -> std::result::Result<(), InstallError> {
+    if final_path.join(INSTALLED_FROM_MARKER).exists() {
+        Ok(())
+    } else {
+        Err(InstallError::NotInstalledHere(name.to_string()))
+    }
+}
+
+pub(crate) fn source_spec_string(source: &InstallSource) -> String {
     match source {
         InstallSource::GitHubRepo(repo) => format!("github:{repo}"),
         InstallSource::DirectUrl(url) => url.clone(),
         InstallSource::Registry(name) => name.clone(),
     }
+}
+
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    hex_bytes(Sha256::digest(bytes))
+}
+
+fn hex_bytes(bytes: impl AsRef<[u8]>) -> String {
+    let bytes = bytes.as_ref();
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1457,22 +1667,22 @@ mod tests {
 
     #[test]
     fn parse_github_source() {
-        let s = InstallSource::parse("github:blissito/test-skill").unwrap();
+        let s = InstallSource::parse("github:blissito/ghostycode").unwrap();
         assert_eq!(
             s,
-            InstallSource::GitHubRepo("blissito/test-skill".to_string())
+            InstallSource::GitHubRepo("blissito/ghostycode".to_string())
         );
     }
 
     #[test]
     fn parse_github_source_rejects_missing_repo() {
-        let err = InstallSource::parse("github:blissito").unwrap_err();
+        let err = InstallSource::parse("github:Hmbown").unwrap_err();
         assert!(err.to_string().contains("github source must"), "got: {err}");
     }
 
     #[test]
     fn parse_github_source_rejects_extra_slashes() {
-        let err = InstallSource::parse("github:blissito/repo/extra").unwrap_err();
+        let err = InstallSource::parse("github:Hmbown/repo/extra").unwrap_err();
         assert!(err.to_string().contains("github source must"), "got: {err}");
     }
 
@@ -1588,6 +1798,18 @@ mod tests {
     fn parse_frontmatter_requires_opening_fence() {
         let body = b"name: hello\ndescription: x\n";
         assert!(parse_frontmatter_name(body).is_err());
+    }
+
+    #[test]
+    fn update_refuses_to_replace_a_directory_without_an_install_marker() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dest = tmp.path().join("hand-authored");
+        std::fs::create_dir_all(&dest).expect("dest");
+        std::fs::write(dest.join("SKILL.md"), "---\nname: hand-authored\n---\n").expect("skill md");
+        assert!(!dest.join(INSTALLED_FROM_MARKER).exists());
+        let err = reject_unmarked_update(&dest, "hand-authored").unwrap_err();
+        assert!(matches!(err, InstallError::NotInstalledHere(name) if name == "hand-authored"));
+        assert!(dest.join("SKILL.md").exists(), "unmarked tree must survive");
     }
 
     #[test]

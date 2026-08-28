@@ -1,13 +1,17 @@
-# ghosty Architecture
+# Ghosty Architecture
 
 This document provides an overview of the ghosty architecture for developers and contributors.
 
-Current boundary note (v0.8.6):
+Current boundary note (read the workspace version from `Cargo.toml`; this
+boundary has held since v0.9.1):
 - `crates/tui` is still the live end-user runtime for the TUI, runtime API, task manager, and tool execution loop.
 - Other workspace crates are being split out incrementally, but they are not yet the sole runtime source of truth.
-- The LSP subsystem (`crates/tui/src/lsp/`) is fully wired into the engine's post-tool-execution path
-  (`core/engine/lsp_hooks.rs`), providing inline diagnostics after every edit_file/apply_patch/write_file.
-- The swarm agent system was removed in v0.8.5. The active v0.8.35 orchestration surface is persistent sub-agent sessions (`agent_open` / `agent_eval` / `agent_close`) and persistent RLM sessions (`rlm_open` / `rlm_eval` / `rlm_configure` / `rlm_close`).
+- The LSP subsystem (`crates/tui/src/lsp/`) is fully wired into the engine's
+  post-tool-execution path (`core/engine/lsp_hooks.rs`), providing inline
+  diagnostics after `File` write, edit, and patch actions.
+- The swarm agent system was removed in v0.8.5. The active sub-agent surface is
+  the single `agent` tool; persistent RLM sessions are available through the
+  deferred `rlm` action family.
   No model-visible swarm tool remains in the active codebase.
 
 ## High-Level Overview
@@ -54,11 +58,11 @@ Current boundary note (v0.8.6):
 ┌─────────────────────────────────────────────────────────────────┐
 │                        LLM Layer                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │              LLM Client Abstraction (llm_client.rs)       │  │
-│  │  ┌─────────────────┐  ┌─────────────────────────────┐    │  │
-│  │  │  DeepSeek Client │  │  Compatible Client (DeepSeek)│    │  │
-│  │  │   (client.rs)   │  │       (client.rs)           │    │  │
-│  │  └─────────────────┘  └─────────────────────────────┘    │  │
+│  │               LLM Client Layer (client.rs)               │  │
+│  │  ┌──────────────────┐  ┌─────────────────────────────┐   │  │
+│  │  │ OpenAI-compatible │  │  Anthropic / Responses      │   │  │
+│  │  │  (chat adapter)  │  │   (adapters)                │   │  │
+│  │  └──────────────────┘  └─────────────────────────────┘   │  │
 │  └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -74,7 +78,6 @@ Current boundary note (v0.8.6):
 - **`core/`** - Main engine components
   - `engine.rs` - Engine state, operation handling, message processing
   - `engine/turn_loop.rs` - Streaming turn loop and tool execution orchestration
-  - `engine/capacity_flow.rs` - Capacity guardrail checkpoints and interventions
   - `session.rs` - Session state management
   - `turn.rs` - Turn-based conversation handling
   - `events.rs` - Event system for UI updates
@@ -89,28 +92,47 @@ Current boundary note (v0.8.6):
 
 - **`crates/tools`** - Shared tool invocation primitives, including tool result/error/capability types used by the TUI runtime.
 - **`crates/agent`** - Model/provider registry (ModelRegistry) for resolving model IDs to provider endpoints.
-- **`crates/app-server`** - HTTP/SSE + JSON-RPC app server transport for headless agent workflows.
+- **`crates/app-server`** - HTTP/SSE + JSON-RPC app server transport for
+  headless agent workflows. Note that `app-server --http`/`--mobile` delegate
+  to the TUI binary, which is where the runtime API actually lives.
 - **`crates/config`** - Config loading, profiles, environment variable precedence, CLI runtime overrides.
-- **`crates/core`** - Agent loop, session management, turn orchestration, capacity flow guardrails.
+- **`crates/core`** - Provider-neutral request construction (`request.rs`),
+  bounded context fragments, the tool-call parser, and thread/session types.
+  It does **not** own the agent loop: the live turn loop is
+  `Engine::run_turn` in `crates/tui/src/core/engine/turn_loop.rs`, and
+  `crates/tui/src/core/` is a module inside the TUI crate, not this crate. A
+  placeholder `engine/` tree here once suggested otherwise — it had no callers
+  and emitted `TurnComplete` without contacting a model — and was removed in
+  v0.9.11 so there is exactly one turn loop in the workspace.
 - **`crates/execpolicy`** - Approval/sandbox policy engine for tool execution decisions.
 - **`crates/hooks`** - Lifecycle hooks (stdout, jsonl, webhook) for pre/post tool events.
 - **`crates/mcp`** - MCP client + stdio server for Model Context Protocol tool servers.
 - **`crates/protocol`** - Request/response framing and protocol types.
 - **`crates/secrets`** - OS keyring integration for API key storage.
 - **`crates/state`** - SQLite thread/session persistence layer.
-- **`crates/tui-core`** - Event-driven TUI state machine scaffold.
+- **`crates/workflow`** / **`crates/workflow-js`** - Workflow engine and its
+  QuickJS scripting layer (renamed from the whaleflow crates).
+- **`crates/lane`** - Lane runtime: durable, attachable running instances of
+  Fleet/Workflow work (`ghosty lane list/status/attach/logs/stop`).
+- **`crates/release`** / **`crates/build-support`** - Release checks and build
+  plumbing.
 
 ### LLM Integration
 
-- **`client.rs`** - HTTP client for DeepSeek's documented OpenAI-compatible Chat Completions API
-- **`llm_client.rs`** - Abstract LLM client trait with retry logic
+- **`client.rs`** - The live HTTP client layer: OpenAI-compatible, Anthropic,
+  and Responses wire adapters, DeepSeek request-boundary handling, retry
+  policy, and streaming. Provider routes land here through the shared config
+  and catalog layers.
+- **`llm_client/`** - LLM client trait, retry logic, and error classification
+  (`LlmClient`, `RetryConfig`, `with_retry`) consumed by `client.rs`; `mock.rs`
+  is test-only (`#[cfg(test)]`).
 - **`models.rs`** - Data structures for API requests/responses
 
 #### DeepSeek API Endpoints
 
-DeepSeek exposes OpenAI-compatible endpoints. The CLI uses:
-- `https://api.deepseek.com/beta/chat/completions` - default v0.8.16 DeepSeek model turns
-- `https://api.deepseek.com/beta/models` - default v0.8.16 live model discovery and health checks
+DeepSeek exposes OpenAI-compatible endpoints. The first-party route uses:
+- `https://api.deepseek.com/beta` - default DeepSeek base URL (`provider_defaults.rs`)
+- `https://api.deepseek.com/beta/models` - live model discovery and health checks
 
 `https://api.deepseek.com/v1` is accepted for OpenAI SDK compatibility, and
 can still be configured explicitly to opt out of beta-only features such as
@@ -126,10 +148,17 @@ drives turns through Chat Completions.
   - `file.rs` - File read/write operations
   - `todo.rs` - Checklist tools plus legacy todo aliases
   - `tasks.rs` - Model-visible durable task, gate, background shell, and PR-attempt tools
-  - `github.rs` - Read-only GitHub context and guarded comment/closure tools backed by `gh`
+  - `git.rs` - Read-only `git_status` / `git_diff` inspection wrappers
+  - `git_tool.rs` - The canonical action-based `Git` tool (`status | diff | log | show | blame`); per-action legacy aliases were removed in v0.9.3
+  - `git_history.rs` - Read-only `git_log` / `git_show` / `git_blame`
+  - `github/` - Unified `github` tool family (read-only context plus guarded
+    comment/closure actions backed by `gh`); deferred by default and
+    discoverable through `tool_search`
   - `automation.rs` - Model-visible scheduling tools over `AutomationManager`
   - `plan.rs` - Planning tools
-  - `subagent.rs` - Persistent sub-agent sessions (replaces the removed `agent_swarm` surface)
+  - `subagent/` - Sub-agent launch and supervision. The one model-facing tool
+    is `agent`; the `agent_open`/`agent_eval`/`agent_close` lifecycle surface
+    was retired (see `subagent/coord.rs:5`)
   - `spec.rs` - Tool specifications
   - `rlm.rs` - Persistent Recursive Language Model (RLM) sessions — sandboxed Python REPLs with semantic helper calls and `var_handle` output support
 
@@ -141,14 +170,13 @@ drives turns through Chat Completions.
 
 ### User Interface
 
-- **`tui/`** - Terminal UI components (ratatui-based)
+- **`tui/`** - Terminal UI components (ratatui-based; this is a representative
+  list, not exhaustive - the module has grown to 80+ focused files):
   - `app.rs` - Application state and message handling
   - `ui.rs` - Event handling, streaming state, and rendering logic
   - `approval.rs` - Tool approval dialog
   - `clipboard.rs` - Clipboard handling
-  - `streaming.rs` - Streaming text collector
-
-- **`ui.rs`** - Legacy/simple UI utilities
+  - `underwater.rs` - Main shell chrome: status chips, mode labels, phase rail
 
 ### LSP Integration
 
@@ -156,16 +184,24 @@ drives turns through Chat Completions.
   - `mod.rs` - `LspManager` — lazy per-language transport pool + config
   - `client.rs` - `StdioLspTransport` — JSON-RPC over stdio with `didOpen`/`didChange`/`publishDiagnostics`
   - `diagnostics.rs` - Diagnostic types, severity, and HTML-block renderer
-  - `registry.rs` - Language detection and default server map (rust-analyzer, pyright, gopls, clangd, typescript-language-server, jdtls, vue-language-server)
+  - `registry.rs` - Language detection and the default server map: `rust-analyzer`,
+    `gopls`, `pyright-langserver`, `typescript-language-server`, `jdtls`,
+    `intelephense` (PHP), `vue-language-server`, `clangd` (`lsp/registry.rs:98-110`)
   - Wired into the engine via `core/engine/lsp_hooks.rs` — called after every successful edit
 
 ### Security
 
 - **`sandbox/`** - platform sandbox policy preparation and denial reporting
   - `mod.rs` - Sandbox type definitions
+  - `backend.rs` - Pluggable sandbox backend abstraction (routes shell
+    execution to a remote service, e.g. Alibaba OpenSandbox)
   - `policy.rs` - Sandbox policy configuration
+  - `opensandbox.rs` - Alibaba OpenSandbox HTTP backend adapter
   - `seatbelt.rs` - macOS Seatbelt profile generation
-  - `landlock.rs` - Linux Landlock detection and future helper contract
+  - `bwrap.rs` - opt-in Linux bubblewrap command wrapper
+  - `seccomp.rs` - dormant Linux seccomp implementation; not wired into commands
+  - `process_hardening.rs` - Linux kernel-level hardening for the TUI process
+    itself (defense-in-depth; not a child-command sandbox)
   - `windows.rs` - Windows helper contract; not advertised until a Job
     Object process-containment helper exists
 
@@ -177,8 +213,6 @@ drives turns through Chat Completions.
 - **`purge.rs`** - Agent-driven context purging (surgical message removal/rewriting)
 - **`pricing.rs`** - Cost estimation
 - **`prompts.rs`** - System prompt templates
-- **`project_doc.rs`** - Project documentation handling
-- **`session.rs`** - Session serialization
 - **`runtime_api.rs`** - HTTP/SSE runtime API (`ghosty serve --http`)
 - **`runtime_threads.rs`** - Durable thread/turn/item store + replayable event timeline
 - **`task_manager.rs`** - Durable queue, worker pool, task timelines and artifacts
@@ -189,7 +223,7 @@ drives turns through Chat Completions.
 
 1. User input received in TUI
 2. Input processed by `core/engine.rs`
-3. Message sent to LLM via `llm_client.rs`
+3. Message sent to LLM via `client.rs`
 4. Response streamed back, parsed in `client.rs`
 5. Tool calls extracted and executed via `tools/`
 6. Hooks triggered before/after tool execution
@@ -203,19 +237,19 @@ drives turns through Chat Completions.
 3. While degraded/offline, new prompts are queued in-memory and mirrored to `~/.ghosty/sessions/checkpoints/offline_queue.json`
 4. Queue edits (`/queue ...`) are persisted continuously so drafts and queued prompts survive restarts
 5. Successful turn completion clears the active checkpoint and writes a durable session snapshot
-6. Agent/Yolo turns also take pre/post-turn side-git workspace snapshots under `~/.ghosty/snapshots/<project_hash>/<worktree_hash>/.git`; `/restore N` and `revert_turn` restore file state without changing conversation history or the user's `.git`
+6. Action-capable turns also take pre/post-turn side-git workspace snapshots under `~/.ghosty/snapshots/<project_hash>/<worktree_hash>/.git`; `/restore N` and `revert_turn` restore file state without changing conversation history or the user's `.git`
 
 ### Tool Execution
 
 1. LLM requests tool via `tool_use` content block
 2. Tool registry looks up handler
 3. Pre-execution hooks run
-4. Approval requested if needed (non-yolo mode)
-5. Tool executed (possibly sandboxed on macOS)
+4. Approval requested when the effective permission posture and policy require it
+5. Tool executed (possibly wrapped by Seatbelt on macOS or opt-in bubblewrap on Linux)
 6. Post-execution hooks run
 7. Result metadata is retained on runtime item records
-8. **LSP post-edit hook** (v0.8.6): if the tool was `edit_file`/`apply_patch`/`write_file` and LSP is enabled, the engine runs `run_post_edit_lsp_hook()` to collect diagnostics
-9. **Diagnostics flush** (v0.8.6): before the next API request, `flush_pending_lsp_diagnostics()` injects any collected errors as a synthetic user message
+8. **LSP post-edit hook**: after a `File` write, edit, or patch action (including a replay-only legacy alias), the engine runs `run_post_edit_lsp_hook()` when LSP is enabled to collect diagnostics
+9. **Diagnostics flush**: before the next API request, `flush_pending_lsp_diagnostics()` injects any collected errors as a synthetic user message
 10. Result returned to agent loop
 
 ### Background Tasks
@@ -269,7 +303,12 @@ ordinary durable tasks.
 
 1. Create skill directory with `SKILL.md`
 2. Define skill prompt and optional scripts
-3. Place in `~/.ghosty/skills/`
+3. Place in a GhostyCode-owned root (`~/.ghosty/skills/` or
+   `<workspace>/.ghosty/skills/`), or import from a compatible harness root
+   through `/skills`
+
+See [SKILLS.md](SKILLS.md) for the Skills Manager, audit inventory, and the
+rule that compatible roots (`.claude`, `.agents`, …) are never mutated in place.
 
 ### Adding Hooks
 
@@ -284,12 +323,15 @@ command = "echo 'Running tool: $TOOL_NAME'"
 ## Key Design Decisions
 
 1. **Streaming-first**: All LLM responses stream for responsiveness
-2. **Tool safety**: Non-YOLO mode requires approval for destructive operations, including side-effectful MCP tools
+2. **Tool safety**: Ask and Auto-Review require approval according to tool and
+   managed policy; Full Access removes ordinary prompts but not hard safety
+   holds. Side-effectful MCP tools use the same boundary.
 3. **Extensibility**: MCP, skills, and hooks allow customization without code changes
 4. **Cross-platform**: Core works on Linux/macOS/Windows. Sandbox guarantees
-   are platform-specific: macOS Seatbelt is the active policy path; Linux and
-   Windows require helper enforcement before they should be treated as full OS
-   sandboxing.
+   are platform-specific: macOS uses Seatbelt when available; Linux uses an
+   installed bubblewrap executable only when explicitly enabled; Windows has
+   no advertised OS command sandbox. Seccomp and the Windows helper contract
+   are not wired into command execution.
 5. **Minimal dependencies**: Careful dependency selection for build speed
 6. **Local-first runtime API**: HTTP/SSE endpoints are intended for trusted localhost access and are served by the `crates/tui` runtime today
 

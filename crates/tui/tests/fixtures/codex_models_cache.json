@@ -1,0 +1,40 @@
+{
+  "client_version": "test-client",
+  "etag": "test-etag",
+  "fetched_at": "2030-01-02T03:04:05Z",
+  "models": [
+    {
+      "slug": "gpt-test-secondary",
+      "display_name": "GPT Test Secondary",
+      "priority": 20,
+      "context_window": 128000,
+      "supports_parallel_tool_calls": false,
+      "supported_reasoning_levels": [{"effort": "medium"}],
+      "visibility": "list",
+      "supported_in_api": true,
+      "base_instructions": "ignored by GhostyCode"
+    },
+    {
+      "slug": "gpt-test-primary",
+      "display_name": "GPT Test Primary",
+      "priority": 10,
+      "context_window": 372000,
+      "supports_parallel_tool_calls": true,
+      "supported_reasoning_levels": [{"effort": "high"}],
+      "visibility": "list",
+      "supported_in_api": true,
+      "base_instructions": "ignored by GhostyCode"
+    },
+    {
+      "slug": "codex-test-review",
+      "display_name": "Codex Test Review",
+      "priority": 30,
+      "context_window": 272000,
+      "supports_parallel_tool_calls": true,
+      "supported_reasoning_levels": [{"effort": "medium"}],
+      "visibility": "hide",
+      "supported_in_api": true,
+      "base_instructions": "ignored by GhostyCode"
+    }
+  ]
+}

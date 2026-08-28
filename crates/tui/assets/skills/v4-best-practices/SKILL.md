@@ -29,7 +29,7 @@ sub-agent (thinking off) to read the target files and confirm path/symbol
 assumptions still hold.
 
 ```
-agent_spawn role="verifier" model="deepseek-v4-flash" thinking="off"
+agent type="verifier" model="deepseek-v4-flash"
   prompt: "Read these files and confirm: [list assumptions]. Report mismatches."
 ```
 

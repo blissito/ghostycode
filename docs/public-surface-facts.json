@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 2,
+  "product": {
+    "name": "Ghosty",
+    "description": "Terminal coding agent for supported hosted and local models. One runtime on your machine. Rust, MIT.",
+    "positioning": "Terminal-native, model/provider-neutral, local-first coding agent",
+    "license": "MIT",
+    "terminology": {
+      "Fleet": "who is in the roster and which member is selected",
+      "Workflow": "what order the work follows",
+      "Lane": "one running Workflow instance",
+      "Runtime": "where, how, and with what authority selected work executes"
+    },
+    "sources": [
+      "Cargo.toml",
+      "LICENSE",
+      "README.md",
+      "npm/ghosty/package.json",
+      "docs/FLEET.md"
+    ]
+  },
+  "sourceCandidate": {
+    "version": "0.9.11",
+    "providerCount": 45,
+    "toolCount": 74,
+    "sandboxBackends": [
+      "seatbelt (macOS, when available)",
+      "bubblewrap (Linux, opt-in when installed)"
+    ],
+    "sources": [
+      "Cargo.toml",
+      "crates/tui/src/config.rs",
+      "crates/tui/src/sandbox/mod.rs",
+      "web/scripts/derive-facts.mjs"
+    ]
+  },
+  "latestPublishedRelease": {
+    "tag": "v0.9.11",
+    "version": "0.9.11",
+    "publishedAt": "2026-08-23T17:39:46Z",
+    "url": "https://github.com/blissito/ghostycode/releases/tag/v0.9.11",
+    "sources": [
+      "web/data/latest-published-release.json"
+    ]
+  },
+  "install": {
+    "recommended": "npm install -g ghosty",
+    "binaries": [
+      "ghosty",
+      "ghosty-tui"
+    ],
+    "channels": {
+      "npm": "published releases only",
+      "cargo": "published crates only",
+      "prebuiltArchives": "published GitHub Releases only",
+      "cnbMirror": "documented targets only"
+    },
+    "androidTermux": {
+      "status": "preview",
+      "npm": "preview",
+      "requiresMatchingPublishedAssets": true,
+      "sourceBuild": true
+    },
+    "sources": [
+      "README.md",
+      "npm/ghosty/package.json",
+      "npm/ghosty/README.md",
+      "npm/ghosty/scripts/artifacts.js",
+      "docs/INSTALL.md",
+      "docs/CNB_MIRROR.md"
+    ]
+  },
+  "control": {
+    "modes": [
+      "Plan",
+      "Work",
+      "Operate"
+    ],
+    "permissionPostures": [
+      "Ask",
+      "Auto-Review",
+      "Full Access"
+    ],
+    "shortcuts": {
+      "mode": {
+        "chord": "Tab",
+        "when": "composer empty"
+      },
+      "permissionPosture": {
+        "chord": "Shift+Tab",
+        "when": "always (suppressed only under a non-Config modal)"
+      }
+    },
+    "sources": [
+      "docs/MODES.md",
+      "docs/KEYBINDINGS.md",
+      "crates/tui/src/settings.rs"
+    ]
+  },
+  "toolSurface": {
+    "defaultActive": [
+      "read",
+      "write",
+      "edit",
+      "bash",
+      "agent",
+      "todo_write"
+    ],
+    "schemas": {
+      "read": [
+        "path",
+        "offset?",
+        "limit?"
+      ],
+      "write": [
+        "path",
+        "content"
+      ],
+      "edit": [
+        "path",
+        "edits"
+      ],
+      "bash": [
+        "command",
+        "timeout?"
+      ]
+    },
+    "deferred": {
+      "Web": [
+        "search",
+        "fetch",
+        "wait"
+      ]
+    },
+    "compatibility": {
+      "legacyAliases": "hidden-exact",
+      "modelVisible": false,
+      "toolSearchDiscoverable": false
+    },
+    "activationCache": {
+      "maximumNames": 8,
+      "maximumSchemaBytes": 16384,
+      "scope": "per conversation; each subagent owns an independent policy-filtered cache"
+    },
+    "agentConcurrency": {
+      "defaultConfigured": 64,
+      "maximumConfigured": 128,
+      "maximumAdmitted": 1024
+    },
+    "sources": [
+      "docs/TOOL_SURFACE.md",
+      "docs/RUNTIME_SIMPLIFICATION_DESIGN.md",
+      "crates/tui/src/core/engine/tool_catalog.rs",
+      "crates/tui/src/tools/registry.rs",
+      "crates/tui/src/config/subagent_limits.rs"
+    ]
+  },
+  "surfaces": {
+    "availableInSourceCandidate": [
+      "TUI",
+      "ghosty exec",
+      "Web client",
+      "Runtime API",
+      "MCP",
+      "Fleet"
+    ],
+    "sources": [
+      "docs/GUIDE.md",
+      "docs/WEB.md",
+      "docs/RUNTIME_API.md",
+      "docs/MCP.md",
+      "docs/FLEET.md"
+    ]
+  },
+  "trust": {
+    "localRuntime": "runtime, workspace state, and audit log stay on the user's machine",
+    "hostedProviderBoundary": "the selected hosted provider receives turn context required for inference",
+    "localInference": "a loopback local-model route can keep inference local",
+    "telemetry": "anonymous usage counting is on by default with a clear first-run disclosure and a durable opt-out; Ghosty does not collect conversations, code, prompts, files, file/repo/branch names, model content, credentials, or per-turn/per-tool timelines; it posts aggregate counts and closed enums to the first-party endpoint https://telemetry.ghosty.net/v1/telemetry, whose storage has no IP, country, or geo column and a fixed three-month retention; telemetry_endpoint = \"\" writes only to a local dry-run file; no mandatory hosted relay",
+    "account": "no account required for the local runtime",
+    "plan": "Plan is read-only",
+    "sandbox": "Seatbelt is used on macOS when available; Linux bubblewrap is opt-in and must be installed; Windows currently reports no OS sandbox",
+    "audit": "sensitive events append best-effort to $GHOSTY_HOME/audit.log (default ~/.ghosty/audit.log); write failures are logged",
+    "usage": "provider token and cache usage is shown locally when available",
+    "sources": [
+      "docs/PROVIDERS.md",
+      "docs/MODES.md",
+      "docs/SANDBOX.md",
+      "docs/RUNTIME_API.md",
+      "docs/WEB.md",
+      "crates/tui/src/audit.rs",
+      "web/app/[locale]/faq/page.tsx",
+      "web/app/[locale]/install/page.tsx"
+    ]
+  },
+  "platforms": {
+    "prebuilt": [
+      "Linux x64",
+      "Linux arm64",
+      "macOS x64",
+      "macOS arm64",
+      "Windows x64",
+      "Windows arm64"
+    ],
+    "preview": [
+      "Android/Termux arm64"
+    ],
+    "sources": [
+      "docs/INSTALL.md"
+    ]
+  },
+  "repository": {
+    "canonical": "https://github.com/blissito/ghostycode",
+    "mirrors": [
+      "https://cnb.cool/ghosty.net/ghosty",
+      "https://npmmirror.com/package/ghosty"
+    ],
+    "creditSources": [
+      "CHANGELOG.md",
+      "docs/CONTRIBUTORS.md",
+      "web/lib/release-credits.ts"
+    ],
+    "requiredCandidateCredits": [
+      "@bistack",
+      "@aboimpinto",
+      "@wuisabel-gif",
+      "@RepentStar"
+    ]
+  },
+  "screenshot": {
+    "readme": "assets/screenshot.webp",
+    "website": "web/public/ghosty-tui.webp",
+    "sourceVersion": null,
+    "sourceCommit": null,
+    "terminal": "unrecorded",
+    "theme": "Blue Stage dark",
+    "capture": "current Ghosty session; exact binary identity was not recorded, so this image makes no published-release or exact-candidate claim",
+    "sources": [
+      "crates/tui"
+    ]
+  }
+}

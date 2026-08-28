@@ -16,31 +16,34 @@ sub-agents through long tool-using sessions with evidence-driven verification.
 Built for developers who want a keyboard-first coding agent with MCP support,
 session persistence, and zero vendor lock-in. Open source (MIT).
 
-> ### 🩹 Novedad (0.0.14) — la sesión ya no se te olvida
+> ### ⚡ Novedad (0.0.15) — Ghosty se pone al día con upstream
 >
-> Si pegaste capturas y de pronto Ghosty perdía el hilo de la conversación, era
-> esto: desde 0.0.13 los bytes de las imágenes se quedaban en el historial y se
-> reenviaban en cada turno, pero el medidor de contexto los contaba como **cero
-> tokens**. Cuatro capturas podían meter cientos de miles de tokens invisibles,
-> el proveedor rechazaba la petición y el motor resumía la conversación de
-> emergencia, en silencio.
+> Esta versión vuelve a sincronizar Ghosty con [CodeWhale](https://github.com/Hmbown/CodeWhale),
+> el proyecto del que nace. Es un salto grande por dentro —el árbol se triplica—
+> pero lo que verás tú es esto:
 >
-> Ahora las imágenes sólo conservan sus bytes en los 2 mensajes más recientes
-> (las viejas dejan su ruta, y el modelo puede releerlas con `image_analyze`),
-> el estimador sí las cobra, y si el contexto se desborda de todos modos, te
-> avisa antes de resumir. Además, cambiar de modelo ya no te apaga `auto_compact`
-> sin decirte nada.
+> - **Un solo binario.** `ghosty` lo hace todo; ya no existe `ghosty-tui` ni el
+>   error `Companion ghosty-tui binary not found`. Quien lo tenga instalado
+>   recibe el comando viejo refrescado, sin código obsoleto.
+> - **Agente completo desde Zed y JetBrains** (`ghosty serve --acp`): lee y
+>   edita archivos, ejecuta comandos, cancela a media respuesta, cambia de
+>   modelo. Antes por ACP solo había chat.
+> - **Cambia de proveedor sin reiniciar**, con el `/provider` nuevo: lista,
+>   prueba la conexión y edita la key desde la TUI.
+> - **La constitución se cumple.** Las invariantes de `.ghosty/constitution.json`
+>   dejan de ser prosa en el prompt y pasan a verificarse mecánicamente.
+> - **Límites reales por modelo.** `max_tokens` y ventana de contexto ya salen
+>   del catálogo de cada ruta, no de un número fijo.
+> - **EasyBits es proveedor de primera clase** (`--provider easybits`), no un
+>   alias: el modo ya no se pierde al guardar. Y `ghosty auth set` sobre una
+>   instalación nueva deja ese proveedor activo, sin paso extra.
+> - **El fantasma volvió**, con más gestos.
 >
-> Sigue disponible **Kimi K3** con tu key de **Moonshot** (1M de contexto,
-> razonamiento siempre activo, visión nativa) como modelo por defecto de ese
-> provider, con **Kimi K2.6** (256K) a un `/model` de distancia:
+> Sigue disponible **Kimi K3** con tu key de **Moonshot** (1M de contexto):
 >
 > ```bash
 > ghosty auth set --provider moonshot --api-key "TU_KEY_MOONSHOT"
 > ```
->
-> O elige Moonshot en el picker de `/provider` (te pide la key ahí mismo). También
-> disponible vía OpenRouter (`moonshotai/kimi-k3`).
 
 ## Instalación
 
@@ -53,7 +56,7 @@ curl -fsSL https://formmy.app/ghosty/install.sh | sh
 ### Alternativas
 
 ```bash
-# npm (baja los binarios precompilados del release)
+# npm (baja el binario precompilado del release)
 npm install -g ghostycode
 
 # Cargo (requiere Rust 1.88+)
@@ -149,14 +152,16 @@ añadas tu llave, así que una instalación nueva nunca falla por falta de crede
 
 3. Verifica: `ghosty mcp list`
 
-> **¿Por qué `tools=core` y no `core,sandbox` ni `tools=all`?** EasyBits revende
-> DeepSeek, cuya API (compatible con OpenAI) tiene un **tope duro de 128 tools por
-> request**. EasyBits expone `core` = 65 tools y `sandbox` = 47; sumadas a las ~36
-> built-in de Ghosty, `core` solo cabe (101 total) pero `core,sandbox` se pasa (146 >
-> 128) y verás el error `Invalid 'tools': array too long ... maximum length 128`. Usa
-> **un solo grupo**: `tools=core` (o `tools=sandbox` si solo necesitas ejecutar código).
-> Con Anthropic no pasa porque sus tools MCP van como `defer_loading` (ToolSearch) y no
-> cuentan en el tope; DeepSeek ignora ese flag y cuenta todas.
+> **¿Por qué un solo grupo y no `core,sandbox`?** EasyBits revende DeepSeek, cuya
+> API tiene un **tope duro de 128 tools por request** y las cuenta todas. `core` son
+> 65 y `sandbox` 47; con las ~36 built-in de Ghosty, uno solo cabe y los dos juntos
+> no (146 > 128 → `Invalid 'tools': array too long`). Ghosty te avisa antes de enviar
+> la petición si te pasas.
+>
+> Para tener **cajas, S3 y base de datos a la vez**, usa el modo híbrido: conecta
+> solo `?tools=sandbox` por MCP (crear una caja no tiene endpoint REST) y usa S3 y
+> DB por `curl` contra `https://www.easybits.cloud/api/v2` con la misma key. Está
+> paso a paso en [`docs/TALLER.md`](docs/TALLER.md).
 
 Gestiona otros servidores con `ghosty mcp add stdio|http <nombre> ...`,
 `ghosty mcp enable|disable|remove <nombre>` y `ghosty mcp validate`.

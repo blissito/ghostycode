@@ -90,9 +90,9 @@ impl ToolSpec for ValidateDataTool {
     }
 
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        let path = optional_str(&input, "path");
-        let content = optional_str(&input, "content");
-        let requested_format = DataFormat::from_input(optional_str(&input, "format"))?;
+        let path = optional_str(&input, "path")?;
+        let content = optional_str(&input, "content")?;
+        let requested_format = DataFormat::from_input(optional_str(&input, "format")?)?;
 
         let (source_name, raw_content, extension) = load_input_source(path, content, context)?;
         match requested_format {
@@ -271,7 +271,8 @@ mod tests {
             .await
             .expect("execute");
         assert!(result.success);
-        assert!(result.content.contains("\"valid\": true"));
+        let content: Value = serde_json::from_str(&result.content).expect("validation json");
+        assert_eq!(content.get("valid").and_then(Value::as_bool), Some(true));
     }
 
     #[tokio::test]
@@ -286,7 +287,8 @@ mod tests {
             .await
             .expect("execute");
         assert!(result.success);
-        assert!(result.content.contains("\"format\": \"toml\""));
+        let content: Value = serde_json::from_str(&result.content).expect("validation json");
+        assert_eq!(content.get("format").and_then(Value::as_str), Some("toml"));
     }
 
     #[tokio::test]

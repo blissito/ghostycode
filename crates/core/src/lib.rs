@@ -1,10 +1,20 @@
-use std::collections::HashMap;
+pub mod fragments;
+pub mod ids;
+pub mod journal;
+pub mod request;
+pub mod role;
+pub mod session;
+pub mod tool_parser;
+
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::Result;
+use std::time::Duration;
+
+use anyhow::{Result, anyhow};
 use ghosty_agent::ModelRegistry;
-use ghosty_config::{CliRuntimeOverrides, ConfigToml, ProviderKind};
+use ghosty_config::{ConfigToml, ProviderKind};
 use ghosty_execpolicy::{
     AskForApproval, ExecApprovalRequirement, ExecPolicyContext, ExecPolicyDecision,
     ExecPolicyEngine,
@@ -14,18 +24,31 @@ use ghosty_mcp::{
     McpManager, McpStartupCompleteEvent, McpStartupStatus as McpManagerStartupStatus,
 };
 use ghosty_protocol::{
-    AppResponse, EventFrame, ExecApprovalRequestEvent, PromptRequest, PromptResponse,
-    ResponseChannel, ReviewDecision, Thread, ThreadForkParams, ThreadListParams, ThreadReadParams,
-    ThreadRequest, ThreadResponse, ThreadResumeParams, ThreadSetNameParams, ThreadStatus,
-    ToolPayload,
+    AppResponse, EventFrame, ExecApprovalRequestEvent, ResponseChannel, ReviewDecision, Status,
+    Thread, ThreadForkParams, ThreadGoal, ThreadGoalClearParams, ThreadGoalGetParams,
+    ThreadGoalProgressParams, ThreadGoalSetParams, ThreadGoalStatus, ThreadListParams,
+    ThreadReadParams, ThreadRequest, ThreadResponse, ThreadResumeParams, ThreadSetNameParams,
+    ThreadStatus, ToolPayload, UserInputRequestEvent,
 };
 use ghosty_state::{
-    JobStateRecord, JobStateStatus, SessionSource, StateStore, ThreadListFilters, ThreadMetadata,
+    JobStateRecord, JobStateStatus, SessionSource, StateStore, ThreadGoalRecord,
+    ThreadGoalStatus as PersistedThreadGoalStatus, ThreadListFilters, ThreadMetadata,
     ThreadStatus as PersistedThreadStatus,
 };
 use ghosty_tools::{ToolCall, ToolRegistry};
 use serde_json::{Value, json};
+use tokio::time;
 use uuid::Uuid;
+
+/// Per-tool dispatch budget for the headless runtime. Matches the generous
+/// subagent default so long-running tools are not cut off prematurely.
+fn tool_dispatch_timeout() -> Duration {
+    if cfg!(test) {
+        Duration::from_millis(50)
+    } else {
+        Duration::from_secs(300)
+    }
+}
 
 /// How a new thread's conversation history is initialized.
 #[derive(Debug, Clone)]
@@ -74,6 +97,18 @@ pub enum JobStatus {
     Failed,
     /// Cancelled by the user.
     Cancelled,
+}
+
+impl Status for JobStatus {
+    fn is_terminal(&self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
+    fn is_active(&self) -> bool {
+        matches!(self, Self::Queued | Self::Running)
+    }
+    fn is_paused(&self) -> bool {
+        matches!(self, Self::Paused)
+    }
 }
 
 const JOB_DETAIL_SCHEMA_VERSION: u8 = 1;
@@ -154,6 +189,51 @@ pub struct JobRecord {
     pub created_at: i64,
     /// Timestamp of the last state change.
     pub updated_at: i64,
+}
+
+/// Map a durable [`JobRecord`] to the dependency-neutral run read model.
+///
+/// Pure projection of the record as persisted: unknown budgets stay unset and
+/// nothing is fabricated. `updated_at` (epoch seconds) provides the terminal
+/// timestamp because the job manager records no separate end time. The
+/// free-form job detail is intentionally omitted because this owner does not
+/// classify it as safe for a cross-surface read model.
+#[must_use]
+pub fn job_record_to_agent_run(record: &JobRecord) -> ghosty_protocol::agent_run::AgentRunSnapshot {
+    use ghosty_protocol::agent_run::{
+        AgentRunSnapshot, BudgetSummary, RunSource, RunState, TerminalOutcome, TerminalSummary,
+    };
+
+    let (state, terminal) = match record.status {
+        JobStatus::Queued => (RunState::Queued, None),
+        JobStatus::Running => (RunState::Running, None),
+        JobStatus::Paused => (RunState::Paused, None),
+        JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled => {
+            let outcome = match record.status {
+                JobStatus::Completed => TerminalOutcome::Completed,
+                JobStatus::Failed => TerminalOutcome::Failed,
+                _ => TerminalOutcome::Cancelled,
+            };
+            (
+                RunState::Terminal,
+                Some(TerminalSummary {
+                    outcome,
+                    ended_at_ms: record.updated_at.checked_mul(1000),
+                    detail: None,
+                }),
+            )
+        }
+    };
+
+    AgentRunSnapshot {
+        run_id: record.id.clone(),
+        parent: None,
+        source: RunSource::CoreJob,
+        state,
+        budget: BudgetSummary::default(),
+        terminal,
+        refs: Vec::new(),
+    }
 }
 
 /// Manages background jobs with retry logic and persistence.
@@ -564,11 +644,32 @@ impl ThreadManager {
         self.running_threads
             .insert(thread.id.clone(), thread.clone());
         if let Some(history) = params.history.as_ref() {
+            // A read→resume flow hands back items that are already on the
+            // persisted chain; appending them again would double the
+            // conversation on every resume, compounding. Dedup by content
+            // fingerprint (the item's JSON, matching what append_message
+            // stores as content) against the persisted chain and against
+            // items already appended in this loop.
+            let mut seen: HashSet<String> = self
+                .store
+                .list_messages(&thread.id, None)?
+                .into_iter()
+                .map(|message| {
+                    message
+                        .item
+                        .as_ref()
+                        .map_or(message.content.clone(), |item| item.to_string())
+                })
+                .collect();
             for item in history {
+                let fingerprint = item.to_string();
+                if !seen.insert(fingerprint.clone()) {
+                    continue;
+                }
                 self.store.append_message(
                     &thread.id,
                     "history",
-                    &item.to_string(),
+                    &fingerprint,
                     Some(item.clone()),
                 )?;
             }
@@ -644,6 +745,71 @@ impl ThreadManager {
         Ok(Some(updated))
     }
 
+    /// Sets or replaces the persisted goal for a thread.
+    pub fn set_thread_goal(&mut self, params: &ThreadGoalSetParams) -> Result<Option<ThreadGoal>> {
+        if self.store.get_thread(&params.thread_id)?.is_none() {
+            return Ok(None);
+        }
+        let now = chrono::Utc::now().timestamp();
+        let goal = ThreadGoalRecord {
+            thread_id: params.thread_id.clone(),
+            goal_id: format!("goal-{}", Uuid::new_v4()),
+            objective: params.objective.clone(),
+            status: PersistedThreadGoalStatus::Active,
+            token_budget: params.token_budget,
+            tokens_used: 0,
+            time_used_seconds: 0,
+            continuation_count: 0,
+            created_at: now,
+            updated_at: now,
+        };
+        self.store.upsert_thread_goal(&goal)?;
+        Ok(Some(to_protocol_goal(goal)))
+    }
+
+    /// Reads the persisted goal for a thread.
+    pub fn get_thread_goal(&self, params: &ThreadGoalGetParams) -> Result<Option<ThreadGoal>> {
+        Ok(self
+            .store
+            .get_thread_goal(&params.thread_id)?
+            .map(to_protocol_goal))
+    }
+
+    /// Accrues durable per-goal usage and/or a continuation pass for a thread.
+    pub fn record_thread_goal_progress(
+        &mut self,
+        params: &ThreadGoalProgressParams,
+    ) -> Result<Option<ThreadGoal>> {
+        if self.store.get_thread(&params.thread_id)?.is_none() {
+            return Ok(None);
+        }
+
+        let now = chrono::Utc::now().timestamp();
+        let mut goal = if params.token_delta != 0 || params.time_delta_seconds != 0 {
+            self.store.record_thread_goal_usage(
+                &params.thread_id,
+                params.token_delta,
+                params.time_delta_seconds,
+                now,
+            )?
+        } else {
+            self.store.get_thread_goal(&params.thread_id)?
+        };
+
+        if params.record_continuation {
+            goal = self
+                .store
+                .record_thread_goal_continuation(&params.thread_id, now)?;
+        }
+
+        Ok(goal.map(to_protocol_goal))
+    }
+
+    /// Clears the persisted goal for a thread, returning whether one existed.
+    pub fn clear_thread_goal(&mut self, params: &ThreadGoalClearParams) -> Result<bool> {
+        self.store.delete_thread_goal(&params.thread_id)
+    }
+
     /// Archives a thread so it no longer appears in default listings.
     pub fn archive_thread(&mut self, thread_id: &str) -> Result<()> {
         self.store.mark_archived(thread_id)?;
@@ -656,6 +822,12 @@ impl ThreadManager {
     /// Restores an archived thread to active status.
     pub fn unarchive_thread(&mut self, thread_id: &str) -> Result<()> {
         self.store.mark_unarchived(thread_id)?;
+        if let Some(metadata) = self.store.get_thread(thread_id)? {
+            let thread = to_protocol_thread(metadata);
+            if let Some(cached) = self.running_threads.get_mut(thread_id) {
+                *cached = thread;
+            }
+        }
         Ok(())
     }
 
@@ -689,6 +861,10 @@ impl ThreadManager {
     }
 
     fn persist_thread(&self, thread: &Thread, rollout_path: Option<PathBuf>) -> Result<()> {
+        // This update payload carries no per-thread policy, so preserve any
+        // policy already stored for the thread rather than erasing it with
+        // NULLs on every persist/resume.
+        let existing = self.store.get_thread(&thread.id)?;
         self.store.upsert_thread(&ThreadMetadata {
             id: thread.id.clone(),
             rollout_path,
@@ -703,8 +879,12 @@ impl ThreadManager {
             cli_version: thread.cli_version.clone(),
             source: to_persisted_source(&thread.source),
             name: thread.name.clone(),
-            sandbox_policy: None,
-            approval_mode: None,
+            sandbox_policy: existing
+                .as_ref()
+                .and_then(|metadata| metadata.sandbox_policy.clone()),
+            approval_mode: existing
+                .as_ref()
+                .and_then(|metadata| metadata.approval_mode.clone()),
             archived: matches!(thread.status, ThreadStatus::Archived),
             archived_at: None,
             git_sha: None,
@@ -748,7 +928,9 @@ impl Runtime {
         hooks: HookDispatcher,
     ) -> Self {
         let mut jobs = JobManager::default();
-        let _ = jobs.load_from_store(&state);
+        if let Err(e) = jobs.load_from_store(&state) {
+            tracing::warn!("Failed to load job store, starting with empty job list: {e}");
+        }
         Self {
             config,
             model_registry,
@@ -759,6 +941,46 @@ impl Runtime {
             hooks,
             jobs,
         }
+    }
+
+    /// Update the live configuration in-place so the next turn picks up
+    /// changes without a restart.  Called by the app-server after
+    /// `ConfigSet` or `ConfigUnset`.
+    ///
+    /// Only `config.toml` is touched by those operations, so the sibling
+    /// `permissions.toml` (and therefore `exec_policy`) is left unchanged.
+    ///
+    /// Fields that the TUI caches on its `App` struct (`api_provider`,
+    /// `reasoning_effort`, `mcp_config_path`, `skills_dir`, …) are read
+    /// live from `self.config` here via `resolve_runtime_options`, so they
+    /// take effect on the next prompt turn without any extra plumbing.
+    pub fn update_config(&mut self, config: ConfigToml) {
+        self.config = config;
+    }
+
+    /// Reload the live configuration **and** the exec policy from a
+    /// freshly-loaded `ConfigStore`.  Used by the app-server's
+    /// `ConfigReload` request, which re-reads both `config.toml` and the
+    /// sibling `permissions.toml` from disk.
+    ///
+    /// Unlike `update_config`, this also refreshes `self.exec_policy` so
+    /// externally edited permission rules take effect without a restart.
+    ///
+    /// Mirrors the TUI `reload_runtime_config` codepath for everything
+    /// that is reachable from the headless `Runtime`. The TUI-only caches
+    /// (`last_effective_reasoning_effort`, `model_compaction_budget`,
+    /// `ui_locale`, …) do not exist on `Runtime` and need no work here.
+    ///
+    /// **Not** refreshed by this call:
+    /// * `mcp_manager` — MCP server connections are loaded once at
+    ///   startup from `mcp_config_path`. Changing `mcp_config_path` or the
+    ///   referenced `mcp.json` still requires a headless-runtime restart;
+    ///   the TUI owns a separate explicit `/mcp reload` operation.
+    /// * `tool_registry` — built once at startup.
+    /// * `model_registry` — static catalog.
+    pub fn reload_config_and_policy(&mut self, config: ConfigToml, exec_policy: ExecPolicyEngine) {
+        self.config = config;
+        self.exec_policy = exec_policy;
     }
 
     fn persisted_thread_data(&self, thread_id: &str) -> Result<Value> {
@@ -790,22 +1012,17 @@ impl Runtime {
                 })
             });
 
+        let goal = self
+            .thread_manager
+            .state_store()
+            .get_thread_goal(thread_id)?
+            .map(to_protocol_goal);
+
         Ok(json!({
             "history": history,
-            "checkpoint": checkpoint
+            "checkpoint": checkpoint,
+            "goal": goal
         }))
-    }
-
-    fn persist_latest_checkpoint(&self, thread_id: &str, reason: &str, state: Value) -> Result<()> {
-        self.thread_manager.state_store().save_checkpoint(
-            thread_id,
-            "latest",
-            &json!({
-                "reason": reason,
-                "saved_at": chrono::Utc::now().timestamp(),
-                "state": state
-            }),
-        )
     }
 
     /// Dispatches a thread request (create, start, resume, fork, list, read, etc.).
@@ -856,6 +1073,7 @@ impl Runtime {
                         status: "missing".to_string(),
                         thread: None,
                         threads: Vec::new(),
+                        goal: None,
                         model: None,
                         model_provider: None,
                         cwd: None,
@@ -878,6 +1096,7 @@ impl Runtime {
                         status: "missing".to_string(),
                         thread: None,
                         threads: Vec::new(),
+                        goal: None,
                         model: None,
                         model_provider: None,
                         cwd: None,
@@ -893,6 +1112,7 @@ impl Runtime {
                 status: "ok".to_string(),
                 thread: None,
                 threads: self.thread_manager.list_threads(&params)?,
+                goal: None,
                 model: None,
                 model_provider: None,
                 cwd: None,
@@ -909,6 +1129,9 @@ impl Runtime {
                     status: "ok".to_string(),
                     thread: self.thread_manager.read_thread(&params)?,
                     threads: Vec::new(),
+                    goal: self.thread_manager.get_thread_goal(&ThreadGoalGetParams {
+                        thread_id: params.thread_id,
+                    })?,
                     model: None,
                     model_provider: None,
                     cwd: None,
@@ -923,6 +1146,7 @@ impl Runtime {
                 status: "ok".to_string(),
                 thread: self.thread_manager.set_thread_name(&params)?,
                 threads: Vec::new(),
+                goal: None,
                 model: None,
                 model_provider: None,
                 cwd: None,
@@ -931,6 +1155,113 @@ impl Runtime {
                 events: Vec::new(),
                 data: json!({}),
             }),
+            ThreadRequest::GoalSet(params) => {
+                let thread_id = params.thread_id.clone();
+                if let Some(goal) = self.thread_manager.set_thread_goal(&params)? {
+                    Ok(ThreadResponse {
+                        thread_id,
+                        status: "ok".to_string(),
+                        thread: None,
+                        threads: Vec::new(),
+                        goal: Some(goal.clone()),
+                        model: None,
+                        model_provider: None,
+                        cwd: None,
+                        approval_policy: None,
+                        sandbox: None,
+                        events: vec![EventFrame::ThreadGoalUpdated { goal: goal.clone() }],
+                        data: json!({ "goal": goal }),
+                    })
+                } else {
+                    Ok(ThreadResponse {
+                        thread_id,
+                        status: "missing".to_string(),
+                        thread: None,
+                        threads: Vec::new(),
+                        goal: None,
+                        model: None,
+                        model_provider: None,
+                        cwd: None,
+                        approval_policy: None,
+                        sandbox: None,
+                        events: Vec::new(),
+                        data: json!({"error":"thread not found"}),
+                    })
+                }
+            }
+            ThreadRequest::GoalGet(params) => {
+                let goal = self.thread_manager.get_thread_goal(&params)?;
+                Ok(ThreadResponse {
+                    thread_id: params.thread_id,
+                    status: "ok".to_string(),
+                    thread: None,
+                    threads: Vec::new(),
+                    goal: goal.clone(),
+                    model: None,
+                    model_provider: None,
+                    cwd: None,
+                    approval_policy: None,
+                    sandbox: None,
+                    events: Vec::new(),
+                    data: json!({ "goal": goal }),
+                })
+            }
+            ThreadRequest::GoalClear(params) => {
+                let thread_id = params.thread_id.clone();
+                let cleared = self.thread_manager.clear_thread_goal(&params)?;
+                Ok(ThreadResponse {
+                    thread_id: thread_id.clone(),
+                    status: if cleared { "cleared" } else { "empty" }.to_string(),
+                    thread: None,
+                    threads: Vec::new(),
+                    goal: None,
+                    model: None,
+                    model_provider: None,
+                    cwd: None,
+                    approval_policy: None,
+                    sandbox: None,
+                    events: if cleared {
+                        vec![EventFrame::ThreadGoalCleared { thread_id }]
+                    } else {
+                        Vec::new()
+                    },
+                    data: json!({ "cleared": cleared }),
+                })
+            }
+            ThreadRequest::GoalRecordProgress(params) => {
+                let thread_id = params.thread_id.clone();
+                if let Some(goal) = self.thread_manager.record_thread_goal_progress(&params)? {
+                    Ok(ThreadResponse {
+                        thread_id,
+                        status: "ok".to_string(),
+                        thread: None,
+                        threads: Vec::new(),
+                        goal: Some(goal.clone()),
+                        model: None,
+                        model_provider: None,
+                        cwd: None,
+                        approval_policy: None,
+                        sandbox: None,
+                        events: vec![EventFrame::ThreadGoalUpdated { goal: goal.clone() }],
+                        data: json!({ "goal": goal }),
+                    })
+                } else {
+                    Ok(ThreadResponse {
+                        thread_id,
+                        status: "missing".to_string(),
+                        thread: None,
+                        threads: Vec::new(),
+                        goal: None,
+                        model: None,
+                        model_provider: None,
+                        cwd: None,
+                        approval_policy: None,
+                        sandbox: None,
+                        events: Vec::new(),
+                        data: json!({"error":"thread or goal not found"}),
+                    })
+                }
+            }
             ThreadRequest::Archive { thread_id } => {
                 self.thread_manager.archive_thread(&thread_id)?;
                 Ok(ThreadResponse {
@@ -938,6 +1269,7 @@ impl Runtime {
                     status: "archived".to_string(),
                     thread: None,
                     threads: Vec::new(),
+                    goal: None,
                     model: None,
                     model_provider: None,
                     cwd: None,
@@ -954,6 +1286,7 @@ impl Runtime {
                     status: "unarchived".to_string(),
                     thread: None,
                     threads: Vec::new(),
+                    goal: None,
                     model: None,
                     model_provider: None,
                     cwd: None,
@@ -963,123 +1296,19 @@ impl Runtime {
                     data: json!({}),
                 })
             }
-            ThreadRequest::Message { thread_id, input } => {
-                self.thread_manager.touch_message(&thread_id, &input)?;
-                let response_id = format!("{thread_id}:{}", input.len());
-                self.hooks
-                    .emit(HookEvent::ResponseStart {
-                        response_id: response_id.clone(),
-                    })
-                    .await;
-                self.hooks
-                    .emit(HookEvent::ResponseEnd {
-                        response_id: response_id.clone(),
-                    })
-                    .await;
-
-                Ok(ThreadResponse {
-                    thread_id,
-                    status: "accepted".to_string(),
-                    thread: None,
-                    threads: Vec::new(),
-                    model: None,
-                    model_provider: None,
-                    cwd: None,
-                    approval_policy: None,
-                    sandbox: None,
-                    events: vec![
-                        EventFrame::ResponseStart {
-                            response_id: response_id.clone(),
-                        },
-                        EventFrame::ResponseDelta {
-                            response_id: response_id.clone(),
-                            delta: "queued".to_string(),
-                            channel: ResponseChannel::Text,
-                        },
-                        EventFrame::ResponseEnd { response_id },
-                    ],
-                    data: json!({}),
-                })
-            }
+            // A thread message is a *turn*, and this type is not the turn
+            // engine — it owns thread bookkeeping and persistence only. The
+            // app-server routes messages through its runtime bridge
+            // (`POST /v1/threads/{id}/turns` on the runtime API) and never
+            // reaches this arm. Returning an error rather than a canned
+            // "accepted" keeps any other caller from mistaking bookkeeping
+            // for execution.
+            ThreadRequest::Message { thread_id, .. } => Err(anyhow!(
+                "thread message for {thread_id} cannot be executed here: \
+                 Runtime::handle_thread does not run turns. Send it through the \
+                 app-server runtime bridge (POST /v1/threads/{{id}}/turns)."
+            )),
         }
-    }
-
-    /// Resolves the model for a prompt, records the message, and returns the response.
-    pub async fn handle_prompt(
-        &mut self,
-        req: PromptRequest,
-        cli_overrides: &CliRuntimeOverrides,
-    ) -> Result<PromptResponse> {
-        let resolved = self.config.resolve_runtime_options(cli_overrides);
-        let requested_model = req.model.clone().unwrap_or_else(|| resolved.model.clone());
-        let selection = self
-            .model_registry
-            .resolve(Some(&requested_model), Some(resolved.provider));
-        let resolved_model = selection.resolved.id.clone();
-        let response_id = format!("resp-{}", Uuid::new_v4());
-
-        self.hooks
-            .emit(HookEvent::ResponseStart {
-                response_id: response_id.clone(),
-            })
-            .await;
-        self.hooks
-            .emit(HookEvent::ResponseDelta {
-                response_id: response_id.clone(),
-                delta: "model-selected".to_string(),
-            })
-            .await;
-        self.hooks
-            .emit(HookEvent::ResponseEnd {
-                response_id: response_id.clone(),
-            })
-            .await;
-
-        let payload = json!({
-            "provider": resolved.provider.as_str(),
-            "model": resolved_model.clone(),
-            "prompt": req.prompt,
-            "telemetry": resolved.telemetry,
-            "base_url": resolved.base_url,
-            "has_api_key": resolved.api_key.as_ref().is_some_and(|k| !k.trim().is_empty()),
-            "approval_policy": resolved.approval_policy,
-            "sandbox_mode": resolved.sandbox_mode
-        });
-        if let Some(thread_id) = req.thread_id.as_ref() {
-            self.thread_manager.touch_message(thread_id, &req.prompt)?;
-            let assistant_message_id = self.thread_manager.store.append_message(
-                thread_id,
-                "assistant",
-                &payload.to_string(),
-                Some(payload.clone()),
-            )?;
-            self.persist_latest_checkpoint(
-                thread_id,
-                "prompt_response",
-                json!({
-                    "response_id": response_id.clone(),
-                    "model": resolved_model.clone(),
-                    "provider": resolved.provider.as_str(),
-                    "assistant_message_id": assistant_message_id
-                }),
-            )?;
-        }
-
-        Ok(PromptResponse {
-            output: payload.to_string(),
-            model: resolved_model,
-            events: vec![
-                EventFrame::ResponseStart {
-                    response_id: response_id.clone(),
-                },
-                EventFrame::ResponseDelta {
-                    response_id: response_id.clone(),
-                    delta: "model-selected".to_string(),
-                    channel: ResponseChannel::Text,
-                },
-                EventFrame::ResponseEnd { response_id },
-            ],
-        })
     }
 
     /// Evaluates execution policy and dispatches a tool call.
@@ -1095,11 +1324,12 @@ impl Runtime {
             ToolPayload::LocalShell { .. } => "exec_shell",
             _ => call.name.as_str(),
         };
+        let policy_path = permission_path_for_call(&call);
         let decision = self.exec_policy.check(ExecPolicyContext {
             command: &command,
             cwd: &policy_cwd,
             tool: Some(policy_tool),
-            path: None,
+            path: policy_path.as_deref(),
             ask_for_approval: approval_mode,
             sandbox_mode: None,
         })?;
@@ -1134,7 +1364,7 @@ impl Runtime {
                 .await;
             self.hooks
                 .emit(HookEvent::GenericEventFrame {
-                    frame: error_frame.clone(),
+                    frame: Box::new(error_frame.clone()),
                 })
                 .await;
             return Ok(json!({
@@ -1153,6 +1383,7 @@ impl Runtime {
             let reason = decision.reason().to_string();
             let maybe_approval_frame = approval_request_frame(
                 &decision.requirement,
+                decision.matched_rule.as_deref(),
                 call_id,
                 approval_id.clone(),
                 response_id.clone(),
@@ -1170,7 +1401,7 @@ impl Runtime {
             if let Some(frame) = maybe_approval_frame {
                 self.hooks
                     .emit(HookEvent::GenericEventFrame {
-                        frame: frame.clone(),
+                        frame: Box::new(frame.clone()),
                     })
                     .await;
                 events.push(event_frame_payload(&frame));
@@ -1187,6 +1418,55 @@ impl Runtime {
             }));
         }
 
+        // Headless `request_user_input`: mirror the approval fire-and-return
+        // branch (issue #3102). The TUI intercepts this tool by name before
+        // dispatch and blocks on a reply channel; the headless runtime instead
+        // emits a typed `UserInputRequest` frame and returns a
+        // `user_input_required` status so the client can render the question.
+        // It does NOT block — consistent with the headless approval model,
+        // which has no resume channel either.
+        //
+        // The reply goes to the runtime API
+        // (`POST /v1/user-input/{thread_id}/{request_id}`), which owns the
+        // pending request and can resume the turn. The app-server control
+        // transport cannot: it executes only `thread/interrupt` mid-turn, so
+        // an answer sent over it would queue behind the very turn that is
+        // waiting for it. `AppRequest::SubmitUserInput` therefore refuses
+        // explicitly instead of pretending to have delivered the answer.
+        if call.name == REQUEST_USER_INPUT_TOOL_NAME {
+            let request_id = format!("user-input-{}", Uuid::new_v4());
+            let arguments = match &call.payload {
+                ToolPayload::Function { arguments } => arguments.as_str(),
+                // Custom/Mcp/LocalShell can't carry a user_input payload; fall
+                // through to the generic dispatch error below.
+                _ => "",
+            };
+            let maybe_frame = user_input_request_frame(
+                call_id.clone(),
+                response_id.clone(),
+                request_id.clone(),
+                arguments,
+            );
+            let mut events = Vec::new();
+            if let Some(frame) = maybe_frame {
+                self.hooks
+                    .emit(HookEvent::GenericEventFrame {
+                        frame: Box::new(frame.clone()),
+                    })
+                    .await;
+                events.push(event_frame_payload(&frame));
+            }
+            return Ok(json!({
+                "ok": false,
+                "status": "user_input_required",
+                "execution_kind": execution_kind,
+                "response_id": response_id,
+                "request_id": request_id,
+                "precheck": precheck,
+                "events": events,
+            }));
+        }
+
         let start_frame = EventFrame::ToolCallStart {
             response_id: response_id.clone(),
             tool_name: call.name.clone(),
@@ -1194,7 +1474,7 @@ impl Runtime {
         };
         self.hooks
             .emit(HookEvent::GenericEventFrame {
-                frame: start_frame.clone(),
+                frame: Box::new(start_frame.clone()),
             })
             .await;
         self.hooks
@@ -1209,8 +1489,15 @@ impl Runtime {
             })
             .await;
 
-        match self.tool_registry.dispatch(call.clone(), true).await {
-            Ok(tool_output) => {
+        match time::timeout(
+            tool_dispatch_timeout(),
+            self.tool_registry.dispatch(call.clone(), true),
+        )
+        .await
+        {
+            Ok(Ok(tool_output)) => {
+                let success = tool_output.success();
+                let status = if success { "completed" } else { "failed" };
                 let result_frame = EventFrame::ToolCallResult {
                     response_id: response_id.clone(),
                     tool_name: call.name.clone(),
@@ -1218,20 +1505,20 @@ impl Runtime {
                 };
                 self.hooks
                     .emit(HookEvent::GenericEventFrame {
-                        frame: result_frame.clone(),
+                        frame: Box::new(result_frame.clone()),
                     })
                     .await;
                 self.hooks
                     .emit(HookEvent::ToolLifecycle {
                         response_id: response_id.clone(),
                         tool_name: call.name,
-                        phase: "completed".to_string(),
-                        payload: json!({ "ok": true }),
+                        phase: status.to_string(),
+                        payload: json!({ "ok": success }),
                     })
                     .await;
                 Ok(json!({
-                    "ok": true,
-                    "status": "completed",
+                    "ok": success,
+                    "status": status,
                     "execution_kind": execution_kind,
                     "response_id": response_id,
                     "precheck": precheck,
@@ -1242,7 +1529,7 @@ impl Runtime {
                     ]
                 }))
             }
-            Err(err) => {
+            Ok(Err(err)) => {
                 let message = format!("{err:?}");
                 let error_frame = EventFrame::Error {
                     response_id: response_id.clone(),
@@ -1250,7 +1537,7 @@ impl Runtime {
                 };
                 self.hooks
                     .emit(HookEvent::GenericEventFrame {
-                        frame: error_frame.clone(),
+                        frame: Box::new(error_frame.clone()),
                     })
                     .await;
                 self.hooks
@@ -1264,6 +1551,39 @@ impl Runtime {
                 Ok(json!({
                     "ok": false,
                     "status": "failed",
+                    "execution_kind": execution_kind,
+                    "response_id": response_id,
+                    "precheck": precheck,
+                    "error": message,
+                    "events": [
+                        event_frame_payload(&start_frame),
+                        event_frame_payload(&error_frame)
+                    ]
+                }))
+            }
+            Err(_elapsed) => {
+                let seconds = tool_dispatch_timeout().as_secs().max(1);
+                let message = format!("Tool '{}' timed out after {seconds}s", call.name);
+                let error_frame = EventFrame::Error {
+                    response_id: response_id.clone(),
+                    message: message.clone(),
+                };
+                self.hooks
+                    .emit(HookEvent::GenericEventFrame {
+                        frame: Box::new(error_frame.clone()),
+                    })
+                    .await;
+                self.hooks
+                    .emit(HookEvent::ToolLifecycle {
+                        response_id: response_id.clone(),
+                        tool_name: call.name,
+                        phase: "failed".to_string(),
+                        payload: json!({ "error": message.clone(), "timeout": true }),
+                    })
+                    .await;
+                Ok(json!({
+                    "ok": false,
+                    "status": "timeout",
                     "execution_kind": execution_kind,
                     "response_id": response_id,
                     "precheck": precheck,
@@ -1294,18 +1614,18 @@ impl Runtime {
             };
             self.hooks
                 .emit(HookEvent::GenericEventFrame {
-                    frame: EventFrame::McpStartupUpdate {
+                    frame: Box::new(EventFrame::McpStartupUpdate {
                         update: ghosty_protocol::McpStartupUpdateEvent {
                             server_name: update.server_name,
                             status,
                         },
-                    },
+                    }),
                 })
                 .await;
         }
         self.hooks
             .emit(HookEvent::GenericEventFrame {
-                frame: EventFrame::McpStartupComplete {
+                frame: Box::new(EventFrame::McpStartupComplete {
                     summary: ghosty_protocol::McpStartupCompleteEvent {
                         ready: summary.ready.clone(),
                         failed: summary
@@ -1318,7 +1638,7 @@ impl Runtime {
                             .collect(),
                         cancelled: summary.cancelled.clone(),
                     },
-                },
+                }),
             })
             .await;
         summary
@@ -1470,6 +1790,7 @@ fn thread_response_from_new(status: &str, new: NewThread) -> ThreadResponse {
         status: status.to_string(),
         thread: Some(new.thread),
         threads: Vec::new(),
+        goal: None,
         model: Some(new.model),
         model_provider: Some(new.model_provider),
         cwd: Some(new.cwd),
@@ -1495,6 +1816,24 @@ fn preview_from_initial_history(initial_history: &InitialHistory) -> String {
                 .map(Value::to_string)
                 .unwrap_or_else(|| "Resumed conversation".to_string()),
         ),
+    }
+}
+
+fn permission_path_for_call(call: &ToolCall) -> Option<String> {
+    match &call.payload {
+        ToolPayload::Function { arguments } => serde_json::from_str::<Value>(arguments)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            }),
+        ToolPayload::Mcp { raw_arguments, .. } => raw_arguments
+            .get("path")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        ToolPayload::Custom { .. } | ToolPayload::LocalShell { .. } => None,
     }
 }
 
@@ -1532,6 +1871,32 @@ fn to_protocol_thread(thread: ThreadMetadata) -> Thread {
     }
 }
 
+fn to_protocol_goal(goal: ThreadGoalRecord) -> ThreadGoal {
+    ThreadGoal {
+        thread_id: goal.thread_id,
+        goal_id: goal.goal_id,
+        objective: goal.objective,
+        status: to_protocol_goal_status(goal.status),
+        token_budget: goal.token_budget,
+        tokens_used: goal.tokens_used,
+        time_used_seconds: goal.time_used_seconds,
+        continuation_count: goal.continuation_count,
+        created_at: goal.created_at,
+        updated_at: goal.updated_at,
+    }
+}
+
+fn to_protocol_goal_status(status: PersistedThreadGoalStatus) -> ThreadGoalStatus {
+    match status {
+        PersistedThreadGoalStatus::Active => ThreadGoalStatus::Active,
+        PersistedThreadGoalStatus::Paused => ThreadGoalStatus::Paused,
+        PersistedThreadGoalStatus::Blocked => ThreadGoalStatus::Blocked,
+        PersistedThreadGoalStatus::UsageLimited => ThreadGoalStatus::UsageLimited,
+        PersistedThreadGoalStatus::BudgetLimited => ThreadGoalStatus::BudgetLimited,
+        PersistedThreadGoalStatus::Complete => ThreadGoalStatus::Complete,
+    }
+}
+
 fn to_persisted_status(status: &ThreadStatus) -> PersistedThreadStatus {
     match status {
         ThreadStatus::Running => PersistedThreadStatus::Running,
@@ -1555,6 +1920,7 @@ fn to_persisted_source(source: &ghosty_protocol::SessionSource) -> SessionSource
 
 fn approval_request_frame(
     requirement: &ExecApprovalRequirement,
+    matched_rule: Option<&str>,
     call_id: String,
     approval_id: String,
     turn_id: String,
@@ -1597,6 +1963,7 @@ fn approval_request_frame(
             command,
             cwd,
             reason: reason.clone(),
+            matched_rule: matched_rule.map(|rule| rule.to_string().into_boxed_str()),
             network_approval_context: None,
             proposed_execpolicy_amendment: proposed_execpolicy_amendment
                 .as_ref()
@@ -1607,6 +1974,33 @@ fn approval_request_frame(
             available_decisions,
         },
     })
+}
+
+/// Build an [`EventFrame::UserInputRequest`] for a headless
+/// `request_user_input` tool call, mirroring [`approval_request_frame`].
+///
+/// `arguments` is the raw JSON arguments string the model supplied to the
+/// `request_user_input` tool (a `ToolPayload::Function` body). On parse
+/// failure we return `None` so the caller falls through to the generic tool
+/// error path rather than silently dropping the request.
+fn user_input_request_frame(
+    call_id: String,
+    turn_id: String,
+    request_id: String,
+    arguments: &str,
+) -> Option<EventFrame> {
+    let parsed: Value = serde_json::from_str(arguments).ok()?;
+    // Extract the `questions` array and lift it into the headless event
+    // shape. We tolerate missing `allow_free_text`/`multi_select` (default
+    // false) and extra fields, matching the lenient TUI `from_value` path.
+    let questions = parsed.get("questions").cloned().filter(Value::is_array)?;
+    let request = UserInputRequestEvent {
+        call_id,
+        turn_id,
+        request_id,
+        questions: serde_json::from_value(questions).ok()?,
+    };
+    Some(EventFrame::UserInputRequest { request })
 }
 
 fn approval_requirement_payload(requirement: &ExecApprovalRequirement) -> Value {
@@ -1678,6 +2072,13 @@ fn event_frame_payload(frame: &EventFrame) -> Value {
     serde_json::to_value(frame)
         .unwrap_or_else(|_| json!({"event":"error","message":"failed to encode event frame"}))
 }
+
+/// Tool name that triggers the headless clarification-question flow.
+///
+/// Mirrors the TUI's `REQUEST_USER_INPUT_NAME`
+/// (`crates/tui/src/core/engine/tool_catalog.rs`); duplicated here rather than
+/// depended on across crates so `core` stays free of `tui` imports.
+const REQUEST_USER_INPUT_TOOL_NAME: &str = "request_user_input";
 
 fn json_optional_string(value: &Value) -> Option<String> {
     if value.is_null() {
@@ -1784,7 +2185,7 @@ fn runtime_status_to_job_state(status: JobStatus) -> JobStateStatus {
     match status {
         JobStatus::Queued => JobStateStatus::Queued,
         JobStatus::Running => JobStateStatus::Running,
-        JobStatus::Paused => JobStateStatus::Running,
+        JobStatus::Paused => JobStateStatus::Paused,
         JobStatus::Completed => JobStateStatus::Completed,
         JobStatus::Failed => JobStateStatus::Failed,
         JobStatus::Cancelled => JobStateStatus::Cancelled,
@@ -1795,6 +2196,7 @@ fn job_state_status_to_runtime(status: JobStateStatus) -> JobStatus {
     match status {
         JobStateStatus::Queued => JobStatus::Queued,
         JobStateStatus::Running => JobStatus::Running,
+        JobStateStatus::Paused => JobStatus::Paused,
         JobStateStatus::Completed => JobStatus::Completed,
         JobStateStatus::Failed => JobStatus::Failed,
         JobStateStatus::Cancelled => JobStatus::Cancelled,
@@ -1804,8 +2206,220 @@ fn job_state_status_to_runtime(status: JobStateStatus) -> JobStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ghosty_protocol::ThreadResumeParams;
+    use ghosty_tools::ToolCallSource;
+
+    fn temp_core_state(name: &str) -> StateStore {
+        let dir =
+            std::env::temp_dir().join(format!("ghosty-core-{name}-{}", Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).expect("create temp state dir");
+        StateStore::open(Some(dir.join("state.db"))).expect("open state store")
+    }
+
+    fn test_thread_metadata(id: &str) -> ThreadMetadata {
+        ThreadMetadata {
+            id: id.to_string(),
+            rollout_path: None,
+            preview: "test thread".to_string(),
+            ephemeral: false,
+            model_provider: "deepseek".to_string(),
+            created_at: 10,
+            updated_at: 10,
+            status: PersistedThreadStatus::Running,
+            path: None,
+            cwd: PathBuf::from("/tmp/ghosty"),
+            cli_version: "0.0.0-test".to_string(),
+            source: SessionSource::Interactive,
+            name: None,
+            sandbox_policy: None,
+            approval_mode: None,
+            archived: false,
+            archived_at: None,
+            git_sha: None,
+            git_branch: None,
+            git_origin_url: None,
+            memory_mode: None,
+            current_leaf_id: None,
+        }
+    }
 
     // ── JobManager: lifecycle ──────────────────────────────────────────
+
+    #[test]
+    fn permission_path_for_call_extracts_function_path_argument() {
+        let call = ToolCall {
+            name: "read_file".to_string(),
+            payload: ToolPayload::Function {
+                arguments: json!({ "path": "README.md" }).to_string(),
+            },
+            source: ToolCallSource::Direct,
+            raw_tool_call_id: None,
+        };
+
+        assert_eq!(
+            permission_path_for_call(&call).as_deref(),
+            Some("README.md")
+        );
+    }
+
+    #[test]
+    fn permission_path_for_call_extracts_mcp_path_argument() {
+        let call = ToolCall {
+            name: "mcp_fs_read".to_string(),
+            payload: ToolPayload::Mcp {
+                server: "fs".to_string(),
+                tool: "read".to_string(),
+                raw_arguments: json!({ "path": "secrets/token.txt" }),
+                raw_tool_call_id: None,
+            },
+            source: ToolCallSource::Direct,
+            raw_tool_call_id: None,
+        };
+
+        assert_eq!(
+            permission_path_for_call(&call).as_deref(),
+            Some("secrets/token.txt")
+        );
+    }
+
+    #[test]
+    fn permission_path_for_call_ignores_shell_payload() {
+        let call = ToolCall {
+            name: "exec_shell".to_string(),
+            payload: ToolPayload::LocalShell {
+                params: ghosty_protocol::LocalShellParams {
+                    command: "cargo test".to_string(),
+                    cwd: None,
+                    timeout_ms: None,
+                },
+            },
+            source: ToolCallSource::Direct,
+            raw_tool_call_id: None,
+        };
+
+        assert_eq!(permission_path_for_call(&call), None);
+    }
+
+    #[test]
+    fn thread_goal_progress_accumulates_durable_accounting() {
+        let store = temp_core_state("thread-goal-progress");
+        store
+            .upsert_thread(&test_thread_metadata("thread-1"))
+            .expect("upsert thread");
+        let mut manager = ThreadManager::new(store);
+        manager
+            .set_thread_goal(&ThreadGoalSetParams {
+                thread_id: "thread-1".to_string(),
+                objective: "Carry the goal across turns".to_string(),
+                token_budget: Some(2_000),
+            })
+            .expect("set goal")
+            .expect("goal exists");
+
+        let updated = manager
+            .record_thread_goal_progress(&ThreadGoalProgressParams {
+                thread_id: "thread-1".to_string(),
+                token_delta: 750,
+                time_delta_seconds: 12,
+                record_continuation: true,
+            })
+            .expect("record progress")
+            .expect("goal exists");
+
+        assert_eq!(updated.tokens_used, 750);
+        assert_eq!(updated.time_used_seconds, 12);
+        assert_eq!(updated.continuation_count, 1);
+
+        let persisted = manager
+            .get_thread_goal(&ThreadGoalGetParams {
+                thread_id: "thread-1".to_string(),
+            })
+            .expect("read goal")
+            .expect("goal exists");
+        assert_eq!(persisted.tokens_used, 750);
+        assert_eq!(persisted.time_used_seconds, 12);
+        assert_eq!(persisted.continuation_count, 1);
+    }
+
+    #[test]
+    fn approval_request_frame_includes_matched_rule() {
+        let requirement = ExecApprovalRequirement::NeedsApproval {
+            reason: "Typed ask rule 'tool=exec_shell command=cargo test' requires approval."
+                .to_string(),
+            proposed_execpolicy_amendment: None,
+            proposed_network_policy_amendments: Vec::new(),
+        };
+
+        let frame = approval_request_frame(
+            &requirement,
+            Some("tool=exec_shell command=cargo test"),
+            "call-1".to_string(),
+            "approval-1".to_string(),
+            "turn-1".to_string(),
+            "cargo test --workspace".to_string(),
+            "/repo".to_string(),
+        )
+        .expect("approval frame");
+
+        let EventFrame::ExecApprovalRequest { request } = frame else {
+            panic!("expected exec approval request frame");
+        };
+        assert_eq!(
+            request.matched_rule.as_deref(),
+            Some("tool=exec_shell command=cargo test")
+        );
+        assert_eq!(request.reason, requirement.reason());
+    }
+
+    #[test]
+    fn user_input_request_frame_lifts_questions_from_arguments() {
+        // issue #3102: the headless frame constructor must parse the model's
+        // `request_user_input` arguments and lift the questions into the
+        // UserInputRequestEvent, defaulting the boolean flags when omitted.
+        let arguments = r#"{"questions":[{"header":"Scope","id":"scope","question":"Which?","options":[{"label":"A","description":"a"},{"label":"B","description":"b"}],"allow_free_text":true}]}"#;
+        let frame = user_input_request_frame(
+            "call-1".to_string(),
+            "turn-1".to_string(),
+            "ui-1".to_string(),
+            arguments,
+        )
+        .expect("user input frame");
+
+        let EventFrame::UserInputRequest { request } = frame else {
+            panic!("expected user_input_request frame");
+        };
+        assert_eq!(request.call_id, "call-1");
+        assert_eq!(request.turn_id, "turn-1");
+        assert_eq!(request.request_id, "ui-1");
+        assert_eq!(request.questions.len(), 1);
+        assert_eq!(request.questions[0].id, "scope");
+        assert!(request.questions[0].allow_free_text);
+        // multi_select omitted in the payload → defaults to false.
+        assert!(!request.questions[0].multi_select);
+        assert_eq!(request.questions[0].options.len(), 2);
+    }
+
+    #[test]
+    fn user_input_request_frame_returns_none_on_invalid_arguments() {
+        // On parse failure the constructor returns None so invoke_tool falls
+        // through to the generic tool error path instead of silently dropping.
+        let frame = user_input_request_frame(
+            "call-1".to_string(),
+            "turn-1".to_string(),
+            "ui-1".to_string(),
+            "not json",
+        );
+        assert!(frame.is_none());
+
+        // Valid JSON but missing the questions array is also rejected.
+        let frame = user_input_request_frame(
+            "call-1".to_string(),
+            "turn-1".to_string(),
+            "ui-1".to_string(),
+            r#"{"foo":"bar"}"#,
+        );
+        assert!(frame.is_none());
+    }
 
     #[test]
     fn enqueue_creates_queued_job_with_zero_progress() {
@@ -2105,7 +2719,7 @@ mod tests {
         );
         assert_eq!(
             runtime_status_to_job_state(JobStatus::Paused),
-            JobStateStatus::Running
+            JobStateStatus::Paused
         );
         assert_eq!(
             runtime_status_to_job_state(JobStatus::Completed),
@@ -2130,6 +2744,10 @@ mod tests {
         assert_eq!(
             job_state_status_to_runtime(JobStateStatus::Running),
             JobStatus::Running
+        );
+        assert_eq!(
+            job_state_status_to_runtime(JobStateStatus::Paused),
+            JobStatus::Paused
         );
         assert_eq!(
             job_state_status_to_runtime(JobStateStatus::Completed),
@@ -2232,5 +2850,432 @@ mod tests {
         assert_eq!(entry.status, JobStatus::Running);
         assert_eq!(entry.progress, Some(50));
         assert_eq!(entry.detail.as_deref(), Some("working"));
+    }
+
+    #[test]
+    fn paused_job_persists_as_paused_not_running() {
+        let store = temp_core_state("paused-persist");
+        let mut jm = JobManager::default();
+        let job = jm.enqueue("task");
+        let id = job.id.clone();
+        jm.set_running(&id);
+        jm.pause(&id, Some("waiting".to_string()));
+        jm.persist_job(&store, &id).expect("persist paused job");
+
+        let persisted = store.list_jobs(Some(10)).expect("list jobs");
+        let record = persisted.iter().find(|job| job.id == id).unwrap();
+        assert_eq!(record.status, JobStateStatus::Paused);
+
+        let mut reloaded = JobManager::default();
+        reloaded.load_from_store(&store).expect("reload jobs");
+        let jobs = reloaded.list();
+        let reloaded_job = jobs.iter().find(|job| job.id == id).unwrap();
+        assert_eq!(reloaded_job.status, JobStatus::Paused);
+    }
+
+    // ── O1: JobRecord → AgentRunSnapshot adapter ────────────────────────
+
+    fn sample_job_record(status: JobStatus, detail: Option<&str>) -> JobRecord {
+        JobRecord {
+            id: "job-o1-1".to_string(),
+            name: "sample".to_string(),
+            status,
+            progress: None,
+            detail: detail.map(str::to_string),
+            retry: JobRetryMetadata {
+                attempt: 0,
+                max_attempts: DEFAULT_JOB_MAX_ATTEMPTS,
+                backoff_base_ms: DEFAULT_JOB_BACKOFF_BASE_MS,
+                next_backoff_ms: 0,
+                next_retry_at: None,
+            },
+            history: Vec::new(),
+            created_at: 1_700_000_000,
+            updated_at: 1_700_000_042,
+        }
+    }
+
+    #[test]
+    fn job_record_to_agent_run_maps_non_terminal_states() {
+        use ghosty_protocol::agent_run::RunState;
+
+        for (status, expected) in [
+            (JobStatus::Queued, RunState::Queued),
+            (JobStatus::Running, RunState::Running),
+            (JobStatus::Paused, RunState::Paused),
+        ] {
+            let snapshot = job_record_to_agent_run(&sample_job_record(status, None));
+            assert!(snapshot.is_coherent());
+            assert_eq!(snapshot.run_id, "job-o1-1");
+            assert_eq!(snapshot.parent, None);
+            assert_eq!(
+                snapshot.source,
+                ghosty_protocol::agent_run::RunSource::CoreJob
+            );
+            assert_eq!(snapshot.state, expected);
+            assert!(snapshot.terminal.is_none());
+            assert!(snapshot.refs.is_empty());
+            assert_eq!(
+                snapshot.budget,
+                ghosty_protocol::agent_run::BudgetSummary::default()
+            );
+        }
+    }
+
+    #[test]
+    fn job_record_to_agent_run_maps_terminal_states_without_fabricating_fields() {
+        use ghosty_protocol::agent_run::{RunState, TerminalOutcome};
+
+        let cases = [
+            (
+                JobStatus::Completed,
+                TerminalOutcome::Completed,
+                Some("done"),
+            ),
+            (JobStatus::Failed, TerminalOutcome::Failed, Some("boom")),
+            (JobStatus::Cancelled, TerminalOutcome::Cancelled, None),
+        ];
+
+        for (status, outcome, detail) in cases {
+            let snapshot = job_record_to_agent_run(&sample_job_record(status, detail));
+            assert!(snapshot.is_coherent());
+            assert_eq!(snapshot.state, RunState::Terminal);
+            let terminal = snapshot.terminal.expect("terminal summary");
+            assert_eq!(terminal.outcome, outcome);
+            assert_eq!(terminal.ended_at_ms, Some(1_700_000_042_000));
+            assert_eq!(terminal.detail, None);
+            assert_eq!(
+                snapshot.budget,
+                ghosty_protocol::agent_run::BudgetSummary::default()
+            );
+            assert!(snapshot.refs.is_empty());
+            assert_eq!(snapshot.parent, None);
+        }
+    }
+
+    #[test]
+    fn job_record_to_agent_run_does_not_export_unclassified_detail() {
+        let record = sample_job_record(JobStatus::Failed, Some("owner-private diagnostic"));
+        let snapshot = job_record_to_agent_run(&record);
+        let terminal = snapshot.terminal.as_ref().expect("terminal summary");
+        assert_eq!(terminal.detail, None);
+        let serialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
+        assert!(!serialized.contains("owner-private diagnostic"));
+    }
+
+    #[test]
+    fn job_record_to_agent_run_omits_ended_at_on_updated_at_overflow() {
+        let mut record = sample_job_record(JobStatus::Completed, Some("ok"));
+        record.updated_at = i64::MAX;
+        let snapshot = job_record_to_agent_run(&record);
+        assert!(snapshot.is_coherent());
+        let terminal = snapshot.terminal.expect("terminal summary");
+        assert_eq!(terminal.ended_at_ms, None);
+    }
+
+    #[test]
+    fn unarchive_thread_updates_running_threads_cache() {
+        let store = temp_core_state("unarchive-cache");
+        let mut manager = ThreadManager::new(store);
+        let spawned = manager
+            .spawn_thread_with_history(
+                "deepseek".to_string(),
+                PathBuf::from("/tmp/ghosty"),
+                InitialHistory::New,
+                true,
+            )
+            .expect("spawn thread");
+        let thread_id = spawned.thread.id.clone();
+        let resume_params = ThreadResumeParams {
+            thread_id: thread_id.clone(),
+            history: None,
+            path: None,
+            model: None,
+            model_provider: None,
+            cwd: None,
+            approval_policy: None,
+            sandbox: None,
+            config: None,
+            base_instructions: None,
+            developer_instructions: None,
+            personality: None,
+            persist_extended_history: false,
+        };
+
+        manager.archive_thread(&thread_id).expect("archive thread");
+        let archived = manager
+            .resume_thread_with_history(
+                &resume_params,
+                Path::new("/tmp/ghosty"),
+                "deepseek".to_string(),
+            )
+            .expect("resume archived thread")
+            .expect("thread in cache");
+        assert_eq!(archived.thread.status, ThreadStatus::Archived);
+
+        manager
+            .unarchive_thread(&thread_id)
+            .expect("unarchive thread");
+        let restored = manager
+            .resume_thread_with_history(
+                &resume_params,
+                Path::new("/tmp/ghosty"),
+                "deepseek".to_string(),
+            )
+            .expect("resume unarchived thread")
+            .expect("thread in cache");
+        assert_eq!(restored.thread.status, ThreadStatus::Idle);
+    }
+
+    #[test]
+    fn resume_with_history_does_not_reappend_persisted_messages() {
+        // A read→resume flow hands the thread's own history back to
+        // `thread/resume`; appending it verbatim doubled the conversation on
+        // every resume, compounding.
+        let store = temp_core_state("resume-history-dedup");
+        let mut manager = ThreadManager::new(store);
+        let history = vec![
+            json!({"type": "user_message", "message": "hello"}),
+            json!({"type": "assistant_message", "message": "hi there"}),
+        ];
+        let spawned = manager
+            .spawn_thread_with_history(
+                "deepseek".to_string(),
+                PathBuf::from("/tmp/ghosty"),
+                InitialHistory::Forked(history.clone()),
+                true,
+            )
+            .expect("spawn thread");
+        let thread_id = spawned.thread.id.clone();
+        let message_count = |manager: &ThreadManager| {
+            manager
+                .state_store()
+                .list_messages(&thread_id, None)
+                .expect("list messages")
+                .len()
+        };
+        assert_eq!(message_count(&manager), 2);
+
+        let resume_params = ThreadResumeParams {
+            thread_id: thread_id.clone(),
+            history: Some(history.clone()),
+            path: None,
+            model: None,
+            model_provider: None,
+            cwd: None,
+            approval_policy: None,
+            sandbox: None,
+            config: None,
+            base_instructions: None,
+            developer_instructions: None,
+            personality: None,
+            persist_extended_history: false,
+        };
+
+        // Resuming twice with the same history must be idempotent.
+        for _ in 0..2 {
+            manager
+                .resume_thread_with_history(
+                    &resume_params,
+                    Path::new("/tmp/ghosty"),
+                    "deepseek".to_string(),
+                )
+                .expect("resume thread")
+                .expect("thread found");
+        }
+        assert_eq!(
+            message_count(&manager),
+            2,
+            "resume re-appended messages already on the persisted chain"
+        );
+
+        // A genuinely new history item is still appended, exactly once.
+        let mut extended = history.clone();
+        extended.push(json!({"type": "user_message", "message": "something new"}));
+        let resume_params = ThreadResumeParams {
+            history: Some(extended),
+            ..resume_params
+        };
+        manager
+            .resume_thread_with_history(
+                &resume_params,
+                Path::new("/tmp/ghosty"),
+                "deepseek".to_string(),
+            )
+            .expect("resume thread")
+            .expect("thread found");
+        assert_eq!(message_count(&manager), 3);
+    }
+
+    #[test]
+    fn persist_thread_preserves_stored_policy() {
+        // persist_thread's update payload carries no per-thread policy;
+        // writing NULLs unconditionally erased any policy stored earlier
+        // (e.g. on every resume).
+        let store = temp_core_state("persist-policy");
+        let mut metadata = test_thread_metadata("thread-policy");
+        metadata.sandbox_policy = Some("workspace-write".to_string());
+        metadata.approval_mode = Some("on-request".to_string());
+        store.upsert_thread(&metadata).expect("seed thread");
+
+        // A fresh manager has an empty running-thread cache, so resume goes
+        // through the persisted path, which calls persist_thread.
+        let mut manager = ThreadManager::new(store);
+        let resume_params = ThreadResumeParams {
+            thread_id: "thread-policy".to_string(),
+            history: None,
+            path: None,
+            model: None,
+            model_provider: None,
+            cwd: None,
+            approval_policy: None,
+            sandbox: None,
+            config: None,
+            base_instructions: None,
+            developer_instructions: None,
+            personality: None,
+            persist_extended_history: false,
+        };
+        manager
+            .resume_thread_with_history(
+                &resume_params,
+                Path::new("/tmp/ghosty"),
+                "deepseek".to_string(),
+            )
+            .expect("resume thread")
+            .expect("thread found");
+
+        let persisted = manager
+            .state_store()
+            .get_thread("thread-policy")
+            .expect("read thread")
+            .expect("thread persisted");
+        assert_eq!(persisted.sandbox_policy.as_deref(), Some("workspace-write"));
+        assert_eq!(persisted.approval_mode.as_deref(), Some("on-request"));
+    }
+
+    #[tokio::test]
+    async fn invoke_tool_returns_timeout_status_for_slow_tools() {
+        use async_trait::async_trait;
+        use ghosty_agent::ModelRegistry;
+        use ghosty_config::ConfigToml;
+        use ghosty_execpolicy::{AskForApproval, ExecPolicyEngine};
+        use ghosty_hooks::HookDispatcher;
+        use ghosty_mcp::McpManager;
+        use ghosty_protocol::{ToolKind, ToolOutput, ToolPayload};
+        use ghosty_tools::{FunctionCallError, ToolDescriptor, ToolHandler, ToolInvocation};
+
+        struct SlowTool;
+        #[async_trait]
+        impl ToolHandler for SlowTool {
+            fn kind(&self) -> ToolKind {
+                ToolKind::Function
+            }
+
+            async fn handle(
+                &self,
+                _invocation: ToolInvocation,
+            ) -> std::result::Result<ToolOutput, FunctionCallError> {
+                time::sleep(Duration::from_millis(200)).await;
+                Ok(ToolOutput::Function {
+                    body: Some(json!("late")),
+                    success: true,
+                })
+            }
+        }
+
+        let mut registry = ToolRegistry::default();
+        registry
+            .register(
+                ToolDescriptor {
+                    name: "slow_tool".to_string(),
+                    input_schema: json!({"type":"object"}),
+                    output_schema: json!({"type":"object"}),
+                    supports_parallel_tool_calls: true,
+                    timeout_ms: None,
+                },
+                Arc::new(SlowTool),
+            )
+            .expect("register slow tool");
+
+        let runtime = Runtime::new(
+            ConfigToml::default(),
+            ModelRegistry::default(),
+            temp_core_state("invoke-tool-timeout"),
+            Arc::new(registry),
+            Arc::new(McpManager::default()),
+            ExecPolicyEngine::new(vec![], vec![]),
+            HookDispatcher::default(),
+        );
+
+        let result = runtime
+            .invoke_tool(
+                ToolCall {
+                    name: "slow_tool".to_string(),
+                    payload: ToolPayload::Function {
+                        arguments: "{}".to_string(),
+                    },
+                    source: ToolCallSource::Direct,
+                    raw_tool_call_id: None,
+                },
+                AskForApproval::Never,
+                Path::new("/tmp/ghosty"),
+            )
+            .await
+            .expect("invoke tool");
+
+        assert_eq!(result["status"], "timeout");
+        assert_eq!(result["ok"], false);
+    }
+
+    #[tokio::test]
+    async fn thread_message_is_refused_rather_than_faked() {
+        // This arm used to record the user message, emit canned
+        // ResponseStart/ResponseDelta("queued")/ResponseEnd frames and report
+        // status "accepted" — with no worker, no model, and nothing queued.
+        // `Runtime` owns thread bookkeeping, not the turn engine, so the only
+        // honest answer here is a refusal that names where turns actually run.
+        let mut runtime = Runtime::new(
+            ConfigToml::default(),
+            ModelRegistry::default(),
+            temp_core_state("message-refused"),
+            Arc::new(ToolRegistry::default()),
+            Arc::new(McpManager::default()),
+            ExecPolicyEngine::new(vec![], vec![]),
+            HookDispatcher::default(),
+        );
+        let spawned = runtime
+            .thread_manager
+            .spawn_thread_with_history(
+                "deepseek".to_string(),
+                PathBuf::from("/tmp/ghosty"),
+                InitialHistory::New,
+                true,
+            )
+            .expect("spawn thread");
+        let thread_id = spawned.thread.id.clone();
+
+        let err = runtime
+            .handle_thread(ThreadRequest::Message {
+                thread_id: thread_id.clone(),
+                input: "run this".to_string(),
+            })
+            .await
+            .expect_err("handle_thread must not pretend to execute a turn");
+        assert!(
+            err.to_string().contains("/v1/threads/{id}/turns"),
+            "the refusal must name the surface that does run turns: {err}"
+        );
+
+        // Nothing was written to history on the way out.
+        let history = runtime
+            .thread_manager
+            .store
+            .list_messages(&thread_id, None)
+            .expect("list messages");
+        assert!(
+            history.is_empty(),
+            "a refused message must leave no history rows: {history:?}"
+        );
     }
 }

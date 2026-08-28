@@ -20,7 +20,7 @@ Check the [releases page](https://github.com/blissito/ghostycode/releases) for t
 Report privately via one of:
 
 - **GitHub private advisory**: [github.com/blissito/ghostycode/security/advisories/new](https://github.com/blissito/ghostycode/security/advisories/new)
-- **Email**: [security@deepseek-tui.com](mailto:security@deepseek-tui.com) — include `[SECURITY]` in the subject line
+- **Email**: [fixtergeek@gmail.com](mailto:fixtergeek@gmail.com) — include `[SECURITY]` in the subject line
 
 Include in your report:
 
@@ -46,7 +46,7 @@ You will receive status updates at each phase. If the timeline slips, we will co
 ### In scope (what counts)
 
 - Remote code execution through crafted prompts or model responses
-- Sandbox escape — breaking out of the YOLO-mode workspace boundary or shell `cwd` confinement
+- Sandbox escape — breaking out of an active Seatbelt/bubblewrap wrapper or a declared workspace boundary
 - Credential leak — exfiltration of API keys, tokens, or environment secrets
 - Arbitrary file read/write outside the intended workspace (`PathEscape` bypass)
 - SSRF via `fetch_url` or `web_search` against internal network endpoints
@@ -61,6 +61,34 @@ You will receive status updates at each phase. If the timeline slips, we will co
 - Theoretical ML-model injection attacks not demonstrated in the ghosty context
 
 If you are unsure whether a bug is in scope, report it anyway. We will triage and respond.
+
+
+## WeCom Bridge Security
+
+The WeCom Bridge (`integrations/wecom-bridge/`) extends Ghosty to WeCom
+(企业微信) Smart Bot WebSocket sessions. It inherits all standard Ghosty
+security boundaries and adds bridge-specific controls.
+
+### Bridge-specific protections
+
+- **No public port**: The bridge communicates with `ghosty serve --http` on `127.0.0.1` only
+- **Token gate**: All runtime API calls carry `GHOSTY_RUNTIME_TOKEN`
+- **Chat allowlist**: Only chats/users listed in `WECOM_CHAT_ALLOWLIST` can interact. First-pairing mode (`WECOM_ALLOW_UNLISTED=true`) is meant for onboarding only
+- **Approval required**: Tool calls from WeCom sessions must be approved — either via explicit `/allow <id>` commands or natural-language keywords (`允许`, `yes`, `ok`, etc.)
+- **No workspace exposure**: Only prompts, status summaries, and approval requests are sent to WeCom. Workspace contents, shell output, and runtime internals stay on the local machine
+
+### Reporting WeCom Bridge vulnerabilities
+
+Report bridge-specific security issues through the same channels listed above.
+Include the bridge version (check `package.json`) and your WeCom deployment configuration
+(sensitive values redacted). Bridge logs may be requested for reproduction.
+
+### Bridge environment safety
+
+- `WECOM_BOT_SECRET` and `GHOSTY_RUNTIME_TOKEN` must never be committed to git
+- The `.env` file is gitignored; use `.env.example` as the template
+- Rotate secrets periodically, especially after sharing screen captures
+- Use `GHOSTY_APPROVAL_TIMEOUT_MS` (default 5 min) to limit the approval window
 
 ## Hall of Fame
 

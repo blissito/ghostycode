@@ -19,6 +19,14 @@ pub struct UserInputQuestion {
     pub id: String,
     pub question: String,
     pub options: Vec<UserInputOption>,
+    /// When `true`, the modal offers a free-text "Other" response in addition
+    /// to the fixed options. Defaults to `false` for backwards compatibility
+    /// (older payloads omitting the field get the previous behavior).
+    #[serde(default)]
+    pub allow_free_text: bool,
+    /// When `true`, the user may select more than one option before confirming.
+    #[serde(default)]
+    pub multi_select: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,9 +70,9 @@ impl UserInputRequest {
                     "request_user_input.questions.question cannot be empty",
                 ));
             }
-            if q.options.len() < 2 || q.options.len() > 3 {
+            if q.options.len() < 2 || q.options.len() > 4 {
                 return Err(ToolError::invalid_input(
-                    "request_user_input.questions.options must contain 2 or 3 items",
+                    "request_user_input.questions.options must contain 2 to 4 items",
                 ));
             }
             for opt in &q.options {
@@ -131,7 +139,17 @@ impl ToolSpec for RequestUserInputTool {
                                     "required": ["label", "description"]
                                 },
                                 "minItems": 2,
-                                "maxItems": 3
+                                "maxItems": 4
+                            },
+                            "allow_free_text": {
+                                "type": "boolean",
+                                "description": "When true, also offer a free-text 'Other' response. Defaults to false.",
+                                "default": false
+                            },
+                            "multi_select": {
+                                "type": "boolean",
+                                "description": "When true, allow selecting more than one option. Defaults to false.",
+                                "default": false
                             }
                         },
                         "required": ["header", "id", "question", "options"]
@@ -184,75 +202,108 @@ mod tests {
                         description: "Option B".to_string(),
                     },
                 ],
+                allow_free_text: false,
+                multi_select: false,
             }],
         };
         assert!(request.validate().is_ok());
     }
 
     #[test]
+    fn from_value_accepts_four_options_and_flags() {
+        // Mirrors the json!-literal style used in tools/subagent/tests.rs and
+        // exercises the schema-loosening from issue #3102: 4 options (was capped
+        // at 3) plus the new allow_free_text / multi_select flags.
+        let input = json!({
+            "questions": [{
+                "header": "Scope",
+                "id": "scope",
+                "question": "Which surfaces should this change affect?",
+                "options": [
+                    { "label": "TUI", "description": "Visible modal flow only" },
+                    { "label": "Headless", "description": "Protocol event only" },
+                    { "label": "All surfaces", "description": "TUI and headless" },
+                    { "label": "CLI", "description": "Command-line surface" }
+                ],
+                "allow_free_text": true,
+                "multi_select": true
+            }]
+        });
+        let request = UserInputRequest::from_value(&input).expect("4 options + flags parse");
+        assert_eq!(request.questions.len(), 1);
+        assert_eq!(request.questions[0].options.len(), 4);
+        assert!(request.questions[0].allow_free_text);
+        assert!(request.questions[0].multi_select);
+    }
+
+    #[test]
+    fn from_value_defaults_flags_when_omitted() {
+        // Backwards compatibility: a legacy payload omitting the new boolean
+        // fields must still parse, defaulting both to false.
+        let input = json!({
+            "questions": [{
+                "header": "Pick",
+                "id": "choice",
+                "question": "Which?",
+                "options": [
+                    { "label": "A", "description": "a" },
+                    { "label": "B", "description": "b" }
+                ]
+            }]
+        });
+        let request = UserInputRequest::from_value(&input).expect("legacy payload parses");
+        assert!(!request.questions[0].allow_free_text);
+        assert!(!request.questions[0].multi_select);
+    }
+
+    #[test]
+    fn rejects_five_options() {
+        let input = json!({
+            "questions": [{
+                "header": "Pick",
+                "id": "choice",
+                "question": "Which?",
+                "options": [
+                    { "label": "A", "description": "a" },
+                    { "label": "B", "description": "b" },
+                    { "label": "C", "description": "c" },
+                    { "label": "D", "description": "d" },
+                    { "label": "E", "description": "e" }
+                ]
+            }]
+        });
+        let err = UserInputRequest::from_value(&input).expect_err("5 options must fail");
+        assert!(err.to_string().contains("2 to 4 items"));
+    }
+
+    fn yes_no_question(header: &str, id: &str) -> UserInputQuestion {
+        UserInputQuestion {
+            header: header.to_string(),
+            id: id.to_string(),
+            question: "?".to_string(),
+            options: vec![
+                UserInputOption {
+                    label: "A".to_string(),
+                    description: "A".to_string(),
+                },
+                UserInputOption {
+                    label: "B".to_string(),
+                    description: "B".to_string(),
+                },
+            ],
+            allow_free_text: false,
+            multi_select: false,
+        }
+    }
+
+    #[test]
     fn rejects_too_many_questions() {
         let request = UserInputRequest {
             questions: vec![
-                UserInputQuestion {
-                    header: "Q1".to_string(),
-                    id: "q1".to_string(),
-                    question: "?".to_string(),
-                    options: vec![
-                        UserInputOption {
-                            label: "A".to_string(),
-                            description: "A".to_string(),
-                        },
-                        UserInputOption {
-                            label: "B".to_string(),
-                            description: "B".to_string(),
-                        },
-                    ],
-                },
-                UserInputQuestion {
-                    header: "Q2".to_string(),
-                    id: "q2".to_string(),
-                    question: "?".to_string(),
-                    options: vec![
-                        UserInputOption {
-                            label: "A".to_string(),
-                            description: "A".to_string(),
-                        },
-                        UserInputOption {
-                            label: "B".to_string(),
-                            description: "B".to_string(),
-                        },
-                    ],
-                },
-                UserInputQuestion {
-                    header: "Q3".to_string(),
-                    id: "q3".to_string(),
-                    question: "?".to_string(),
-                    options: vec![
-                        UserInputOption {
-                            label: "A".to_string(),
-                            description: "A".to_string(),
-                        },
-                        UserInputOption {
-                            label: "B".to_string(),
-                            description: "B".to_string(),
-                        },
-                    ],
-                },
-                UserInputQuestion {
-                    header: "Q4".to_string(),
-                    id: "q4".to_string(),
-                    question: "?".to_string(),
-                    options: vec![
-                        UserInputOption {
-                            label: "A".to_string(),
-                            description: "A".to_string(),
-                        },
-                        UserInputOption {
-                            label: "B".to_string(),
-                            description: "B".to_string(),
-                        },
-                    ],
-                },
+                yes_no_question("Q1", "q1"),
+                yes_no_question("Q2", "q2"),
+                yes_no_question("Q3", "q3"),
+                yes_no_question("Q4", "q4"),
             ],
         };
         assert!(request.validate().is_err());

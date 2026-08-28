@@ -3,13 +3,18 @@
 //! Sandbox module for secure command execution.
 //!
 //! This module provides sandboxing capabilities for shell commands executed by
-//! Ghosty Code. Sandboxing restricts what system resources a command can access,
+//! GhostyCode. Sandboxing restricts what system resources a command can access,
 //! preventing accidental or malicious damage to the system.
 //!
 //! # Platform Support
 //!
-//! - **macOS**: Uses Seatbelt (sandbox-exec) for mandatory access control
-//! - **Linux**: Uses Landlock (kernel 5.13+) for filesystem access control
+//! - **macOS**: Uses Seatbelt (`sandbox-exec`) when the runtime probe succeeds
+//! - **Linux**: Uses bubblewrap only when the user opts in and `/usr/bin/bwrap`
+//!   is executable. The seccomp helper is not wired into child execution and
+//!   therefore is not advertised.
+//! - **OpenHarmony**: No local Linux sandbox is advertised. Bubblewrap,
+//!   seccomp, and Linux `prctl` hardening are gated out under `target_env =
+//!   "ohos"`.
 //! - **Windows**: No OS sandbox is advertised yet. The planned first helper
 //!   contract is process-tree containment only via a Windows Job Object; it
 //!   must not claim filesystem, network, registry, or AppContainer isolation.
@@ -35,13 +40,10 @@ pub mod process_hardening;
 #[cfg(target_os = "macos")]
 pub mod seatbelt;
 
-#[cfg(target_os = "linux")]
-pub mod landlock;
-
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod seccomp;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod bwrap;
 
 #[cfg(target_os = "windows")]
@@ -52,6 +54,19 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 pub use policy::SandboxPolicy;
+
+/// Public OS-sandbox capability labels consumed by the website facts
+/// generator. Keep this list limited to wrappers that the command execution
+/// path can actually select and apply.
+#[allow(dead_code)]
+// EXTERNAL CONTRACT — zero Rust references by design: the website's docs
+// drift gate parses this const out of the source text (web/lib/facts-drift.ts
+// and web/scripts/facts-lib.mjs match the literal declaration). Deleting or
+// renaming it silently breaks that gate.
+pub const PUBLIC_SANDBOX_BACKENDS: &[&str] = &[
+    "seatbelt (macOS, when available)",
+    "bubblewrap (Linux, opt-in when installed)",
+];
 
 /// Specification for a command to be executed, potentially within a sandbox.
 ///
@@ -81,6 +96,12 @@ pub struct CommandSpec {
     /// Optional justification for why this command needs to run.
     /// Used for logging and audit purposes.
     pub justification: Option<String>,
+
+    /// The shell command exactly as requested, before the dispatcher adds
+    /// shell-specific wrapping (encoding prefixes, exit-code capture, temp
+    /// `-File` scripts). Authoritative for display; `None` for specs built
+    /// directly from a program + args.
+    pub requested_command: Option<String>,
 }
 
 impl CommandSpec {
@@ -109,14 +130,26 @@ impl CommandSpec {
         #[cfg(not(windows))]
         let (program, args) = dispatcher.build_command_parts(command);
 
+        let env = {
+            #[cfg(windows)]
+            {
+                windows_shell_default_env()
+            }
+            #[cfg(not(windows))]
+            {
+                HashMap::new()
+            }
+        };
+
         Self {
             program,
             args,
             cwd,
-            env: HashMap::new(),
+            env,
             timeout,
             sandbox_policy: SandboxPolicy::default(),
             justification: None,
+            requested_command: Some(command.to_string()),
         }
     }
 
@@ -130,6 +163,7 @@ impl CommandSpec {
             timeout,
             sandbox_policy: SandboxPolicy::default(),
             justification: None,
+            requested_command: None,
         }
     }
 
@@ -159,6 +193,9 @@ impl CommandSpec {
 
     /// Get the original command as a single string (for display).
     pub fn display_command(&self) -> String {
+        if let Some(requested) = &self.requested_command {
+            return requested.clone();
+        }
         if self.args.len() == 2
             && self.args[0] == "-c"
             && matches!(
@@ -211,6 +248,10 @@ impl CommandSpec {
     }
 }
 
+fn windows_shell_default_env() -> HashMap<String, String> {
+    HashMap::from([("PYTHONIOENCODING".to_string(), "utf-8".to_string())])
+}
+
 /// The type of sandbox being used for execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SandboxType {
@@ -222,9 +263,9 @@ pub enum SandboxType {
     #[cfg(target_os = "macos")]
     MacosSeatbelt,
 
-    /// Linux Landlock sandboxing (kernel 5.13+).
-    #[cfg(target_os = "linux")]
-    LinuxLandlock,
+    /// Linux bubblewrap namespace sandboxing.
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    LinuxBubblewrap,
 
     /// Windows process-containment helper.
     ///
@@ -240,8 +281,8 @@ impl std::fmt::Display for SandboxType {
             SandboxType::None => write!(f, "none"),
             #[cfg(target_os = "macos")]
             SandboxType::MacosSeatbelt => write!(f, "macos-seatbelt"),
-            #[cfg(target_os = "linux")]
-            SandboxType::LinuxLandlock => write!(f, "linux-landlock"),
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+            SandboxType::LinuxBubblewrap => write!(f, "linux-bwrap"),
             #[cfg(target_os = "windows")]
             SandboxType::Windows => write!(f, "windows-sandbox"),
         }
@@ -298,6 +339,14 @@ impl ExecEnv {
 
 /// Detect what sandbox technology is available on the current platform.
 pub fn get_platform_sandbox() -> Option<SandboxType> {
+    get_platform_sandbox_with_bwrap_preference(false)
+}
+
+/// Detect the sandbox wrapper the configured command path can actually use.
+///
+/// Linux bubblewrap is deliberately opt-in. Source-only sandbox prototypes do
+/// not make commands sandboxed unless the child launch path applies them.
+pub fn get_platform_sandbox_with_bwrap_preference(prefer_bwrap: bool) -> Option<SandboxType> {
     #[cfg(target_os = "macos")]
     {
         if seatbelt::is_available() {
@@ -305,12 +354,15 @@ pub fn get_platform_sandbox() -> Option<SandboxType> {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
-        if landlock::is_available() {
-            return Some(SandboxType::LinuxLandlock);
+        if prefer_bwrap && bwrap::is_available() {
+            return Some(SandboxType::LinuxBubblewrap);
         }
     }
+
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
+    let _ = prefer_bwrap;
 
     #[cfg(target_os = "windows")]
     {
@@ -329,6 +381,85 @@ pub fn is_sandbox_available() -> bool {
 
 /// Manager for sandbox operations.
 ///
+/// User-configured bwrap bind-mount extensions (#5410).
+///
+/// The default `--ro-bind / /` already exposes the host filesystem
+/// read-only, so extra read-only roots are rarely needed; they exist for
+/// setups where a policy or a future default narrows the root bind. Device
+/// roots cover host device nodes that must stay writable (e.g. `/dev/null`
+/// for redirection) — under a read-only root bind `open(O_WRONLY)` on such
+/// nodes fails with `EROFS`, which is the original #5410 report.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BwrapMountExtensions {
+    /// Extra host paths to bind read-only inside the sandbox. Non-existent
+    /// or non-directory paths are skipped silently (same rule as writable
+    /// roots — a sandbox must never fail to start because config went
+    /// stale).
+    pub read_only_roots: Vec<PathBuf>,
+    /// Host device-node paths to bind read-write (e.g. `/dev/null`).
+    /// Non-existent paths are skipped; paths that exist but are not
+    /// character/block devices are skipped too — this key must never become
+    /// a general writable-root escape hatch.
+    pub device_roots: Vec<PathBuf>,
+}
+
+impl BwrapMountExtensions {
+    /// Resolve configured paths against the live filesystem, returning
+    /// `(read_only_mounts, device_mounts)` as canonical paths that exist and
+    /// satisfy each key's constraints. The bwrap module only exists on
+    /// Linux, so the resolution inlines the same two checks its
+    /// `existing_directory` performs (canonicalize + is_dir) — the type is
+    /// carried on every platform because `SandboxManager` is.
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    fn resolve(&self) -> (Vec<PathBuf>, Vec<PathBuf>) {
+        let read_only = self
+            .read_only_roots
+            .iter()
+            .filter_map(|path| bwrap::existing_directory_shim(path))
+            .filter(|path| path != std::path::Path::new("/"))
+            .collect();
+        let devices = self
+            .device_roots
+            .iter()
+            .filter_map(|path| {
+                let canonical = path.canonicalize().ok()?;
+                let meta = std::fs::metadata(&canonical).ok()?;
+                use std::os::unix::fs::FileTypeExt;
+                let file_type = meta.file_type();
+                (file_type.is_char_device() || file_type.is_block_device()).then_some(canonical)
+            })
+            .collect();
+        (read_only, devices)
+    }
+
+    /// Same resolution on non-Linux platforms, where the sandbox manager
+    /// carries the type but never uses it: there is no bwrap to build a
+    /// command for, so the extension lists resolve empty rather than doing
+    /// filesystem work whose result would be discarded.
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
+    fn resolve(&self) -> (Vec<PathBuf>, Vec<PathBuf>) {
+        (Vec::new(), Vec::new())
+    }
+}
+
+/// Expand a leading `~` or `~/` to the user's home directory. Paths without
+/// the prefix (and any path when no home directory is resolvable) pass
+/// through unchanged.
+fn expand_home_prefix(path: PathBuf) -> PathBuf {
+    let Some(text) = path.to_str() else {
+        return path;
+    };
+    if text == "~" {
+        return dirs::home_dir().unwrap_or(path);
+    }
+    if let Some(rest) = text.strip_prefix("~/")
+        && let Some(home) = dirs::home_dir()
+    {
+        return home.join(rest);
+    }
+    path
+}
+
 /// The `SandboxManager` is responsible for:
 /// - Detecting available sandbox technologies
 /// - Transforming `CommandSpecs` into sandboxed `ExecEnvs`
@@ -342,9 +473,19 @@ pub struct SandboxManager {
     #[allow(dead_code)]
     forced_sandbox: Option<SandboxType>,
 
-    /// When true and bwrap is available on Linux, route commands through
-    /// bubblewrap instead of Landlock alone (#2184).
+    /// When true and bwrap is executable on Linux, route commands through
+    /// bubblewrap (#2184).
     prefer_bwrap: bool,
+
+    /// User-configured bwrap bind-mount extensions (#5410): extra
+    /// read-only roots and writable device nodes.
+    bwrap_extensions: BwrapMountExtensions,
+
+    /// Opt-in read deny-list (S1, #5568): paths sandboxed commands must not
+    /// be able to read even though the sandbox otherwise grants full-disk
+    /// read (Seatbelt appends last-match-wins deny rules; bubblewrap masks
+    /// each path). Empty by default — today's behavior unchanged.
+    denied_read_subpaths: Vec<PathBuf>,
 }
 
 impl SandboxManager {
@@ -355,7 +496,7 @@ impl SandboxManager {
 
     /// Create a new `SandboxManager` with bwrap preference (#2184).
     ///
-    /// When `prefer_bwrap` is true and `/usr/bin/bwrap` is present on Linux,
+    /// When `prefer_bwrap` is true and `/usr/bin/bwrap` is executable on Linux,
     /// exec_shell commands will be routed through bubblewrap.
     pub fn with_bwrap_preference(prefer_bwrap: bool) -> Self {
         Self {
@@ -367,6 +508,42 @@ impl SandboxManager {
     /// Set the bwrap preference (#2184).
     pub fn set_prefer_bwrap(&mut self, prefer: bool) {
         self.prefer_bwrap = prefer;
+        self.sandbox_available = None;
+    }
+
+    /// Set user-configured bwrap mount extensions (#5410): extra read-only
+    /// roots and writable device nodes such as `/dev/null`.
+    pub fn set_bwrap_extensions(&mut self, extensions: BwrapMountExtensions) {
+        self.bwrap_extensions = extensions;
+    }
+
+    /// Set the opt-in read deny-list (S1, #5568). A leading `~` in a path
+    /// expands to the user's home directory here, and each existing path is
+    /// ALSO recorded in canonicalized form when that differs: macOS Seatbelt
+    /// matches the kernel-resolved path, so a rule written against
+    /// `/var/...` alone never fires for the real `/private/var/...` file —
+    /// the deny must name both spellings to actually deny.
+    pub fn set_denied_read_subpaths(&mut self, paths: Vec<PathBuf>) {
+        let mut resolved: Vec<PathBuf> = Vec::with_capacity(paths.len());
+        for path in paths.into_iter().map(expand_home_prefix) {
+            if let Ok(canonical) = std::fs::canonicalize(&path)
+                && canonical != path
+                && !resolved.contains(&canonical)
+            {
+                resolved.push(canonical);
+            }
+            if !resolved.contains(&path) {
+                resolved.push(path);
+            }
+        }
+        self.denied_read_subpaths = resolved;
+    }
+
+    /// Test-only view of the resolved deny-list (post home-expansion and
+    /// canonicalization).
+    #[cfg(test)]
+    pub fn denied_read_subpaths_for_test(&self) -> &[PathBuf] {
+        &self.denied_read_subpaths
     }
 
     /// Check if sandboxing is available.
@@ -375,9 +552,14 @@ impl SandboxManager {
             return available;
         }
 
-        let available = is_sandbox_available();
+        let available = self.configured_sandbox().is_some();
         self.sandbox_available = Some(available);
         available
+    }
+
+    /// Return the wrapper this manager is configured and able to apply.
+    pub fn configured_sandbox(&self) -> Option<SandboxType> {
+        get_platform_sandbox_with_bwrap_preference(self.prefer_bwrap)
     }
 
     /// Select the appropriate sandbox type for the given policy.
@@ -392,8 +574,7 @@ impl SandboxManager {
             return forced;
         }
 
-        // Use platform default
-        get_platform_sandbox().unwrap_or(SandboxType::None)
+        self.configured_sandbox().unwrap_or(SandboxType::None)
     }
 
     /// Transform a `CommandSpec` into a sandboxed `ExecEnv`.
@@ -408,10 +589,10 @@ impl SandboxManager {
             SandboxType::None => Self::prepare_unsandboxed(spec),
 
             #[cfg(target_os = "macos")]
-            SandboxType::MacosSeatbelt => Self::prepare_seatbelt(spec),
+            SandboxType::MacosSeatbelt => self.prepare_seatbelt(spec),
 
-            #[cfg(target_os = "linux")]
-            SandboxType::LinuxLandlock => self.prepare_landlock(spec),
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+            SandboxType::LinuxBubblewrap => self.prepare_bwrap(spec),
 
             #[cfg(target_os = "windows")]
             SandboxType::Windows => Self::prepare_windows(spec),
@@ -435,14 +616,18 @@ impl SandboxManager {
 
     /// Prepare a Seatbelt-sandboxed execution environment (macOS).
     #[cfg(target_os = "macos")]
-    fn prepare_seatbelt(spec: &CommandSpec) -> ExecEnv {
+    fn prepare_seatbelt(&self, spec: &CommandSpec) -> ExecEnv {
         // Build the original command
         let mut original_command = vec![spec.program.clone()];
         original_command.extend(spec.args.clone());
 
         // Generate sandbox-exec arguments
-        let seatbelt_args =
-            seatbelt::create_seatbelt_args(original_command, &spec.sandbox_policy, &spec.cwd);
+        let seatbelt_args = seatbelt::create_seatbelt_args(
+            original_command,
+            &spec.sandbox_policy,
+            &spec.cwd,
+            &self.denied_read_subpaths,
+        );
 
         // Prepend sandbox-exec to the command
         let mut command = vec![seatbelt::SANDBOX_EXEC_PATH.to_string()];
@@ -450,6 +635,7 @@ impl SandboxManager {
 
         // Add sandbox indicator to environment
         let mut env = spec.env.clone();
+        env.insert("GHOSTY_SANDBOX".to_string(), "seatbelt".to_string());
         env.insert("DEEPSEEK_SANDBOX".to_string(), "seatbelt".to_string());
 
         ExecEnv {
@@ -462,43 +648,40 @@ impl SandboxManager {
         }
     }
 
-    /// Prepare a Landlock-sandboxed execution environment (Linux).
+    /// Prepare a bubblewrap-sandboxed execution environment (Linux).
     ///
-    /// If `prefer_bwrap` is set and `/usr/bin/bwrap` is available, routes the
-    /// command through bubblewrap for stronger filesystem isolation (#2184).
-    /// Otherwise falls back to Landlock markers.
-    #[cfg(target_os = "linux")]
-    fn prepare_landlock(&self, spec: &CommandSpec) -> ExecEnv {
-        // Check if bwrap passthrough should be used (#2184).
-        if self.prefer_bwrap && bwrap::is_available() {
-            let command = bwrap::build_bwrap_command(&spec.cwd, &spec.program, &spec.args);
-
-            let mut env = spec.env.clone();
-            env.insert("DEEPSEEK_SANDBOX".to_string(), "bwrap".to_string());
-
-            return ExecEnv {
-                command,
-                cwd: spec.cwd.clone(),
-                env,
-                timeout: spec.timeout,
-                sandbox_type: SandboxType::LinuxLandlock,
-                policy: spec.sandbox_policy.clone(),
-            };
-        }
-
-        // Fall back to Landlock (marker only — full implementation needs a helper).
-        let mut command = vec![spec.program.clone()];
-        command.extend(spec.args.clone());
+    /// Carries the standard container trio `--dev /dev`, `--proc /proc`,
+    /// `--tmpfs /tmp` (#5410): without a private `/dev`, host device nodes
+    /// inherited through the read-only root bind reject `open(O_WRONLY)`
+    /// with `EROFS` — `foo >/dev/null` was the original report — and
+    /// without `/proc`, toolchains that read process tables misbehave.
+    /// `/tmp` is writable-but-isolated (tmpfs) so linkers and test
+    /// harnesses have scratch space without widening the filesystem
+    /// policy. User-configured extensions (extra read-only roots,
+    /// writable device nodes) apply after the defaults.
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    fn prepare_bwrap(&self, spec: &CommandSpec) -> ExecEnv {
+        let writable_roots = spec.sandbox_policy.get_writable_roots(&spec.cwd);
+        let command = bwrap::build_bwrap_command(
+            &spec.cwd,
+            &spec.program,
+            &spec.args,
+            &writable_roots,
+            spec.sandbox_policy.has_network_access(),
+            &self.bwrap_extensions,
+            &self.denied_read_subpaths,
+        );
 
         let mut env = spec.env.clone();
-        env.insert("DEEPSEEK_SANDBOX".to_string(), "landlock".to_string());
+        env.insert("GHOSTY_SANDBOX".to_string(), "bwrap".to_string());
+        env.insert("DEEPSEEK_SANDBOX".to_string(), "bwrap".to_string());
 
         ExecEnv {
             command,
             cwd: spec.cwd.clone(),
             env,
             timeout: spec.timeout,
-            sandbox_type: SandboxType::LinuxLandlock,
+            sandbox_type: SandboxType::LinuxBubblewrap,
             policy: spec.sandbox_policy.clone(),
         }
     }
@@ -516,8 +699,10 @@ impl SandboxManager {
 
         let mut env = spec.env.clone();
         let kind = windows::select_best_kind(&spec.sandbox_policy, &spec.cwd);
+        env.insert("GHOSTY_SANDBOX".to_string(), format!("windows:{kind}"));
         env.insert("DEEPSEEK_SANDBOX".to_string(), format!("windows:{kind}"));
         if !spec.sandbox_policy.has_network_access() {
+            env.insert("GHOSTY_SANDBOX_BLOCK_NETWORK".to_string(), "1".to_string());
             env.insert(
                 "DEEPSEEK_SANDBOX_BLOCK_NETWORK".to_string(),
                 "1".to_string(),
@@ -539,7 +724,10 @@ impl SandboxManager {
     /// This helps distinguish between legitimate command failures and
     /// sandbox-blocked operations.
     pub fn was_denied(sandbox_type: SandboxType, exit_code: i32, stderr: &str) -> bool {
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(not(any(
+            target_os = "macos",
+            all(target_os = "linux", not(target_env = "ohos"))
+        )))]
         let _ = (exit_code, stderr);
 
         match sandbox_type {
@@ -548,8 +736,8 @@ impl SandboxManager {
             #[cfg(target_os = "macos")]
             SandboxType::MacosSeatbelt => seatbelt::detect_denial(exit_code, stderr),
 
-            #[cfg(target_os = "linux")]
-            SandboxType::LinuxLandlock => landlock::detect_denial(exit_code, stderr),
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+            SandboxType::LinuxBubblewrap => bwrap::detect_denial(exit_code, stderr),
 
             #[cfg(target_os = "windows")]
             SandboxType::Windows => windows::detect_denial(exit_code, stderr),
@@ -558,7 +746,10 @@ impl SandboxManager {
 
     /// Get a human-readable description of why a command was blocked.
     pub fn denial_message(sandbox_type: SandboxType, stderr: &str) -> String {
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(not(any(
+            target_os = "macos",
+            all(target_os = "linux", not(target_env = "ohos"))
+        )))]
         let _ = stderr;
 
         match sandbox_type {
@@ -578,22 +769,19 @@ impl SandboxManager {
                 }
             }
 
-            #[cfg(target_os = "linux")]
-            SandboxType::LinuxLandlock => {
-                // Seccomp patterns checked first because they are more specific (#2182).
-                if stderr.contains("Bad system call")
-                    || stderr.contains("bad system call")
-                    || stderr.contains("SIGSYS")
-                    || stderr.contains("seccomp")
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+            SandboxType::LinuxBubblewrap => {
+                if let Some(error) = stderr
+                    .lines()
+                    .map(str::trim_start)
+                    .find(|line| line.starts_with("bwrap:"))
                 {
-                    "Seccomp blocked a disallowed system call (e.g., ptrace, mount, kexec)."
-                        .to_string()
-                } else if stderr.contains("Permission denied") {
-                    "Landlock blocked access. The command tried to access a restricted path."
-                        .to_string()
+                    format!("Bubblewrap could not create the sandbox: {}", error)
+                } else if stderr.contains("Read-only file system") {
+                    "Bubblewrap blocked access outside the writable workspace view.".to_string()
                 } else {
                     format!(
-                        "Landlock blocked operation: {}",
+                        "Bubblewrap blocked operation: {}",
                         stderr.lines().next().unwrap_or("unknown")
                     )
                 }
@@ -642,6 +830,7 @@ mod tests {
             timeout: Duration::from_secs(30),
             sandbox_policy: SandboxPolicy::default(),
             justification: None,
+            requested_command: None,
         };
 
         assert_eq!(spec.display_command(), "echo hello");
@@ -659,31 +848,25 @@ mod tests {
 
         let dispatcher = crate::shell_dispatcher::global_dispatcher();
         assert_eq!(spec.program, dispatcher.kind().binary());
-        if dispatcher.kind().is_powershell() {
-            assert_eq!(
-                spec.args,
-                vec![
-                    dispatcher.kind().command_flag().to_string(),
-                    "-Command".to_string(),
-                    format!("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {cmd}")
-                ]
-            );
-        } else {
-            let expected = if matches!(dispatcher.kind(), crate::shell_dispatcher::ShellKind::Cmd) {
-                vec!["/C".to_string(), format!("chcp 65001 >NUL & {cmd}")]
-            } else {
-                vec![
-                    dispatcher.kind().command_flag().to_string(),
-                    cmd.to_string(),
-                ]
-            };
-            assert_eq!(spec.args, expected);
-            // The quoted message is intact in a single argv slot — shell `-c`
-            // performs POSIX tokenization, yielding the correct argv:
-            // ["git","commit","-m","feat: complete sub-pages"].
-            assert_eq!(spec.args.len(), 2);
-            assert!(spec.args[1].contains(r#""feat: complete sub-pages""#));
-        }
+        // The quoted message survives in exactly ONE argv slot, regardless of
+        // which shell-specific wrapping (encoding prefix, exit-code capture)
+        // the dispatcher added around it. This single-line ASCII command never
+        // takes the temp `-File` path, so the payload stays on the argv.
+        let carriers: Vec<&String> = spec
+            .args
+            .iter()
+            .filter(|arg| arg.contains(r#""feat: complete sub-pages""#))
+            .collect();
+        assert_eq!(carriers.len(), 1, "args: {:?}", spec.args);
+        // And no argv entry is a tokenized fragment of the message.
+        assert!(
+            !spec
+                .args
+                .iter()
+                .any(|arg| arg == "feat:" || arg == "complete" || arg == "sub-pages\""),
+            "args: {:?}",
+            spec.args
+        );
         assert_eq!(spec.display_command(), cmd);
     }
 
@@ -710,6 +893,16 @@ mod tests {
         assert!(matches!(spec.sandbox_policy, SandboxPolicy::ReadOnly));
         assert_eq!(spec.env.get("FOO"), Some(&"bar".to_string()));
         assert_eq!(spec.justification, Some("Testing".to_string()));
+    }
+
+    #[test]
+    fn windows_shell_default_env_forces_python_pipe_stdio_utf8() {
+        let env = windows_shell_default_env();
+
+        assert_eq!(
+            env.get("PYTHONIOENCODING").map(String::as_str),
+            Some("utf-8")
+        );
     }
 
     #[test]
@@ -740,39 +933,14 @@ mod tests {
             .with_policy(SandboxPolicy::DangerFullAccess);
 
         let env = manager.prepare(&spec);
-        let dispatcher = crate::shell_dispatcher::global_dispatcher();
 
         assert_eq!(env.sandbox_type, SandboxType::None);
-        if dispatcher.kind().is_powershell() {
-            assert_eq!(
-                env.command,
-                vec![
-                    dispatcher.kind().binary().to_string(),
-                    dispatcher.kind().command_flag().to_string(),
-                    "-Command".to_string(),
-                    "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; echo test"
-                        .to_string(),
-                ]
-            );
-        } else if matches!(dispatcher.kind(), crate::shell_dispatcher::ShellKind::Cmd) {
-            assert_eq!(
-                env.command,
-                vec![
-                    dispatcher.kind().binary().to_string(),
-                    "/C".to_string(),
-                    "chcp 65001 >NUL & echo test".to_string(),
-                ]
-            );
-        } else {
-            assert_eq!(
-                env.command,
-                vec![
-                    dispatcher.kind().binary().to_string(),
-                    dispatcher.kind().command_flag().to_string(),
-                    "echo test".to_string(),
-                ]
-            );
-        }
+        // Unsandboxed preparation passes the spec through untouched: the
+        // command is exactly the spec's program followed by the dispatcher-
+        // built args, whatever wrapping the current shell required.
+        let mut expected = vec![spec.program.clone()];
+        expected.extend(spec.args.iter().cloned());
+        assert_eq!(env.command, expected);
         assert!(!env.is_sandboxed());
     }
 
@@ -804,6 +972,9 @@ mod tests {
 
         #[cfg(target_os = "macos")]
         assert_eq!(format!("{}", SandboxType::MacosSeatbelt), "macos-seatbelt");
+
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+        assert_eq!(format!("{}", SandboxType::LinuxBubblewrap), "linux-bwrap");
     }
 
     // ── Parity tests (#2187) ──────────────────────────────────────────────
@@ -820,15 +991,37 @@ mod tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_parity_macos_seatbelt_available() {
-        let st = get_platform_sandbox();
-        assert!(matches!(st, Some(SandboxType::MacosSeatbelt)));
+        // Match real runtime availability (`seatbelt::is_available` via
+        // `get_platform_sandbox`), not merely the presence of sandbox-exec or a
+        // diagnostics layer that may report seatbelt at another boundary.
+        // On hosts where sandbox-exec exists but is denied (e.g. some CI /
+        // restricted macOS environments), skip rather than asserting a false
+        // positive.
+        match get_platform_sandbox() {
+            Some(SandboxType::MacosSeatbelt) => {}
+            None => {
+                eprintln!("skipping: MacosSeatbelt unavailable via get_platform_sandbox()");
+            }
+            Some(other) => panic!("unexpected macOS sandbox type: {other:?}"),
+        }
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_parity_linux_landlock_available() {
-        let st = get_platform_sandbox();
-        assert!(matches!(st, Some(SandboxType::LinuxLandlock)));
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    fn linux_default_never_claims_an_unwired_sandbox() {
+        assert_eq!(get_platform_sandbox(), None);
+        assert_eq!(get_platform_sandbox_with_bwrap_preference(false), None);
+    }
+
+    #[test]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    fn linux_bwrap_selection_requires_opt_in_and_executable() {
+        let expected = bwrap::is_available().then_some(SandboxType::LinuxBubblewrap);
+        assert_eq!(get_platform_sandbox_with_bwrap_preference(true), expected);
+
+        let manager = SandboxManager::with_bwrap_preference(true);
+        let selected = manager.select_sandbox(&SandboxPolicy::default());
+        assert_eq!(selected, expected.unwrap_or(SandboxType::None));
     }
 
     #[test]
@@ -844,9 +1037,9 @@ mod tests {
             0,
             ""
         ));
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         assert!(!SandboxManager::was_denied(
-            SandboxType::LinuxLandlock,
+            SandboxType::LinuxBubblewrap,
             0,
             ""
         ));
@@ -855,17 +1048,17 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
-    fn test_parity_seccomp_sigsys_detected() {
-        assert!(SandboxManager::was_denied(
-            SandboxType::LinuxLandlock,
-            31,
-            ""
-        ));
-        assert!(SandboxManager::was_denied(
-            SandboxType::LinuxLandlock,
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    fn bwrap_denial_is_not_inferred_from_seccomp_text() {
+        assert!(!SandboxManager::was_denied(
+            SandboxType::LinuxBubblewrap,
             1,
             "Bad system call"
+        ));
+        assert!(SandboxManager::was_denied(
+            SandboxType::LinuxBubblewrap,
+            1,
+            "Read-only file system"
         ));
     }
 
@@ -886,15 +1079,38 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
+    fn sandbox_child_env_exports_ghosty_marker_and_legacy_alias() {
+        let manager = SandboxManager {
+            forced_sandbox: Some(SandboxType::MacosSeatbelt),
+            ..SandboxManager::default()
+        };
+        let spec = CommandSpec::shell("true", PathBuf::from("/tmp"), Duration::from_secs(5));
+        let env = manager.prepare(&spec);
+
+        assert_eq!(
+            env.env.get("GHOSTY_SANDBOX").map(String::as_str),
+            Some("seatbelt")
+        );
+        assert_eq!(
+            env.env.get("DEEPSEEK_SANDBOX").map(String::as_str),
+            Some("seatbelt")
+        );
+    }
+
+    #[test]
     fn test_parity_manager_default_no_bwrap() {
         let manager = SandboxManager::default();
         let spec = CommandSpec::shell("true", PathBuf::from("/tmp"), Duration::from_secs(5))
             .with_policy(SandboxPolicy::default());
         let env = manager.prepare(&spec);
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         {
+            let primary_marker = env.env.get("GHOSTY_SANDBOX");
             let marker = env.env.get("DEEPSEEK_SANDBOX");
-            assert!(marker.is_none_or(|v| v != "bwrap"));
+            assert!(primary_marker.is_none());
+            assert!(marker.is_none());
+            assert_eq!(env.sandbox_type, SandboxType::None);
         }
         let _ = env;
     }
@@ -905,14 +1121,96 @@ mod tests {
         let spec = CommandSpec::shell("true", PathBuf::from("/tmp"), Duration::from_secs(5))
             .with_policy(SandboxPolicy::default());
         let env = manager.prepare(&spec);
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         {
             if crate::sandbox::bwrap::is_available() {
+                let primary_marker = env.env.get("GHOSTY_SANDBOX");
                 let marker = env.env.get("DEEPSEEK_SANDBOX");
+                assert_eq!(primary_marker.map(String::as_str), Some("bwrap"));
                 assert_eq!(marker.map(String::as_str), Some("bwrap"));
+                assert_eq!(env.sandbox_type, SandboxType::LinuxBubblewrap);
+                assert_eq!(env.program(), bwrap::BWRAP_PATH);
+            } else {
+                assert_eq!(env.sandbox_type, SandboxType::None);
+                assert!(!env.env.contains_key("GHOSTY_SANDBOX"));
+                assert!(!env.env.contains_key("DEEPSEEK_SANDBOX"));
             }
         }
         let _ = env;
+    }
+
+    #[test]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    fn bwrap_read_only_policy_keeps_the_working_directory_read_only() {
+        let manager = SandboxManager {
+            forced_sandbox: Some(SandboxType::LinuxBubblewrap),
+            ..SandboxManager::default()
+        };
+        let spec = CommandSpec::shell("true", PathBuf::from("/tmp"), Duration::from_secs(5))
+            .with_policy(SandboxPolicy::ReadOnly);
+        let env = manager.prepare(&spec);
+
+        assert_eq!(env.sandbox_type, SandboxType::LinuxBubblewrap);
+        assert!(!env.command.iter().any(|arg| arg == "--bind"));
+        assert!(!env.command.iter().any(|arg| arg == "--share-net"));
+    }
+
+    #[test]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    fn bwrap_workspace_policy_maps_additional_roots_and_network_access() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = dir.path().join("workspace");
+        let extra = dir.path().join("extra");
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        std::fs::create_dir_all(&extra).expect("extra");
+
+        let manager = SandboxManager {
+            forced_sandbox: Some(SandboxType::LinuxBubblewrap),
+            ..SandboxManager::default()
+        };
+        let policy = SandboxPolicy::WorkspaceWrite {
+            writable_roots: vec![extra.clone()],
+            network_access: true,
+            exclude_tmpdir: true,
+            exclude_slash_tmp: true,
+        };
+        let spec = CommandSpec::shell("true", workspace.clone(), Duration::from_secs(5))
+            .with_policy(policy);
+        let env = manager.prepare(&spec);
+
+        for root in [workspace, extra] {
+            let root = root
+                .canonicalize()
+                .expect("writable root")
+                .to_string_lossy()
+                .into_owned();
+            assert!(env.command.windows(3).any(|args| args[0] == "--bind"
+                && args[1].as_str() == root.as_str()
+                && args[2].as_str() == root.as_str()));
+        }
+        assert!(env.command.iter().any(|arg| arg == "--share-net"));
+    }
+
+    #[test]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    fn full_access_and_external_policies_bypass_forced_bwrap() {
+        let manager = SandboxManager {
+            forced_sandbox: Some(SandboxType::LinuxBubblewrap),
+            ..SandboxManager::default()
+        };
+
+        for policy in [
+            SandboxPolicy::DangerFullAccess,
+            SandboxPolicy::ExternalSandbox {
+                network_access: false,
+            },
+        ] {
+            let spec = CommandSpec::shell("true", PathBuf::from("/tmp"), Duration::from_secs(5))
+                .with_policy(policy);
+            let env = manager.prepare(&spec);
+            assert_eq!(env.sandbox_type, SandboxType::None);
+            assert_ne!(env.program(), bwrap::BWRAP_PATH);
+        }
     }
 
     #[test]

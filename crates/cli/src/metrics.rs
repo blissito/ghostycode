@@ -1,4 +1,4 @@
-//! `deepseek metrics` — reads the audit log and session/task stores and prints
+//! `ghosty metrics` — reads the audit log and session/task stores and prints
 //! a human-readable usage rollup.
 //!
 //! Data sources:
@@ -17,7 +17,7 @@ use serde_json::Value;
 // Public entry-point
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Arguments accepted by `deepseek metrics`.
+/// Arguments accepted by `ghosty metrics`.
 #[derive(Debug, Default)]
 pub struct MetricsArgs {
     /// Emit machine-readable JSON instead of human text.
@@ -823,15 +823,15 @@ fn print_human(rollup: &Rollup) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 fn deepseek_home() -> PathBuf {
-    // Respect DEEPSEEK_HOME env override; fall back to ~/.deepseek.
-    if let Ok(v) = std::env::var("DEEPSEEK_HOME")
-        && !v.is_empty()
-    {
-        return PathBuf::from(v);
-    }
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".deepseek")
+    // This reader preserves the legacy DEEPSEEK_HOME/default-root precedence,
+    // but delegates every environment and platform-home decision to the shared
+    // runtime path authority.
+    ghosty_paths::ghosty_home_override()
+        .ok()
+        .flatten()
+        .or_else(ghosty_paths::legacy_deepseek_home_override)
+        .or_else(ghosty_paths::legacy_deepseek_home)
+        .unwrap_or_else(|| PathBuf::from(ghosty_paths::LEGACY_APP_DIR))
 }
 
 /// Parse a timestamp from a JSON value field (tries RFC3339).

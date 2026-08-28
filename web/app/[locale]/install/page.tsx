@@ -2,83 +2,93 @@ import Link from "next/link";
 import { Seal } from "@/components/seal";
 import { InstallCodeBlock } from "@/components/install-code-block";
 import { InstallBinary } from "@/components/install-binary";
+import { GETTING_STARTED_STEPS } from "@/lib/content/getting-started";
+import { getFacts } from "@/lib/facts";
+import { buildPageMetadata } from "@/lib/page-meta";
+
+export const revalidate = 300;
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const isZh = locale === "zh";
-  return {
-    title: isZh ? "安装 · Ghosty Code" : "Install · Ghosty Code",
+  return buildPageMetadata({
+    path: "/install",
+    locale,
+    title: isZh ? "安装 · Ghosty" : "Install · Ghosty",
     description: isZh
-      ? "安装 Ghosty Code 的 ghosty / ghosty-tui 二进制对。其他方式：npm、Homebrew、预编译二进制、Docker、国内镜像。"
-      : "Install the matched ghosty / ghosty-tui binary pair. Other ways: npm, Homebrew, prebuilt binary, Docker, source.",
-  };
+      ? "一行 curl -fsSL https://ghosty.net/install.sh | sh 安装或更新 Ghosty，也支持 npm、Cargo、GitHub Releases、CNB 镜像、Homebrew、预编译二进制、Docker 和源码编译。"
+      : "Install or update Ghosty with curl -fsSL https://ghosty.net/install.sh | sh, or via npm, cargo, GitHub Releases, the CNB mirror, Homebrew, prebuilt binaries, Docker, or from source.",
+  });
 }
 
-const CARGO_INSTALL = `cargo install ghosty-cli --locked
-cargo install ghosty-tui --locked`;
+const SHELL_INSTALL = `curl -fsSL https://ghosty.net/install.sh | sh`;
+const SHELL_INSPECT = `curl -fsSL https://ghosty.net/install.sh`;
+const NPM_INSTALL = `npm install -g ghosty`;
+const CARGO_INSTALL = `cargo install ghosty-cli --locked`;
 const FIRST_RUN = `ghosty`;
-const VERIFY = `ghosty --version
-ghosty doctor`;
-
 const UPDATE = `ghosty update`;
 
-const SET_KEY_BASH = `export DEEPSEEK_API_KEY=sk-...`;
-const SET_KEY_AUTH = `ghosty auth set --provider deepseek --api-key sk-...`;
-
-const NPM_INSTALL = `npm install -g ghostycode`;
-
+const RELEASE_DOWNLOAD = `# Download your platform archive:
+https://github.com/blissito/ghostycode/releases/latest`;
+const cnbInstall = (tag: string) =>
+  `cargo install --git https://cnb.cool/ghosty.net/ghosty --tag ${tag} ghosty-cli --locked --force`;
 const TUNA_CONFIG = `# ~/.cargo/config.toml
 [source.crates-io]
 replace-with = "tuna"
 
 [source.tuna]
 registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`;
-const TUNA_INSTALL = `cargo install ghosty-cli --locked
-cargo install ghosty-tui --locked`;
-const NPMMIRROR = `npm config set registry https://registry.npmmirror.com
-npm install -g ghostycode`;
+const TUNA_INSTALL = `cargo install ghosty-cli --locked`;
 
-const BREW = `brew tap blissito/deepseek-tui
-brew install deepseek-tui`;
+const BREW = `brew tap blissito/ghostycode
+brew install ghosty`;
 
-const DOCKER = `docker volume create ghostycode-home
+const DOCKER = `docker volume create ghosty-home
 docker run --rm -it \\
   -e DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY \\
-  -v ghostycode-home:/home/ghosty/.ghosty \\
+  -v ghosty-home:/home/ghosty/.ghosty \\
   -v "$PWD:/workspace" -w /workspace \\
-  ghcr.io/hmbown/ghostycode:latest`;
+  ghcr.io/blissito/ghostycode:latest`;
 
 const FROM_SOURCE = `git clone https://github.com/blissito/ghostycode
-cd ghosty
+cd GhostyCode
 cargo build --release --locked
 
-# Install both binaries from the local checkout
-cargo install --path crates/cli --locked   # ghosty
-cargo install --path crates/tui --locked   # ghosty-tui`;
+# Install the compiled runtime as ghosty
+cargo install --path crates/cli --locked`;
 
-const CONFIG_TREE = `~/.ghosty/
+const CONFIG_TREE = `$GHOSTY_HOME/ (default: ~/.ghosty/)
 ├── config.toml      api keys, model, hooks, profiles
 ├── mcp.json         MCP server definitions
 ├── skills/          user skills (each with SKILL.md)
 ├── sessions/        checkpoints + offline queue
 ├── tasks/           background task store
-└── audit.log        credential / approval / elevation audit trail
+└── audit.log        best-effort credential / approval / elevation events
 
 ./.ghosty/        project-scoped config (optional, per-repo)`;
 
-const CONFIG_TREE_ZH = `~/.ghosty/
+const CONFIG_TREE_ZH = `$GHOSTY_HOME/（默认：~/.ghosty/）
 ├── config.toml      API 密钥、模型、钩子、配置集
 ├── mcp.json         MCP 服务器定义
 ├── skills/          用户技能（每个含 SKILL.md）
 ├── sessions/        检查点 + 离线队列
 ├── tasks/           后台任务存储
-└── audit.log        凭证 / 审批 / 提权审计日志
+└── audit.log        尽力写入的凭证 / 审批 / 提权事件
 
 ./.ghosty/        项目级配置（可选，每个仓库）`;
 
 export default async function InstallPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const isZh = locale === "zh";
+  const facts = await getFacts();
+  const publishedRelease = facts.latestPublishedRelease;
+  const sourceIsPublished = publishedRelease?.version === facts.version;
+  const firstSession = GETTING_STARTED_STEPS.find((step) => step.id === "first-session")!;
+  const connectProvider = GETTING_STARTED_STEPS.find((step) => step.id === "connect-provider")!;
+  const verify = `ghosty --version${
+    publishedRelease ? `   # latest published: ${publishedRelease.version}` : ""
+  }
+ghosty doctor`;
 
   const copyLabel = isZh ? "复制" : "Copy";
   const copiedLabel = isZh ? "已复制 ✓" : "Copied ✓";
@@ -86,7 +96,7 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
   return (
     <>
       {/* ① INSTALL */}
-      <section className="mx-auto max-w-[1100px] px-6 pt-12 pb-10">
+      <section className="site-container section">
         <div className="flex items-baseline gap-4 mb-3">
           <Seal char="装" />
           <div className="eyebrow">{isZh ? "01 · 安装" : "01 · Install"}</div>
@@ -100,89 +110,107 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
         </h1>
 
         <div className="space-y-3">
-          <InstallCodeBlock cmd={CARGO_INSTALL} copyLabel={copyLabel} copiedLabel={copiedLabel} />
+          <InstallCodeBlock cmd={SHELL_INSTALL} copyLabel={copyLabel} copiedLabel={copiedLabel} />
           <InstallCodeBlock cmd={FIRST_RUN} copyLabel={copyLabel} copiedLabel={copiedLabel} />
         </div>
 
         <p className="mt-4 text-sm text-ink-soft leading-relaxed max-w-2xl">
           {isZh ? (
             <>
-              编译并安装 <code className="inline">ghosty</code> 和 <code className="inline">ghosty-tui</code> 到 <code className="inline">~/.cargo/bin</code>。
-              需要 Rust 1.88+——如未安装可访问{" "}
-              <a href="https://rustup.rs" className="body-link">rustup.rs</a>。
-              下方「其他安装方式」列出了不用 Rust 工具链、国内镜像、Homebrew、预编译二进制等替代选项。
+              macOS / Linux 安装脚本会从 GitHub Releases 下载经 SHA-256 校验的二进制，
+              默认安装到 <code className="inline">~/.local/bin</code>，并提供{" "}
+              <code className="inline">ghosty</code> 和 <code className="inline">ghosty-tui</code>
+              两个命令名；两者运行同一个编译后的 runtime。先审阅脚本可运行{" "}
+              <code className="inline">{SHELL_INSPECT}</code>。下方「其他安装方式」列出 npm、Cargo、GitHub Releases、
+              CNB、国内镜像、Homebrew、预编译二进制和 Docker。
             </>
           ) : (
             <>
-              Compiles and installs <code className="inline">ghosty</code> and{" "}
-              <code className="inline">ghosty-tui</code> to{" "}
-              <code className="inline">~/.cargo/bin</code>. Requires Rust 1.88+ — install via{" "}
-              <a href="https://rustup.rs" className="body-link">rustup.rs</a> if you don&apos;t have it.
-              See <a href="#other-ways" className="body-link">Other ways to install</a> below for
-              npm, Homebrew, prebuilt binaries, or mainland China mirrors.
+              The macOS / Linux installer downloads SHA-256-verified binaries from GitHub Releases,
+              installs to <code className="inline">~/.local/bin</code> by default, and exposes{" "}
+              <code className="inline">ghosty</code> and <code className="inline">ghosty-tui</code> as
+              two names for the same compiled runtime. To inspect it first, run{" "}
+              <code className="inline">{SHELL_INSPECT}</code>. See{" "}
+              <a href="#other-ways" className="body-link">Other ways to install</a> below for
+              npm, cargo, GitHub Releases, CNB, Homebrew, prebuilt binaries, Docker, or mainland
+              China mirrors.
             </>
           )}
         </p>
       </section>
 
       {/* ② VERIFY */}
-      <section className="mx-auto max-w-[1100px] px-6 py-10 hairline-t">
+      <section className="site-container py-10 hairline-t">
         <div className="flex items-baseline gap-4 mb-5">
           <Seal char="验" />
           <div className="eyebrow">{isZh ? "02 · 验证" : "02 · Verify"}</div>
         </div>
 
-        <InstallCodeBlock cmd={VERIFY} copyLabel={copyLabel} copiedLabel={copiedLabel} />
+        <InstallCodeBlock cmd={verify} copyLabel={copyLabel} copiedLabel={copiedLabel} />
 
         <p className="mt-4 text-sm text-ink-soft leading-relaxed max-w-2xl">
           {isZh ? (
             <>
               <code className="inline">ghosty doctor</code> 检查 API 密钥、网络、沙箱可用性、
-              MCP 服务器，并将完整报告写入{" "}
-              <code className="inline">~/.ghosty/doctor.log</code>。
+              MCP 服务器，并在终端输出修复建议；需要结构化输出时可加{" "}
+              <code className="inline">--json</code>。
             </>
           ) : (
             <>
               <code className="inline">ghosty doctor</code> checks your API key, network,
-              sandbox availability, and MCP servers. Full report is written to{" "}
-              <code className="inline">~/.ghosty/doctor.log</code>.
+              sandbox availability, and MCP servers, then prints remediation guidance. Add{" "}
+              <code className="inline">--json</code> when you need structured output.
             </>
           )}
         </p>
       </section>
 
       {/* ③ UPDATE */}
-      <section className="mx-auto max-w-[1100px] px-6 py-10 hairline-t">
+      <section className="site-container py-10 hairline-t">
         <div className="flex items-baseline gap-4 mb-5">
           <Seal char="新" />
           <div className="eyebrow">{isZh ? "03 · 更新" : "03 · Update"}</div>
         </div>
 
         <InstallCodeBlock cmd={UPDATE} copyLabel={copyLabel} copiedLabel={copiedLabel} />
+        <div className="mt-3">
+          <InstallCodeBlock cmd={SHELL_INSTALL} copyLabel={copyLabel} copiedLabel={copiedLabel} />
+        </div>
 
         <p className="mt-4 text-sm text-ink-soft leading-relaxed max-w-2xl">
           {isZh ? (
             <>
               检查 GitHub Releases 是否有新版本并就地替换二进制。
-              通过 Homebrew 或 npm 安装的话，使用包管理器升级更稳：
-              <code className="inline">brew upgrade deepseek-tui</code> 或{" "}
-              <code className="inline">npm update -g ghosty</code>。
-              Cargo 安装的可以重跑两个 <code className="inline">cargo install</code> 命令并加 <code className="inline">--force</code>。
+              通过 <code className="inline">install.sh</code> 安装的用户也可以重跑同一条{" "}
+              <code className="inline">curl</code> 命令覆盖更新。
+              通过包管理器安装的话，用包管理器升级更稳：npm 安装的运行{" "}
+              <code className="inline">npm update -g ghosty</code>；
+              Cargo 安装的重跑 <code className="inline">ghosty-cli</code> 这一条{" "}
+              <code className="inline">cargo install</code> 命令并加 <code className="inline">--force</code>；
+              Cargo 只安装 <code className="inline">ghosty</code>，如需短名称可自行定义{" "}
+              <code className="inline">ghosty-tui</code> shell alias；
+              Homebrew 用 <code className="inline">brew upgrade ghosty</code>。
             </>
           ) : (
             <>
               Checks GitHub Releases for a newer version and replaces the binary in place. If you
-              installed via Homebrew or npm, prefer the package manager instead:{" "}
-              <code className="inline">brew upgrade deepseek-tui</code> or{" "}
-              <code className="inline">npm update -g ghosty</code>. Cargo users can re-run both{" "}
-              <code className="inline">cargo install</code> commands with <code className="inline">--force</code>.
+              installed with <code className="inline">install.sh</code>, re-run the same{" "}
+              <code className="inline">curl</code> command to overwrite the binaries.
+              If you installed via a package manager, prefer it instead: npm users run{" "}
+              <code className="inline">npm update -g ghosty</code>; Cargo users re-run the one{" "}
+              <code className="inline">ghosty-cli</code> install command with{" "}
+              <code className="inline">--force</code>. Cargo installs only{" "}
+              <code className="inline">ghosty</code>; define your own{" "}
+              <code className="inline">ghosty-tui</code> shell alias if you want the shorter name;
+              Homebrew updates with{" "}
+              <code className="inline">brew upgrade ghosty</code>.
             </>
           )}
         </p>
       </section>
 
       {/* ④ FIRST RUN */}
-      <section className="mx-auto max-w-[1100px] px-6 py-10 hairline-t">
+      <section className="site-container py-10 hairline-t">
         <div className="flex items-baseline gap-4 mb-5">
           <Seal char="始" />
           <div className="eyebrow">{isZh ? "04 · 首次运行" : "04 · First run"}</div>
@@ -191,40 +219,40 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
         <ol className="space-y-6 max-w-2xl">
           <li>
             <div className="font-display text-lg mb-2">
-              {isZh ? "① 获取 API 密钥" : "① Get an API key"}
+              {isZh ? `① ${firstSession.title.zh}` : `① ${firstSession.title.en}`}
             </div>
             <p className="text-sm text-ink-soft leading-relaxed">
-              {isZh ? (
-                <>
-                  在{" "}
-                  <a href="https://platform.deepseek.com" className="body-link">
-                    platform.deepseek.com
-                  </a>{" "}
-                  注册并创建密钥，格式为 <code className="inline">sk-...</code>。
-                </>
-              ) : (
-                <>
-                  Sign up at{" "}
-                  <a href="https://platform.deepseek.com" className="body-link">
-                    platform.deepseek.com
-                  </a>{" "}
-                  and create a key (format: <code className="inline">sk-...</code>).
-                </>
-              )}
+              {isZh ? firstSession.body.zh : firstSession.body.en}
             </p>
+            <div className="mt-2">
+              <InstallCodeBlock
+                cmd={firstSession.commands.join("\n")}
+                copyLabel={copyLabel}
+                copiedLabel={copiedLabel}
+              />
+            </div>
           </li>
 
           <li>
             <div className="font-display text-lg mb-2">
-              {isZh ? "② 设置密钥" : "② Set the key"}
+              {isZh ? `② ${connectProvider.title.zh}` : `② ${connectProvider.title.en}`}
             </div>
-            <div className="space-y-2">
-              <InstallCodeBlock cmd={SET_KEY_BASH} copyLabel={copyLabel} copiedLabel={copiedLabel} />
-              <p className="text-xs text-ink-mute">
-                {isZh ? "或保存到 ~/.ghosty/config.toml：" : "Or persist it to ~/.ghosty/config.toml:"}
-              </p>
-              <InstallCodeBlock cmd={SET_KEY_AUTH} copyLabel={copyLabel} copiedLabel={copiedLabel} />
+            <p className="text-sm text-ink-soft leading-relaxed">
+              {isZh ? connectProvider.body.zh : connectProvider.body.en}
+            </p>
+            <div className="mt-2">
+              <InstallCodeBlock
+                cmd={connectProvider.commands.join("\n")}
+                copyLabel={copyLabel}
+                copiedLabel={copiedLabel}
+              />
             </div>
+            <Link
+              href={`/${locale}${connectProvider.link.href}`}
+              className="body-link mt-2 inline-block text-sm"
+            >
+              {isZh ? connectProvider.link.label.zh : connectProvider.link.label.en} →
+            </Link>
           </li>
 
           <li>
@@ -235,16 +263,23 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
             <p className="mt-3 text-sm text-ink-soft leading-relaxed">
               {isZh ? (
                 <>
-                  默认 Plan 模式（只读调查）。按{" "}
+                  新会话使用你选择的默认模式（未修改则为 Act）。输入区空闲时，按{" "}
                   <kbd className="font-mono text-xs px-1 hairline-t hairline-b hairline-l hairline-r">Tab</kbd>{" "}
-                  切换到 Agent 模式（执行工具，按需审批）。再按一次进入 YOLO 模式（自动批准）。
+                  循环 Plan → Act → Operate；按{" "}
+                  <kbd className="font-mono text-xs px-1 hairline-t hairline-b hairline-l hairline-r">Shift+Tab</kbd>{" "}
+                  循环 Ask → Auto-Review → Full Access。也可以运行{" "}
+                  <code className="inline">/mode</code> 选择模式或运行 <code className="inline">/config</code>{" "}
+                  查看权限。Plan 始终只读；Full Access 仅应用于你信任的工作区。
                 </>
               ) : (
                 <>
-                  Plan mode (read-only) is the default. Press{" "}
+                  New sessions use your selected default mode (Act unless you changed it). When the composer is idle, press{" "}
                   <kbd className="font-mono text-xs px-1 hairline-t hairline-b hairline-l hairline-r">Tab</kbd>{" "}
-                  to switch to Agent mode (tool execution, per-action approval). Press again for
-                  YOLO (auto-approve).
+                  to cycle Plan → Act → Operate; press{" "}
+                  <kbd className="font-mono text-xs px-1 hairline-t hairline-b hairline-l hairline-r">Shift+Tab</kbd>{" "}
+                  to cycle Ask → Auto-Review → Full Access. You can also run{" "}
+                  <code className="inline">/mode</code> to choose a mode or <code className="inline">/config</code>{" "}
+                  to inspect permissions. Plan stays read-only; use Full Access only in a workspace you trust.
                 </>
               )}
             </p>
@@ -254,7 +289,7 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
 
       {/* ⑤ OTHER WAYS TO INSTALL */}
       <section id="other-ways" className="bg-paper-deep hairline-t hairline-b">
-        <div className="mx-auto max-w-[1100px] px-6 py-12">
+        <div className="site-container py-12">
           <div className="flex items-baseline gap-4 mb-5">
             <Seal char="备" />
             <div className="eyebrow">{isZh ? "05 · 其他安装方式" : "05 · Other ways to install"}</div>
@@ -262,34 +297,103 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
           <h2 className="font-display text-3xl mb-2">
             {isZh ? "其他安装方式" : "Other ways to install"}
           </h2>
-          <p className="text-sm text-ink-soft max-w-2xl mb-10">
+          <p className="text-sm text-ink-soft max-w-2xl mb-4">
             {isZh
-              ? "如果上面的 Cargo 路径不适合你，从下面找到匹配你情况的一条。每条都安装同一组 ghosty / ghosty-tui 二进制。"
-              : "If the Cargo path above doesn't fit your setup, pick the row that matches your situation. Every path installs the same ghosty / ghosty-tui binary pair."}
+              ? "如果上面的脚本不适合你的环境，从下面选一种。每种方式都写明了它安装什么。"
+              : "If the script above doesn't fit your setup, pick one of these. Each one says what it installs."}
+          </p>
+
+          <p className="text-sm text-ink-soft max-w-2xl mb-10">
+            {publishedRelease
+              ? isZh
+                ? `下方的命令安装 ${publishedRelease.tag}，即 GitHub 上最新的发布版本。${sourceIsPublished ? "源码与该版本一致。" : `源码已到 v${facts.version}，尚未发布。`}`
+                : `The commands below install ${publishedRelease.tag}, the latest release on GitHub. ${sourceIsPublished ? "The source matches that release." : `Source is at v${facts.version}, not yet released.`}`
+              : isZh
+                ? "暂时无法验证最新的 GitHub 发布标签；请先查看 Releases，再运行需要固定标签的命令。"
+                : "The latest GitHub release tag could not be verified. Check Releases before running a command that requires a pinned tag."}
           </p>
 
           <div className="space-y-10">
-            {/* No Rust toolchain */}
+            {/* npm */}
             <div>
               <div className="eyebrow mb-2 text-indigo">
-                {isZh ? "没有 Rust 工具链" : "No Rust toolchain"}
+                npm{" "}
+                <span className="text-ink-mute font-mono normal-case tracking-normal">
+                  {isZh ? "· Node 18+" : "· Node 18+"}
+                </span>
               </div>
               <InstallCodeBlock cmd={NPM_INSTALL} copyLabel={copyLabel} copiedLabel={copiedLabel} />
               <p className="mt-3 text-sm text-ink-soft leading-relaxed max-w-2xl">
                 {isZh ? (
                   <>
-                    npm 包装器会从 GitHub Releases 下载对应平台的预编译二进制。需要 Node 18+。
-                    安装后会同时提供 <code className="inline">ghosty</code> 和{" "}
-                    <code className="inline">ghosty-tui</code> 两个命令。
+                    npm wrapper 会从 GitHub Releases 下载经 SHA-256 校验的二进制，并安装{" "}
+                    <code className="inline">ghosty</code> 和 <code className="inline">ghosty-tui</code>
+                    两个命令名；两者运行同一个 runtime。
                   </>
                 ) : (
                   <>
-                    The npm wrapper downloads the prebuilt binary from GitHub Releases for your
-                    platform. Requires Node 18+. Installs both <code className="inline">ghosty</code>{" "}
-                    and <code className="inline">ghosty-tui</code> on PATH.
+                    The npm wrapper downloads SHA-256-verified binaries from GitHub Releases and
+                    installs <code className="inline">ghosty</code> and{" "}
+                    <code className="inline">ghosty-tui</code> as two names for the same runtime.
                   </>
                 )}
               </p>
+            </div>
+
+            {/* Cargo */}
+            <div>
+              <div className="eyebrow mb-2 text-indigo">
+                {isZh ? "Rust 工具链" : "Rust toolchain"}
+              </div>
+              <InstallCodeBlock cmd={CARGO_INSTALL} copyLabel={copyLabel} copiedLabel={copiedLabel} />
+              <p className="mt-3 text-sm text-ink-soft leading-relaxed max-w-2xl">
+                {isZh ? (
+                  <>
+                    <code className="inline">ghosty-cli</code> 这一个 Cargo package 只会把{" "}
+                    <code className="inline">ghosty</code> 安装到 <code className="inline">~/.cargo/bin</code>。
+                    如需较短的 <code className="inline">ghosty-tui</code> 名称，可自行定义 shell alias。
+                    需要 Rust 1.88+；Linux 用户先安装 <code className="inline">pkg-config</code> 和{" "}
+                    <code className="inline">libdbus-1-dev</code> 等构建依赖。如未安装 Rust，可访问{" "}
+                    <a href="https://rustup.rs" className="body-link">rustup.rs</a>。
+                  </>
+                ) : (
+                  <>
+                    The one <code className="inline">ghosty-cli</code> Cargo package installs only{" "}
+                    <code className="inline">ghosty</code> to <code className="inline">~/.cargo/bin</code>.
+                    Define your own <code className="inline">ghosty-tui</code> shell alias if you want the shorter name.
+                    Requires Rust 1.88+; install via{" "}
+                    <a href="https://rustup.rs" className="body-link">rustup.rs</a> if you don&apos;t have it.
+                    On Linux, install build dependencies such as{" "}
+                    <code className="inline">pkg-config</code> and{" "}
+                    <code className="inline">libdbus-1-dev</code> first.
+                  </>
+                )}
+              </p>
+            </div>
+
+            {/* GitHub Release */}
+            <div className="rounded-lg border border-ink/12 bg-white/70 p-5">
+              <div className="font-display text-lg mb-3">{isZh ? "GitHub Releases" : "GitHub Releases"}</div>
+              <InstallCodeBlock cmd={RELEASE_DOWNLOAD} copyLabel={copyLabel} copiedLabel={copiedLabel} />
+            </div>
+
+            {/* CNB */}
+            <div className="rounded-lg border border-ink/12 bg-white/70 p-5">
+              <div className="font-display text-lg mb-3">{isZh ? "CNB 镜像" : "CNB mirror"}</div>
+              {publishedRelease ? (
+                <InstallCodeBlock
+                  cmd={cnbInstall(publishedRelease.tag)}
+                  copyLabel={copyLabel}
+                  copiedLabel={copiedLabel}
+                />
+              ) : (
+                <a
+                  href="https://github.com/blissito/ghostycode/releases/latest"
+                  className="body-link"
+                >
+                  {isZh ? "查看最新 GitHub 发布" : "Check the latest GitHub release"}
+                </a>
+              )}
             </div>
 
             {/* Mainland China network */}
@@ -300,11 +404,13 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
               <p className="text-sm text-ink-soft leading-relaxed max-w-2xl mb-3">
                 {isZh ? (
                   <>
-                    Cargo 经清华 Tuna 镜像——添加到 <code className="inline">~/.cargo/config.toml</code>：
+                    <strong className="text-indigo">官方源：</strong>
+                    GitHub Releases 为唯一官方发布源。Cargo 经清华 Tuna 镜像——添加到 <code className="inline">~/.cargo/config.toml</code>：
                   </>
                 ) : (
                   <>
-                    Cargo via Tsinghua Tuna mirror — add to{" "}
+                    <strong className="text-indigo">Official source:</strong>{" "}
+                    GitHub Releases is the sole canonical release source. Cargo via Tsinghua Tuna mirror — add to{" "}
                     <code className="inline">~/.cargo/config.toml</code>:
                   </>
                 )}
@@ -314,26 +420,22 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
                 <InstallCodeBlock cmd={TUNA_INSTALL} copyLabel={copyLabel} copiedLabel={copiedLabel} />
               </div>
 
-              <p className="text-sm text-ink-soft leading-relaxed max-w-2xl mt-6 mb-3">
-                {isZh ? "npm 经 npmmirror 镜像：" : "npm via npmmirror:"}
-              </p>
-              <InstallCodeBlock cmd={NPMMIRROR} copyLabel={copyLabel} copiedLabel={copiedLabel} />
-
               <p className="mt-4 text-sm text-ink-soft leading-relaxed max-w-2xl">
                 {isZh ? (
                   <>
-                    npm 包装器仍会从{" "}
-                    <code className="inline">github.com/blissito/ghostycode/releases</code>{" "}
-                    下载二进制，国内可能较慢。Cargo + Tuna 完全绕开 GitHub。
+                    npm 安装时设置 <code className="inline">GHOSTY_USE_CNB_MIRROR=1</code>，
+                    wrapper 会改从 CNB 镜像下载二进制而不是 GitHub。Cargo + Tuna 或 CNB
+                    路径同样可以绕开 GitHub 下载瓶颈。
                     DeepSeek API（<code className="inline">api.deepseek.com</code>）在国内直连，无需代理。
                   </>
                 ) : (
                   <>
-                    The npm wrapper still downloads the binary from{" "}
-                    <code className="inline">github.com/blissito/ghostycode/releases</code>, which can
-                    be slow over GFW. Cargo + Tuna routes around GitHub entirely. The DeepSeek API
-                    at <code className="inline">api.deepseek.com</code> is reachable from mainland
-                    China without a proxy.
+                    For the npm path, set{" "}
+                    <code className="inline">GHOSTY_USE_CNB_MIRROR=1</code> and the wrapper
+                    downloads binaries from the CNB mirror instead of GitHub. Cargo + Tuna or the
+                    CNB path also routes around GitHub download bottlenecks. The DeepSeek API at{" "}
+                    <code className="inline">api.deepseek.com</code> is reachable from mainland China
+                    without a proxy.
                   </>
                 )}
               </p>
@@ -344,10 +446,15 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
               <div className="eyebrow mb-2 text-indigo">
                 Homebrew{" "}
                 <span className="text-ink-mute font-mono normal-case tracking-normal">
-                  · macOS / Linux
+                  {isZh ? "· macOS / Linux" : "· macOS / Linux"}
                 </span>
               </div>
               <InstallCodeBlock cmd={BREW} copyLabel={copyLabel} copiedLabel={copiedLabel} />
+              <p className="mt-3 text-sm text-ink-soft leading-relaxed max-w-2xl">
+                {isZh
+                  ? "formula 是 ghosty。tap 仓库在重命名前仍叫 blissito/homebrew-ghosty；brew tap blissito/ghostycode 继续有效。旧的 deepseek-tui formula 作为一轮重叠的弃用别名保留。"
+                  : "The formula is ghosty. The tap repo is still blissito/homebrew-ghosty until it is renamed; brew tap blissito/ghostycode keeps working. The legacy deepseek-tui formula remains a deprecated alias for one overlap release."}
+              </p>
             </div>
 
             {/* Prebuilt binary */}
@@ -385,7 +492,7 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
               <p className="mt-3 text-sm text-ink-soft leading-relaxed max-w-2xl">
                 {isZh
                   ? "适合本地修改 workspace 或贡献补丁。"
-                  : "Useful for hacking on the workspace itself or contributing patches."}
+                  : "Useful for working on the workspace itself or contributing patches."}
               </p>
             </div>
           </div>
@@ -393,7 +500,7 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
       </section>
 
       {/* ⑥ WHERE CONFIG LIVES */}
-      <section className="mx-auto max-w-[1100px] px-6 py-12">
+      <section className="site-container py-12">
         <div className="flex items-baseline gap-4 mb-5">
           <Seal char="件" />
           <div className="eyebrow">{isZh ? "06 · 配置文件在哪" : "06 · Where config lives"}</div>
@@ -418,16 +525,92 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
         </p>
       </section>
 
-      {/* ⑦ NEXT STEPS */}
+      {/* ⑦ PROVENANCE */}
+      <section className="site-container py-12 hairline-t">
+        <div className="flex items-baseline gap-4 mb-5">
+          <Seal char="源" />
+          <div className="eyebrow">{isZh ? "07 · 来源与镜像" : "07 · Provenance & mirrors"}</div>
+        </div>
+
+        <div className="space-y-4 text-sm text-ink-soft leading-relaxed max-w-2xl">
+          <p>
+            {isZh ? (
+              <>
+                <strong className="text-ink">ghosty.net</strong> 和{" "}
+                <strong className="text-ink">www.ghosty.net</strong> 是 Ghosty 的官方站点，
+                部署在 Cloudflare 上。网站源码位于{" "}
+                <code className="inline">blissito/ghostycode</code> 仓库的{" "}
+                <code className="inline">web/</code> 目录下，任何人都可自行部署为镜像。
+              </>
+            ) : (
+              <>
+                <strong className="text-ink">ghosty.net</strong> and{" "}
+                <strong className="text-ink">www.ghosty.net</strong> are the official Ghosty
+                sites, deployed on Cloudflare. The website source lives under{" "}
+                <code className="inline">web/</code> in the{" "}
+                <code className="inline">blissito/ghostycode</code> repository — anyone can
+                self-deploy it as a mirror.
+              </>
+            )}
+          </p>
+
+          <div className="grid sm:grid-cols-2 gap-4 mt-4">
+            <div>
+              <div className="eyebrow mb-1 text-indigo">{isZh ? "官方发布" : "Official releases"}</div>
+              <p>
+                {isZh
+                  ? "所有正式发布和 SHA-256 校验文件仅通过 GitHub Releases 分发。npm 包从 GitHub Releases 下载经校验的二进制。"
+                  : "All official releases and SHA-256 checksums are distributed exclusively through GitHub Releases. The npm package downloads verified binaries from GitHub Releases."}
+              </p>
+            </div>
+            <div>
+              <div className="eyebrow mb-1 text-indigo">{isZh ? "CNB 镜像" : "CNB mirror"}</div>
+              <p>
+                {isZh ? (
+                  <>
+                    面向无法稳定访问 GitHub 的用户，提供 CNB 镜像（
+                    <a href="https://github.com/blissito/ghostycode/blob/main/docs/CNB_MIRROR.md" className="body-link">docs/CNB_MIRROR.md</a>
+                    ）。镜像仓库由社区成员维护，发布延迟可能为几小时。
+                  </>
+                ) : (
+                  <>
+                    A CNB mirror is available for users who cannot reliably reach GitHub (
+                    <a href="https://github.com/blissito/ghostycode/blob/main/docs/CNB_MIRROR.md" className="body-link">docs/CNB_MIRROR.md</a>
+                    ). The mirror is maintained by community members; release latency may be a few hours.
+                  </>
+                )}
+              </p>
+            </div>
+            <div>
+              <div className="eyebrow mb-1 text-indigo">{isZh ? "TUNA / 包镜像" : "TUNA / package mirrors"}</div>
+              <p>
+                {isZh
+                  ? "Cargo 用户可通过 TUNA（清华大学开源镜像站）加速下载。这些镜像由第三方维护，Ghosty 项目不控制镜像内容。"
+                  : "Cargo users can accelerate downloads via TUNA (Tsinghua University Open Source Mirror). These mirrors are maintained by third parties; the Ghosty project does not control mirror content."}
+              </p>
+            </div>
+            <div>
+              <div className="eyebrow mb-1 text-indigo">{isZh ? "自行部署" : "Self-deployed"}</div>
+              <p>
+                {isZh
+                  ? "自行部署的网站副本、镜像站和第三方包不受 Ghosty 项目控制。请验证下载来源和校验和。"
+                  : "Self-deployed website copies, mirror sites, and third-party packages are not controlled by the Ghosty project. Verify download sources and checksums."}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ⑧ NEXT STEPS */}
       <section className="bg-paper-deep hairline-t hairline-b">
-        <div className="mx-auto max-w-[1100px] px-6 py-12">
+        <div className="site-container py-12">
           <div className="flex items-baseline gap-4 mb-5">
             <Seal char="续" />
-            <div className="eyebrow">{isZh ? "07 · 下一步" : "07 · Next steps"}</div>
+            <div className="eyebrow">{isZh ? "08 · 下一步" : "08 · Next steps"}</div>
           </div>
           <div className="grid md:grid-cols-3 gap-0 col-rule hairline-t hairline-b">
             <Link
-              href={isZh ? "/zh/docs" : "/docs"}
+              href={`/${locale}/docs`}
               className="p-6 hover:bg-paper-deep transition-colors"
             >
               <div className="font-display text-xl mb-2">Docs</div>
@@ -439,7 +622,7 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
               </span>
             </Link>
             <Link
-              href={isZh ? "/zh/faq" : "/faq"}
+              href={`/${locale}/faq`}
               className="p-6 hover:bg-paper-deep transition-colors"
             >
               <div className="font-display text-xl mb-2">FAQ</div>
@@ -451,7 +634,7 @@ export default async function InstallPage({ params }: { params: Promise<{ locale
               </span>
             </Link>
             <Link
-              href={isZh ? "/zh/roadmap" : "/roadmap"}
+              href={`/${locale}/roadmap`}
               className="p-6 hover:bg-paper-deep transition-colors"
             >
               <div className="font-display text-xl mb-2">Roadmap</div>

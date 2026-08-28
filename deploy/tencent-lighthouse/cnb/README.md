@@ -8,8 +8,9 @@ The active root `.cnb.yml` does two things:
 
 - runs Feishu bridge and version-drift checks when CNB receives `main`;
 - builds Linux x64 release assets from `v*` tags, creates the CNB release, and
-  uploads `ghosty-linux-x64`, `ghosty-tui-linux-x64`, and
-  `deepseek-artifacts-sha256.txt`.
+  uploads the current `ghosty-linux-x64` and `ghosty-tui-linux-x64` commands,
+  the compatibility-only `ghosty-tui-linux-x64` release filename, and
+  `ghosty-artifacts-sha256.txt`.
 
 The files in this directory are retained as deploy-button templates for Tencent
 Lighthouse. Copy only the deploy environment file after the Lighthouse instance
@@ -37,10 +38,8 @@ Optional:
 - `GHOSTY_REPO_URL`: defaults to the CNB mirror URL
 - `LIGHTHOUSE_SSH_PORT`: defaults to `22`
 
-The server side should already have `/opt/whalebro/ghosty`,
-`/etc/ghosty/runtime.env`, `/etc/ghosty/feishu-bridge.env`, and the
-`ghosty-runtime` / `ghosty-feishu-bridge` systemd services from
-`docs/TENCENT_LIGHTHOUSE_HK.md`.
+The server side should already have the runtime checkout, environment files,
+and systemd services installed by the maintainer-owned server setup process.
 
 ## Safety Notes
 

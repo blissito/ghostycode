@@ -1,0 +1,15 @@
+{
+  "name": "@ghosty/bridge-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared pure helpers for GhostyCode chat bridges.",
+  "main": "src/lib.mjs",
+  "scripts": {
+    "check": "node --check src/lib.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -18,20 +18,20 @@ or tool integration.
   default unless the server explicitly requires something else.
 - Add timeouts and clear error messages around external APIs.
 
-## DeepSeek Setup
+## Ghosty Setup
 
 Common commands:
 
 ```bash
-deepseek mcp init
-deepseek mcp add my-server --command node --arg server.js
-deepseek mcp add remote-server --url http://127.0.0.1:3000/mcp
-deepseek mcp list
-deepseek mcp validate
-deepseek mcp tools
+ghosty mcp init
+ghosty mcp add my-server --command node --arg server.js
+ghosty mcp add remote-server --url http://127.0.0.1:3000/mcp
+ghosty mcp list
+ghosty mcp validate
+ghosty mcp tools
 ```
 
-HTTP/SSE entries can include per-server headers in `~/.deepseek/mcp.json` when
+HTTP/SSE entries can include per-server headers in `~/.ghosty/mcp.json` when
 credentials or custom routing headers are required.
 
 ## Workflow
@@ -39,6 +39,6 @@ credentials or custom routing headers are required.
 1. Define the service boundary and the minimum useful tools.
 2. Choose transport and credential handling.
 3. Implement the server using a maintained MCP SDK when available.
-4. Add the server with `deepseek mcp add` or edit `~/.deepseek/mcp.json`.
-5. Run `deepseek mcp validate`, then `deepseek mcp tools`.
+4. Add the server with `ghosty mcp add` or edit `~/.ghosty/mcp.json`.
+5. Run `ghosty mcp validate`, then `ghosty mcp tools`.
 6. Test one happy path and one failure path before calling it done.

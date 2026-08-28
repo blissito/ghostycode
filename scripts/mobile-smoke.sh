@@ -43,7 +43,7 @@ start_server() {
     SERVER_PID=$!
     # Wait for the server to become ready.
     for _ in $(seq 1 30); do
-        if curl -sf "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
+        if curl -sf --max-time 2 "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
             return 0
         fi
         sleep 0.3
@@ -73,7 +73,7 @@ assert_status() {
     fi
 
     local url="http://127.0.0.1:${PORT}${path}"
-    local curl_args=(-sf -o /dev/null -w '%{http_code}' -X "$method")
+    local curl_args=(-sf --max-time 10 -o /dev/null -w '%{http_code}' -X "$method")
     if [[ -n "$header" ]]; then
         curl_args+=(-H "$header")
     fi
@@ -95,7 +95,7 @@ assert_status() {
 assert_body_contains() {
     local method="$1" path="$2" header="$3" substring="$4"
     local url="http://127.0.0.1:${PORT}${path}"
-    local curl_args=(-sf -X "$method")
+    local curl_args=(-sf --max-time 10 -X "$method")
     if [[ -n "$header" ]]; then
         curl_args+=(-H "$header")
     fi
@@ -107,6 +107,24 @@ assert_body_contains() {
         pass "$method $path body contains '$substring'"
     else
         fail "$method $path body missing '$substring'"
+    fi
+}
+
+assert_body_not_contains() {
+    local method="$1" path="$2" header="$3" substring="$4"
+    local url="http://127.0.0.1:${PORT}${path}"
+    local curl_args=(-sf --max-time 10 -X "$method")
+    if [[ -n "$header" ]]; then
+        curl_args+=(-H "$header")
+    fi
+
+    local body
+    body=$(curl "${curl_args[@]}" "$url" 2>/dev/null || true)
+
+    if echo "$body" | grep -q "$substring"; then
+        fail "$method $path body unexpectedly contains '$substring'"
+    else
+        pass "$method $path body does not contain '$substring'"
     fi
 }
 
@@ -127,8 +145,8 @@ PORT=$(pick_port)
 log "=== Test Group 1: Token auth ==="
 start_server "$PORT" --mobile --auth-token "$TOKEN"
 
-assert_status GET "/mobile" 401
-assert_body_contains GET "/mobile?token=${TOKEN}" "" "Ghosty Code Mobile"
+assert_body_contains GET "/mobile" "" "Ghosty Mobile"
+assert_body_not_contains GET "/mobile" "" "$TOKEN"
 assert_status GET "/v1/threads/summary" 401
 assert_status GET "/v1/threads/summary" "Authorization: Bearer ${TOKEN}" 200
 assert_status POST "/v1/approvals/no_such_id" "Authorization: Bearer ${TOKEN}" '{"decision":"allow"}' 404
@@ -142,7 +160,7 @@ PORT=$(pick_port)
 log "=== Test Group 2: Insecure mode (no token) ==="
 start_server "$PORT" --mobile --insecure
 
-assert_body_contains GET "/mobile" "" "Ghosty Code Mobile"
+assert_body_contains GET "/mobile" "" "Ghosty Mobile"
 assert_status GET "/v1/threads/summary" 200
 
 stop_server
@@ -157,7 +175,7 @@ STDOUT_FILE=$(mktemp)
 SERVER_PID=$!
 SERVER_READY=0
 for _ in $(seq 1 30); do
-    if curl -sf "http://127.0.0.1:${PORT}/health" > /dev/null 2>&1; then
+    if curl -sf --max-time 2 "http://127.0.0.1:${PORT}/health" > /dev/null 2>&1; then
         SERVER_READY=1
         break
     fi

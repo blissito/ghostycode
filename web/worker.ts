@@ -10,9 +10,17 @@ import {
 } from "./lib/community-agent-tasks";
 import { runFactsDrift } from "./lib/facts-drift";
 import { runLinkCheck, runSemanticDrift } from "./lib/content-watch";
+import { fetchWithStaticInstaller } from "./lib/static-installer";
 
 export default {
-  fetch: handler.fetch,
+  fetch(request, env, ctx) {
+    return fetchWithStaticInstaller(
+      request,
+      env,
+      ctx,
+      (nextRequest, nextEnv, nextCtx) => handler.fetch(nextRequest, nextEnv, nextCtx),
+    );
+  },
   async scheduled(event: ScheduledEvent, env: Record<string, unknown>, ctx: ExecutionContext) {
     const expr = event.cron;
     ctx.waitUntil((async () => {

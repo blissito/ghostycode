@@ -1,0 +1,46 @@
+Ghosty empty-state whale mark — CURRENT (main) vs NEW (Signal Cut)
+
+== classic ==
+
+  BEFORE
+       ˚
+      ▗▄▄▄▄▄▄▄▄▄▄▄▖      ▚△▞
+     ▐██·███████████▙━━━━▞
+      ▝▀▀▀▀▀▀▀▀▀▀▀▀▘
+
+  AFTER
+        ˚
+      ▗▄▄▟▄▄▄▄▄▖  ▚△▞
+     ▐█·████████▙▄▄▞
+      ▝▀▀▀▀▀▀▀▀▘
+
+  AFTER, GHOSTY_ASCII_SAFE=1
+        o
+      .########.  \^/
+     |#.###########/
+      .########.
+
+  block width: 24 -> 17 columns
+
+== uwu ==
+
+  BEFORE
+       ˚✦
+     ▗▄▄▄▄▄▄▄▄▄▄▄▖    ▚△▞
+    ▐█░·░█████████▙▄▄▞
+     ▝▀▀▀▀▀▀▀▀▀▀▀▘
+
+  AFTER
+        ˚✦
+      ▗▄▄▟▄▄▄▄▖  ▚△▞
+     ▐█░·░█████▙▄▄▞
+      ▝▀▀▀▀▀▀▀▘
+
+  AFTER, GHOSTY_ASCII_SAFE=1
+        o*
+      .#######.  \^/
+     |#:.:########/
+      .#######.
+
+  block width: 21 -> 16 columns
+

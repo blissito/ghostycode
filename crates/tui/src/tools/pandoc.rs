@@ -70,7 +70,7 @@ impl ToolSpec for PandocConvertTool {
     }
 
     fn description(&self) -> &'static str {
-        "Convert a document between formats via pandoc. Reads `source_path` (any pandoc-supported input format — pandoc autodetects from extension), converts to `target_format`, and either writes the result to `output_path` (when provided) or returns the converted text inline. Supported targets: markdown, gfm, commonmark, html, rst, latex, docx, odt, epub, plain, asciidoc. Use this instead of shelling out to pandoc via `exec_shell` — no approval prompt for output_path-less reads, structured errors, and a curated format whitelist."
+        "Convert a document between formats via pandoc. Reads `source_path` (any pandoc-supported input format — pandoc autodetects from extension), converts to `target_format`, and either writes the result to `output_path` (when provided) or returns the converted text inline. Supported targets: markdown, gfm, commonmark, html, rst, latex, docx, odt, epub, plain, asciidoc. Use this instead of shelling out to pandoc via `Bash` — no approval prompt for output_path-less reads, structured errors, and a curated format whitelist."
     }
 
     fn input_schema(&self) -> Value {
@@ -110,7 +110,7 @@ impl ToolSpec for PandocConvertTool {
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
         let source_path_str = required_str(&input, "source_path")?;
         let target_format = required_str(&input, "target_format")?.trim().to_lowercase();
-        let output_path_str = optional_str(&input, "output_path");
+        let output_path_str = optional_str(&input, "output_path")?;
 
         if !SUPPORTED_TARGET_FORMATS.contains(&target_format.as_str()) {
             return Err(ToolError::invalid_input(format!(
@@ -209,6 +209,24 @@ mod tests {
         crate::dependencies::resolve_pandoc().is_some()
     }
 
+    fn pandoc_environment_unavailable(err: &ToolError) -> bool {
+        let msg = err.to_string();
+        msg.contains("getXdgDirectory") || msg.contains("sHGetFolderPath")
+    }
+
+    // Test-only skip diagnostic; the module-wide print_stderr deny targets prod code.
+    #[allow(clippy::print_stderr)]
+    async fn execute_pandoc_or_skip(input: Value, ctx: &ToolContext) -> Option<ToolResult> {
+        match PandocConvertTool.execute(input, ctx).await {
+            Ok(result) => Some(result),
+            Err(err) if pandoc_environment_unavailable(&err) => {
+                eprintln!("skipping pandoc integration assertion: {err}");
+                None
+            }
+            Err(err) => panic!("execute: {err:?}"),
+        }
+    }
+
     #[test]
     fn supported_target_formats_match_schema_enum() {
         let tool = PandocConvertTool;
@@ -293,13 +311,14 @@ mod tests {
         let src = tmp.path().join("note.md");
         fs::write(&src, "# Title\n\nA paragraph with `inline code`.\n").unwrap();
         let ctx = ToolContext::new(tmp.path().to_path_buf());
-        let result = PandocConvertTool
-            .execute(
-                json!({"source_path": "note.md", "target_format": "html"}),
-                &ctx,
-            )
-            .await
-            .expect("execute");
+        let Some(result) = execute_pandoc_or_skip(
+            json!({"source_path": "note.md", "target_format": "html"}),
+            &ctx,
+        )
+        .await
+        else {
+            return;
+        };
         assert!(result.success);
         assert!(
             result.content.contains("<h1") && result.content.contains("Title"),
@@ -322,17 +341,18 @@ mod tests {
         let src = tmp.path().join("note.md");
         fs::write(&src, "# Title\n").unwrap();
         let ctx = ToolContext::new(tmp.path().to_path_buf());
-        let result = PandocConvertTool
-            .execute(
-                json!({
-                    "source_path": "note.md",
-                    "target_format": "html",
-                    "output_path": "out.html",
-                }),
-                &ctx,
-            )
-            .await
-            .expect("execute");
+        let Some(result) = execute_pandoc_or_skip(
+            json!({
+                "source_path": "note.md",
+                "target_format": "html",
+                "output_path": "out.html",
+            }),
+            &ctx,
+        )
+        .await
+        else {
+            return;
+        };
         assert!(result.success);
         assert!(result.content.contains("wrote"));
         let written = fs::read_to_string(tmp.path().join("out.html")).expect("read");

@@ -2,13 +2,22 @@
 name = "ghosty-release"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Shared Ghosty Code release discovery and version comparison helpers"
+description = "Shared Ghosty release discovery and version comparison helpers"
+
+[lints]
+workspace = true
 
 [dependencies]
 anyhow.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
+rustls.workspace = true
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+webpki-roots = "1"

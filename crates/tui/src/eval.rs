@@ -56,31 +56,43 @@ pub enum ScenarioStepKind {
     Search,
     Edit,
     ApplyPatch,
-    ExecShell,
+    Bash,
 }
 
 impl ScenarioStepKind {
-    /// Tool name associated with this step.
+    /// Canonical tool name associated with this step.
     pub fn tool_name(self) -> &'static str {
         match self {
-            ScenarioStepKind::List => "list_dir",
-            ScenarioStepKind::Read => "read_file",
-            ScenarioStepKind::Search => "search",
-            ScenarioStepKind::Edit => "edit_file",
+            ScenarioStepKind::List
+            | ScenarioStepKind::Read
+            | ScenarioStepKind::Search
+            | ScenarioStepKind::Edit => "File",
             ScenarioStepKind::ApplyPatch => "apply_patch",
-            ScenarioStepKind::ExecShell => "exec_shell",
+            ScenarioStepKind::Bash => "Bash",
+        }
+    }
+
+    /// Canonical action for action-based tools.
+    pub fn action(self) -> Option<&'static str> {
+        match self {
+            ScenarioStepKind::List => Some("list"),
+            ScenarioStepKind::Read => Some("read"),
+            ScenarioStepKind::Search => Some("search_content"),
+            ScenarioStepKind::Edit => Some("edit"),
+            ScenarioStepKind::ApplyPatch => None,
+            ScenarioStepKind::Bash => Some("run"),
         }
     }
 
     /// Parse a step kind from CLI-friendly strings.
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_lowercase().as_str() {
-            "list" | "list_dir" => Some(Self::List),
-            "read" | "read_file" => Some(Self::Read),
-            "search" | "grep" | "grep_files" => Some(Self::Search),
-            "edit" | "edit_file" => Some(Self::Edit),
+            "list" => Some(Self::List),
+            "read" => Some(Self::Read),
+            "search" | "grep" => Some(Self::Search),
+            "edit" => Some(Self::Edit),
             "patch" | "apply_patch" => Some(Self::ApplyPatch),
-            "shell" | "exec_shell" | "exec" => Some(Self::ExecShell),
+            "bash" | "shell" | "exec" => Some(Self::Bash),
             _ => None,
         }
     }
@@ -109,6 +121,8 @@ pub struct EvalMetrics {
 pub struct EvalStep {
     pub kind: ScenarioStepKind,
     pub tool_name: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<&'static str>,
     pub success: bool,
     pub duration: Duration,
     pub error: Option<String>,
@@ -130,7 +144,7 @@ pub struct EvalHarnessConfig {
     pub scenario_name: String,
     /// If set, the harness will intentionally fail this step to test metrics.
     pub fail_step: Option<ScenarioStepKind>,
-    /// Shell command executed during the `exec_shell` step.
+    /// Shell command executed during the canonical `Bash.run` step.
     pub shell_command: String,
     /// Token that must appear in shell output for validation.
     pub shell_expect_token: String,
@@ -190,7 +204,7 @@ impl EvalHarness {
         let mut per_tool: BTreeMap<ScenarioStepKind, ToolStats> = BTreeMap::new();
 
         let list_output = self.run_step(ScenarioStepKind::List, &mut steps, &mut per_tool, || {
-            let entries = list_dir(workspace.path())?;
+            let entries = list_workspace(workspace.path())?;
             Ok(entries.join(", "))
         });
 
@@ -200,7 +214,7 @@ impl EvalHarness {
             } else {
                 seed.notes_path.clone()
             };
-            read_file(&path)
+            read_workspace_file(&path)
         });
 
         let search_output =
@@ -220,7 +234,7 @@ impl EvalHarness {
             } else {
                 seed.notes_path.clone()
             };
-            edit_file_append(&path, "edited = true")?;
+            append_workspace_file(&path, "edited = true")?;
             Ok("appended line".to_string())
         });
 
@@ -241,19 +255,14 @@ impl EvalHarness {
             },
         );
 
-        let shell_output = self.run_step(
-            ScenarioStepKind::ExecShell,
-            &mut steps,
-            &mut per_tool,
-            || {
-                let command = if self.config.fail_step == Some(ScenarioStepKind::ExecShell) {
-                    "command_that_does_not_exist".to_string()
-                } else {
-                    self.config.shell_command.clone()
-                };
-                exec_shell(workspace.path(), &command)
-            },
-        );
+        let shell_output = self.run_step(ScenarioStepKind::Bash, &mut steps, &mut per_tool, || {
+            let command = if self.config.fail_step == Some(ScenarioStepKind::Bash) {
+                "command_that_does_not_exist".to_string()
+            } else {
+                self.config.shell_command.clone()
+            };
+            run_bash(workspace.path(), &command)
+        });
 
         let duration = started_at.elapsed();
 
@@ -313,6 +322,7 @@ impl EvalHarness {
                 steps.push(EvalStep {
                     kind,
                     tool_name: kind.tool_name(),
+                    action: kind.action(),
                     success: true,
                     duration,
                     error: None,
@@ -333,6 +343,7 @@ impl EvalHarness {
                 steps.push(EvalStep {
                     kind,
                     tool_name: kind.tool_name(),
+                    action: kind.action(),
                     success: false,
                     duration,
                     error: Some(err_str.clone()),
@@ -355,7 +366,7 @@ impl EvalHarness {
 //
 // The `--record` flag writes one JSON object per line to a `.jsonl` file:
 //
-//     { "request": { "step": "list_dir", "kind": "List" },
+//     { "request": { "tool": "File", "action": "list", "kind": "List" },
 //       "response_events": [{ "type": "ok", "output": "…" }] }
 //
 // The mock LLM client replays these fixtures via
@@ -378,10 +389,7 @@ pub struct FixtureRecord {
 impl FixtureRecord {
     fn ok(kind: ScenarioStepKind, output: &str) -> Self {
         Self {
-            request: serde_json::json!({
-                "step": kind.tool_name(),
-                "kind": format!("{kind:?}"),
-            }),
+            request: Self::request(kind),
             response_events: vec![serde_json::json!({
                 "type": "ok",
                 "output": output,
@@ -391,15 +399,23 @@ impl FixtureRecord {
 
     fn err(kind: ScenarioStepKind, error: &str) -> Self {
         Self {
-            request: serde_json::json!({
-                "step": kind.tool_name(),
-                "kind": format!("{kind:?}"),
-            }),
+            request: Self::request(kind),
             response_events: vec![serde_json::json!({
                 "type": "error",
                 "error": error,
             })],
         }
+    }
+
+    fn request(kind: ScenarioStepKind) -> serde_json::Value {
+        let mut request = serde_json::json!({
+            "tool": kind.tool_name(),
+            "kind": format!("{kind:?}"),
+        });
+        if let Some(action) = kind.action() {
+            request["action"] = serde_json::Value::String(action.to_string());
+        }
+        request
     }
 }
 
@@ -532,7 +548,7 @@ fn summarize_workspace(root: &Path, list_output: Option<&str>) -> Result<Workspa
         && !output.trim().is_empty()
     {
         return Err(anyhow!(
-            "workspace appears empty after list_dir: {}",
+            "workspace appears empty after File.list: {}",
             output.trim()
         ));
     }
@@ -571,7 +587,7 @@ fn validate_outputs(
     search_ok && edit_ok && patch_ok && shell_ok
 }
 
-fn list_dir(path: &Path) -> Result<Vec<String>> {
+fn list_workspace(path: &Path) -> Result<Vec<String>> {
     let mut entries = Vec::new();
     let dir = fs::read_dir(path)
         .with_context(|| format!("failed to read directory: {}", path.display()))?;
@@ -585,7 +601,7 @@ fn list_dir(path: &Path) -> Result<Vec<String>> {
     Ok(entries)
 }
 
-fn read_file(path: &Path) -> Result<String> {
+fn read_workspace_file(path: &Path) -> Result<String> {
     fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))
 }
 
@@ -648,8 +664,8 @@ fn search_files(root: &Path, pattern: &str) -> Result<SearchResult> {
     Ok(SearchResult { matches })
 }
 
-fn edit_file_append(path: &Path, line: &str) -> Result<()> {
-    let mut content = read_file(path)?;
+fn append_workspace_file(path: &Path, line: &str) -> Result<()> {
+    let mut content = read_workspace_file(path)?;
     if !content.ends_with('\n') {
         content.push('\n');
     }
@@ -675,7 +691,7 @@ fn apply_patch(root: &Path, patch: &str) -> Result<()> {
     }
 
     let file_path = root.join(file_rel);
-    let original = read_file(&file_path)?;
+    let original = read_workspace_file(&file_path)?;
     let had_trailing_newline = original.ends_with('\n');
     let mut file_lines: Vec<String> = original.lines().map(|l| l.to_string()).collect();
 
@@ -736,7 +752,7 @@ fn apply_patch(root: &Path, patch: &str) -> Result<()> {
         .with_context(|| format!("failed to write patched file {}", file_path.display()))
 }
 
-fn exec_shell(root: &Path, command: &str) -> Result<String> {
+fn run_bash(root: &Path, command: &str) -> Result<String> {
     crate::shell_dispatcher::global_dispatcher().run_foreground(command, root)
 }
 

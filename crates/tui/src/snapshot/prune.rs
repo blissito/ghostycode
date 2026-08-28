@@ -25,7 +25,12 @@ pub fn prune_older_than(workspace: &Path, max_age: Duration) -> io::Result<usize
     }
     let repo = SnapshotRepo::open_or_init(workspace)?;
     let removed = repo.prune_older_than(max_age)?;
-    repo.prune_unreachable_objects()?;
+    // `git prune --expire=now` walks the whole object store — seconds on a
+    // large snapshot repo. Nothing removed means nothing newly unreachable,
+    // so skip the walk entirely on the common boot path (#3757).
+    if removed > 0 {
+        repo.prune_unreachable_objects()?;
+    }
     Ok(removed)
 }
 
@@ -33,14 +38,13 @@ pub fn prune_older_than(workspace: &Path, max_age: Duration) -> io::Result<usize
 mod tests {
     use super::*;
     use crate::test_support::lock_test_env;
-    use std::sync::MutexGuard;
     use tempfile::tempdir;
 
     /// Same guard shape as in `repo::tests` — pins HOME for the lifetime
     /// of one test under the process-wide env mutex.
     struct ScopedHome {
         prev: Option<std::ffi::OsString>,
-        _guard: MutexGuard<'static, ()>,
+        _guard: crate::test_support::TestEnvLock,
     }
     impl Drop for ScopedHome {
         fn drop(&mut self) {

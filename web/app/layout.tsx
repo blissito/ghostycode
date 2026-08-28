@@ -1,56 +1,17 @@
 import type { Metadata } from "next";
-import { Fraunces, IBM_Plex_Sans, JetBrains_Mono, Noto_Serif_SC } from "next/font/google";
-import "./globals.css";
+import { SITE_URL } from "@/lib/page-meta";
 
-const display = Fraunces({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-display",
-  display: "swap",
-});
-
-const body = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-body",
-  display: "swap",
-});
-
-const mono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-mono",
-  display: "swap",
-});
-
-// Noto Serif SC is heavy; load only what we need for decorative anchors.
-const cjk = Noto_Serif_SC({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  variable: "--font-cjk",
-  display: "swap",
-  preload: false,
-});
-
+/**
+ * Root metadata boundary. The per-locale `<html>`/`<body>`, fonts, and content
+ * metadata live in app/[locale]/layout.tsx; this root only exists to give every
+ * route — including the framework-generated `/_not-found` and the root-segment
+ * `opengraph-image` — a resolvable `metadataBase` so Next stops falling back to
+ * `http://localhost:3000` for social image URLs.
+ */
 export const metadata: Metadata = {
-  title: "Ghosty Code · DeepSeek V4 Agent Harness",
-  description:
-    "The most agentic harness for DeepSeek V4. Constitutional hierarchy, structured trust, verification, and recovery — rules, tools, and feedback loops that help the model keep working.",
-  metadataBase: new URL("https://ghosty.net"),
-  openGraph: {
-    title: "Ghosty Code",
-    description: "The most agentic harness for DeepSeek V4. Constitutional hierarchy, structured trust, verification, and recovery.",
-    url: "https://ghosty.net",
-    siteName: "Ghosty Code",
-    type: "website",
-  },
-  twitter: { card: "summary_large_image" },
+  metadataBase: new URL(SITE_URL),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable} ${cjk.variable}`}>
-      <body>{children}</body>
-    </html>
-  );
+  return children;
 }

@@ -17,6 +17,38 @@
         npm run check
         npm test
 
+.rust_workspace_gates_stage: &rust_workspace_gates_stage
+  name: rust workspace gates
+  # The all-feature TUI test crate is large enough that concurrent rustc and
+  # clippy processes or disposable test debug metadata can exceed the shared
+  # CNB runner's memory. Keep the full gate surface, but serialize Cargo,
+  # omit test-only debug tables, and use the established workspace-test stack
+  # size so deep runtime API tests do not abort on the platform default.
+  timeout: 45m
+  script: |
+    set -eu
+    export CARGO_BUILD_JOBS=1
+    export CARGO_PROFILE_TEST_DEBUG=0
+    ./scripts/release/check-versions.sh
+    ./scripts/release/check-ohos-deps.sh
+    cargo fmt --all -- --check
+    cargo check --workspace --all-targets --locked
+    cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+    # Hermetic HOME so libtest's shared process cannot see a populated
+    # ~/.ghosty/config.toml (#5355 config-fixture family). Tests stay in
+    # the suite; isolation is scheduling, not deletion.
+    hermetic_home="${TMPDIR:-/tmp}/cw-cnb-hermetic-home-$$"
+    mkdir -p "${hermetic_home}/.ghosty"
+    export HOME="${hermetic_home}"
+    export USERPROFILE="${hermetic_home}"
+    export GHOSTY_HOME="${hermetic_home}/.ghosty"
+    unset GHOSTY_CONFIG_PATH DEEPSEEK_CONFIG_PATH DEEPSEEK_HOME || true
+    RUST_MIN_STACK=16777216 cargo test --workspace --all-features --locked
+    # Parity gates as first-class steps so drift surfaces as a named failure,
+    # not a buried workspace-test entry. Mirrors release.yml's parity job.
+    cargo test -p ghosty-protocol --test parity_protocol --locked
+    cargo test -p ghosty-state --test parity_state --locked
+
 .linux_rust_gates: &linux_rust_gates
   name: linux rust gates
   runner:
@@ -34,25 +66,23 @@
           rustup component add rustfmt clippy
         fi
 
-    - name: rust workspace gates
-      script: |
-        set -eu
-        ./scripts/release/check-versions.sh
-        cargo fmt --all -- --check
-        cargo check --workspace --all-targets --locked
-        cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-        cargo test --workspace --all-features --locked
+    - *rust_workspace_gates_stage
 
     - name: linux npm wrapper smoke
+      # Full LTO can link silently for longer than CNB's default 10-minute
+      # no-output window. Keep the production profile and give the job enough
+      # time to emit its version and wrapper receipts.
+      timeout: 45m
       script: |
         set -eu
-        cargo build --release --locked -p ghosty-cli -p ghosty-tui
+        # The release profile uses full LTO and one codegen unit. Bound Cargo's
+        # parallelism so the final links cannot exhaust a shared CNB runner.
+        cargo build --jobs 2 --release --locked -p ghosty-cli
+        cp target/release/ghosty target/release/ghosty-tui
         export PATH="$PWD/target/release:$PATH"
         node scripts/release/npm-wrapper-smoke.js
         ./target/release/ghosty --version
         ./target/release/ghosty-tui --version
-        ./target/release/deepseek --version
-        ./target/release/deepseek-tui --version
 
 .linux_release_preflight: &linux_release_preflight
   name: linux release preflight
@@ -71,14 +101,7 @@
           rustup component add rustfmt clippy
         fi
 
-    - name: rust workspace gates
-      script: |
-        set -eu
-        ./scripts/release/check-versions.sh
-        cargo fmt --all -- --check
-        cargo check --workspace --all-targets --locked
-        cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-        cargo test --workspace --all-features --locked
+    - *rust_workspace_gates_stage
 
     - name: crate publish dry-run
       script: |
@@ -86,15 +109,20 @@
         ./scripts/release/publish-crates.sh dry-run
 
     - name: release binary smoke
+      # Full LTO can link silently for longer than CNB's default 10-minute
+      # no-output window. Keep the production profile and give the job enough
+      # time to emit its version and wrapper receipts.
+      timeout: 45m
       script: |
         set -eu
-        cargo build --release --locked -p ghosty-cli -p ghosty-tui
+        # Keep the production release profile intact while avoiding a burst of
+        # concurrent rustc/linker processes on the shared release runner.
+        cargo build --jobs 2 --release --locked -p ghosty-cli
+        cp target/release/ghosty target/release/ghosty-tui
         export PATH="$PWD/target/release:$PATH"
         node scripts/release/npm-wrapper-smoke.js
         ./target/release/ghosty --version
         ./target/release/ghosty-tui --version
-        ./target/release/deepseek --version
-        ./target/release/deepseek-tui --version
 
 main:
   push:
@@ -115,26 +143,39 @@ $:
     - docker:
         image: rust:1.88-bookworm
       stages:
-        - name: build linux x64 release assets
+        - name: build linux x64 release assets (static)
+          # The static full-LTO link can also outlive CNB's default no-output
+          # window. Do not weaken the release profile to keep the runner alive.
+          timeout: 45m
           script: |
             set -eu
 
             apt-get update
-            apt-get install -y git libdbus-1-dev nodejs pkg-config
+            apt-get install -y git musl-tools nodejs pkg-config
+            rustup target add x86_64-unknown-linux-musl
 
             ./scripts/release/check-versions.sh
-            cargo build --release --locked -p ghosty-cli -p ghosty-tui
+            ./scripts/release/check-ohos-deps.sh
+            checkout_sha="$(git rev-parse 'HEAD^{commit}')"
+            commit_sha="${CNB_COMMIT:-${checkout_sha}}"
+            if [ "$commit_sha" != "$checkout_sha" ]; then
+              echo "ERROR: CNB_COMMIT ${commit_sha} does not match checkout ${checkout_sha}" >&2
+              exit 1
+            fi
+            export GHOSTY_BUILD_SHA="$commit_sha"
+            cargo build --jobs 2 --release --locked \
+              --target x86_64-unknown-linux-musl \
+              -p ghosty-cli   # single binary
 
             mkdir -p target/cnb-release
-            cp target/release/ghosty target/cnb-release/ghosty-linux-x64
-            cp target/release/ghosty-tui target/cnb-release/ghosty-tui-linux-x64
-            cp target/release/deepseek target/cnb-release/deepseek-linux-x64
-            cp target/release/deepseek-tui target/cnb-release/deepseek-tui-linux-x64
+            BIN_DIR="target/x86_64-unknown-linux-musl/release"
+            cp "$BIN_DIR/ghosty" target/cnb-release/ghosty-linux-x64
+            cp "$BIN_DIR/ghosty" target/cnb-release/ghosty-tui-linux-x64
+            cp "$BIN_DIR/ghosty" target/cnb-release/ghosty-tui-linux-x64
             strip \
               target/cnb-release/ghosty-linux-x64 \
               target/cnb-release/ghosty-tui-linux-x64 \
-              target/cnb-release/deepseek-linux-x64 \
-              target/cnb-release/deepseek-tui-linux-x64 \
+              target/cnb-release/ghosty-tui-linux-x64 \
               || true
 
             (
@@ -142,10 +183,8 @@ $:
               sha256sum \
                 ghosty-linux-x64 \
                 ghosty-tui-linux-x64 \
-                deepseek-linux-x64 \
-                deepseek-tui-linux-x64 \
+                ghosty-tui-linux-x64 \
                 > ghosty-artifacts-sha256.txt
-              cp ghosty-artifacts-sha256.txt deepseek-artifacts-sha256.txt
             )
 
             tag_name="${CNB_BRANCH:-}"
@@ -153,7 +192,11 @@ $:
               tag_name="$(git describe --tags --exact-match 2>/dev/null || true)"
             fi
             version="${tag_name#v}"
-            commit_sha="${CNB_COMMIT:-$(git rev-parse HEAD)}"
+            cargo_version="$(grep -E '^version = "' Cargo.toml | head -n1 | sed -E 's/^version = "([^"]+)".*/\1/')"
+            if [ -n "$tag_name" ] && [ "$version" != "$cargo_version" ]; then
+              echo "ERROR: tag ${tag_name} does not match Cargo.toml version ${cargo_version}" >&2
+              exit 1
+            fi
             {
               echo "# ${tag_name:-CNB release}"
               echo
@@ -168,10 +211,8 @@ $:
               echo "Assets:"
               echo "- ghosty-linux-x64"
               echo "- ghosty-tui-linux-x64"
+              echo "- ghosty-tui-linux-x64 (v0.9.4 compatibility alias)"
               echo "- ghosty-artifacts-sha256.txt"
-              echo "- deepseek-linux-x64"
-              echo "- deepseek-tui-linux-x64"
-              echo "- deepseek-artifacts-sha256.txt"
             } > target/cnb-release/CNB_RELEASE.md
 
         - name: create cnb release
@@ -186,7 +227,5 @@ $:
             attachments:
               - target/cnb-release/ghosty-linux-x64
               - target/cnb-release/ghosty-tui-linux-x64
+              - target/cnb-release/ghosty-tui-linux-x64
               - target/cnb-release/ghosty-artifacts-sha256.txt
-              - target/cnb-release/deepseek-linux-x64
-              - target/cnb-release/deepseek-tui-linux-x64
-              - target/cnb-release/deepseek-artifacts-sha256.txt

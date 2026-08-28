@@ -3,6 +3,20 @@
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 
+#[cfg(windows)]
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+#[cfg(windows)]
+use windows::Win32::Foundation::{ERROR_MORE_DATA, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
+#[cfg(windows)]
+use windows::Win32::System::Environment::ExpandEnvironmentStringsW;
+#[cfg(windows)]
+use windows::Win32::System::Registry::{
+    HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, REG_EXPAND_SZ, REG_SZ, REG_VALUE_TYPE,
+    RegCloseKey, RegEnumValueW, RegOpenKeyExW,
+};
+#[cfg(windows)]
+use windows::core::{PCWSTR, PWSTR};
+
 /// Convert a string env map into owned OS strings for child env helpers.
 pub fn string_map_env(
     env: &HashMap<String, String>,
@@ -23,10 +37,10 @@ where
     V: AsRef<OsStr>,
 {
     let mut env = Vec::new();
+    #[cfg(windows)]
+    append_sanitized_child_env_candidates(&mut env, windows_registry_env_vars());
     for (key, value) in std::env::vars_os() {
-        if is_allowed_parent_env_key(&key) {
-            upsert_env(&mut env, key, value);
-        }
+        append_sanitized_child_env_candidate(&mut env, key, value);
     }
     for (key, value) in overrides {
         upsert_env(
@@ -35,6 +49,8 @@ where
             value.as_ref().to_os_string(),
         );
     }
+    #[cfg(windows)]
+    fill_windows_common_program_files(&mut env);
     env
 }
 
@@ -62,6 +78,7 @@ where
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 pub fn apply_to_pty_command<I, K, V>(cmd: &mut portable_pty::CommandBuilder, overrides: I)
 where
     I: IntoIterator<Item = (K, V)>,
@@ -96,6 +113,65 @@ where
             upsert_env(&mut env, key, value);
         }
     }
+    for (key, value) in overrides {
+        upsert_env(
+            &mut env,
+            key.as_ref().to_os_string(),
+            value.as_ref().to_os_string(),
+        );
+    }
+    env
+}
+
+/// Build the environment for a reviewed plugin-contributed MCP child.
+///
+/// Unlike user-authored MCP configuration, a plugin must name every extra
+/// environment source during trust review. Start from the ordinary
+/// secret-scrubbed child environment, remove ambient proxy variables whose
+/// URLs may themselves contain credentials, then apply only reviewed
+/// overrides. `NO_PROXY` remains safe routing metadata.
+#[cfg(test)]
+pub fn sanitized_plugin_mcp_env<I, K, V>(overrides: I) -> Vec<(OsString, OsString)>
+where
+    I: IntoIterator<Item = (K, V)>,
+    K: AsRef<OsStr>,
+    V: AsRef<OsStr>,
+{
+    sanitized_plugin_mcp_env_from(std::env::vars_os(), overrides)
+}
+
+/// Build a reviewed plugin child environment from an immutable host snapshot.
+///
+/// This is separate from `sanitized_plugin_mcp_env` so a repository-local
+/// dotenv file loaded after startup cannot add or replace inherited values.
+pub fn sanitized_plugin_mcp_env_from<B, BK, BV, I, K, V>(
+    base_environment: B,
+    overrides: I,
+) -> Vec<(OsString, OsString)>
+where
+    B: IntoIterator<Item = (BK, BV)>,
+    BK: AsRef<OsStr>,
+    BV: AsRef<OsStr>,
+    I: IntoIterator<Item = (K, V)>,
+    K: AsRef<OsStr>,
+    V: AsRef<OsStr>,
+{
+    let mut env = Vec::new();
+    for (key, value) in base_environment {
+        if is_allowed_parent_env_key(key.as_ref()) {
+            upsert_env(
+                &mut env,
+                key.as_ref().to_os_string(),
+                value.as_ref().to_os_string(),
+            );
+        }
+    }
+    env.retain(|(key, _)| {
+        !matches!(
+            normalize_key(key).as_str(),
+            "HTTP_PROXY" | "HTTPS_PROXY" | "ALL_PROXY" | "FTP_PROXY"
+        )
+    });
     for (key, value) in overrides {
         upsert_env(
             &mut env,
@@ -183,6 +259,9 @@ fn is_allowed_parent_env_key(key: &OsStr) -> bool {
             | "PROGRAMFILES"
             | "PROGRAMFILES(X86)"
             | "PROGRAMW6432"
+            | "COMMONPROGRAMFILES"
+            | "COMMONPROGRAMFILES(X86)"
+            | "COMMONPROGRAMW6432"
             | "PROCESSOR_ARCHITECTURE"
             | "NUGET_PACKAGES"
             | "NUGET_HTTP_CACHE_PATH"
@@ -194,11 +273,59 @@ fn is_allowed_parent_env_key(key: &OsStr) -> bool {
             | "NO_PROXY"
             | "ALL_PROXY"
             | "FTP_PROXY"
+            // Python uses these to pick stdio/default encodings when stdout is
+            // piped instead of attached to a Windows console (#4202).
+            | "PYTHONIOENCODING"
+            | "PYTHONUTF8"
+            // Rustup installs `cargo`/`rustc` as shims and resolves the real
+            // toolchain through these non-secret bootstrap paths. Dropping
+            // them makes an otherwise working Rust toolchain unusable in
+            // official Rust containers and other non-default installations.
+            | "CARGO_HOME"
+            | "RUSTUP_HOME"
+            | "RUSTUP_TOOLCHAIN"
     ) || normalized.starts_with("LC_")
         // .NET CLI / SDK configuration (DOTNET_ROOT, DOTNET_CLI_*,
         // DOTNET_NOLOGO, DOTNET_CLI_TELEMETRY_OPTOUT, …). Paths and flags
         // only — no secret-shaped values (#1857).
         || normalized.starts_with("DOTNET_")
+        || is_allowed_platform_path_like_child_env_key(&normalized)
+}
+
+#[cfg(windows)]
+fn is_allowed_platform_path_like_child_env_key(normalized: &str) -> bool {
+    is_allowed_path_like_child_env_key(normalized)
+}
+
+#[cfg(not(windows))]
+fn is_allowed_platform_path_like_child_env_key(_normalized: &str) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn is_allowed_path_like_child_env_key(normalized: &str) -> bool {
+    if is_secret_like_child_env_key(normalized) {
+        return false;
+    }
+    normalized.ends_with("_ROOT")
+        || normalized.ends_with("_DIR")
+        || normalized.ends_with("_HOME")
+        || normalized.ends_with("_PATH")
+        || normalized.ends_with("_PATHS")
+        || normalized.ends_with("SDKROOT")
+}
+
+#[cfg(windows)]
+fn is_secret_like_child_env_key(normalized: &str) -> bool {
+    normalized.contains("SECRET")
+        || normalized.contains("TOKEN")
+        || normalized.contains("PASSWORD")
+        || normalized.contains("PASSWD")
+        || normalized.contains("CREDENTIAL")
+        || normalized.contains("API_KEY")
+        || normalized.contains("ACCESS_KEY")
+        || normalized.contains("PRIVATE_KEY")
+        || normalized.ends_with("_KEY")
 }
 
 /// Allowlist for MCP stdio launches. Strict superset of
@@ -259,10 +386,193 @@ fn is_allowed_mcp_env_key(key: &OsStr) -> bool {
     false
 }
 
+#[cfg(windows)]
+fn append_sanitized_child_env_candidates<I, K, V>(
+    env: &mut Vec<(OsString, OsString)>,
+    candidates: I,
+) where
+    I: IntoIterator<Item = (K, V)>,
+    K: Into<OsString>,
+    V: Into<OsString>,
+{
+    for (key, value) in candidates {
+        append_sanitized_child_env_candidate(env, key.into(), value.into());
+    }
+}
+
+fn append_sanitized_child_env_candidate(
+    env: &mut Vec<(OsString, OsString)>,
+    key: OsString,
+    value: OsString,
+) {
+    if is_allowed_parent_env_key(&key) {
+        upsert_env(env, key, value);
+    }
+}
+
 fn upsert_env(env: &mut Vec<(OsString, OsString)>, key: OsString, value: OsString) {
     let normalized = normalize_key(&key);
     env.retain(|(existing, _)| normalize_key(existing) != normalized);
     env.push((key, value));
+}
+
+#[cfg(windows)]
+fn windows_registry_env_vars() -> Vec<(OsString, OsString)> {
+    let mut env = Vec::new();
+    append_windows_registry_env_key(
+        &mut env,
+        HKEY_LOCAL_MACHINE,
+        r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+    );
+    append_windows_registry_env_key(&mut env, HKEY_CURRENT_USER, "Environment");
+    env
+}
+
+#[cfg(windows)]
+fn append_windows_registry_env_key(env: &mut Vec<(OsString, OsString)>, root: HKEY, subkey: &str) {
+    let mut key = HKEY::default();
+    let subkey_wide = windows_wide_null(OsStr::new(subkey));
+    let open =
+        unsafe { RegOpenKeyExW(root, PCWSTR(subkey_wide.as_ptr()), None, KEY_READ, &mut key) };
+    if open != ERROR_SUCCESS {
+        return;
+    }
+
+    let mut index = 0;
+    loop {
+        match read_windows_registry_env_value(key, index) {
+            RegistryEnvValue::Value(name, value) => {
+                upsert_env(env, name, value);
+                index += 1;
+            }
+            RegistryEnvValue::Skip => {
+                index += 1;
+            }
+            RegistryEnvValue::Done => break,
+        }
+    }
+
+    let _ = unsafe { RegCloseKey(key) };
+}
+
+#[cfg(windows)]
+enum RegistryEnvValue {
+    Value(OsString, OsString),
+    Skip,
+    Done,
+}
+
+#[cfg(windows)]
+fn read_windows_registry_env_value(key: HKEY, index: u32) -> RegistryEnvValue {
+    let mut name = vec![0u16; 32_767];
+    let mut data = vec![0u8; 65_536];
+
+    loop {
+        let mut name_len = name.len() as u32;
+        let mut data_len = data.len() as u32;
+        let mut value_type = 0u32;
+        let status = unsafe {
+            RegEnumValueW(
+                key,
+                index,
+                Some(PWSTR(name.as_mut_ptr())),
+                &mut name_len,
+                None,
+                Some(&mut value_type),
+                Some(data.as_mut_ptr()),
+                Some(&mut data_len),
+            )
+        };
+
+        if status == ERROR_NO_MORE_ITEMS {
+            return RegistryEnvValue::Done;
+        }
+        if status == ERROR_MORE_DATA && resize_registry_data_buffer(&mut data, data_len) {
+            continue;
+        }
+        if status != ERROR_SUCCESS {
+            return RegistryEnvValue::Skip;
+        }
+        if value_type != REG_SZ.0 && value_type != REG_EXPAND_SZ.0 {
+            return RegistryEnvValue::Skip;
+        }
+
+        let name = OsString::from_wide(&name[..name_len as usize]);
+        let value = registry_utf16_value_from_bytes(&data[..data_len as usize]);
+        let value = if REG_VALUE_TYPE(value_type) == REG_EXPAND_SZ {
+            expand_windows_env_string(&value).unwrap_or(value)
+        } else {
+            value
+        };
+        return RegistryEnvValue::Value(name, value);
+    }
+}
+
+#[cfg(windows)]
+fn resize_registry_data_buffer(data: &mut Vec<u8>, required_len: u32) -> bool {
+    let Ok(required_len) = usize::try_from(required_len) else {
+        return false;
+    };
+    if required_len <= data.len() {
+        return false;
+    }
+    data.resize(required_len, 0);
+    true
+}
+
+#[cfg(windows)]
+fn registry_utf16_value_from_bytes(data: &[u8]) -> OsString {
+    let mut wide = data
+        .chunks_exact(2)
+        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect::<Vec<_>>();
+    while wide.last() == Some(&0) {
+        wide.pop();
+    }
+    OsString::from_wide(&wide)
+}
+
+#[cfg(windows)]
+fn expand_windows_env_string(value: &OsStr) -> Option<OsString> {
+    let src = windows_wide_null(value);
+    let required_len = unsafe { ExpandEnvironmentStringsW(PCWSTR(src.as_ptr()), None) };
+    if required_len == 0 {
+        return None;
+    }
+
+    let mut expanded = vec![0u16; required_len as usize];
+    let written = unsafe { ExpandEnvironmentStringsW(PCWSTR(src.as_ptr()), Some(&mut expanded)) };
+    if written == 0 || written > required_len {
+        return None;
+    }
+
+    let len = usize::try_from(written).ok()?.saturating_sub(1);
+    Some(OsString::from_wide(&expanded[..len]))
+}
+
+#[cfg(windows)]
+fn windows_wide_null(value: &OsStr) -> Vec<u16> {
+    value.encode_wide().chain(std::iter::once(0)).collect()
+}
+
+#[cfg(any(windows, test))]
+fn fill_windows_common_program_files(env: &mut Vec<(OsString, OsString)>) {
+    for (key, default) in [
+        ("CommonProgramFiles", r"C:\Program Files\Common Files"),
+        (
+            "CommonProgramFiles(x86)",
+            r"C:\Program Files (x86)\Common Files",
+        ),
+        ("CommonProgramW6432", r"C:\Program Files\Common Files"),
+    ] {
+        let existing = env
+            .iter()
+            .find(|(existing, _)| normalize_key(existing) == normalize_key(OsStr::new(key)))
+            .map(|(_, value)| value.to_string_lossy().trim().is_empty());
+        if existing.unwrap_or(true) {
+            upsert_env(env, OsString::from(key), OsString::from(default));
+        }
+    }
 }
 
 fn normalize_key(key: &OsStr) -> String {
@@ -272,12 +582,7 @@ fn normalize_key(key: &OsStr) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
+    use crate::test_support::EnvVarGuard;
 
     #[test]
     fn mcp_env_allowlist_inherits_base_keys() {
@@ -386,6 +691,9 @@ mod tests {
             "PROGRAMFILES",
             "PROGRAMFILES(X86)",
             "PROGRAMW6432",
+            "COMMONPROGRAMFILES",
+            "COMMONPROGRAMFILES(X86)",
+            "COMMONPROGRAMW6432",
             "PROCESSOR_ARCHITECTURE",
             "NUGET_PACKAGES",
             "DOTNET_ROOT",
@@ -404,6 +712,170 @@ mod tests {
         assert!(
             !is_allowed_parent_env_key(OsStr::new("NuGetPackageSourceCredentials_feed")),
             "NuGet credential vars must not be exported to child processes"
+        );
+    }
+
+    #[test]
+    fn child_env_allowlist_includes_python_stdio_encoding_vars() {
+        for key in ["PYTHONIOENCODING", "PYTHONUTF8", "pythonioencoding"] {
+            assert!(
+                is_allowed_parent_env_key(OsStr::new(key)),
+                "child env allowlist should include Python stdio encoding key {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn child_env_allowlist_includes_rust_toolchain_bootstrap_keys() {
+        for key in [
+            "CARGO_HOME",
+            "RUSTUP_HOME",
+            "RUSTUP_TOOLCHAIN",
+            "cargo_home",
+        ] {
+            assert!(
+                is_allowed_parent_env_key(OsStr::new(key)),
+                "child env allowlist should include Rust bootstrap key {key}"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn child_env_allowlist_includes_custom_path_like_vars_without_secrets() {
+        // #3572: SDK/toolchain roots created through Windows Environment
+        // Variables are often project-specific and cannot be exhaustively
+        // named in the static allowlist.
+        for key in [
+            "BIMRV_SDK_ROOT",
+            "ACME_TOOLCHAIN_HOME",
+            "PROJECT_SDK_DIR",
+            "CMAKE_PREFIX_PATH",
+            "ANDROID_SDKROOT",
+        ] {
+            assert!(
+                is_allowed_parent_env_key(OsStr::new(key)),
+                "child env allowlist should include path-like key {key}"
+            );
+        }
+
+        for key in [
+            "OPENAI_API_KEY",
+            "GITHUB_TOKEN",
+            "MY_SECRET_ROOT",
+            "SERVICE_PASSWORD_DIR",
+            "AWS_ACCESS_KEY_ID",
+            "PRIVATE_KEY_PATH",
+            "NuGetPackageSourceCredentials_feed",
+        ] {
+            assert!(
+                !is_allowed_parent_env_key(OsStr::new(key)),
+                "secret-like key {key} must not be exported to child processes"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn sanitized_child_env_preserves_custom_sdk_root_vars() {
+        let _guard = crate::test_support::lock_test_env();
+        let _sdk = EnvVarGuard::set("BIMRV_SDK_ROOT", r"F:\Lib\BimRv27.5");
+        let _secret = EnvVarGuard::set("MY_SECRET_ROOT", r"F:\Secrets");
+
+        let env = sanitized_child_env(std::iter::empty::<(OsString, OsString)>());
+
+        assert!(
+            env.iter()
+                .any(|(key, value)| key == "BIMRV_SDK_ROOT" && value == r"F:\Lib\BimRv27.5"),
+            "child env should preserve custom SDK roots"
+        );
+        assert!(
+            env.iter().all(|(key, _)| key != "MY_SECRET_ROOT"),
+            "secret-like path vars must still be dropped"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_registry_env_candidates_preserve_custom_sdk_roots() {
+        use windows::Win32::System::Registry::{
+            HKEY_CURRENT_USER, REG_SZ, RegCreateKeyW, RegDeleteTreeW, RegSetValueExW,
+        };
+
+        let subkey = format!(r"Software\GhostyCodeTest\child_env_{}", std::process::id());
+        let subkey_wide = windows_wide_null(OsStr::new(&subkey));
+        let mut key = HKEY::default();
+        let created =
+            unsafe { RegCreateKeyW(HKEY_CURRENT_USER, PCWSTR(subkey_wide.as_ptr()), &mut key) };
+        assert_eq!(created, ERROR_SUCCESS);
+
+        set_registry_string_value(key, "BIMRV_SDK_ROOT", r"F:\Lib\BimRv27.5");
+        set_registry_string_value(key, "MY_SECRET_ROOT", r"F:\Secrets");
+        let _ = unsafe { RegCloseKey(key) };
+
+        let mut candidates = Vec::new();
+        append_windows_registry_env_key(&mut candidates, HKEY_CURRENT_USER, &subkey);
+        let mut env = Vec::new();
+        append_sanitized_child_env_candidates(&mut env, candidates);
+
+        let _ = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, PCWSTR(subkey_wide.as_ptr())) };
+
+        assert!(
+            env.iter()
+                .any(|(key, value)| key == "BIMRV_SDK_ROOT" && value == r"F:\Lib\BimRv27.5"),
+            "registry child env should preserve custom SDK roots"
+        );
+        assert!(
+            env.iter().all(|(key, _)| key != "MY_SECRET_ROOT"),
+            "secret-like registry vars must still be dropped"
+        );
+
+        fn set_registry_string_value(key: HKEY, name: &str, value: &str) {
+            let name_wide = windows_wide_null(OsStr::new(name));
+            let data = value
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .flat_map(u16::to_le_bytes)
+                .collect::<Vec<_>>();
+            let status = unsafe {
+                RegSetValueExW(key, PCWSTR(name_wide.as_ptr()), None, REG_SZ, Some(&data))
+            };
+            assert_eq!(status, ERROR_SUCCESS);
+        }
+    }
+
+    #[test]
+    fn windows_common_program_files_defaults_replace_empty_values() {
+        let mut env = vec![
+            (OsString::from("CommonProgramFiles"), OsString::new()),
+            (
+                OsString::from("CommonProgramFiles(x86)"),
+                OsString::from(" "),
+            ),
+            (
+                OsString::from("CommonProgramW6432"),
+                OsString::from(r"D:\Common Files"),
+            ),
+        ];
+
+        fill_windows_common_program_files(&mut env);
+
+        let get = |name: &str| {
+            env.iter()
+                .find(|(key, _)| normalize_key(key) == normalize_key(OsStr::new(name)))
+                .map(|(_, value)| value.to_string_lossy().into_owned())
+        };
+        assert_eq!(
+            get("CommonProgramFiles").as_deref(),
+            Some(r"C:\Program Files\Common Files")
+        );
+        assert_eq!(
+            get("CommonProgramFiles(x86)").as_deref(),
+            Some(r"C:\Program Files (x86)\Common Files")
+        );
+        assert_eq!(
+            get("CommonProgramW6432").as_deref(),
+            Some(r"D:\Common Files")
         );
     }
 
@@ -470,18 +942,10 @@ mod tests {
 
     #[test]
     fn sanitized_mcp_env_passes_through_node_bootstrap() {
-        let _guard = env_lock().lock().expect("env lock");
-        let prev = std::env::var_os("NVM_DIR");
-        unsafe {
-            std::env::set_var("NVM_DIR", "/tmp/test-nvm");
-        }
+        let _guard = crate::test_support::lock_test_env();
+        let _nvm_dir = EnvVarGuard::set("NVM_DIR", "/tmp/test-nvm");
 
         let env = sanitized_mcp_env(std::iter::empty::<(OsString, OsString)>());
-
-        match prev {
-            Some(value) => unsafe { std::env::set_var("NVM_DIR", value) },
-            None => unsafe { std::env::remove_var("NVM_DIR") },
-        }
 
         let nvm_dir = env
             .iter()
@@ -492,22 +956,10 @@ mod tests {
 
     #[test]
     fn sanitized_mcp_env_drops_unrelated_secret_like_values() {
-        let _guard = env_lock().lock().expect("env lock");
-        let prev = std::env::var_os("DEEPSEEK_MCP_TEST_SECRET");
-        unsafe {
-            std::env::set_var("DEEPSEEK_MCP_TEST_SECRET", "should-not-leak");
-        }
+        let _guard = crate::test_support::lock_test_env();
+        let _secret = EnvVarGuard::set("DEEPSEEK_MCP_TEST_SECRET", "should-not-leak");
 
         let env = sanitized_mcp_env(std::iter::empty::<(OsString, OsString)>());
-
-        match prev {
-            Some(value) => unsafe {
-                std::env::set_var("DEEPSEEK_MCP_TEST_SECRET", value);
-            },
-            None => unsafe {
-                std::env::remove_var("DEEPSEEK_MCP_TEST_SECRET");
-            },
-        }
 
         assert!(
             env.iter().all(|(key, _)| key != "DEEPSEEK_MCP_TEST_SECRET"),
@@ -516,23 +968,34 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_plugin_mcp_env_requires_explicit_proxy_provenance() {
+        let _guard = crate::test_support::lock_test_env();
+        let synthetic_proxy = format!(
+            "{}://{}:{}@{}",
+            "http", "fixture-user", "fixture-password", "127.0.0.1:9"
+        );
+        let _proxy = EnvVarGuard::set("HTTP_PROXY", synthetic_proxy);
+
+        let ambient = sanitized_plugin_mcp_env(std::iter::empty::<(OsString, OsString)>());
+        let explicit = sanitized_plugin_mcp_env([("HTTP_PROXY", "http://proxy.invalid")]);
+
+        assert!(
+            ambient
+                .iter()
+                .all(|(key, _)| normalize_key(key) != "HTTP_PROXY"),
+            "reviewed plugins must not inherit a credential-capable proxy URL"
+        );
+        assert!(explicit.iter().any(|(key, value)| {
+            normalize_key(key) == "HTTP_PROXY" && value == "http://proxy.invalid"
+        }));
+    }
+
+    #[test]
     fn sanitized_child_env_drops_parent_secret_like_values() {
-        let _guard = env_lock().lock().expect("env lock");
-        let previous = std::env::var_os("DEEPSEEK_CHILD_ENV_TEST_SECRET");
-        unsafe {
-            std::env::set_var("DEEPSEEK_CHILD_ENV_TEST_SECRET", "parent-secret");
-        }
+        let _guard = crate::test_support::lock_test_env();
+        let _secret = EnvVarGuard::set("DEEPSEEK_CHILD_ENV_TEST_SECRET", "parent-secret");
 
         let env = sanitized_child_env(std::iter::empty::<(OsString, OsString)>());
-
-        match previous {
-            Some(value) => unsafe {
-                std::env::set_var("DEEPSEEK_CHILD_ENV_TEST_SECRET", value);
-            },
-            None => unsafe {
-                std::env::remove_var("DEEPSEEK_CHILD_ENV_TEST_SECRET");
-            },
-        }
 
         assert!(
             env.iter()
@@ -542,22 +1005,10 @@ mod tests {
 
     #[test]
     fn explicit_child_env_values_win_over_parent_allowlist() {
-        let _guard = env_lock().lock().expect("env lock");
-        let previous = std::env::var_os("PATH");
-        unsafe {
-            std::env::set_var("PATH", "/parent/bin");
-        }
+        let _guard = crate::test_support::lock_test_env();
+        let _path = EnvVarGuard::set("PATH", "/parent/bin");
 
         let env = sanitized_child_env([(OsString::from("PATH"), OsString::from("/explicit/bin"))]);
-
-        match previous {
-            Some(value) => unsafe {
-                std::env::set_var("PATH", value);
-            },
-            None => unsafe {
-                std::env::remove_var("PATH");
-            },
-        }
 
         let path = env
             .iter()
@@ -568,37 +1019,12 @@ mod tests {
 
     #[test]
     fn sanitized_child_env_preserves_windows_toolchain_vars() {
-        let _guard = env_lock().lock().expect("env lock");
-        let prev_lib = std::env::var_os("LIB");
-        let prev_include = std::env::var_os("INCLUDE");
-        let prev_sdk = std::env::var_os("WINDOWSSDKDIR");
-        // SAFETY: serialised by env_lock above. Restoring after the
-        // assertion is also under the same guard so concurrent tests
-        // never see our staged values.
-        unsafe {
-            std::env::set_var("LIB", r"C:\sdk\lib");
-            std::env::set_var("INCLUDE", r"C:\sdk\include");
-            std::env::set_var("WINDOWSSDKDIR", r"C:\sdk");
-        }
+        let _guard = crate::test_support::lock_test_env();
+        let _lib = EnvVarGuard::set("LIB", r"C:\sdk\lib");
+        let _include = EnvVarGuard::set("INCLUDE", r"C:\sdk\include");
+        let _sdk = EnvVarGuard::set("WINDOWSSDKDIR", r"C:\sdk");
 
         let env = sanitized_child_env(std::iter::empty::<(OsString, OsString)>());
-
-        // Restore prior state before asserting so a panic still leaves
-        // the process env clean for the next test.
-        unsafe {
-            match prev_lib {
-                Some(value) => std::env::set_var("LIB", value),
-                None => std::env::remove_var("LIB"),
-            }
-            match prev_include {
-                Some(value) => std::env::set_var("INCLUDE", value),
-                None => std::env::remove_var("INCLUDE"),
-            }
-            match prev_sdk {
-                Some(value) => std::env::set_var("WINDOWSSDKDIR", value),
-                None => std::env::remove_var("WINDOWSSDKDIR"),
-            }
-        }
 
         assert!(
             env.iter()

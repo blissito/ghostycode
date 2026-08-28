@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Ghosty Code Mobile</title>
+  <title>Ghosty Mobile</title>
   <style>
     :root {
       color-scheme: dark;
@@ -207,7 +207,7 @@
 </head>
 <body>
   <header>
-    <h1>Ghosty Code Mobile</h1>
+    <h1>Ghosty Mobile</h1>
     <button id="refresh" title="Refresh threads">Refresh</button>
   </header>
 
@@ -261,6 +261,9 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const MAX_VISIBLE_EVENTS = 100;
+    const TOKEN_STORAGE_KEY = "ghosty_runtime_token";
+    const TOKEN_COOKIE = "ghosty_runtime_token";
     const state = {
       threadId: "",
       activeTurnId: "",
@@ -275,17 +278,32 @@
     }
 
     function token() {
-      return $("token").value;
+      return $("token").value.trim();
+    }
+
+    function setRuntimeTokenCookie(value) {
+      const attrs = "; Path=/; SameSite=Strict";
+      if (!value) {
+        document.cookie = TOKEN_COOKIE + "=; Max-Age=0" + attrs;
+        return;
+      }
+      document.cookie = TOKEN_COOKIE + "=" + encodeURIComponent(value) + attrs;
     }
 
     function takeTokenFromUrl() {
-      const params = new URLSearchParams(location.search);
+      const hash = location.hash.startsWith("#") ? location.hash.slice(1) : "";
+      const params = new URLSearchParams(hash);
       const urlToken = params.get("token");
       if (!urlToken) return;
-      localStorage.setItem("ghosty_runtime_token", urlToken);
+      localStorage.setItem(TOKEN_STORAGE_KEY, urlToken);
+      setRuntimeTokenCookie(urlToken);
       params.delete("token");
-      const qs = params.toString();
-      history.replaceState(null, "", location.pathname + (qs ? "?" + qs : ""));
+      const nextHash = params.toString();
+      history.replaceState(
+        null,
+        "",
+        location.pathname + location.search + (nextHash ? "#" + nextHash : "")
+      );
     }
 
     function headers(extra = {}) {
@@ -349,7 +367,6 @@
       }
       if (name === "turn.lifecycle") return "Turn status: " + (payload.status || "");
       if (name === "turn.completed") return "Turn completed";
-      if (name === "coherence.state") return JSON.stringify(payload, null, 2);
       return JSON.stringify(payload, null, 2);
     }
 
@@ -359,6 +376,13 @@
       const approvalId = payload.approval_id || payload.id;
       if (!approvalId) return null;
       return { id: approvalId };
+    }
+
+    function pruneVisibleEvents() {
+      const events = $("events");
+      while (events.childElementCount > MAX_VISIBLE_EVENTS) {
+        events.firstElementChild.remove();
+      }
     }
 
     async function decideApproval(approvalId, decision, container) {
@@ -408,8 +432,10 @@
       }
 
       $("events").appendChild(item);
+      pruneVisibleEvents();
       state.eventCount += 1;
-      $("event-count").textContent = state.eventCount + " events";
+      const visible = Math.min(state.eventCount, MAX_VISIBLE_EVENTS);
+      $("event-count").textContent = visible + " of " + state.eventCount + " events";
       $("events").scrollTop = $("events").scrollHeight;
     }
 
@@ -455,7 +481,8 @@
       $("active-title").textContent = title || id;
       $("events").innerHTML = "";
       if (state.source) state.source.close();
-      const qs = "?since_seq=0" + (token() ? "&token=" + encodeURIComponent(token()) : "");
+      if (token()) setRuntimeTokenCookie(token());
+      const qs = "?since_seq=0&replay_limit=" + MAX_VISIBLE_EVENTS;
       const source = new EventSource("/v1/threads/" + encodeURIComponent(id) + "/events" + qs);
       state.source = source;
       const names = [
@@ -472,8 +499,7 @@
         "approval.required",
         "approval.decided",
         "approval.timeout",
-        "sandbox.denied",
-        "coherence.state"
+        "sandbox.denied"
       ];
       for (const name of names) {
         source.addEventListener(name, (ev) => {
@@ -529,9 +555,11 @@
 
     async function boot() {
       takeTokenFromUrl();
-      $("token").value = localStorage.getItem("ghosty_runtime_token") || "";
+      $("token").value = localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+      if (token()) setRuntimeTokenCookie(token());
       $("save-token").onclick = async () => {
-        localStorage.setItem("ghosty_runtime_token", token());
+        localStorage.setItem(TOKEN_STORAGE_KEY, token());
+        setRuntimeTokenCookie(token());
         await loadThreads().catch((err) => setStatus(err.message, "bad"));
       };
       $("refresh").onclick = () => loadThreads().catch((err) => setStatus(err.message, "bad"));

@@ -1,0 +1,274 @@
+use std::collections::HashMap;
+use std::fmt;
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+
+use super::activation::{PluginActivationCapability, PluginActivationPolicy};
+use super::manifest::{
+    PluginCompatibility, PluginInventory, PluginManifest, ResolvedPluginComponents,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginScope {
+    Builtin,
+    User,
+    Workspace,
+}
+
+impl PluginScope {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Builtin => "builtin",
+            Self::User => "user",
+            Self::Workspace => "workspace",
+        }
+    }
+}
+
+impl fmt::Display for PluginScope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginOrigin {
+    Builtin,
+    GhostyCodeHome,
+    Workspace,
+}
+
+impl PluginOrigin {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Builtin => "ghosty-builtin",
+            Self::GhostyCodeHome => "ghosty-home",
+            Self::Workspace => "workspace-ghosty",
+        }
+    }
+}
+
+impl fmt::Display for PluginOrigin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PluginId(pub String);
+
+impl PluginId {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Persistable proof of the exact reviewed plugin authority attached to a
+/// Skill or MCP server. Runtime contexts keep this receipt instead of a
+/// pointer to mutable process-global discovery state, and revalidate it at
+/// every side-effect boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PluginAuthority {
+    pub plugin_id: PluginId,
+    pub plugin_name: String,
+    pub workspace: PathBuf,
+    pub state_path: PathBuf,
+    pub source_manifest: PathBuf,
+    pub staged_manifest: PathBuf,
+    pub content_hash: String,
+    pub capability_hash: String,
+    /// Monotonic generation of this plugin's persisted authority. Any trust,
+    /// enablement, disablement, or revocation transition invalidates receipts
+    /// held by another process immediately, even when hashes are unchanged.
+    pub state_generation: u64,
+}
+
+impl fmt::Display for PluginId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginDiagnosticLevel {
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginDiagnostic {
+    pub level: PluginDiagnosticLevel,
+    pub code: &'static str,
+    pub message: String,
+    pub path: Option<PathBuf>,
+}
+
+impl PluginDiagnostic {
+    #[must_use]
+    pub fn warning(code: &'static str, message: impl Into<String>, path: Option<PathBuf>) -> Self {
+        Self {
+            level: PluginDiagnosticLevel::Warning,
+            code,
+            message: message.into(),
+            path,
+        }
+    }
+
+    #[must_use]
+    pub fn error(code: &'static str, message: impl Into<String>, path: Option<PathBuf>) -> Self {
+        Self {
+            level: PluginDiagnosticLevel::Error,
+            code,
+            message: message.into(),
+            path,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginTrustStatus {
+    Trusted,
+    NeverReviewed,
+    ContentChanged,
+    CapabilitiesChanged,
+}
+
+impl PluginTrustStatus {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Trusted => "trusted",
+            Self::NeverReviewed => "not-reviewed",
+            Self::ContentChanged => "content-changed",
+            Self::CapabilitiesChanged => "capabilities-changed",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PluginSkillSnapshot {
+    pub name: String,
+    pub description: String,
+    pub localized_descriptions: HashMap<String, String>,
+    pub invocation: crate::skills::SkillInvocation,
+    pub aliases: Vec<String>,
+    pub body: String,
+    pub path: PathBuf,
+    /// Digest of the exact UTF-8 bytes parsed into this snapshot. This is the
+    /// corresponding entry in the reviewed bundle's file-hash inventory.
+    pub source_hash: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct LoadedPlugin {
+    pub id: PluginId,
+    pub manifest: PluginManifest,
+    pub base_path: PathBuf,
+    pub canonical_root: PathBuf,
+    /// Ghosty-owned, content-addressed copy used for active execution.
+    /// `None` means the reviewed bundle has not been staged safely and cannot
+    /// become active even if an older state file says it was enabled.
+    pub staged_root: Option<PathBuf>,
+    pub scope: PluginScope,
+    pub origin: PluginOrigin,
+    pub enabled: bool,
+    pub trust_status: PluginTrustStatus,
+    pub applicable: bool,
+    pub inventory: PluginInventory,
+    pub components: ResolvedPluginComponents,
+    pub content_hash: String,
+    pub capability_hash: String,
+    pub state_generation: u64,
+    pub skill_snapshots: Vec<PluginSkillSnapshot>,
+    pub diagnostics: Vec<PluginDiagnostic>,
+}
+
+impl LoadedPlugin {
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.manifest.plugin.name
+    }
+
+    #[must_use]
+    pub fn trusted(&self) -> bool {
+        self.trust_status == PluginTrustStatus::Trusted
+    }
+
+    #[must_use]
+    pub fn compatibility(&self) -> PluginCompatibility {
+        self.inventory.compatibility()
+    }
+
+    #[must_use]
+    pub fn active(&self) -> bool {
+        self.enabled
+            && self.trusted()
+            && self.staged_root.is_some()
+            && self.applicable
+            && self.inventory.can_activate_supported_components()
+            && !self
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.level == PluginDiagnosticLevel::Error)
+    }
+
+    /// Bundle-wide `active()` is not enough at a consumption boundary. Skills
+    /// must request Skills; each MCP server must request its stdio or remote
+    /// transport. A later policy that drops an adapter refuses that adapter
+    /// even if the bundle stays active for another supported surface.
+    #[must_use]
+    pub fn component_active(&self, capability: PluginActivationCapability) -> bool {
+        self.active() && PluginActivationPolicy::current().is_supported(capability)
+    }
+
+    #[must_use]
+    pub fn authority(&self, state_path: PathBuf, workspace: PathBuf) -> Option<PluginAuthority> {
+        let staged_root = self.staged_root.as_ref()?;
+        // The staged tree mirrors the source bundle byte-for-byte, so both
+        // share one manifest file name (`plugin.json` or legacy
+        // `plugin.toml`). Fall back to the legacy name for synthetic
+        // instances whose roots are not on disk.
+        let manifest_name = super::agent_plugin::resolve_manifest_path(&self.canonical_root)
+            .and_then(|path| path.file_name().map(|name| name.to_os_string()))
+            .unwrap_or_else(|| std::ffi::OsString::from("plugin.toml"));
+        Some(PluginAuthority {
+            plugin_id: self.id.clone(),
+            plugin_name: self.name().to_string(),
+            workspace,
+            state_path,
+            source_manifest: self.canonical_root.join(&manifest_name),
+            staged_manifest: staged_root.join(&manifest_name),
+            content_hash: self.content_hash.clone(),
+            capability_hash: self.capability_hash.clone(),
+            state_generation: self.state_generation,
+        })
+    }
+
+    #[must_use]
+    pub fn state_label(&self) -> &'static str {
+        if self.active() {
+            "active"
+        } else if !self.enabled {
+            "disabled"
+        } else if !self.trusted() {
+            "enabled-untrusted"
+        } else if self.staged_root.is_none() {
+            "unstaged"
+        } else if !self.applicable {
+            "inapplicable"
+        } else if !self.inventory.can_activate_supported_components() {
+            "unsupported"
+        } else {
+            "inactive"
+        }
+    }
+}

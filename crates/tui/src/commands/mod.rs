@@ -1,40 +1,38 @@
 //! Slash command registry and dispatch system
 //!
 //! This module provides a modular command system inspired by Codex-rs.
-//! Commands are organized by category and dispatched through a central registry.
+//! Commands are organized by category and dispatched through a central strategy
+//! registry. Built-in handlers live in group-owned areas under [`groups`]; this
+//! module keeps registry construction, user-command precedence, and the
+//! fall-through behaviour.
 
-mod anchor;
-mod attachment;
-mod balance;
-mod change;
-mod config;
-mod core;
-mod debug;
-mod feedback;
-mod goal;
-mod hooks;
-mod init;
-mod jobs;
-mod mcp;
-mod memory;
-mod network;
-mod note;
-mod provider;
-mod queue;
-mod rename;
-mod restore;
-mod review;
-mod session;
-pub mod share;
-mod skills;
-mod stash;
-mod status;
-mod task;
+mod contract;
+pub mod discovery;
+mod groups;
+pub mod traits;
 pub mod user_commands;
+pub mod user_registry;
 
-use std::fmt::Write as _;
+#[cfg(test)]
+#[path = "epic_dispatch_acceptance.rs"]
+mod epic_dispatch_acceptance;
 
-use crate::localization::{Locale, MessageId, tr};
+#[cfg(test)]
+#[path = "epic_discovery_acceptance.rs"]
+mod epic_discovery_acceptance;
+
+use std::sync::OnceLock;
+
+pub use traits::CommandInfo;
+
+// Long-standing public paths that predate the group layout.
+pub use groups::project::share;
+#[cfg(test)]
+pub(crate) use groups::session::rename_with_manager as rename_session_with_manager;
+
+// Voice capture plumbing shared with the hotbar and the UI event loop.
+pub use groups::core::voice;
+
 use crate::tui::app::{App, AppAction};
 
 /// Result of executing a command
@@ -77,7 +75,6 @@ impl CommandResult {
     }
 
     /// Create a result with both message and action
-    #[allow(dead_code)]
     pub fn with_message_and_action(msg: impl Into<String>, action: AppAction) -> Self {
         Self {
             message: Some(msg.into()),
@@ -96,582 +93,215 @@ impl CommandResult {
     }
 }
 
-/// Command metadata for help and autocomplete.
+static REGISTRY: OnceLock<traits::CommandRegistry> = OnceLock::new();
+
+fn build_registry() -> traits::CommandRegistry {
+    let mut registry = traits::CommandRegistry::empty();
+    for &group in groups::all_command_groups() {
+        registry.register_group(group);
+    }
+    #[cfg(test)]
+    {
+        registry.register_test_only(feat015_ctx_command());
+    }
+    registry
+}
+
+/// FEAT-015 test-only contextual command (D6).
 ///
-/// The English description lives in `localization::english` (private), keyed
-/// by `description_id`. Callers resolve a localized description through
-/// [`CommandInfo::description_for`] which delegates to
-/// [`crate::localization::tr`].
-#[derive(Debug, Clone, Copy)]
-pub struct CommandInfo {
-    pub name: &'static str,
-    pub aliases: &'static [&'static str],
-    pub usage: &'static str,
-    pub description_id: MessageId,
-}
+/// Registered into the global registry only in test builds; the production
+/// registry is untouched. The command implements the portable contract
+/// `RegisterCommand` shape, and its handler cannot name concrete `App`; the
+/// TUI bridge resolves metadata and dispatches it through public `execute()`.
+#[cfg(test)]
+struct Feat015TestCommand;
 
-impl CommandInfo {
-    pub fn requires_argument(&self) -> bool {
-        self.usage.contains('<') || self.usage.contains('[')
+#[cfg(test)]
+impl ghosty_command_contract::metadata::RegisterCommand<CommandResult> for Feat015TestCommand {
+    fn info() -> &'static ghosty_command_contract::metadata::CommandInfo {
+        static INFO: ghosty_command_contract::metadata::CommandInfo =
+            ghosty_command_contract::metadata::CommandInfo {
+                name: "feat015ctx",
+                aliases: &[],
+                usage: "/feat015ctx",
+                description_key: "cmd_workspace_description",
+            };
+        &INFO
     }
 
-    pub fn palette_command(&self) -> String {
-        if self.requires_argument() {
-            format!("/{} ", self.name)
-        } else {
-            format!("/{}", self.name)
-        }
-    }
-
-    pub fn description_for(&self, locale: Locale) -> &'static str {
-        tr(locale, self.description_id)
-    }
-
-    pub fn palette_description_for(&self, locale: Locale) -> String {
-        let desc = self.description_for(locale);
-        if self.aliases.is_empty() {
-            desc.to_string()
-        } else {
-            format!("{}  aliases: {}", desc, self.aliases.join(", "))
-        }
+    fn handler() -> ghosty_command_contract::handler::CommandHandler<CommandResult> {
+        ghosty_command_contract::handler::CommandHandler::Contextual(feat015_contextual)
     }
 }
 
-/// All registered commands
-pub const COMMANDS: &[CommandInfo] = &[
-    // Core commands
-    CommandInfo {
-        name: "anchor",
-        aliases: &["maodian"],
-        usage: "/anchor <text> | /anchor list | /anchor remove <n>",
-        description_id: MessageId::CmdAnchorDescription,
-    },
-    CommandInfo {
-        name: "help",
-        aliases: &["?", "bangzhu", "帮助"],
-        usage: "/help [command]",
-        description_id: MessageId::CmdHelpDescription,
-    },
-    CommandInfo {
-        name: "clear",
-        aliases: &["qingping"],
-        usage: "/clear",
-        description_id: MessageId::CmdClearDescription,
-    },
-    CommandInfo {
-        name: "exit",
-        aliases: &["quit", "q", "tuichu"],
-        usage: "/exit",
-        description_id: MessageId::CmdExitDescription,
-    },
-    CommandInfo {
-        name: "model",
-        aliases: &["moxing"],
-        usage: "/model [name]",
-        description_id: MessageId::CmdModelDescription,
-    },
-    CommandInfo {
-        name: "models",
-        aliases: &["moxingliebiao"],
-        usage: "/models",
-        description_id: MessageId::CmdModelsDescription,
-    },
-    CommandInfo {
-        name: "provider",
-        aliases: &[],
-        usage: "/provider [name] [model]",
-        description_id: MessageId::CmdProviderDescription,
-    },
-    CommandInfo {
-        name: "queue",
-        aliases: &["queued"],
-        usage: "/queue [list|edit <n>|drop <n>|clear]",
-        description_id: MessageId::CmdQueueDescription,
-    },
-    CommandInfo {
-        name: "stash",
-        aliases: &["park"],
-        usage: "/stash [list|pop|clear]",
-        description_id: MessageId::CmdStashDescription,
-    },
-    CommandInfo {
-        name: "hooks",
-        aliases: &["hook", "gouzi"],
-        usage: "/hooks [list|events]",
-        description_id: MessageId::CmdHooksDescription,
-    },
-    CommandInfo {
-        name: "subagents",
-        aliases: &["agents", "zhinengti"],
-        usage: "/subagents",
-        description_id: MessageId::CmdSubagentsDescription,
-    },
-    CommandInfo {
-        name: "agent",
-        aliases: &["daili"],
-        usage: "/agent [N] <task>",
-        description_id: MessageId::CmdAgentDescription,
-    },
-    CommandInfo {
-        name: "links",
-        aliases: &["dashboard", "api", "lianjie"],
-        usage: "/links",
-        description_id: MessageId::CmdLinksDescription,
-    },
-    CommandInfo {
-        name: "feedback",
-        aliases: &[],
-        usage: "/feedback [bug|feature|security]",
-        description_id: MessageId::CmdFeedbackDescription,
-    },
-    CommandInfo {
-        name: "home",
-        aliases: &["stats", "overview", "zhuye", "shouye"],
-        usage: "/home",
-        description_id: MessageId::CmdHomeDescription,
-    },
-    CommandInfo {
-        name: "workspace",
-        aliases: &["cwd"],
-        usage: "/workspace [path]",
-        description_id: MessageId::CmdWorkspaceDescription,
-    },
-    CommandInfo {
-        name: "note",
-        aliases: &[],
-        usage: "/note [add|list|show|edit|remove|clear|path]",
-        description_id: MessageId::CmdNoteDescription,
-    },
-    CommandInfo {
-        name: "memory",
-        aliases: &[],
-        usage: "/memory [show|path|clear|edit|help]",
-        description_id: MessageId::CmdMemoryDescription,
-    },
-    CommandInfo {
-        name: "attach",
-        aliases: &["image", "media", "fujian"],
-        usage: "/attach <path>",
-        description_id: MessageId::CmdAttachDescription,
-    },
-    CommandInfo {
-        name: "task",
-        aliases: &["tasks"],
-        usage: "/task [add <prompt>|list|show <id>|cancel <id>]",
-        description_id: MessageId::CmdTaskDescription,
-    },
-    CommandInfo {
-        name: "jobs",
-        aliases: &["job", "zuoye"],
-        usage: "/jobs [list|show <id>|poll <id>|wait <id>|stdin <id> <input>|cancel <id>]",
-        description_id: MessageId::CmdJobsDescription,
-    },
-    CommandInfo {
-        name: "mcp",
-        aliases: &[],
-        usage: "/mcp [init|add stdio <name> <command> [args...]|add http <name> <url>|enable <name>|disable <name>|remove <name>|validate|reload]",
-        description_id: MessageId::CmdMcpDescription,
-    },
-    CommandInfo {
-        name: "network",
-        aliases: &[],
-        usage: "/network [list|allow <host>|deny <host>|remove <host>|default <allow|deny|prompt>]",
-        description_id: MessageId::CmdNetworkDescription,
-    },
-    // Session commands
-    CommandInfo {
-        name: "rename",
-        aliases: &["gaiming", "chongmingming"],
-        usage: "/rename <new title>",
-        description_id: MessageId::CmdRenameDescription,
-    },
-    CommandInfo {
-        name: "save",
-        aliases: &[],
-        usage: "/save [path]",
-        description_id: MessageId::CmdSaveDescription,
-    },
-    CommandInfo {
-        name: "fork",
-        aliases: &["branch"],
-        usage: "/fork",
-        description_id: MessageId::CmdForkDescription,
-    },
-    CommandInfo {
-        name: "new",
-        aliases: &[],
-        usage: "/new [--force]",
-        description_id: MessageId::CmdNewDescription,
-    },
-    CommandInfo {
-        name: "sessions",
-        aliases: &["resume"],
-        usage: "/sessions [show|prune <days>]",
-        description_id: MessageId::CmdSessionsDescription,
-    },
-    CommandInfo {
-        name: "load",
-        aliases: &["jiazai"],
-        usage: "/load [path]",
-        description_id: MessageId::CmdLoadDescription,
-    },
-    CommandInfo {
-        name: "compact",
-        aliases: &["yasuo"],
-        usage: "/compact",
-        description_id: MessageId::CmdCompactDescription,
-    },
-    CommandInfo {
-        name: "purge",
-        aliases: &["qingchu"],
-        usage: "/purge",
-        description_id: MessageId::CmdPurgeDescription,
-    },
-    CommandInfo {
-        name: "relay",
-        aliases: &["batonpass", "接力"],
-        usage: "/relay [focus]",
-        description_id: MessageId::CmdRelayDescription,
-    },
-    CommandInfo {
-        name: "context",
-        aliases: &["ctx"],
-        usage: "/context",
-        description_id: MessageId::CmdContextDescription,
-    },
-    CommandInfo {
-        name: "export",
-        aliases: &["daochu"],
-        usage: "/export [path]",
-        description_id: MessageId::CmdExportDescription,
-    },
-    // Config commands
-    CommandInfo {
-        name: "config",
-        aliases: &[],
-        usage: "/config",
-        description_id: MessageId::CmdConfigDescription,
-    },
-    CommandInfo {
-        name: "mode",
-        aliases: &["jihua", "zidong"],
-        usage: "/mode [agent|plan|yolo|1|2|3]",
-        description_id: MessageId::CmdModeDescription,
-    },
-    CommandInfo {
-        name: "theme",
-        aliases: &[],
-        usage: "/theme [name]",
-        description_id: MessageId::CmdThemeDescription,
-    },
-    CommandInfo {
-        name: "verbose",
-        aliases: &[],
-        usage: "/verbose [on|off]",
-        description_id: MessageId::CmdVerboseDescription,
-    },
-    CommandInfo {
-        name: "trust",
-        aliases: &["xinren"],
-        usage: "/trust [on|off|add <path>|remove <path>|list]",
-        description_id: MessageId::CmdTrustDescription,
-    },
-    CommandInfo {
-        name: "logout",
-        aliases: &[],
-        usage: "/logout",
-        description_id: MessageId::CmdLogoutDescription,
-    },
-    // Debug commands
-    CommandInfo {
-        name: "tokens",
-        aliases: &[],
-        usage: "/tokens",
-        description_id: MessageId::CmdTokensDescription,
-    },
-    CommandInfo {
-        name: "translate",
-        aliases: &["translation", "transale"],
-        usage: "/translate",
-        description_id: MessageId::CmdTranslateDescription,
-    },
-    CommandInfo {
-        name: "system",
-        aliases: &["xitong"],
-        usage: "/system",
-        description_id: MessageId::CmdSystemDescription,
-    },
-    CommandInfo {
-        name: "edit",
-        aliases: &[],
-        usage: "/edit",
-        description_id: MessageId::CmdEditDescription,
-    },
-    CommandInfo {
-        name: "diff",
-        aliases: &[],
-        usage: "/diff",
-        description_id: MessageId::CmdDiffDescription,
-    },
-    CommandInfo {
-        name: "change",
-        aliases: &[],
-        usage: "/change [version]",
-        description_id: MessageId::CmdChangeDescription,
-    },
-    CommandInfo {
-        name: "undo",
-        aliases: &[],
-        usage: "/undo",
-        description_id: MessageId::CmdUndoDescription,
-    },
-    CommandInfo {
-        name: "retry",
-        aliases: &["chongshi"],
-        usage: "/retry",
-        description_id: MessageId::CmdRetryDescription,
-    },
-    CommandInfo {
-        name: "init",
-        aliases: &[],
-        usage: "/init",
-        description_id: MessageId::CmdInitDescription,
-    },
-    CommandInfo {
-        name: "lsp",
-        aliases: &[],
-        usage: "/lsp [on|off|status]",
-        description_id: MessageId::CmdLspDescription,
-    },
-    CommandInfo {
-        name: "share",
-        aliases: &[],
-        usage: "/share",
-        description_id: MessageId::CmdShareDescription,
-    },
-    CommandInfo {
-        name: "hunt",
-        aliases: &["goal", "mubiao", "狩猎"],
-        usage: "/hunt [quarry] [budget: N]",
-        description_id: MessageId::CmdGoalDescription,
-    },
-    CommandInfo {
-        name: "settings",
-        aliases: &[],
-        usage: "/settings",
-        description_id: MessageId::CmdSettingsDescription,
-    },
-    CommandInfo {
-        name: "status",
-        aliases: &[],
-        usage: "/status",
-        description_id: MessageId::CmdStatusDescription,
-    },
-    CommandInfo {
-        name: "statusline",
-        aliases: &[],
-        usage: "/statusline",
-        description_id: MessageId::CmdStatuslineDescription,
-    },
-    // Skills commands
-    CommandInfo {
-        name: "skills",
-        aliases: &["jinengliebiao"],
-        usage: "/skills [--remote|sync|<prefix>]",
-        description_id: MessageId::CmdSkillsDescription,
-    },
-    CommandInfo {
-        name: "skill",
-        aliases: &["jineng"],
-        usage: "/skill <name|install <spec>|update <name>|uninstall <name>|trust <name>>",
-        description_id: MessageId::CmdSkillDescription,
-    },
-    CommandInfo {
-        name: "review",
-        aliases: &["shencha"],
-        usage: "/review <target>",
-        description_id: MessageId::CmdReviewDescription,
-    },
-    CommandInfo {
-        name: "restore",
-        aliases: &[],
-        usage: "/restore [N]",
-        description_id: MessageId::CmdRestoreDescription,
-    },
-    // RLM command
-    CommandInfo {
-        name: "rlm",
-        aliases: &["recursive", "digui"],
-        usage: "/rlm [N] <file_or_text>",
-        description_id: MessageId::CmdRlmDescription,
-    },
-    // Debug/cost command
-    CommandInfo {
-        name: "cost",
-        aliases: &[],
-        usage: "/cost",
-        description_id: MessageId::CmdCostDescription,
-    },
-    // Balance query (#2019)
-    CommandInfo {
-        name: "balance",
-        aliases: &[],
-        usage: "/balance",
-        description_id: MessageId::CmdBalanceDescription,
-    },
-    // Profile switching (#390)
-    CommandInfo {
-        name: "profile",
-        aliases: &["dangan"],
-        usage: "/profile <name>",
-        description_id: MessageId::CmdHelpDescription, // reuse for now
-    },
-    // Cache telemetry (#263)
-    CommandInfo {
-        name: "cache",
-        aliases: &[],
-        usage: "/cache [count|inspect|stats|zones|warmup]",
-        description_id: MessageId::CmdCacheDescription,
-    },
-    // Slop Ledger (#2127)
-    CommandInfo {
-        name: "slop",
-        aliases: &["canzha"],
-        usage: "/slop [query|export]",
-        description_id: MessageId::CmdSlopDescription,
-    },
-];
+/// Test-only contextual handler: reads workspace, mode, and currency facets
+/// through the envelope and returns the host-selected result type. It has no
+/// concrete `App` parameter or TUI state in its input surface.
+#[cfg(test)]
+fn feat015_contextual(
+    contexts: ghosty_command_contract::handler::CommandContexts<'_>,
+    arg: Option<&str>,
+) -> CommandResult {
+    use ghosty_command_contract::handler::ContextParts;
+    let parts: ContextParts<'_> = contexts.into_parts();
+    let workspace = parts.workspace.expect("workspace facet").workspace();
+    let mode = parts.mode_policy.expect("mode-policy facet").mode();
+    let currency = parts.cost.expect("cost facet").display_currency();
+    let normalized = arg.unwrap_or("");
+    CommandResult::message(format!(
+        "feat015ctx workspace={} mode={:?} currency={:?} arg={}",
+        workspace.display(),
+        mode,
+        currency,
+        normalized
+    ))
+}
+
+#[cfg(test)]
+static FEAT015_CTX: OnceLock<&'static traits::ContextualCommand> = OnceLock::new();
+
+#[cfg(test)]
+fn feat015_ctx_command() -> &'static traits::ContextualCommand {
+    FEAT015_CTX.get_or_init(|| {
+        Box::leak(Box::new(
+            traits::ContextualCommand::from_contract::<Feat015TestCommand>()
+                .expect("FEAT-015 portable registration must bridge into the TUI registry"),
+        ))
+    })
+}
+
+pub fn registry() -> &'static traits::CommandRegistry {
+    REGISTRY.get_or_init(build_registry)
+}
+
+pub fn command_infos() -> Vec<&'static CommandInfo> {
+    registry().infos()
+}
+
+pub fn get_command_info(name: &str) -> Option<&'static CommandInfo> {
+    registry().get_info(name)
+}
 
 /// Execute a slash command
 pub fn execute(cmd: &str, app: &mut App) -> CommandResult {
-    let parts: Vec<&str> = cmd.trim().splitn(2, ' ').collect();
-    let command = parts[0].to_lowercase();
-    let command = command.strip_prefix('/').unwrap_or(&command);
-    let arg = parts.get(1).map(|s| s.trim());
+    // Keep the command's raw remainder available for commands whose payload is
+    // byte-sensitive. Most slash commands intentionally receive a normalized
+    // argument below; `/preview-request --prompt`, however, must describe the
+    // exact prompt the send path would receive, including trailing whitespace
+    // and newlines.
+    let dispatch_input = cmd.trim_start();
+    let command_token_end = dispatch_input
+        .find(char::is_whitespace)
+        .unwrap_or(dispatch_input.len());
+    let raw_remainder = &dispatch_input[command_token_end..];
+    let trimmed = cmd.trim();
+
+    // `$skillname` is a backward-compatible alias for `/skill skillname`.
+    // Resolve it early so skills can be loaded with the `$` prefix.
+    if let Some(skill_input) = trimmed.strip_prefix('$') {
+        let skill_input = skill_input.trim_start();
+        if skill_input.is_empty() {
+            return CommandResult::error(
+                "Type a skill name after $. For example: $getting-started",
+            );
+        }
+        let parts: Vec<&str> = skill_input.splitn(2, char::is_whitespace).collect();
+        let skill_name = parts.first().copied().unwrap_or("");
+        let arg = parts
+            .get(1)
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty());
+        if let Some(result) = groups::skills::run_skill_by_name(app, skill_name, arg) {
+            return result;
+        }
+        return CommandResult::error(format!(
+            "Unknown skill: ${skill_name}. Type /skills to see installed skills."
+        ));
+    }
+
+    let parts: Vec<&str> = trimmed.splitn(2, char::is_whitespace).collect();
+    let command = parts
+        .first()
+        .copied()
+        .unwrap_or_default()
+        .trim_start_matches('/')
+        .to_ascii_lowercase();
+    let arg = parts
+        .get(1)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
 
     // Check user-defined commands FIRST so they can override built-ins.
-    if let Some(result) = user_commands::try_dispatch_user_command(app, cmd.trim()) {
+    if let Some(result) = user_registry::try_dispatch(app, trimmed) {
         return result;
     }
 
-    // Match command or alias
-    match command {
-        // Core commands
-        "anchor" | "maodian" => anchor::anchor(app, arg),
-        "help" | "?" | "bangzhu" | "帮助" => core::help(app, arg),
-        "clear" | "qingping" => core::clear(app),
-        "exit" | "quit" | "q" | "tuichu" => core::exit(),
-        "model" | "moxing" => core::model(app, arg),
-        "models" | "moxingliebiao" => core::models(app),
-        "provider" => provider::provider(app, arg),
-        "queue" | "queued" => queue::queue(app, arg),
-        "stash" | "park" => stash::stash(app, arg),
-        "hooks" | "hook" | "gouzi" => hooks::hooks(app, arg),
-        "subagents" | "agents" | "zhinengti" => core::subagents(app),
-        "agent" | "daili" => agent(app, arg),
-        "links" | "dashboard" | "api" | "lianjie" => core::deepseek_links(app),
-        "feedback" => feedback::feedback(app, arg),
-        "home" | "stats" | "overview" | "zhuye" | "shouye" => core::home_dashboard(app),
-        "workspace" | "cwd" => core::workspace_switch(app, arg),
-        "note" => note::note(app, arg),
-        "memory" => memory::memory(app, arg),
-        "attach" | "image" | "media" | "fujian" => attachment::attach(app, arg),
-        "task" | "tasks" => task::task(app, arg),
-        "jobs" | "job" | "zuoye" => jobs::jobs(app, arg),
-        "mcp" => mcp::mcp(app, arg),
-        "network" => network::network(app, arg),
-
-        // Session commands
-        "rename" | "gaiming" | "chongmingming" => rename::rename(app, arg),
-        "save" => session::save(app, arg),
-        "fork" | "branch" => session::fork(app),
-        "new" => session::new_session(app, arg),
-        "sessions" | "resume" => session::sessions(app, arg),
-        "relay" | "batonpass" | "接力" => relay(app, arg),
-        "load" | "jiazai" => session::load(app, arg),
-        "compact" | "yasuo" => session::compact(app),
-        "purge" | "qingchu" => session::purge(app),
-        "export" | "daochu" => session::export(app, arg),
-
-        // Config commands
-        "config" => config::config_command(app, arg),
-        "settings" => config::show_settings(app),
-        "status" => status::status(app),
-        "statusline" => config::status_line(app),
-        "mode" => config::mode(app, arg),
-        "jihua" => config::mode(app, Some("plan")),
-        "zidong" => config::mode(app, Some("yolo")),
-        "theme" => config::theme(app, arg),
-        "verbose" => config::verbose(app, arg),
-        "trust" | "xinren" => config::trust(app, arg),
-        "logout" => config::logout(app),
-
-        // Debug commands
-        "translate" | "translation" | "transale" => core::translate(app),
-        "tokens" => debug::tokens(app),
-        "cost" => debug::cost(app),
-        "balance" => balance::balance(app),
-        "cache" => debug::cache(app, arg),
-
-        // Slop ledger (#2127)
-        "slop" | "canzha" => config::slop(app, arg),
-
-        // ChangeLog command
-        "change" => change::change(app, arg),
-        "system" | "xitong" => debug::system_prompt(app),
-        "context" | "ctx" => debug::context(app),
-        "edit" => debug::edit(app),
-        "diff" => debug::diff(app),
-        "undo" => {
-            // Try surgical patch-undo first; fall back to conversation undo
-            // if no snapshots are available or if the snapshot undo couldn't
-            // find anything useful.
-            let result = debug::patch_undo(app);
-            if result.message.as_deref().is_none_or(|m| {
-                m.starts_with("No snapshots found")
-                    || m.starts_with("No tool or pre-turn")
-                    || m.starts_with("Snapshot repo")
-            }) {
-                debug::undo_conversation(app)
-            } else {
-                result
-            }
+    // Permanent backward-compatible mode aliases. They select a fixed mode
+    // rather than the canonical `/mode` behavior, so they still dispatch
+    // before registry lookup. Ordinary compatibility aliases belong in their
+    // command's `CommandInfo` metadata.
+    match command.as_str() {
+        "jihua" => {
+            return groups::config::dispatch(app, "jihua", arg).unwrap_or_else(|| {
+                CommandResult::error("The /jihua alias could not be dispatched.")
+            });
         }
-        "retry" | "chongshi" => debug::retry(app),
+        "zidong" => {
+            return groups::config::dispatch(app, "zidong", arg).unwrap_or_else(|| {
+                CommandResult::error("The /zidong alias could not be dispatched.")
+            });
+        }
+        _ => {}
+    }
 
-        // Project commands
-        "init" => init::init(app),
-        "lsp" => config::lsp_command(app, arg),
-        "share" => share::share(app, arg),
-        "goal" | "hunt" | "mubiao" | "狩猎" => goal::hunt(app, arg),
+    if let Some(command_object) = registry().get(command.as_str()) {
+        let command_arg = if command_object.info().name == "preview-request" {
+            Some(raw_remainder)
+        } else {
+            arg
+        };
+        // FEAT-015 dual-path seam (D2): a migrated entry with a
+        // capability-scoped handler receives the envelope built from `app`;
+        // everything else keeps the legacy `execute(app, args)` path. No
+        // production entry is migrated in FEAT-015, so the contextual branch
+        // is only reachable by the test-only fixture (D6).
+        if let Some(handler) = command_object.contextual_handler() {
+            let mut bundle = app.command_contexts();
+            return match handler {
+                ghosty_command_contract::handler::CommandHandler::Pure(pure_fn) => {
+                    pure_fn(command_arg)
+                }
+                ghosty_command_contract::handler::CommandHandler::Contextual(contextual) => {
+                    contextual(bundle.contexts(), command_arg)
+                }
+            };
+        }
+        return command_object.execute(app, command_arg);
+    }
 
-        // Skills commands
-        "skills" | "jinengliebiao" => skills::list_skills(app, arg),
-        "skill" | "jineng" => skills::run_skill(app, arg),
-        "review" | "shencha" => review::review(app, arg),
-        "restore" => restore::restore(app, arg),
-
-        // Profile switch (#390)
-        "profile" | "dangan" => core::profile_switch(app, arg),
-
-        // RLM command
-        "rlm" | "recursive" | "digui" => rlm(app, arg),
-
-        // Legacy command migrations (kept out of registry/autocomplete intentionally).
+    match command.as_str() {
+        // Permanent legacy migration hints. These are deliberately excluded
+        // from registry/autocomplete and only appear when users type old names.
         "set" => CommandResult::error(
             "The /set command was retired. Use /config to edit settings and /settings to inspect current values.",
         ),
         "deepseek" => CommandResult::error(
             "The /deepseek command was renamed. Use /links (aliases: /dashboard, /api).",
         ),
+        "doctor" => CommandResult::error(
+            "The /doctor command is a CLI diagnostic. Run `ghosty doctor` or `ghosty doctor --json`; use `/setup` in the TUI for readiness and verification.",
+        ),
 
         _ => {
             // Third source: skills (lowest precedence after native and user-config).
             // Try to run a skill whose name matches the command.
-            if skills::run_skill_by_name(app, command, arg).is_some() {
-                return skills::run_skill_by_name(app, command, arg).unwrap();
+            if let Some(result) = groups::skills::run_skill_by_name(app, command.as_str(), arg) {
+                return result;
             }
-            let suggestions = suggest_command_names(command, 3);
+            let suggestions =
+                user_registry::with_registry_for_workspace(Some(&app.workspace), |user_commands| {
+                    suggest_command_names(command.as_str(), 3, user_commands)
+                });
             if suggestions.is_empty() {
                 CommandResult::error(format!(
                     "Unknown command: /{command}. Type /help for available commands."
@@ -692,304 +322,11 @@ pub fn execute(cmd: &str, app: &mut App) -> CommandResult {
 
 /// Update a configuration value programmatically (used by interactive UI views).
 pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) -> CommandResult {
-    config::set_config_value(app, key, value, persist)
-}
-
-/// Persist the user's chosen footer items to `~/.deepseek/config.toml` under
-/// `tui.status_items`. See [`config::persist_status_items`] for details.
-pub fn persist_status_items(
-    items: &[crate::config::StatusItem],
-) -> anyhow::Result<std::path::PathBuf> {
-    config::persist_status_items(items)
-}
-
-/// Persist a root-level string key in `config.toml`.
-pub fn persist_root_string_key(
-    config_path: Option<&std::path::Path>,
-    key: &str,
-    value: &str,
-) -> anyhow::Result<std::path::PathBuf> {
-    config::persist_root_string_key(config_path, key, value)
+    groups::config::config::set_config_value(app, key, value, persist)
 }
 
 pub fn switch_mode(app: &mut App, mode: crate::tui::app::AppMode) -> String {
-    config::switch_mode(app, mode)
-}
-
-/// Auto-select a model based on request complexity.
-pub fn auto_model_heuristic(input: &str, current_model: &str) -> String {
-    config::auto_model_heuristic(input, current_model)
-}
-
-pub use config::{
-    AutoRouteRecommendation, AutoRouteSelection, normalize_auto_route_effort,
-    parse_auto_route_recommendation, resolve_auto_route_with_flash,
-};
-
-/// Execute a Recursive Language Model (RLM) turn — Algorithm 1 from
-/// Zhang & Khattab, "Recursive Language Models"
-/// (https://alexzhang13.github.io/blog/2025/rlm/).
-///
-/// The user's prompt text is passed as the argument. It will be stored
-/// in the REPL as the `PROMPT` variable. The root LLM will only see
-/// metadata about the REPL state, never the prompt text directly.
-pub fn rlm(app: &mut App, arg: Option<&str>) -> CommandResult {
-    let (max_depth, target) = match parse_depth_prefixed_arg(arg, 1) {
-        Ok(parsed) => parsed,
-        Err(message) => return CommandResult::error(message),
-    };
-    let target = match target {
-        Some(p) if !p.trim().is_empty() => p.trim().to_string(),
-        _ => {
-            return CommandResult::error(
-                "Usage: /rlm [N] <file_or_text>\n\n\
-                 Opens a persistent RLM context with sub_rlm depth N (0-3, default 1)."
-                    .to_string(),
-            );
-        }
-    };
-
-    let source_arg = if resolves_to_existing_file(app, &target) {
-        format!(r#"file_path: "{target}""#)
-    } else {
-        format!("content: {target:?}")
-    };
-    let message = format!(
-        "Open and use a persistent RLM session for this request. Call `rlm_open` with name `slash_rlm` and {source_arg}. Then call `rlm_configure` with `sub_rlm_max_depth: {max_depth}`. Use `rlm_eval` to inspect the context through `peek`, `search`, and `chunk`, and call `finalize(...)` from the REPL when ready. If a `var_handle` is returned, use `handle_read` for bounded slices or projections before answering."
-    );
-
-    CommandResult::with_message_and_action(
-        format!("Opening persistent RLM context at depth {max_depth}..."),
-        AppAction::SendMessage(message),
-    )
-}
-
-/// Open a persistent sub-agent session from a slash command.
-pub fn agent(_app: &mut App, arg: Option<&str>) -> CommandResult {
-    let (max_depth, task) = match parse_depth_prefixed_arg(arg, 1) {
-        Ok(parsed) => parsed,
-        Err(message) => return CommandResult::error(message),
-    };
-    let task = match task {
-        Some(task) if !task.trim().is_empty() => task.trim().to_string(),
-        _ => {
-            return CommandResult::error(
-                "Usage: /agent [N] <task>\n\n\
-                 Opens a persistent sub-agent session with recursive agent depth N (0-3, default 1).",
-            );
-        }
-    };
-    let message = format!(
-        "Open a persistent sub-agent session for this task. Call `agent_open` with name `slash_agent`, `prompt: {task:?}`, and `max_depth: {max_depth}`. Use `agent_eval` to wait for the next terminal/current projection and `handle_read` on the returned transcript_handle if you need more detail. Verify any claimed side effects before reporting success."
-    );
-    CommandResult::with_message_and_action(
-        format!("Opening persistent sub-agent at depth {max_depth}..."),
-        AppAction::SendMessage(message),
-    )
-}
-
-/// Ask the active model to write a compact relay artifact for the next thread.
-///
-/// The visible command is `/relay` (with `/接力` for Chinese users), but the
-/// durable file path remains `.deepseek/handoff.md` for compatibility with
-/// existing sessions and startup prompt loading.
-pub fn relay(app: &mut App, arg: Option<&str>) -> CommandResult {
-    let focus = arg.map(str::trim).filter(|value| !value.is_empty());
-    let message = build_relay_instruction(app, focus);
-    CommandResult::with_message_and_action(
-        "Preparing session relay at .deepseek/handoff.md...",
-        AppAction::SendMessage(message),
-    )
-}
-
-fn build_relay_instruction(app: &App, focus: Option<&str>) -> String {
-    let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "Create a compact session relay (接力) for a future Ghosty Code thread."
-    );
-    let _ = writeln!(out);
-    let _ = writeln!(out, "Write or update `.deepseek/handoff.md`.");
-    let _ = writeln!(
-        out,
-        "Keep the existing file path for compatibility, but title the artifact `# Session relay`."
-    );
-    let _ = writeln!(out);
-    let _ = writeln!(out, "Current session snapshot:");
-    let _ = writeln!(out, "- Workspace: {}", app.workspace.display());
-    let _ = writeln!(out, "- Mode: {}", app.mode.label());
-    let _ = writeln!(out, "- Model: {}", app.model_display_label());
-    if let Some(focus) = focus {
-        let _ = writeln!(out, "- Requested relay focus: {focus}");
-    }
-    if let Some(quarry) = app.hunt.quarry.as_deref() {
-        let _ = writeln!(out, "- Hunt quarry: {quarry}");
-    }
-    if let Some(budget) = app.hunt.token_budget {
-        let _ = writeln!(out, "- Hunt token budget: {budget}");
-    }
-    if let Ok(todos) = app.todos.try_lock() {
-        let snapshot = todos.snapshot();
-        if !snapshot.items.is_empty() {
-            let _ = writeln!(
-                out,
-                "\nWork checklist (primary progress surface, {}% complete):",
-                snapshot.completion_pct
-            );
-            for item in snapshot.items {
-                let _ = writeln!(
-                    out,
-                    "- #{} [{}] {}",
-                    item.id,
-                    item.status.as_str(),
-                    item.content
-                );
-            }
-        }
-    } else {
-        let _ = writeln!(
-            out,
-            "\nWork checklist: unavailable because the checklist is busy."
-        );
-    }
-
-    if let Ok(plan) = app.plan_state.try_lock() {
-        let snapshot = plan.snapshot();
-        if snapshot.explanation.is_some() || !snapshot.items.is_empty() {
-            let _ = writeln!(out, "\nOptional strategy metadata from update_plan:");
-            if let Some(explanation) = snapshot.explanation.as_deref() {
-                let _ = writeln!(out, "- Explanation: {explanation}");
-            }
-            for item in snapshot.items {
-                let _ = writeln!(out, "- [{}] {}", plan_status_label(&item.status), item.step);
-            }
-        }
-    } else {
-        let _ = writeln!(
-            out,
-            "\nStrategy metadata: unavailable because plan state is busy."
-        );
-    }
-
-    let _ = writeln!(
-        out,
-        "\nBefore writing, inspect the current transcript context and any live tool evidence you need. Do not invent test results, file changes, blockers, or decisions."
-    );
-    let _ = writeln!(
-        out,
-        "\nUse this compact structure:\n\
-         # Session relay\n\
-         \n\
-         ## Goal\n\
-         [the user's objective and any explicit constraints]\n\
-         \n\
-         ## Current work\n\
-         [the active Work checklist item, progress, and what is mid-flight]\n\
-         \n\
-         ## Files and state\n\
-         [changed files, important paths, sub-agents/RLM sessions, commands run]\n\
-         \n\
-         ## Decisions\n\
-         [why key choices were made]\n\
-         \n\
-         ## Verification\n\
-         [what passed, what failed, what was not run]\n\
-         \n\
-         ## Next action\n\
-         [one concrete action for the next thread]"
-    );
-    let _ = writeln!(
-        out,
-        "\nKeep it under about 900 words unless the session genuinely needs more. After writing, report the path and the single next action."
-    );
-    out
-}
-
-fn plan_status_label(status: &crate::tools::plan::StepStatus) -> &'static str {
-    match status {
-        crate::tools::plan::StepStatus::Pending => "pending",
-        crate::tools::plan::StepStatus::InProgress => "in_progress",
-        crate::tools::plan::StepStatus::Completed => "completed",
-    }
-}
-
-fn parse_depth_prefixed_arg(
-    arg: Option<&str>,
-    default_depth: u32,
-) -> Result<(u32, Option<&str>), String> {
-    let Some(raw) = arg.map(str::trim).filter(|raw| !raw.is_empty()) else {
-        return Ok((default_depth, None));
-    };
-    let mut parts = raw.splitn(2, char::is_whitespace);
-    let first = parts.next().unwrap_or_default();
-    if first.chars().all(|ch| ch.is_ascii_digit()) {
-        let depth: u32 = first
-            .parse()
-            .map_err(|_| "Depth must be an integer from 0 to 3".to_string())?;
-        if depth > 3 {
-            return Err("Depth must be between 0 and 3".to_string());
-        }
-        Ok((depth, parts.next().map(str::trim)))
-    } else {
-        Ok((default_depth, Some(raw)))
-    }
-}
-
-fn resolves_to_existing_file(app: &App, input: &str) -> bool {
-    let path = std::path::Path::new(input);
-    let candidate = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        app.workspace.join(path)
-    };
-    candidate.is_file()
-}
-
-/// Get command info by name or alias
-pub fn get_command_info(name: &str) -> Option<&'static CommandInfo> {
-    let name = name.strip_prefix('/').unwrap_or(name);
-    COMMANDS
-        .iter()
-        .find(|cmd| cmd.name == name || cmd.aliases.contains(&name))
-}
-
-/// Get all command names matching a prefix, including both built-in
-/// static commands and user-defined commands, formatted as `/name`.
-///
-/// `workspace` is used to also scan workspace-local command directories;
-/// pass `None` when no workspace context is available.
-#[allow(dead_code)]
-pub fn all_command_names_matching(
-    prefix: &str,
-    workspace: Option<&std::path::Path>,
-) -> Vec<String> {
-    let prefix = prefix.strip_prefix('/').unwrap_or(prefix).to_lowercase();
-    let mut result: Vec<String> = COMMANDS
-        .iter()
-        .filter(|cmd| {
-            cmd.name.starts_with(&prefix) || cmd.aliases.iter().any(|a| a.starts_with(&prefix))
-        })
-        .map(|cmd| format!("/{}", cmd.name))
-        .collect();
-
-    // Add user-defined commands
-    result.extend(user_commands::user_commands_matching(&prefix, workspace));
-
-    result.sort();
-    result.dedup();
-    result
-}
-
-/// Get all commands matching a prefix (for autocomplete)
-#[allow(dead_code)]
-pub fn commands_matching(prefix: &str) -> Vec<&'static CommandInfo> {
-    let prefix = prefix.strip_prefix('/').unwrap_or(prefix).to_lowercase();
-    COMMANDS
-        .iter()
-        .filter(|cmd| {
-            cmd.name.starts_with(&prefix) || cmd.aliases.iter().any(|a| a.starts_with(&prefix))
-        })
-        .collect()
+    groups::config::config::switch_mode(app, mode)
 }
 
 fn edit_distance(a: &str, b: &str) -> usize {
@@ -1004,60 +341,95 @@ fn edit_distance(a: &str, b: &str) -> usize {
     }
 
     let b_chars: Vec<char> = b.chars().collect();
-    let mut prev: Vec<usize> = (0..=b_chars.len()).collect();
-    let mut curr = vec![0usize; b_chars.len() + 1];
+    let mut previous: Vec<usize> = (0..=b_chars.len()).collect();
+    let mut current = vec![0usize; b_chars.len() + 1];
 
     for (i, a_ch) in a.chars().enumerate() {
-        curr[0] = i + 1;
+        current[0] = i + 1;
         for (j, b_ch) in b_chars.iter().enumerate() {
             let cost = if a_ch == *b_ch { 0 } else { 1 };
-            let delete = prev[j + 1] + 1;
-            let insert = curr[j] + 1;
-            let substitute = prev[j] + cost;
-            curr[j + 1] = delete.min(insert).min(substitute);
+            let delete = previous[j + 1] + 1;
+            let insert = current[j] + 1;
+            let substitute = previous[j] + cost;
+            current[j + 1] = delete.min(insert).min(substitute);
         }
-        std::mem::swap(&mut prev, &mut curr);
+        std::mem::swap(&mut previous, &mut current);
     }
 
-    prev[b_chars.len()]
+    previous[b_chars.len()]
 }
 
-fn suggest_command_names(input: &str, limit: usize) -> Vec<String> {
+fn best_suggestion_score<'a>(
+    query: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<(u8, usize)> {
+    let mut best: Option<(u8, usize)> = None;
+    for candidate in candidates {
+        let prefix_match = candidate.starts_with(query) || query.starts_with(candidate);
+        let contains_match = candidate.contains(query) || query.contains(candidate);
+        let distance = edit_distance(candidate, query);
+        let close_typo = distance <= 2;
+        if !(prefix_match || contains_match || close_typo) {
+            continue;
+        }
+
+        let rank = if prefix_match {
+            0
+        } else if contains_match {
+            1
+        } else {
+            2
+        };
+
+        match best {
+            Some((best_rank, best_distance))
+                if rank > best_rank || (rank == best_rank && distance >= best_distance) => {}
+            _ => best = Some((rank, distance)),
+        }
+    }
+    best
+}
+
+fn suggest_command_names(
+    input: &str,
+    limit: usize,
+    user_commands: &user_registry::UserCommandRegistry,
+) -> Vec<String> {
     let query = input.trim().to_ascii_lowercase();
     if query.is_empty() || limit == 0 {
         return Vec::new();
     }
 
     let mut scored: Vec<(u8, usize, String)> = Vec::new();
-    for command in COMMANDS {
-        let mut best: Option<(u8, usize)> = None;
-        for candidate in std::iter::once(command.name).chain(command.aliases.iter().copied()) {
-            let candidate = candidate.to_ascii_lowercase();
-            let prefix_match = candidate.starts_with(&query) || query.starts_with(&candidate);
-            let contains_match = candidate.contains(&query) || query.contains(&candidate);
-            let distance = edit_distance(&candidate, &query);
-            let close_typo = distance <= 2;
-            if !(prefix_match || contains_match || close_typo) {
-                continue;
-            }
-
-            let rank = if prefix_match {
-                0
-            } else if contains_match {
-                1
-            } else {
-                2
-            };
-
-            match best {
-                Some((best_rank, best_distance))
-                    if rank > best_rank || (rank == best_rank && distance >= best_distance) => {}
-                _ => best = Some((rank, distance)),
-            }
+    for command in registry().infos() {
+        // A user command can shadow a built-in canonical name or just one of
+        // its aliases. Score only the built-in spellings that still dispatch
+        // to the built-in so suggestions never advertise different behavior.
+        if user_commands.get(command.name).is_some() {
+            continue;
         }
-
-        if let Some((rank, distance)) = best {
+        let candidates = std::iter::once(command.name).chain(
+            command
+                .aliases
+                .iter()
+                .copied()
+                .filter(|alias| user_commands.get(alias).is_none()),
+        );
+        if let Some((rank, distance)) = best_suggestion_score(&query, candidates) {
             scored.push((rank, distance, command.name.to_string()));
+        }
+    }
+
+    for command in user_commands.iter().filter(|command| !command.hidden) {
+        let candidates = std::iter::once(command.name.as_str()).chain(
+            command.aliases.iter().map(String::as_str).filter(|alias| {
+                user_commands
+                    .get(alias)
+                    .is_some_and(|resolved| resolved.name == command.name)
+            }),
+        );
+        if let Some((rank, distance)) = best_suggestion_score(&query, candidates) {
+            scored.push((rank, distance, command.name.clone()));
         }
     }
 
@@ -1077,55 +449,176 @@ fn suggest_command_names(input: &str, limit: usize) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::config::{ApiProvider, Config};
+    use crate::localization::{Locale, MessageId};
     use crate::tools::plan::{PlanItemArg, StepStatus, UpdatePlanArgs};
     use crate::tools::todo::TodoStatus;
     use crate::tui::app::{App, AppAction, TuiOptions};
+    use crate::tui::work_surface::{RailPanel, WorkSurfacePlacement};
     use std::ffi::OsString;
     use std::path::{Path, PathBuf};
-    use std::sync::MutexGuard;
     use tempfile::tempdir;
+
+    fn is_palette_safe_command_name(name: &str) -> bool {
+        let bytes = name.as_bytes();
+        !bytes.is_empty()
+            && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+            && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
+            && bytes
+                .iter()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
+            && !name.contains("--")
+    }
 
     fn create_test_app() -> App {
         let options = TuiOptions {
-            model: "deepseek-v4-pro".to_string(),
-            workspace: PathBuf::from("."),
-            config_path: None,
-            config_profile: None,
-            allow_shell: false,
-            use_alt_screen: true,
-            use_mouse_capture: false,
-            use_bracketed_paste: true,
-            max_subagents: 1,
-            skills_dir: PathBuf::from("."),
-            memory_path: PathBuf::from("memory.md"),
-            notes_path: PathBuf::from("notes.txt"),
-            mcp_config_path: PathBuf::from("mcp.json"),
-            use_memory: false,
-            start_in_agent_mode: false,
-            skip_onboarding: true,
-            yolo: false,
-            resume_session_id: None,
-            initial_input: None,
+            ..crate::test_support::test_tui_options(PathBuf::from("."))
         };
         App::new(options, &Config::default())
     }
 
     #[test]
+    fn user_registry_module_is_compiled() {
+        super::user_registry::reload(None);
+        let registry = super::user_registry::current_registry();
+        assert!(registry.is_valid());
+    }
+
+    #[test]
+    fn preview_request_dispatch_preserves_prompt_edge_bytes() {
+        let mut app = create_test_app();
+        let result = execute("/preview-request --prompt   lead\ntrail  ", &mut app);
+
+        assert!(!result.is_error, "{result:?}");
+        assert!(matches!(
+            result.action,
+            Some(AppAction::PreviewOutboundRequest {
+                json: false,
+                base_prompt_only: false,
+                hypothetical_prompt,
+            }) if hypothetical_prompt.as_deref() == Some("  lead\ntrail  ")
+        ));
+    }
+
+    #[test]
+    fn user_command_shadows_builtin_before_group_dispatch() {
+        let temp = tempdir().unwrap();
+        let commands_dir = temp.path().join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).unwrap();
+        std::fs::write(
+            commands_dir.join("help.md"),
+            "---\ndescription: User help\n---\nuser help $ARGUMENTS",
+        )
+        .unwrap();
+
+        let mut app = create_test_app();
+        app.workspace = temp.path().to_path_buf();
+        super::user_registry::reload(Some(temp.path()));
+
+        let result = execute("/help now", &mut app);
+        assert!(!result.is_error);
+        match result.action {
+            Some(AppAction::SendMessage(message)) => assert_eq!(message, "user help now"),
+            other => panic!("expected user command SendMessage action, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn removed_user_command_reloads_and_falls_back_to_builtin() {
+        let temp = tempdir().unwrap();
+        let commands_dir = temp.path().join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).unwrap();
+        let command_path = commands_dir.join("help.md");
+        std::fs::write(&command_path, "user help").unwrap();
+
+        let mut app = create_test_app();
+        app.workspace = temp.path().to_path_buf();
+        super::user_registry::reload(Some(temp.path()));
+        assert!(matches!(
+            execute("/help config", &mut app).action,
+            Some(AppAction::SendMessage(_))
+        ));
+
+        std::fs::remove_file(command_path).unwrap();
+        super::user_registry::reload(Some(temp.path()));
+        let result = execute("/help config", &mut app);
+        assert!(!result.is_error);
+        assert!(
+            result
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("config")),
+            "built-in /help should handle the command"
+        );
+        assert!(result.action.is_none());
+    }
+
+    #[test]
     fn command_registry_contains_config_and_links_but_not_set_or_deepseek() {
-        assert!(COMMANDS.iter().any(|cmd| cmd.name == "config"));
-        assert!(COMMANDS.iter().any(|cmd| cmd.name == "links"));
-        assert!(COMMANDS.iter().any(|cmd| cmd.name == "memory"));
-        assert!(!COMMANDS.iter().any(|cmd| cmd.name == "set"));
-        assert!(!COMMANDS.iter().any(|cmd| cmd.name == "deepseek"));
+        assert!(command_infos().iter().any(|cmd| cmd.name == "config"));
+        let rail = command_infos()
+            .into_iter()
+            .find(|cmd| cmd.name == "rail")
+            .expect("rail command should exist");
+        assert_eq!(rail.aliases, &["sidebar"]);
+        assert_eq!(rail.description_id, MessageId::CmdSidebarDescription);
+        assert!(rail.description_for(Locale::En).contains("rail"));
+        assert!(command_infos().iter().any(|cmd| cmd.name == "links"));
+        let hf = command_infos()
+            .into_iter()
+            .find(|cmd| cmd.name == "hf")
+            .expect("hf command should exist");
+        assert_eq!(hf.aliases, &["huggingface"]);
+        assert_eq!(hf.description_id, MessageId::CmdHfDescription);
+        assert!(hf.description_for(Locale::En).contains("Hugging Face"));
+        assert!(command_infos().iter().any(|cmd| cmd.name == "memory"));
+        assert!(!command_infos().iter().any(|cmd| cmd.name == "set"));
+        assert!(!command_infos().iter().any(|cmd| cmd.name == "deepseek"));
     }
 
     #[test]
     fn links_command_has_dashboard_and_api_aliases() {
-        let links = COMMANDS
-            .iter()
+        let links = command_infos()
+            .into_iter()
             .find(|cmd| cmd.name == "links")
             .expect("links command should exist");
         assert_eq!(links.aliases, &["dashboard", "api", "lianjie"]);
+    }
+
+    #[test]
+    fn transcript_command_is_discoverable_and_opens_live_overlay() {
+        let transcript = command_infos()
+            .into_iter()
+            .find(|cmd| cmd.name == "transcript")
+            .expect("transcript command should exist");
+        assert_eq!(transcript.usage, "/transcript");
+        assert!(transcript.show_in_empty_discovery());
+
+        let mut app = create_test_app();
+        let result = execute("/transcript", &mut app);
+        assert!(!result.is_error);
+        assert!(matches!(result.action, Some(AppAction::OpenLiveTranscript)));
+    }
+
+    #[test]
+    fn hf_alias_dispatches_to_concepts_helper() {
+        let mut app = create_test_app();
+        let result = execute("/huggingface concepts", &mut app);
+        assert!(!result.is_error);
+        let message = result.message.expect("concepts message");
+        assert!(message.contains("Hugging Face provider route"));
+        assert!(message.contains("Hugging Face MCP"));
+        assert!(message.contains("Hub workflows"));
+    }
+
+    #[test]
+    fn xai_device_auth_slash_command_starts_login() {
+        let mut app = create_test_app();
+        let result = execute("/auth xai-device", &mut app);
+        assert!(!result.is_error);
+        assert!(matches!(
+            result.action,
+            Some(AppAction::StartXaiDeviceLogin)
+        ));
     }
 
     #[test]
@@ -1133,13 +626,31 @@ mod tests {
         let mut app = create_test_app();
         let result = execute("/rlm 2 inspect this long corpus", &mut app);
         assert!(!result.is_error);
-        assert!(result.message.as_deref().unwrap_or("").contains("depth 2"));
+        assert!(
+            result
+                .message
+                .as_deref()
+                .unwrap_or("")
+                .contains("persistent working context")
+        );
         let Some(AppAction::SendMessage(message)) = result.action else {
             panic!("expected SendMessage action");
         };
-        assert!(message.contains("rlm_open"));
-        assert!(message.contains("rlm_configure"));
-        assert!(message.contains("sub_rlm_max_depth: 2"));
+        assert!(message.contains("session-persistent working context"));
+        assert!(message.contains("Do not use legacy `rlm` tool actions"));
+    }
+
+    /// `/kernel` was briefly introduced by an in-flight change and rejected:
+    /// the persistent working context is ordinary Agent behavior, not a
+    /// control surface users have to learn.
+    #[test]
+    fn kernel_is_not_a_command() {
+        let mut app = create_test_app();
+        let result = execute("/kernel inspect the fresh corpus", &mut app);
+        assert!(
+            result.is_error,
+            "/kernel must not resolve to a registered command"
+        );
     }
 
     #[test]
@@ -1150,15 +661,15 @@ mod tests {
         let Some(AppAction::SendMessage(message)) = result.action else {
             panic!("expected SendMessage action");
         };
-        assert!(message.contains("agent_open"));
+        assert!(message.contains("`agent`"));
         assert!(message.contains("max_depth: 0"));
     }
 
     #[test]
     fn relay_slash_command_routes_to_session_relay_instruction() {
         let mut app = create_test_app();
-        app.hunt.quarry = Some("Unify the work surface".to_string());
-        app.hunt.token_budget = Some(12_000);
+        app.goal.objective = Some("Unify the work surface".to_string());
+        app.goal.token_budget = Some(12_000);
         {
             let mut todos = app.todos.try_lock().expect("todo lock");
             todos.add("inspect workspace".to_string(), TodoStatus::Completed);
@@ -1167,11 +678,18 @@ mod tests {
         {
             let mut plan = app.plan_state.try_lock().expect("plan lock");
             plan.update(UpdatePlanArgs {
+                objective: Some("Keep relays grounded".to_string()),
                 explanation: Some("RLM-style strategy".to_string()),
+                sources_used: vec!["transcript context".to_string()],
+                critical_files: vec!["crates/tui/src/commands/mod.rs".to_string()],
+                constraints: vec!["Do not invent verification".to_string()],
+                verification_plan: Some("Check relay prompt assertions".to_string()),
+                handoff_packet: Some("Next thread should read the To-do list".to_string()),
                 plan: vec![PlanItemArg {
-                    step: "keep checklist primary".to_string(),
+                    step: "keep To-do primary".to_string(),
                     status: StepStatus::InProgress,
                 }],
+                ..UpdatePlanArgs::default()
             });
         }
 
@@ -1192,20 +710,113 @@ mod tests {
         assert!(message.contains("Write or update `.deepseek/handoff.md`"));
         assert!(message.contains("# Session relay"));
         assert!(message.contains("Requested relay focus: verify install"));
-        assert!(message.contains("Hunt quarry: Unify the work surface"));
-        assert!(message.contains("Hunt token budget: 12000"));
-        assert!(message.contains("Work checklist (primary progress surface, 50% complete)"));
-        assert!(message.contains("#1 [completed] inspect workspace"));
-        assert!(message.contains("#2 [in_progress] patch relay command"));
-        assert!(message.contains("Optional strategy metadata from update_plan"));
+        assert!(message.contains("Goal objective: Unify the work surface"));
+        assert!(message.contains("Goal token budget: 12000"));
+        // #3983: the relay artifact shows the same bounded To-do snapshot body
+        // a forked agent is handed — byte for byte.
+        let expected_body = crate::todo_snapshot::todo_snapshot_body(
+            &app.todos.try_lock().expect("todo lock").snapshot(),
+        )
+        .expect("canonical body");
+        assert_eq!(
+            expected_body,
+            "To-do (50% settled)\n- [x] #1 inspect workspace\n- [~] #2 patch relay command"
+        );
+        assert!(
+            message.contains(&expected_body),
+            "relay must embed the canonical To-do body: {message}"
+        );
+        assert!(message.contains("Conversational strategy notes from update_plan"));
+        assert!(message.contains("Objective: Keep relays grounded"));
         assert!(message.contains("Explanation: RLM-style strategy"));
-        assert!(message.contains("[in_progress] keep checklist primary"));
+        assert!(message.contains("Source: transcript context"));
+        assert!(message.contains("Critical file: crates/tui/src/commands/mod.rs"));
+        assert!(message.contains("Constraint: Do not invent verification"));
+        assert!(message.contains("Verification plan: Check relay prompt assertions"));
+        assert!(message.contains("Handoff packet: Next thread should read the To-do list"));
+        assert!(message.contains("[in_progress] keep To-do primary"));
+        assert!(
+            !message.contains("Work checklist"),
+            "relay copy should use To-do vocabulary: {message}"
+        );
+    }
+
+    /// #3983: `update_plan` is conversational strategy, not a To-do. A session
+    /// with plan state and an empty To-do has no list to hand off, and the
+    /// relay artifact must not manufacture one.
+    #[test]
+    fn relay_does_not_present_plan_only_state_as_work_state() {
+        let mut app = create_test_app();
+        {
+            let mut plan = app.plan_state.try_lock().expect("plan lock");
+            plan.update(UpdatePlanArgs {
+                objective: Some("Ship the To-do seam".to_string()),
+                plan: vec![PlanItemArg {
+                    step: "draft the renderer".to_string(),
+                    status: StepStatus::InProgress,
+                }],
+                ..UpdatePlanArgs::default()
+            });
+        }
+
+        let result = execute("/relay", &mut app);
+        let Some(AppAction::SendMessage(message)) = result.action else {
+            panic!("expected SendMessage action");
+        };
+
+        assert!(
+            !message.contains("Current To-do:"),
+            "plan-only state must not render as a To-do: {message}"
+        );
+        assert!(
+            !message.contains("To-do ("),
+            "plan-only state must not synthesize a To-do list: {message}"
+        );
+        assert!(message.contains("Conversational strategy notes from update_plan"));
+    }
+
+    /// #3983: a graph-backed update is authoritative immediately, even before
+    /// the compatibility To-do projection is published to the UI.
+    #[tokio::test]
+    async fn relay_reads_same_turn_graph_backed_work_update() {
+        use crate::tools::spec::ToolSpec as _;
+
+        let mut app = create_test_app();
+        let work =
+            crate::work_graph::new_shared_work_runtime(app.todos.clone(), app.plan_state.clone());
+        app.runtime_services.work = Some(work.clone());
+
+        let mut context = crate::tools::spec::ToolContext::new(app.workspace.clone());
+        context.runtime.work = Some(work);
+        crate::tools::todo::TodoWriteTool::new(app.todos.clone())
+            .execute(
+                serde_json::json!({
+                    "todos": [{"content": "relay the staged graph", "status": "in_progress"}]
+                }),
+                &context,
+            )
+            .await
+            .expect("graph-backed todo_write");
+
+        assert!(
+            app.todos.lock().await.snapshot().is_empty(),
+            "precondition: legacy projection has not published yet"
+        );
+
+        let result = execute("/relay", &mut app);
+        let Some(AppAction::SendMessage(message)) = result.action else {
+            panic!("expected SendMessage action");
+        };
+        assert!(
+            message.contains("[~] #1 relay the staged graph"),
+            "{message}"
+        );
     }
 
     #[test]
     fn relay_command_has_bilingual_aliases() {
-        let relay = COMMANDS
-            .iter()
+        let relay = command_infos()
+            .into_iter()
             .find(|cmd| cmd.name == "relay")
             .expect("relay command should exist");
         assert_eq!(relay.aliases, &["batonpass", "接力"]);
@@ -1221,10 +832,14 @@ mod tests {
         assert!(message.contains("Requested relay focus: next hand"));
     }
 
+    /// AT-008: No built-in command name or alias is registered twice,
+    /// and no built-in alias collides with another command's canonical name.
+    /// This test iterates every command from `command_infos()` (all 9 groups)
+    /// and asserts uniqueness across the full set of names and aliases.
     #[test]
     fn command_registry_has_unique_names_and_aliases() {
         let mut names = std::collections::BTreeSet::new();
-        for command in COMMANDS {
+        for command in command_infos() {
             assert!(
                 names.insert(command.name),
                 "duplicate command name /{}",
@@ -1233,7 +848,7 @@ mod tests {
         }
 
         let mut aliases = std::collections::BTreeSet::new();
-        for command in COMMANDS {
+        for command in command_infos() {
             for alias in command.aliases {
                 assert!(
                     !names.contains(alias),
@@ -1244,10 +859,321 @@ mod tests {
         }
     }
 
+    /// AT-009: Command ownership contract — top-level `commands/mod.rs` only
+    /// registers groups (`groups::all_command_groups()`), each group owns its
+    /// `commands()` list, and every command has valid metadata.
+    ///
+    /// Config and debug groups are documented permanent exceptions: they keep
+    /// group-local `CommandInfo` statics and `dispatch()` in `mod.rs` rather
+    /// than extracting every command into a focused module. This is accepted
+    /// final structure per FEAT-008 §3.2.
+    ///
+    /// Enforcement strategy:
+    /// - Exactly 9 source-verified groups (from `groups/mod.rs`)
+    /// - Each group owns its commands() list
+    /// - Config and debug exceptions verified within their specific groups by
+    ///   identifying the group through its first command ("config" and "tokens")
+    /// - Not circular: the group-iterated command count is a consistency check;
+    ///   the primary enforcement is exact group count + per-group non-empty + valid metadata
+    #[test]
+    fn command_ownership_contract_is_enforced() {
+        let groups = groups::all_command_groups();
+
+        // AT-009 primary: exactly 9 groups matching groups/mod.rs
+        assert_eq!(
+            groups.len(),
+            9,
+            "expected exactly 9 command groups (core, session, config, debug, \
+             project, skills, memory, plugins, utility), got {}",
+            groups.len()
+        );
+
+        let mut total_commands = 0;
+        let mut has_config = false;
+        let mut has_debug = false;
+        for &group in groups {
+            let commands = group.commands();
+            assert!(
+                !commands.is_empty(),
+                "each group must have at least one command"
+            );
+            for cmd in commands {
+                let info = cmd.info();
+                assert!(!info.name.is_empty(), "command name must not be empty");
+                assert!(
+                    is_palette_safe_command_name(info.name),
+                    "/{} command names must be lowercase ASCII kebab-case",
+                    info.name
+                );
+                let usage_prefix = format!("/{}", info.name);
+                assert!(
+                    info.usage.starts_with(&usage_prefix),
+                    "/{} usage must start with /{{name}}, got {:?}",
+                    info.name,
+                    info.usage
+                );
+            }
+            total_commands += commands.len();
+
+            // Identify config and debug groups by their command content to
+            // verify permanent-exception counts within the correct group.
+            if commands.iter().any(|c| c.info().name == "config") {
+                has_config = true;
+                assert_eq!(
+                    commands.len(),
+                    13,
+                    "config group (group-local metadata exception) expected \
+                     exactly 13 commands, got {}",
+                    commands.len()
+                );
+            }
+            if commands.iter().any(|c| c.info().name == "tokens") {
+                has_debug = true;
+                assert_eq!(
+                    commands.len(),
+                    13,
+                    "debug group (group-local metadata exception) expected \
+                     exactly 13 commands, got {}",
+                    commands.len()
+                );
+            }
+        }
+
+        // Config and debug groups must be found and verified by content identity
+        assert!(
+            has_config,
+            "config group not found (expected first command: /config)"
+        );
+        assert!(
+            has_debug,
+            "debug group not found (expected first command: /tokens)"
+        );
+
+        // Consistency: group-iterated command count must match registry.
+        // FEAT-015 registers one test-only contextual command (`/feat015ctx`)
+        // under `#[cfg(test)]` to prove the dual-path seam (D6); the nine
+        // production groups remain exactly 96 commands.
+        let test_only_count = command_infos()
+            .iter()
+            .filter(|info| info.name == "feat015ctx")
+            .count();
+        assert_eq!(
+            total_commands + test_only_count,
+            command_infos().len(),
+            "group-iterated command count must match registry infos count"
+        );
+    }
+
+    #[test]
+    fn command_groups_are_cached_once() {
+        let first_groups = groups::all_command_groups();
+        let second_groups = groups::all_command_groups();
+        assert!(
+            std::ptr::eq(first_groups.as_ptr(), second_groups.as_ptr()),
+            "command group list should be cached"
+        );
+
+        for &group in first_groups {
+            let first_commands = group.commands();
+            let second_commands = group.commands();
+            assert!(
+                std::ptr::eq(first_commands.as_ptr(), second_commands.as_ptr()),
+                "command list should be cached per group"
+            );
+        }
+    }
+
+    #[test]
+    fn command_registry_metadata_is_complete_and_palette_safe() {
+        for command in command_infos() {
+            assert!(!command.name.is_empty(), "command name must not be empty");
+            assert_eq!(
+                command.name.trim(),
+                command.name,
+                "/{} command name must not need trimming",
+                command.name
+            );
+            assert!(
+                is_palette_safe_command_name(command.name),
+                "/{} command names must stay lowercase ASCII kebab-case",
+                command.name
+            );
+
+            let expected_usage_prefix = format!("/{}", command.name);
+            assert!(
+                command.usage.starts_with(&expected_usage_prefix),
+                "/{} usage must start with its canonical slash command, got {:?}",
+                command.name,
+                command.usage
+            );
+
+            let description = command.description_for(Locale::En);
+            assert!(
+                !description.trim().is_empty(),
+                "/{} must have non-empty English help text",
+                command.name
+            );
+            // #3913: descriptions must not restate the usage field — the
+            // palette and /help already append `usage` when arguments exist.
+            assert!(
+                !description.contains(command.usage),
+                "/{} description embeds its usage string {:?}: {description:?}",
+                command.name,
+                command.usage
+            );
+            assert!(
+                !description.contains(&format!("/{}", command.name)),
+                "/{} description embeds slash-command syntax that usage already covers: {description:?}",
+                command.name
+            );
+            for banned_prefix in ["Toolbox:", "Reference:"] {
+                assert!(
+                    !description.starts_with(banned_prefix),
+                    "/{} description should not start with {banned_prefix:?}: {description:?}",
+                    command.name
+                );
+            }
+
+            let palette_command = command.palette_command();
+            assert!(
+                palette_command.starts_with(&expected_usage_prefix),
+                "/{} palette command must use the canonical command, got {:?}",
+                command.name,
+                palette_command
+            );
+            assert_eq!(
+                palette_command.ends_with(' '),
+                command.requires_argument(),
+                "/{} palette command spacing must match argument requirement",
+                command.name
+            );
+
+            for &alias in command.aliases {
+                assert!(
+                    !alias.trim().is_empty(),
+                    "/{} alias must not be empty",
+                    command.name
+                );
+                assert_eq!(
+                    alias.trim(),
+                    alias,
+                    "/{} alias /{alias} must not need trimming",
+                    command.name
+                );
+                assert!(
+                    !alias.starts_with('/'),
+                    "/{} alias /{alias} must be stored without a slash",
+                    command.name
+                );
+                assert!(
+                    !alias.chars().any(char::is_whitespace),
+                    "/{} alias /{alias} must not contain whitespace",
+                    command.name
+                );
+                assert!(
+                    !alias.chars().any(|ch| ch.is_ascii_uppercase()),
+                    "/{} alias /{alias} must not contain uppercase ASCII",
+                    command.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn flagship_orchestration_and_workspace_commands_are_visible_at_the_palette_root() {
+        for name in [
+            "auto",
+            "goal",
+            "hooks",
+            "tokens",
+            "translate",
+            "workflow",
+            "workspace",
+        ] {
+            let info = registry()
+                .get_info(name)
+                .unwrap_or_else(|| panic!("/{name} must be registered"));
+            assert!(
+                info.show_in_empty_discovery(),
+                "/{name} must appear at the palette root (#5442 / #5439)"
+            );
+            assert!(
+                !traits::ADVANCED_DISCOVERY_COMMANDS.contains(&name),
+                "/{name} must not stay on the Advanced discovery list"
+            );
+        }
+    }
+
+    #[test]
+    fn command_discovery_tier_lists_use_canonical_registered_names() {
+        for (tier_name, names) in [
+            ("advanced", traits::ADVANCED_DISCOVERY_COMMANDS),
+            ("compatibility", traits::COMPATIBILITY_DISCOVERY_COMMANDS),
+        ] {
+            for &name in names {
+                let info = registry()
+                    .get_info(name)
+                    .unwrap_or_else(|| panic!("{tier_name} discovery entry {name:?} must resolve"));
+                assert_eq!(
+                    info.name, name,
+                    "{tier_name} discovery entry {name:?} must be canonical, not an alias for /{}",
+                    info.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn command_info_resolves_canonical_names_and_aliases() {
+        for command in command_infos() {
+            for lookup in [command.name.to_string(), format!("/{}", command.name)] {
+                let resolved = get_command_info(&lookup)
+                    .unwrap_or_else(|| panic!("{lookup:?} should resolve to /{}", command.name));
+                assert_eq!(resolved.name, command.name);
+            }
+
+            for &alias in command.aliases {
+                for lookup in [alias.to_string(), format!("/{alias}")] {
+                    let resolved = get_command_info(&lookup).unwrap_or_else(|| {
+                        panic!("{lookup:?} should resolve to /{}", command.name)
+                    });
+                    assert_eq!(resolved.name, command.name);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_registered_command_has_a_help_topic() {
+        let mut app = create_test_app();
+        for command in command_infos() {
+            let result = execute(&format!("/help {}", command.name), &mut app);
+            assert!(
+                !result.is_error,
+                "/help {} returned an error: {result:?}",
+                command.name
+            );
+            let message = result
+                .message
+                .unwrap_or_else(|| panic!("/help {} should return text", command.name));
+            assert!(
+                message.contains(command.name),
+                "/help {} should mention the command name, got {message:?}",
+                command.name
+            );
+            assert!(
+                message.contains(command.usage),
+                "/help {} should include usage {:?}, got {message:?}",
+                command.name,
+                command.usage
+            );
+        }
+    }
+
     #[test]
     fn context_command_opens_inspector_and_keeps_ctx_alias() {
-        let context = COMMANDS
-            .iter()
+        let context = command_infos()
+            .into_iter()
             .find(|cmd| cmd.name == "context")
             .expect("context command should exist");
         assert_eq!(context.aliases, &["ctx"]);
@@ -1259,6 +1185,10 @@ mod tests {
             result.action,
             Some(AppAction::OpenContextInspector)
         ));
+
+        let report = execute("/context report", &mut app);
+        let message = report.message.expect("context report should return text");
+        assert!(message.contains("Context Source Map"));
     }
 
     #[test]
@@ -1305,11 +1235,156 @@ mod tests {
     }
 
     #[test]
+    fn voice_send_and_voice_control_commands_toggle_state() {
+        let mut app = create_test_app();
+        assert!(!app.voice_send_enabled);
+        assert!(!app.voice_control_enabled);
+
+        for invocation in ["/voicesend", "/voice-send", "/yuyinsend", "/语音发送"] {
+            let result = execute(invocation, &mut app);
+            assert!(!result.is_error, "{invocation} should toggle cleanly");
+            assert!(result.action.is_none());
+            assert!(result.message.is_some());
+        }
+        // Four toggles land back at disabled.
+        assert!(!app.voice_send_enabled);
+
+        let result = execute("/voicecontrol", &mut app);
+        assert!(!result.is_error);
+        assert!(app.voice_control_enabled);
+        let result = execute("/voice-control", &mut app);
+        assert!(!result.is_error);
+        assert!(!app.voice_control_enabled);
+    }
+
+    /// `/voice` defers the actual capture to the UI event loop via
+    /// `AppAction::VoiceCapture`, so executing it never records audio.
+    /// On hosts without a recorder it must fail gracefully instead.
+    #[test]
+    fn voice_command_toggles_on_and_off_or_fails_gracefully() {
+        let mut app = create_test_app();
+        let result = execute("/voice", &mut app);
+        if app.voice_enabled {
+            assert!(!result.is_error);
+            assert!(matches!(result.action, Some(AppAction::VoiceCapture)));
+            let off = execute("/voice", &mut app);
+            assert!(!off.is_error);
+            assert!(off.action.is_none());
+            assert!(!app.voice_enabled);
+        } else {
+            assert!(result.is_error);
+            assert!(result.action.is_none());
+        }
+    }
+
+    #[test]
+    fn execute_rail_sets_placement_and_reports_actual_state() {
+        let mut app = create_test_app();
+
+        let result = execute("/rail off", &mut app);
+        assert!(!result.is_error);
+        assert_eq!(app.work_surface.placement, WorkSurfacePlacement::Off);
+        assert!(
+            result
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("Rail is off")
+        );
+
+        let result = execute("/rail right", &mut app);
+        assert!(!result.is_error);
+        assert_eq!(app.work_surface.placement, WorkSurfacePlacement::Right);
+        assert!(
+            result
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("right placement")
+        );
+
+        // The /sidebar alias drives the same rail.
+        let result = execute("/sidebar left", &mut app);
+        assert!(!result.is_error);
+        assert_eq!(app.work_surface.placement, WorkSurfacePlacement::Left);
+
+        // Bare /rail reports the actual rendered state; it must never claim
+        // visibility for a surface that cannot render.
+        app.work_surface.placement = WorkSurfacePlacement::Off;
+        let result = execute("/rail", &mut app);
+        assert!(!result.is_error);
+        assert!(
+            result
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("Rail is off")
+        );
+    }
+
+    #[test]
+    fn execute_rail_accepts_panel_targets_and_legacy_words() {
+        let mut app = create_test_app();
+
+        let result = execute("/rail agents", &mut app);
+        assert!(!result.is_error);
+        assert_eq!(app.work_surface.panel, RailPanel::Agents);
+
+        let result = execute("/sidebar context", &mut app);
+        assert!(!result.is_error);
+        assert_eq!(app.work_surface.panel, RailPanel::Context);
+
+        let result = execute("/rail activity", &mut app);
+        assert!(!result.is_error);
+        assert_eq!(
+            app.work_surface.panel,
+            RailPanel::Tasks,
+            "activity maps onto the Tasks panel"
+        );
+
+        let result = execute("/rail pinned", &mut app);
+        assert!(!result.is_error);
+        assert_eq!(app.work_surface.panel, RailPanel::Pinned);
+
+        let result = execute("/sidebar on", &mut app);
+        assert!(!result.is_error);
+        assert_eq!(
+            app.work_surface.placement,
+            WorkSurfacePlacement::Top,
+            "on restores the default top rail"
+        );
+
+        let result = execute("/sidebar none", &mut app);
+        assert!(!result.is_error);
+        assert_eq!(app.work_surface.placement, WorkSurfacePlacement::Off);
+    }
+
+    #[test]
+    fn execute_rail_rejects_invalid_args() {
+        let mut app = create_test_app();
+        let result = execute("/rail maybe", &mut app);
+        assert!(result.is_error);
+        assert!(
+            result
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("Usage: /rail")
+        );
+    }
+
+    #[test]
     fn execute_links_and_aliases_return_links_message() {
         let mut app = create_test_app();
         for cmd in ["/links", "/dashboard", "/api", "/lianjie"] {
             let result = execute(cmd, &mut app);
             let msg = result.message.expect("links commands should return text");
+            assert!(msg.contains("https://ghosty.net/en/docs"));
+            assert!(msg.contains("https://ghosty.net/en/community"));
+            assert!(msg.contains("https://github.com/blissito/ghostycode"));
+            assert!(msg.contains("https://app.ghosty.net"));
+            assert!(msg.contains("separate sign-in"));
+            assert!(msg.contains("not connected to the current local session"));
             assert!(msg.contains("https://platform.deepseek.com"));
             assert!(result.action.is_none());
         }
@@ -1351,7 +1426,7 @@ mod tests {
 
     struct ConfigPathGuard {
         previous: Option<OsString>,
-        _lock: MutexGuard<'static, ()>,
+        _lock: crate::test_support::TestEnvLock,
     }
 
     impl ConfigPathGuard {
@@ -1383,7 +1458,7 @@ mod tests {
     }
 
     /// Build an App scoped to an isolated tempdir so dispatch-side-effects
-    /// (e.g. `/init` writing AGENTS.md, `/export` writing chat transcripts,
+    /// (e.g. `/init` writing AGENTS.md, explicit `/export <path>` writes, or
     /// `/logout` clearing credentials) don't pollute the repo working tree or
     /// the developer's real config when the smoke tests run.
     fn create_isolated_test_app() -> (App, tempfile::TempDir, ConfigPathGuard) {
@@ -1393,42 +1468,28 @@ mod tests {
         std::fs::create_dir_all(config_path.parent().expect("config parent")).expect("config dir");
         let guard = ConfigPathGuard::new(&config_path);
         let options = TuiOptions {
-            model: "deepseek-v4-pro".to_string(),
-            workspace: workspace.clone(),
             config_path: Some(config_path),
-            config_profile: None,
-            allow_shell: false,
-            use_alt_screen: true,
-            use_mouse_capture: false,
-            use_bracketed_paste: true,
-            max_subagents: 1,
             skills_dir: workspace.join("skills"),
             memory_path: workspace.join("memory.md"),
             notes_path: workspace.join("notes.txt"),
             mcp_config_path: workspace.join("mcp.json"),
-            use_memory: false,
-            start_in_agent_mode: false,
-            skip_onboarding: true,
-            yolo: false,
-            resume_session_id: None,
-            initial_input: None,
+            ..crate::test_support::test_tui_options(workspace.clone())
         };
         let app = App::new(options, &Config::default());
         (app, tmpdir, guard)
     }
 
-    /// Smoke test: every entry in `COMMANDS` must dispatch to a real handler.
+    /// Smoke test: every entry in `command_infos()` must dispatch to a real handler.
     /// A dispatch miss surfaces as the fall-through `Unknown command:` error
     /// message in `execute`. This catches the case where a new command is
-    /// added to `COMMANDS` (so it shows up in `/help` and the palette) but
+    /// added to `command_infos()` (so it shows up in `/help` and the palette) but
     /// the matching arm in `execute` is forgotten — the user would type the
     /// command, see it autocomplete, and then get an unhelpful "did you
     /// mean" suggestion. Also catches panics in handlers because the test
     /// runner unwinds the panic and reports the offending command.
-    /// `/save` and `/export` default their output paths to `cwd`-relative
-    /// filenames when no arg is supplied, which would scribble files into
-    /// `crates/tui/` when CI runs from there. Pass an explicit tempdir-
-    /// relative path for those two so the dispatch test stays sandboxed.
+    /// `/save` still defaults its output path, while `/export` accepts a legacy
+    /// direct file path. Pass explicit tempdir paths so this smoke test covers
+    /// both file handlers without touching the developer's clipboard.
     fn invocation_for(command_name: &str, alias_or_name: &str, tmpdir: &std::path::Path) -> String {
         match command_name {
             "save" => format!("/{alias_or_name} {}", tmpdir.join("session.json").display()),
@@ -1446,17 +1507,102 @@ mod tests {
         name == "restore"
     }
 
-    /// Smoke test: every entry in `COMMANDS` must dispatch to a real handler.
+    #[test]
+    fn slash_parser_preserves_arguments_after_the_command_name() {
+        let mut app = create_test_app();
+        let result = execute("/agent 2 review   this   carefully", &mut app);
+        assert!(!result.is_error);
+        let Some(AppAction::SendMessage(message)) = result.action else {
+            panic!("expected /agent to send a model instruction");
+        };
+        assert!(message.contains(r#"prompt: "review   this   carefully""#));
+        assert!(message.contains("max_depth: 2"));
+
+        let mut app = create_test_app();
+        let result = execute("   /relay   ship   command   harness   ", &mut app);
+        assert!(!result.is_error);
+        let Some(AppAction::SendMessage(message)) = result.action else {
+            panic!("expected /relay to send a model instruction");
+        };
+        assert!(message.contains("Requested relay focus: ship   command   harness"));
+
+        let mut app = create_test_app();
+        let result = execute("/rlm 3 inspect   this   corpus", &mut app);
+        assert!(!result.is_error);
+        let Some(AppAction::SendMessage(message)) = result.action else {
+            panic!("expected /rlm to send a model instruction");
+        };
+        assert!(message.contains(r#"this text: "inspect   this   corpus""#));
+        assert!(message.contains("session-persistent working context"));
+    }
+
+    #[test]
+    fn representative_command_groups_keep_dispatch_surfaces() {
+        let mut app = create_test_app();
+        let help = execute("/help clear", &mut app)
+            .message
+            .expect("/help clear should return text");
+        assert!(help.contains("clear"));
+        assert!(help.contains("/clear"));
+
+        let mut app = create_test_app();
+        let result = execute("/config", &mut app);
+        assert!(matches!(result.action, Some(AppAction::OpenConfigView)));
+
+        let mut app = create_test_app();
+        let result = execute("/relay command boundary", &mut app);
+        assert!(!result.is_error);
+        assert!(matches!(
+            result.action,
+            Some(AppAction::SendMessage(message))
+                if message.contains("Requested relay focus: command boundary")
+        ));
+
+        let mut app = create_test_app();
+        let note_help = execute("/note help", &mut app)
+            .message
+            .expect("/note help should return text");
+        assert!(note_help.contains("Usage: /note"));
+
+        let mut app = create_test_app();
+        let result = execute("/goal ship layer 2 | budget: 100", &mut app);
+        assert!(!result.is_error);
+        assert!(matches!(
+            result.action,
+            Some(AppAction::SetGoalObjective {
+                ref objective,
+                token_budget: Some(100)
+            }) if objective == "ship layer 2"
+        ));
+        // The hunt-era alias is gone: `/hunt` must not resolve anymore.
+        assert!(execute("/hunt ship layer 2", &mut app).is_error);
+
+        let (mut app, _tmpdir, _guard) = create_isolated_test_app();
+        let result = execute("/skills", &mut app);
+        assert!(matches!(result.action, Some(AppAction::OpenSkillsManager)));
+
+        let mut app = create_test_app();
+        let result = execute("/task list", &mut app);
+        assert!(matches!(result.action, Some(AppAction::TaskList)));
+
+        let mut app = create_test_app();
+        let tokens = execute("/tokens", &mut app)
+            .message
+            .expect("/tokens should return text");
+        assert!(tokens.contains("deepseek-v4-pro"));
+    }
+
+    /// Smoke test: every entry in `command_infos()` must dispatch to a real handler.
     /// A dispatch miss surfaces as the fall-through `Unknown command:` error
     /// message in `execute`. This catches the case where a new command is
-    /// added to `COMMANDS` (so it shows up in `/help` and the palette) but
+    /// added to `command_infos()` (so it shows up in `/help` and the palette) but
     /// the matching arm in `execute` is forgotten — the user would type the
     /// command, see it autocomplete, and then get an unhelpful "did you
     /// mean" suggestion. Also catches panics in handlers because the test
     /// runner unwinds the panic and reports the offending command.
     #[test]
     fn every_registered_command_dispatches_to_a_handler() {
-        for command in COMMANDS {
+        for command in command_infos() {
             if skip_in_dispatch_smoke(command.name) {
                 continue;
             }
@@ -1477,7 +1623,7 @@ mod tests {
     /// just because the registry lists it as an alias of `/exit`.
     #[test]
     fn every_command_alias_dispatches_to_a_handler() {
-        for command in COMMANDS {
+        for command in command_infos() {
             if skip_in_dispatch_smoke(command.name) {
                 continue;
             }
@@ -1559,5 +1705,283 @@ mod tests {
             .expect("unknown command should return an error message");
         assert!(msg.contains("Unknown command: /zzzzzz"));
         assert!(msg.contains("Type /help for available commands."));
+    }
+
+    #[test]
+    fn dollar_skill_prefix_with_no_name_shows_usage() {
+        let mut app = create_test_app();
+        let result = execute("$", &mut app);
+        assert!(result.is_error);
+        let msg = result.message.expect("should return error message");
+        assert!(msg.contains("Type a skill name after $"));
+    }
+
+    #[test]
+    fn dollar_skill_prefix_unknown_skill_reports_unknown_skill() {
+        let mut app = create_test_app();
+        let result = execute("$definitely-not-a-real-skill-12345", &mut app);
+        assert!(result.is_error);
+        let msg = result.message.expect("should return error message");
+        assert!(msg.contains("Unknown skill: $definitely-not-a-real-skill-12345"));
+        assert!(msg.contains("/skills"));
+    }
+
+    #[test]
+    fn dollar_skill_prefix_does_not_break_existing_slash_dispatch() {
+        let mut app = create_test_app();
+        let result = execute("/help", &mut app);
+        assert!(!result.is_error);
+    }
+
+    fn write_test_skill(root: &Path, name: &str) {
+        let skill_dir = root.join("skills").join(name);
+        std::fs::create_dir_all(&skill_dir).expect("skill directory");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            format!(
+                "---\nname: {name}\ndescription: Test {name} skill\n---\nFollow the test instructions."
+            ),
+        )
+        .expect("skill fixture");
+    }
+
+    #[test]
+    fn task_bearing_skill_invocations_send_the_task_on_the_activated_turn() {
+        for invocation in ["$foo do X", "/foo do X", "/skill foo do X"] {
+            let (mut app, tmpdir, _guard) = create_isolated_test_app();
+            write_test_skill(tmpdir.path(), "foo");
+
+            let result = execute(invocation, &mut app);
+
+            assert!(!result.is_error, "{invocation}: {result:?}");
+            assert!(
+                result
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("Skill 'foo' activated")),
+                "{invocation}: {result:?}"
+            );
+            assert!(
+                matches!(result.action, Some(AppAction::SendMessage(ref task)) if task == "do X"),
+                "{invocation}: {result:?}"
+            );
+            assert!(
+                app.active_skill
+                    .as_deref()
+                    .is_some_and(|instruction| instruction.contains("# Skill: foo")),
+                "{invocation} did not arm foo for the dispatched task"
+            );
+        }
+    }
+
+    #[test]
+    fn bare_dollar_skill_still_arms_the_next_message() {
+        let (mut app, tmpdir, _guard) = create_isolated_test_app();
+        write_test_skill(tmpdir.path(), "foo");
+
+        let result = execute("$foo", &mut app);
+
+        assert!(!result.is_error, "{result:?}");
+        assert!(result.action.is_none());
+        assert!(
+            app.active_skill
+                .as_deref()
+                .is_some_and(|instruction| instruction.contains("# Skill: foo"))
+        );
+    }
+
+    #[test]
+    fn shorthand_can_invoke_a_skill_named_install_without_stealing_management_commands() {
+        for invocation in ["$install do X", "/install do X"] {
+            let (mut app, tmpdir, _guard) = create_isolated_test_app();
+            write_test_skill(tmpdir.path(), "install");
+
+            let result = execute(invocation, &mut app);
+
+            assert!(!result.is_error, "{invocation}: {result:?}");
+            assert!(
+                matches!(result.action, Some(AppAction::SendMessage(ref task)) if task == "do X"),
+                "{invocation}: {result:?}"
+            );
+            assert!(
+                app.active_skill
+                    .as_deref()
+                    .is_some_and(|instruction| instruction.contains("# Skill: install")),
+                "{invocation} did not activate the install skill"
+            );
+        }
+
+        let (mut app, tmpdir, _guard) = create_isolated_test_app();
+        write_test_skill(tmpdir.path(), "install");
+        let result = execute("/skill install", &mut app);
+        assert!(result.is_error, "management subcommand should show usage");
+        assert!(
+            result
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("/skill install"))
+        );
+        assert!(result.action.is_none());
+        assert!(app.active_skill.is_none());
+    }
+
+    // ---------------------------------------------------------------------
+    // FEAT-015: test-only contextual dispatch through the public dispatcher
+    // (D6). The fixture is registered into the global registry only in test
+    // builds and executes through the public `execute()`.
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn feat015_contextual_command_executes_through_public_dispatcher() {
+        let mut app = create_test_app();
+        let result = execute("/feat015ctx hello", &mut app);
+        assert!(!result.is_error, "{result:?}");
+        let message = result.message.expect("message");
+        assert!(message.contains("workspace="), "{message}");
+        assert!(message.contains("mode="), "{message}");
+        assert!(message.contains("currency="), "{message}");
+        assert!(message.contains("arg=hello"), "{message}");
+        assert!(result.action.is_none());
+    }
+
+    #[test]
+    fn feat015_contextual_command_is_registered_only_in_test_builds() {
+        // The fixture entry is present in the test-build registry with a
+        // capability-scoped handler; production builds never see it.
+        assert!(registry().has_contextual_handler("feat015ctx"));
+        let info = registry().get_info("feat015ctx").expect("info");
+        assert_eq!(info.name, "feat015ctx");
+        assert_eq!(
+            info.description_id,
+            crate::localization::MessageId::CmdWorkspaceDescription,
+            "portable description_key must bridge to the TUI localization id"
+        );
+    }
+
+    #[test]
+    fn feat015_all_production_entries_remain_legacy() {
+        // FEAT-015 shipped no production contextual command, so the assertion
+        // below used to exclude nothing. FEAT-018 migrates the utility group;
+        // the remaining non-fixture commands must still use the legacy
+        // concrete-App path. The seven utility entries are asserted separately
+        // by the FEAT-018 public-dispatch and inventory tests (Phase 6).
+        const FEAT_018_UTILITY: &[&str] = &[
+            "attach",
+            "automation",
+            "jobs",
+            "mcp",
+            "network",
+            "task",
+            "update",
+        ];
+        for info in command_infos() {
+            if info.name == "feat015ctx" || FEAT_018_UTILITY.contains(&info.name) {
+                continue;
+            }
+            assert!(
+                !registry().has_contextual_handler(info.name),
+                "/{} must remain on the legacy dispatch path",
+                info.name
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // FEAT-018: public pure/contextual dispatch and seven-entry inventory
+    // (Task 6.2). These tests enter through the public registry/dispatch seam
+    // and prove both handler variants plus all seven utility metadata records.
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn feat018_all_seven_utility_entries_are_registered_with_portable_handlers() {
+        for name in [
+            "attach",
+            "automation",
+            "jobs",
+            "mcp",
+            "network",
+            "task",
+            "update",
+        ] {
+            let info = registry()
+                .get_info(name)
+                .unwrap_or_else(|| panic!("/{name} must be registered"));
+            assert_eq!(info.name, name, "canonical name");
+            assert!(
+                registry().has_contextual_handler(name),
+                "/{name} must carry a portable handler"
+            );
+        }
+    }
+
+    #[test]
+    fn feat018_pure_utility_command_dispatches_through_public_seam() {
+        let mut app = create_test_app();
+        // /jobs is a Pure handler: it must execute without building an
+        // envelope and return the same action as the parser.
+        let result = execute("/jobs list", &mut app);
+        assert!(!result.is_error, "{result:?}");
+        assert!(
+            matches!(
+                result.action,
+                Some(crate::tui::app::AppAction::ShellJob(
+                    crate::tui::app::ShellJobAction::List
+                ))
+            ),
+            "{result:?}"
+        );
+
+        // /update is Pure too; a bare check should reach the plan resolver and
+        // return a message (or a safe error in a test environment), never a panic.
+        let result = execute("/update", &mut app);
+        assert!(result.message.is_some() || result.is_error, "{result:?}");
+    }
+
+    #[test]
+    fn feat018_contextual_utility_commands_dispatch_through_public_seam() {
+        let mut app = create_test_app();
+
+        // /automation (contextual, presentation facet): list action.
+        let automation = execute("/automation list", &mut app);
+        assert!(
+            matches!(
+                automation.action,
+                Some(crate::tui::app::AppAction::Automation(
+                    crate::tui::app::AutomationAction::List
+                ))
+            ),
+            "{automation:?}"
+        );
+
+        // /task (contextual, workspace facet): digest without a runtime must
+        // produce the canonical no-active text.
+        let task = execute("/task digest", &mut app);
+        assert_eq!(
+            task.message.as_deref(),
+            Some("No active operations or to-do items."),
+            "{task:?}"
+        );
+
+        // /mcp (contextual, presentation facet): status maps to Show action.
+        let mcp = execute("/mcp status", &mut app);
+        assert!(
+            matches!(
+                mcp.action,
+                Some(crate::tui::app::AppAction::Mcp(
+                    crate::tui::app::McpUiAction::Show
+                ))
+            ),
+            "{mcp:?}"
+        );
+
+        // /attach (contextual, workspace + media facets): missing path is a
+        // safe error, never a panic, and the composer is untouched.
+        let attach = execute("/attach", &mut app);
+        assert!(attach.is_error, "{attach:?}");
+        assert!(app.input.is_empty(), "composer must stay unchanged");
+
+        // /network (pure): list produces a message.
+        let network = execute("/network list", &mut app);
+        assert!(network.message.is_some() || network.is_error, "{network:?}");
     }
 }

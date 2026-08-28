@@ -1,0 +1,30 @@
+{
+  "name": "@ghosty/runtime-sdk",
+  "version": "0.0.15",
+  "description": "Typed JavaScript helpers for Ghosty Runtime API Fleet endpoints.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs && node --check index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

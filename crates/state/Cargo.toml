@@ -2,14 +2,21 @@
 name = "ghosty-state"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Session/thread persistence and recovery model for DeepSeek workspace architecture"
+description = "Session/thread persistence and recovery model for Ghosty"
+
+[lints]
+workspace = true
 
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
-dirs.workspace = true
+ghosty-paths = { path = "../paths", version = "0.0.15" }
+ghosty-protocol = { path = "../protocol", version = "0.0.15" }
+fd-lock = "4.0.4"
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tracing.workspace = true

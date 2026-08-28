@@ -2,13 +2,85 @@
 
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::models::{ContentBlock, Message};
 use anyhow::{Context, Result};
 use ignore::WalkBuilder;
-use serde_json::Value;
+use std::io;
+
+/// A writer that counts bytes written without storing them.
+pub(crate) struct CountingWriter {
+    count: usize,
+}
+
+impl CountingWriter {
+    pub(crate) fn new() -> Self {
+        Self { count: 0 }
+    }
+
+    pub(crate) fn count(&self) -> usize {
+        self.count
+    }
+}
+
+impl io::Write for CountingWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.count += buf.len();
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+const LOG_FINGERPRINT_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+const LOG_FINGERPRINT_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+/// Return a stable, non-reversible log label for an identifier.
+///
+/// This is meant for correlation in diagnostics where the raw value may be a
+/// session token, remote protocol session id, or other bearer-like handle.
+#[must_use]
+pub fn redacted_identifier_for_log(identifier: &str) -> String {
+    if identifier.is_empty() {
+        return "<redacted:empty>".to_string();
+    }
+
+    let mut hash = LOG_FINGERPRINT_OFFSET_BASIS;
+    for byte in identifier.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(LOG_FINGERPRINT_PRIME);
+    }
+    hash ^= identifier.len() as u64;
+    hash = hash.wrapping_mul(LOG_FINGERPRINT_PRIME);
+
+    format!("<redacted:{hash:016x}>")
+}
+
+#[cfg(windows)]
+pub(crate) fn suppress_console_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+pub(crate) fn suppress_console_window(_cmd: &mut Command) {}
+
+#[cfg(windows)]
+pub(crate) fn suppress_tokio_console_window(cmd: &mut tokio::process::Command) {
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+pub(crate) fn suppress_tokio_console_window(_cmd: &mut tokio::process::Command) {}
 
 // === Project Mapping Helpers ===
 
@@ -111,17 +183,17 @@ pub fn summarize_project(root: &Path) -> String {
 /// directory still precedes its children because `"src" < "src/lib.rs"`)
 /// while making the rendered output byte-stable across runs.
 #[must_use]
-pub fn project_tree(root: &Path, max_depth: usize) -> String {
+pub fn project_tree(root: &Path, max_depth: usize, follow_symlinks: bool) -> String {
     let mut entries: Vec<(PathBuf, bool)> = Vec::new();
 
     let mut builder = WalkBuilder::new(root);
     builder
         .hidden(false)
-        .follow_links(false)
+        .follow_links(follow_symlinks)
         .max_depth(Some(max_depth + 1));
 
     for entry in builder.build().flatten() {
-        if entry.file_type().is_some_and(|ft| ft.is_symlink()) {
+        if entry.file_type().is_some_and(|ft| ft.is_symlink()) && !follow_symlinks {
             continue;
         }
         let depth = entry.depth();
@@ -157,7 +229,23 @@ pub fn project_tree(root: &Path, max_depth: usize) -> String {
 
 // === Filesystem Helpers ===
 
+/// Permission policy for atomic writes.
+///
+/// - [`AtomicWritePermissions::Private`]: keep tempfile's owner-only defaults
+///   (used for GhostyCode internal persistence such as session/history/trust).
+/// - [`AtomicWritePermissions::Workspace`]: match ordinary workspace file
+///   semantics — new files request mode `0666` (kernel applies umask); existing
+///   files retain ordinary `rwx` bits (not setuid/setgid/sticky).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AtomicWritePermissions {
+    Private,
+    Workspace,
+}
+
 /// Atomically write `contents` to `path` using a temporary file + fsync + rename.
+///
+/// Uses a **private** permission policy (Unix tempfile default `0600`). Prefer
+/// [`write_atomic_workspace`] for user workspace source/config files.
 ///
 /// 1. Creates a `NamedTempFile` in the same directory as `path` (same filesystem).
 /// 2. Writes `contents` to the temp file.
@@ -173,18 +261,229 @@ pub fn project_tree(root: &Path, max_depth: usize) -> String {
 /// Returns `io::Error` if the parent directory cannot be determined, the temp
 /// file cannot be created, the write fails, or the rename fails.
 pub fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    write_atomic_with_permissions(path, contents, AtomicWritePermissions::Private)
+}
+
+/// Atomically write `contents` to a **user workspace** path.
+///
+/// On Unix:
+/// - New files request creation mode `0666`; the OS applies the process umask
+///   (same candidate mode as ordinary `std::fs::write`).
+/// - Existing files keep ordinary permission bits (`mode & 0o777`), including
+///   executable bits. setuid/setgid/sticky are intentionally not restored.
+///
+/// On Windows this matches [`write_atomic`] (no POSIX mode simulation).
+///
+/// # Errors
+/// Same failure modes as [`write_atomic`].
+pub fn write_atomic_workspace(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    // Hard-link guard (issue #5569): a workspace path that shares its inode
+    // with another name cannot be proven to stay inside the writable root by
+    // path checks. Atomic rename would replace the directory entry (leaving
+    // the outside link on the old inode), but that silently splits the pair
+    // and would not block a future non-atomic writer. Fail closed. Windows
+    // std has no link-count introspection; its atomic rename still replaces
+    // the directory entry rather than the inode.
+    #[cfg(unix)]
+    if let Ok(metadata) = std::fs::metadata(path)
+        && metadata.is_file()
+        && metadata.nlink() > 1
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "refusing to rewrite {}: the file has {} hard links and path checks cannot prove the other links stay inside the workspace; copy it to a new name to break the link",
+                path.display(),
+                metadata.nlink(),
+            ),
+        ));
+    }
+    write_atomic_with_permissions(path, contents, AtomicWritePermissions::Workspace)
+}
+
+fn write_atomic_with_permissions(
+    path: &Path,
+    contents: &[u8],
+    #[cfg_attr(not(unix), allow(unused_variables))] permission_policy: AtomicWritePermissions,
+) -> std::io::Result<()> {
     let parent = path.parent().ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!("path has no parent directory: {}", path.display()),
         )
     })?;
+
+    // Capture ordinary rwx bits before replacement. Use symlink_metadata so we
+    // do not follow links: an inaccessible or dangling symlink target must not
+    // abort the write — rename still replaces the directory entry, matching
+    // the pre-#4606 private write_atomic behavior. Symlink entries themselves
+    // are treated as "no mode to preserve" (new ordinary file after rename);
+    // only regular-file modes are restored. Mask with 0o777 so setuid/setgid/
+    // sticky are never restored after rewriting content.
+    #[cfg(unix)]
+    let existing_workspace_mode = if permission_policy == AtomicWritePermissions::Workspace {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => None,
+            Ok(metadata) => {
+                use std::os::unix::fs::PermissionsExt;
+                Some(metadata.permissions().mode() & 0o777)
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+            Err(err) => return Err(err),
+        }
+    } else {
+        None
+    };
+
     // Use parent directory so the rename is on the same filesystem.
-    let mut tmp = tempfile::NamedTempFile::new_in(parent)?;
+    #[cfg(unix)]
+    let mut builder = tempfile::Builder::new();
+    #[cfg(not(unix))]
+    let builder = tempfile::Builder::new();
+
+    // New workspace files should behave like ordinary files opened with
+    // creation mode 0666. The kernel applies the inherited process umask.
+    // Do NOT chmod after create: set_permissions bypasses umask.
+    #[cfg(unix)]
+    if permission_policy == AtomicWritePermissions::Workspace && existing_workspace_mode.is_none() {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(fs::Permissions::from_mode(0o666));
+    }
+
+    // Reclaim our own strays before adding another (see the function docs).
+    // Private permission policy is also used for user-chosen destinations
+    // such as `/save <path>`; only sweep Ghosty-owned state/config dirs.
+    if permission_policy == AtomicWritePermissions::Private && is_ghosty_owned_state_dir(parent) {
+        sweep_stale_atomic_write_temps(parent);
+    }
+
+    let mut tmp = builder.tempfile_in(parent)?;
     std::io::Write::write_all(&mut tmp, contents)?;
+
+    // Atomic replacement creates a new inode. Restore ordinary access /
+    // executable bits of an existing workspace file before persisting.
+    #[cfg(unix)]
+    if let Some(mode) = existing_workspace_mode {
+        use std::os::unix::fs::PermissionsExt;
+        tmp.as_file()
+            .set_permissions(fs::Permissions::from_mode(mode))?;
+    }
+
     tmp.as_file().sync_all()?;
+    #[cfg(windows)]
+    {
+        // Windows can briefly deny replacement while Defender, indexing, or a
+        // concurrent reader still holds the destination without delete sharing.
+        // Keep the already-synced tempfile and retry only the transient Win32
+        // sharing/lock failures; permanent permission errors still surface.
+        const MAX_PERSIST_ATTEMPTS: usize = 6;
+        let mut pending = tmp;
+        for attempt in 0..MAX_PERSIST_ATTEMPTS {
+            match pending.persist(path) {
+                Ok(_) => break,
+                Err(err) => {
+                    let retryable = err.error.kind() == std::io::ErrorKind::PermissionDenied
+                        || matches!(err.error.raw_os_error(), Some(5 | 32 | 33));
+                    if !retryable || attempt + 1 == MAX_PERSIST_ATTEMPTS {
+                        return Err(err.error);
+                    }
+                    pending = err.file;
+                    std::thread::sleep(std::time::Duration::from_millis(
+                        10u64.saturating_mul(1u64 << attempt),
+                    ));
+                }
+            }
+        }
+    }
+    #[cfg(not(windows))]
     tmp.persist(path)?;
+    // Fsync the parent directory so the rename (the new directory entry) is
+    // itself durable — otherwise a power loss right after the rename can lose
+    // it even though the file data was synced, silently dropping a
+    // crash-recovery checkpoint. Best-effort: not all platforms permit
+    // opening a directory for sync, so a failure here is not fatal.
+    if let Ok(dir) = std::fs::File::open(parent) {
+        let _ = dir.sync_all();
+    }
     Ok(())
+}
+
+/// True when `dir` is under `$GHOSTY_HOME` / `~/.ghosty`, or the ambient
+/// `~/.deepseek` legacy root when that root is still in play.
+fn is_ghosty_owned_state_dir(dir: &Path) -> bool {
+    if dir.as_os_str().is_empty() {
+        return false;
+    }
+    let primary = ghosty_paths::ghosty_home().ok().flatten();
+    let legacy = (!ghosty_paths::ghosty_home_is_explicit())
+        .then(ghosty_paths::legacy_deepseek_home)
+        .flatten();
+    [primary, legacy]
+        .into_iter()
+        .flatten()
+        .any(|root| !root.as_os_str().is_empty() && dir.starts_with(root))
+}
+
+/// Remove `.tmpXXXXXX` files this writer stranded in `dir` on an earlier run.
+///
+/// `NamedTempFile` deletes itself on drop, so an ordinary failure — or an
+/// ordinary exit — leaves nothing behind. A `SIGKILL` between `tempfile_in`
+/// and `persist` cannot run a destructor, so the partial file survives, and
+/// nothing ever collected it: five such strays (46 KB each, mode 0600) were
+/// sitting in a real `~/.ghosty/` from a single day three weeks earlier.
+/// They accumulate silently in the user's config directory forever.
+///
+/// Deliberately conservative, because this deletes files under `$HOME`:
+///
+/// - **Product directories only** — parent must be under `$GHOSTY_HOME`
+///   (or `~/.ghosty`) or the ambient `~/.deepseek` legacy root. User-chosen
+///   destinations such as `/save <path>` keep the private permission policy
+///   but are not swept (enforced at the call site).
+/// - **Exact shape only** — `tempfile`'s default naming is the literal prefix
+///   `.tmp` followed by exactly six alphanumerics and nothing else. A user file
+///   called `.tmp`, `.tmpfile`, or `.tmp-backup` does not match.
+/// - **Older than an hour** — so a concurrent write by another Ghosty
+///   process is never raced. Same threshold and reasoning as
+///   `shell_dispatcher::sweep_stale_temp_ps1`.
+/// - **Best effort** — every failure is ignored; this must never turn a
+///   successful write into an error.
+fn sweep_stale_atomic_write_temps(dir: &Path) {
+    const STALE_AFTER: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if !is_stray_atomic_write_temp_name(name) {
+            continue;
+        }
+        // Only regular files; never follow or remove a symlink or directory.
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+        let stale = metadata
+            .modified()
+            .ok()
+            .and_then(|modified| modified.elapsed().ok())
+            .is_some_and(|age| age > STALE_AFTER);
+        if stale {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// `tempfile`'s default name: `.tmp` + exactly six ASCII alphanumerics.
+fn is_stray_atomic_write_temp_name(name: &str) -> bool {
+    let Some(random) = name.strip_prefix(".tmp") else {
+        return false;
+    };
+    random.len() == 6 && random.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
 /// Open or create a file for appending at `path`, optionally syncing after
@@ -213,7 +512,7 @@ pub fn flush_and_sync(writer: &mut std::io::BufWriter<std::fs::File>) -> std::io
 ///
 /// Dispatches to the platform-appropriate opener:
 /// - macOS: `open`
-/// - Linux: `xdg-open`
+/// - Linux / BSD: `xdg-open`
 /// - Windows: `cmd /C start ""`
 /// - Other: returns an error.
 ///
@@ -242,7 +541,13 @@ fn browser_open_command(url: &str) -> Result<Command> {
         Ok(command)
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(
+        all(target_os = "linux", not(target_env = "ohos")),
+        target_os = "netbsd",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    ))]
     {
         let mut command = Command::new("xdg-open");
         command.arg(url);
@@ -256,7 +561,15 @@ fn browser_open_command(url: &str) -> Result<Command> {
         Ok(cmd)
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    #[cfg(not(any(
+        target_os = "macos",
+        all(target_os = "linux", not(target_env = "ohos")),
+        target_os = "windows",
+        target_os = "netbsd",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    )))]
     Err(anyhow::anyhow!(
         "browser opening is unsupported on this platform"
     ))
@@ -318,6 +631,18 @@ pub fn record_caught_panic(name: &'static str, message: &str) {
     let location = std::panic::Location::caller();
     tracing::error!(target: "panic", "Task '{name}' panicked at {location}: {message}");
     let _ = write_panic_dump(name, location, message);
+    // A caught panic is still a panic. The site is allowlist-reduced to
+    // `crates/…` or the literal `<dep>`, and `message` is deliberately not
+    // read: a slicing panic embeds the entire string being sliced. The exit
+    // class is left alone — the caller recovered, so this process is not
+    // ending here. A no-op unless this process was armed.
+    ghosty_telemetry::record_blocking(ghosty_telemetry::Event::Panic {
+        site: ghosty_telemetry::reduce_panic_site(
+            location.file(),
+            location.line(),
+            location.column(),
+        ),
+    });
 }
 
 /// Write a panic dump file to `~/.ghosty/crashes/`.
@@ -330,7 +655,7 @@ fn write_panic_dump(
     location: &std::panic::Location<'_>,
     message: &str,
 ) -> std::io::Result<()> {
-    let home = dirs::home_dir().ok_or_else(|| {
+    let home = crate::config::effective_home_dir().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::NotFound, "home directory not found")
     })?;
     // Prefer .ghosty, fall back to .deepseek
@@ -398,13 +723,6 @@ pub fn ensure_dir(path: &Path) -> Result<()> {
         .with_context(|| format!("Failed to create directory: {}", path.display()))
 }
 
-/// Render JSON with pretty formatting, falling back to a compact string on error.
-#[must_use]
-#[allow(dead_code)]
-pub fn pretty_json(value: &Value) -> String {
-    serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
-}
-
 /// Truncate a string to a maximum length, adding an ellipsis if truncated.
 ///
 /// Uses char boundaries to avoid panicking on multi-byte UTF-8 characters.
@@ -456,11 +774,11 @@ pub fn url_encode(input: &str) -> String {
 /// resolve correctly across processes.
 #[must_use]
 pub fn display_path(path: &Path) -> String {
-    display_path_with_home(path, dirs::home_dir().as_deref())
+    display_path_with_home(path, crate::config::effective_home_dir().as_deref())
 }
 
 /// Like [`display_path`] but takes an explicit home directory instead of
-/// reading `$HOME` / `dirs::home_dir()`.  Used in tests and anywhere the
+/// reading `$HOME` / `crate::config::effective_home_dir()`.  Used in tests and anywhere the
 /// caller already has the home path available.
 ///
 /// The home-relative suffix is rejoined with the platform separator
@@ -494,8 +812,12 @@ pub fn estimate_message_chars(messages: &[Message]) -> usize {
         for block in &msg.content {
             match block {
                 ContentBlock::Text { text, .. } => total += text.len(),
-                ContentBlock::Thinking { thinking } => total += thinking.len(),
-                ContentBlock::ToolUse { input, .. } => total += input.to_string().len(),
+                ContentBlock::Thinking { thinking, .. } => total += thinking.len(),
+                ContentBlock::ToolUse { input, .. } => {
+                    let mut cw = CountingWriter::new();
+                    let _ = serde_json::to_writer(&mut cw, input);
+                    total += cw.count();
+                }
                 ContentBlock::ToolResult { content, .. } => total += content.len(),
                 ContentBlock::ServerToolUse { .. }
                 | ContentBlock::ToolSearchToolResult { .. }
@@ -515,11 +837,28 @@ pub fn estimate_message_chars(messages: &[Message]) -> usize {
 // without additional platform scaffolding.
 #[cfg(test)]
 mod tests {
-    use super::display_path_with_home;
+    use super::{display_path_with_home, redacted_identifier_for_log};
     use std::path::PathBuf;
 
     fn home(s: &str) -> Option<PathBuf> {
         Some(PathBuf::from(s))
+    }
+
+    #[test]
+    fn redacted_identifier_for_log_hides_value_and_stays_stable() {
+        let identifier = "session-secret-1234567890";
+        let redacted = redacted_identifier_for_log(identifier);
+
+        assert!(redacted.starts_with("<redacted:"));
+        assert!(redacted.ends_with('>'));
+        assert!(!redacted.contains(identifier));
+        assert_eq!(redacted, redacted_identifier_for_log(identifier));
+        assert_ne!(redacted, redacted_identifier_for_log("another-session"));
+    }
+
+    #[test]
+    fn redacted_identifier_for_log_marks_empty_values() {
+        assert_eq!(redacted_identifier_for_log(""), "<redacted:empty>");
     }
 
     #[test]
@@ -607,6 +946,33 @@ mod atomic_write_tests {
         assert_eq!(read, "new content");
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn write_atomic_retries_windows_replace_contention() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let tmp = tempdir().expect("tempdir");
+        let path = tmp.path().join("contended.json");
+        fs::write(&path, b"old content").expect("write old");
+
+        // FILE_SHARE_READ | FILE_SHARE_WRITE deliberately omits
+        // FILE_SHARE_DELETE, reproducing the short-lived handle contention
+        // that makes MoveFileExW report access denied during replacement.
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0x1 | 0x2)
+            .open(&path)
+            .expect("hold destination without delete sharing");
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            drop(held);
+        });
+
+        write_atomic(&path, b"new content").expect("retry contended atomic replacement");
+        release.join().expect("release destination handle");
+        assert_eq!(fs::read(&path).expect("read replacement"), b"new content");
+    }
+
     #[test]
     fn write_atomic_no_temp_left_behind_on_success() {
         let tmp = tempdir().expect("tempdir");
@@ -627,6 +993,220 @@ mod atomic_write_tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_workspace_refuses_a_hard_linked_target() {
+        let dir = tempdir().expect("tempdir");
+        let outside = dir.path().join("outside.txt");
+        fs::write(&outside, b"outside").expect("outside state");
+        let linked = dir.path().join("linked.txt");
+        fs::hard_link(&outside, &linked).expect("hard link");
+
+        let err = write_atomic_workspace(&linked, b"new").expect_err("must refuse");
+        assert!(
+            err.to_string().contains("hard links"),
+            "the refusal must name the hard-link reason: {err}"
+        );
+        assert_eq!(
+            fs::read_to_string(&outside).expect("outside read"),
+            "outside",
+            "the outside file must stay untouched"
+        );
+        assert_eq!(
+            fs::read_to_string(&linked).expect("linked read"),
+            "outside",
+            "the workspace entry must stay untouched too"
+        );
+        // Breaking the link re-enables normal writes.
+        fs::remove_file(&linked).expect("break link");
+        write_atomic_workspace(&linked, b"fresh").expect("single-link write");
+        assert_eq!(fs::read_to_string(&linked).expect("fresh read"), "fresh");
+        assert_eq!(
+            fs::read_to_string(&outside).expect("outside read"),
+            "outside"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_workspace_new_file_matches_standard_creation_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().expect("tempdir");
+        let control = dir.path().join("control.txt");
+        let actual = dir.path().join("actual.txt");
+
+        fs::write(&control, b"control").expect("write control");
+        write_atomic_workspace(&actual, b"actual").expect("atomic workspace write");
+
+        let control_mode = fs::metadata(&control)
+            .expect("control metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        let actual_mode = fs::metadata(&actual)
+            .expect("actual metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+
+        assert_eq!(actual_mode, control_mode);
+        assert_eq!(fs::read(&actual).expect("read"), b"actual");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_workspace_preserves_existing_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("shared.txt");
+        fs::write(&path, b"before").expect("initial write");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o664))
+            .expect("set shared permissions");
+
+        write_atomic_workspace(&path, b"after").expect("atomic workspace write");
+
+        let mode = fs::metadata(&path).expect("metadata").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o664);
+        assert_eq!(fs::read(&path).expect("read"), b"after");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_workspace_preserves_executable_bits() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("script.sh");
+        fs::write(&path, b"#!/bin/sh\nexit 0\n").expect("initial write");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755))
+            .expect("set executable permissions");
+
+        write_atomic_workspace(&path, b"#!/bin/sh\nexit 1\n").expect("atomic workspace write");
+
+        let mode = fs::metadata(&path).expect("metadata").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755);
+        assert_eq!(fs::read(&path).expect("read"), b"#!/bin/sh\nexit 1\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_workspace_does_not_restore_special_bits() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("special.sh");
+        fs::write(&path, b"#!/bin/sh\n").expect("initial write");
+        // Request sticky + setgid + rwxr-xr-x. Filesystems may clear some
+        // special bits; we only assert that after rewrite we never keep
+        // bits outside the ordinary 0o777 mask.
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o6755));
+        let before = fs::metadata(&path)
+            .expect("metadata before")
+            .permissions()
+            .mode();
+        let expected_ordinary = before & 0o777;
+
+        write_atomic_workspace(&path, b"#!/bin/sh\necho rewritten\n")
+            .expect("atomic workspace write");
+
+        let after = fs::metadata(&path)
+            .expect("metadata after")
+            .permissions()
+            .mode();
+        assert_eq!(after & 0o777, expected_ordinary);
+        // `PermissionsExt::mode()` also contains the regular-file type bit on
+        // macOS/BSD. Check only the Unix special permission bits rather than
+        // treating every non-rwx bit as a restored permission.
+        assert_eq!(after & 0o7000, 0, "special bits must not be restored");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_workspace_replaces_symlink_without_following_target() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let dir = tempdir().expect("tempdir");
+        let target = dir.path().join("target.txt");
+        let link = dir.path().join("link.txt");
+        fs::write(&target, b"target-body").expect("write target");
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600))
+            .expect("lock down target mode");
+        symlink(&target, &link).expect("create symlink");
+
+        write_atomic_workspace(&link, b"replaced-link")
+            .expect("workspace write must replace symlink directory entry");
+
+        let link_meta = fs::symlink_metadata(&link).expect("link metadata");
+        assert!(
+            link_meta.file_type().is_file() && !link_meta.file_type().is_symlink(),
+            "rename should replace the symlink with a regular file"
+        );
+        assert_eq!(fs::read(&link).expect("read link path"), b"replaced-link");
+        // Target inode must remain untouched (old private write_atomic semantics).
+        assert_eq!(fs::read(&target).expect("read target"), b"target-body");
+        assert_eq!(
+            fs::metadata(&target)
+                .expect("target metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_workspace_replaces_self_referential_symlink_without_following() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().expect("tempdir");
+        let link = dir.path().join("self-link.txt");
+        symlink(&link, &link).expect("create self-referential symlink");
+
+        assert!(
+            fs::symlink_metadata(&link)
+                .expect("lstat self-referential symlink")
+                .file_type()
+                .is_symlink()
+        );
+        let follow_error = fs::metadata(&link).expect_err("following the symlink must fail");
+        assert_ne!(
+            follow_error.kind(),
+            std::io::ErrorKind::NotFound,
+            "the fixture must catch a metadata-following regression"
+        );
+
+        let result = write_atomic_workspace(&link, b"new-content");
+        result.expect("workspace write must not follow a self-referential symlink");
+        let link_meta = fs::symlink_metadata(&link).expect("link metadata");
+        assert!(link_meta.file_type().is_file() && !link_meta.file_type().is_symlink());
+        assert_eq!(fs::read(&link).expect("read"), b"new-content");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_private_new_file_does_not_gain_group_or_other_access() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("private.json");
+
+        write_atomic(&path, b"{}").expect("private atomic write");
+
+        let mode = fs::metadata(&path).expect("metadata").permissions().mode() & 0o777;
+        assert_eq!(mode & 0o077, 0);
+    }
+
+    #[test]
+    fn write_atomic_workspace_writes_content() {
+        let tmp = tempdir().expect("tempdir");
+        let path = tmp.path().join("workspace.txt");
+        write_atomic_workspace(&path, b"workspace").expect("write_atomic_workspace");
+        assert_eq!(fs::read(&path).expect("read"), b"workspace");
+    }
+
     #[test]
     fn flush_and_sync_writes_and_syncs() {
         let tmp = tempdir().expect("tempdir");
@@ -641,6 +1221,177 @@ mod atomic_write_tests {
         let content = fs::read_to_string(&path).expect("read");
         assert_eq!(content, "line 1\nline 2\n");
     }
+
+    // === stray atomic-write temp files ===
+
+    /// Backdate a file's mtime past the sweeper's one-hour threshold, using
+    /// std rather than pulling in a dev-dependency just to age a fixture.
+    fn age_past_the_threshold(path: &std::path::Path) {
+        let two_hours_ago =
+            std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 60 * 60);
+        let file = std::fs::File::options()
+            .write(true)
+            .open(path)
+            .expect("open fixture");
+        file.set_times(std::fs::FileTimes::new().set_modified(two_hours_ago))
+            .expect("age the fixture");
+    }
+
+    #[test]
+    fn stray_temp_names_match_only_tempfiles_default_shape() {
+        // What `tempfile` actually produces.
+        assert!(super::is_stray_atomic_write_temp_name(".tmp0dqfST"));
+        assert!(super::is_stray_atomic_write_temp_name(".tmpBcX9dY"));
+        assert!(super::is_stray_atomic_write_temp_name(".tmpABC123"));
+
+        // User files that must never be swept.
+        for safe in [
+            ".tmp",
+            ".tmpfile",
+            ".tmp-backup",
+            ".tmp12345",   // five
+            ".tmp1234567", // seven
+            ".tmpABC12_",  // underscore is not alphanumeric
+            "tmpABC123",   // no leading dot
+            ".temp123456",
+            "config.toml",
+        ] {
+            assert!(
+                !super::is_stray_atomic_write_temp_name(safe),
+                "{safe} must not be treated as ours to delete"
+            );
+        }
+    }
+
+    #[test]
+    fn sweeping_removes_only_old_strays_and_leaves_everything_else() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let old_stray = dir.path().join(".tmpAAAAAA");
+        let fresh_stray = dir.path().join(".tmpBBBBBB");
+        let user_file = dir.path().join(".tmp-please-keep");
+        let real_file = dir.path().join("config.toml");
+        for path in [&old_stray, &fresh_stray, &user_file, &real_file] {
+            std::fs::write(path, b"x").expect("write fixture");
+        }
+
+        age_past_the_threshold(&old_stray);
+
+        super::sweep_stale_atomic_write_temps(dir.path());
+
+        assert!(
+            !old_stray.exists(),
+            "an hour-old stray of ours is collected"
+        );
+        assert!(
+            fresh_stray.exists(),
+            "a fresh stray may belong to a concurrent write and must be left alone"
+        );
+        assert!(user_file.exists(), "a user file must never be swept");
+        assert!(real_file.exists());
+    }
+
+    /// Seal HOME / GHOSTY_HOME to `tmp` so sweep policy is deterministic
+    /// and never inspects the developer's real `~/.ghosty`.
+    fn seal_product_home(
+        tmp: &std::path::Path,
+    ) -> (std::path::PathBuf, Vec<crate::test_support::EnvVarGuard>) {
+        use crate::test_support::EnvVarGuard;
+
+        let product = tmp.join("product-home");
+        std::fs::create_dir_all(&product).expect("create product home");
+        let guards = vec![
+            EnvVarGuard::set("HOME", tmp),
+            EnvVarGuard::set("USERPROFILE", tmp),
+            EnvVarGuard::set("GHOSTY_HOME", &product),
+            EnvVarGuard::remove("GHOSTY_CONFIG_PATH"),
+            EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH"),
+            EnvVarGuard::remove("DEEPSEEK_HOME"),
+        ];
+        (product, guards)
+    }
+
+    #[test]
+    fn a_private_atomic_write_in_a_product_dir_collects_strays() {
+        let _lock = crate::test_support::lock_test_env();
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let (product, _guards) = seal_product_home(tmp.path());
+
+        assert!(
+            super::is_ghosty_owned_state_dir(&product),
+            "sealed GHOSTY_HOME must count as a product dir"
+        );
+
+        let stray = product.join(".tmpCCCCCC");
+        std::fs::write(&stray, b"stranded by a SIGKILL").expect("write stray");
+        age_past_the_threshold(&stray);
+
+        let target = product.join("state.json");
+        super::write_atomic(&target, b"{\"ok\":true}").expect("atomic write");
+
+        assert_eq!(std::fs::read(&target).expect("read back"), b"{\"ok\":true}");
+        assert!(!stray.exists(), "the write reclaimed the earlier stray");
+    }
+
+    #[test]
+    fn a_private_atomic_write_to_a_user_chosen_dest_does_not_sweep() {
+        let _lock = crate::test_support::lock_test_env();
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let (_product, _guards) = seal_product_home(tmp.path());
+        let user_dir = tmp.path().join("user-chosen");
+        std::fs::create_dir_all(&user_dir).expect("create user dest");
+
+        assert!(
+            !super::is_ghosty_owned_state_dir(&user_dir),
+            "user-chosen dest must not count as a product dir: {}",
+            user_dir.display()
+        );
+
+        let stray = user_dir.join(".tmpDDDDDD");
+        std::fs::write(&stray, b"user or concurrent tempfile").expect("write stray");
+        age_past_the_threshold(&stray);
+
+        let target = user_dir.join("session.json");
+        super::write_atomic(&target, b"{\"ok\":true}").expect("atomic write");
+
+        assert_eq!(std::fs::read(&target).expect("read back"), b"{\"ok\":true}");
+        assert!(
+            stray.exists(),
+            "/save <path> and other user-chosen dests must not sweep the parent"
+        );
+    }
+
+    #[test]
+    fn atomic_write_product_dir_detection_matches_ghosty_home_not_siblings() {
+        let _lock = crate::test_support::lock_test_env();
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let (product, explicit_guards) = seal_product_home(tmp.path());
+        let sibling = tmp.path().join("product-home-extra");
+        std::fs::create_dir_all(&sibling).expect("create sibling");
+
+        assert!(super::is_ghosty_owned_state_dir(&product));
+        assert!(super::is_ghosty_owned_state_dir(&product.join("sessions")));
+        assert!(!super::is_ghosty_owned_state_dir(&sibling));
+        assert!(!super::is_ghosty_owned_state_dir(tmp.path()));
+        drop(explicit_guards);
+
+        use crate::test_support::EnvVarGuard;
+        let _home = EnvVarGuard::set("HOME", tmp.path());
+        let _userprofile = EnvVarGuard::set("USERPROFILE", tmp.path());
+        let _no_explicit = EnvVarGuard::remove("GHOSTY_HOME");
+        let _no_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
+        let _no_legacy_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
+        let _no_legacy_home = EnvVarGuard::remove("DEEPSEEK_HOME");
+
+        assert!(super::is_ghosty_owned_state_dir(
+            &tmp.path().join(".ghosty").join("sessions")
+        ));
+        assert!(super::is_ghosty_owned_state_dir(
+            &tmp.path().join(".deepseek")
+        ));
+        assert!(!super::is_ghosty_owned_state_dir(
+            &tmp.path().join("user-chosen")
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -652,7 +1403,7 @@ mod spawn_supervised_tests {
     /// A spawned task that panics does not propagate the panic to the
     /// parent task — `spawn_supervised` catches it. Verified in isolation
     /// from the on-disk crash-dump path so the test is portable across
-    /// macOS / Linux / Windows (where `dirs::home_dir()` reads
+    /// macOS / Linux / Windows (where `crate::config::effective_home_dir()` reads
     /// `USERPROFILE`, not `HOME`, so env-mutation tricks don't redirect
     /// the dump on Windows).
     #[tokio::test]
@@ -703,7 +1454,7 @@ mod spawn_supervised_tests {
 
     /// `write_panic_dump_to` writes a properly-formatted crash log into
     /// the supplied directory. Tested separately from `spawn_supervised`
-    /// because env-mutation redirection of `dirs::home_dir()` doesn't
+    /// because env-mutation redirection of `crate::config::effective_home_dir()` doesn't
     /// work on Windows.
     #[test]
     fn write_panic_dump_writes_named_log() {
@@ -752,7 +1503,7 @@ mod project_mapping_tests {
         fs::write(root.join("apple.txt"), "a").expect("write apple");
         fs::write(root.join("mango.txt"), "m").expect("write mango");
 
-        let tree = project_tree(root, 1);
+        let tree = project_tree(root, 1, false);
         let lines: Vec<&str> = tree.lines().collect();
         let apple_pos = lines
             .iter()
@@ -782,7 +1533,7 @@ mod project_mapping_tests {
         fs::write(src.join("lib.rs"), "lib").expect("write lib");
         fs::write(src.join("main.rs"), "main").expect("write main");
 
-        let tree = project_tree(root, 2);
+        let tree = project_tree(root, 2, false);
         let src_pos = tree.find("DIR: src").expect("src dir line");
         let lib_pos = tree.find("FILE: lib.rs").expect("lib file line");
         let main_pos = tree.find("FILE: main.rs").expect("main file line");
@@ -798,7 +1549,7 @@ mod project_mapping_tests {
         fs::write(root.join("z.txt"), "z").expect("write");
         fs::write(root.join("a.txt"), "a").expect("write");
 
-        assert_eq!(project_tree(root, 1), project_tree(root, 1));
+        assert_eq!(project_tree(root, 1, false), project_tree(root, 1, false));
     }
 
     #[test]
@@ -814,7 +1565,7 @@ mod project_mapping_tests {
         std::os::unix::fs::symlink(&outside_file, root.join("Cargo.toml")).expect("symlink");
 
         assert_eq!(summarize_project(&root), "Unknown project type");
-        assert!(!project_tree(&root, 1).contains("Cargo.toml"));
+        assert!(!project_tree(&root, 1, false).contains("Cargo.toml"));
     }
 
     #[test]
@@ -863,7 +1614,17 @@ mod project_mapping_tests {
             );
         }
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(
+            target_os = "netbsd",
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "dragonfly"
+        ))]
+        {
+            assert_eq!(command.get_program(), "xdg-open");
+        }
+
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         {
             assert_eq!(command.get_program(), "xdg-open");
             assert_eq!(

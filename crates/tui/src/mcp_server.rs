@@ -1,4 +1,4 @@
-//! MCP server implementation for exposing DeepSeek tools over stdio.
+//! MCP server implementation for exposing Ghosty tools over stdio.
 
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, Write};
@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::client::DeepSeekClient;
 use crate::config::Config;
 use crate::llm_client::LlmClient;
+use crate::models::Role;
 use crate::models::{ContentBlock, Message, MessageRequest};
 use crate::session_manager::SessionManager;
 use crate::tools::spec::{ToolError, ToolResult};
@@ -177,13 +178,13 @@ impl McpServer {
                 "deepseek" => {
                     tools.push(json!({
                         "name": "deepseek",
-                        "description": "Send a prompt to DeepSeek and get a response. Creates a new conversation thread.",
+                        "description": "Send a prompt to Ghosty and get a response. Creates a new conversation thread.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
                                 "prompt": {
                                     "type": "string",
-                                    "description": "The user prompt to send to DeepSeek"
+                                    "description": "The user prompt to send to Ghosty"
                                 },
                                 "model": {
                                     "type": "string",
@@ -201,7 +202,7 @@ impl McpServer {
                 "deepseek-reply" => {
                     tools.push(json!({
                         "name": "deepseek-reply",
-                        "description": "Continue an existing conversation thread with DeepSeek. Requires a thread_id from a previous deepseek call.",
+                        "description": "Continue an existing conversation thread with Ghosty. Requires a thread_id from a previous deepseek call.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -233,7 +234,10 @@ impl McpServer {
                 }
             }
         }
-        json!({ "tools": tools, "nextCursor": Value::Null })
+        // MCP spec: `nextCursor` must be omitted (or be a string) when there
+        // are no more results. Emitting `null` violates the spec and breaks
+        // strict clients (e.g. Claude Code) that validate the response shape.
+        json!({ "tools": tools })
     }
 
     fn list_resources_response(&self) -> Value {
@@ -258,7 +262,9 @@ impl McpServer {
             }
         }
 
-        json!({ "resources": resources, "nextCursor": Value::Null })
+        // Same spec point as `list_tools_response`: omit `nextCursor` when
+        // there are no further pages rather than emitting `null`.
+        json!({ "resources": resources })
     }
 
     fn call_tool(
@@ -364,14 +370,11 @@ impl McpServer {
             code: -32000,
             message: format!("Failed to load config: {e}"),
         })?;
-        let client = DeepSeekClient::new(&config).map_err(|e| RpcError {
-            code: -32000,
-            message: format!("Failed to create DeepSeek client: {e}"),
-        })?;
+        let client = DeepSeekClient::new(&config).map_err(model_client_init_error)?;
 
         // Build message list
         let user_message = Message {
-            role: "user".to_string(),
+            role: Role::User,
             content: vec![ContentBlock::Text {
                 text: prompt.to_string(),
                 cache_control: None,
@@ -381,7 +384,7 @@ impl McpServer {
         let messages = if internal_name == "deepseek" {
             vec![user_message]
         } else {
-            let thread = self.threads.lock().unwrap();
+            let thread = self.threads.lock().unwrap_or_else(|e| e.into_inner());
             let mut existing = thread.get(&thread_id).cloned().ok_or_else(|| RpcError {
                 code: -32602,
                 message: format!("Thread not found: {thread_id}"),
@@ -390,11 +393,13 @@ impl McpServer {
             existing
         };
 
-        // Send the API request (non-streaming for the basic version)
+        // Send the API request (non-streaming for the basic version). Internal
+        // chat uses the same resolved output policy as an ordinary turn.
+        let request_route = client.effective_route_envelope(model, chrono::Utc::now());
         let request = MessageRequest {
             model: model.to_string(),
             messages: messages.clone(),
-            max_tokens: 16384,
+            max_tokens: client.effective_max_output_tokens(&request_route.model),
             system: None,
             tools: None,
             tool_choice: None,
@@ -408,10 +413,29 @@ impl McpServer {
 
         let response = runtime
             .block_on(client.create_message(request))
-            .map_err(|e| RpcError {
-                code: -32000,
-                message: format!("DeepSeek API call failed: {e}"),
-            })?;
+            .map_err(model_provider_call_error)?;
+
+        // A provider-declared incomplete reply must not enter the stored
+        // thread or be returned as a successful answer. The billed usage is
+        // still reported in the error payload.
+        if crate::models::is_incomplete_stop_reason(response.stop_reason.as_deref()) {
+            let error = format!(
+                "Model response incomplete: provider stop reason `{}`; the partial reply was not accepted.",
+                crate::models::stop_reason_detail(response.stop_reason.as_deref())
+            );
+            return Ok(json!({
+                "content": [{ "type": "text", "text": &error }],
+                "isError": true,
+                "structuredContent": {
+                    "threadId": thread_id,
+                    "error": error,
+                    "usage": {
+                        "inputTokens": response.usage.input_tokens,
+                        "outputTokens": response.usage.output_tokens,
+                    }
+                }
+            }));
+        }
 
         // Extract response text from content blocks
         let response_text = response
@@ -431,14 +455,14 @@ impl McpServer {
 
         // Store the assistant response in the thread
         {
-            let mut thread = self.threads.lock().unwrap();
+            let mut thread = self.threads.lock().unwrap_or_else(|e| e.into_inner());
             let convo = thread.entry(thread_id.clone()).or_default();
             // If deepseek, we already have just the user message; if deepseek-reply,
             // the user message was appended to the cloned messages above but we need
             // to also append it to the stored thread and then the assistant response.
             if internal_name == "deepseek" {
                 convo.push(Message {
-                    role: "user".to_string(),
+                    role: Role::User,
                     content: vec![ContentBlock::Text {
                         text: prompt.to_string(),
                         cache_control: None,
@@ -446,7 +470,7 @@ impl McpServer {
                 });
             }
             convo.push(Message {
-                role: "assistant".to_string(),
+                role: Role::Assistant,
                 content: vec![ContentBlock::Text {
                     text: response_text.clone(),
                     cache_control: None,
@@ -498,7 +522,7 @@ impl McpServer {
 }
 
 fn default_config_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".deepseek").join("mcp_server.toml"))
+    crate::config::effective_home_dir().map(|home| home.join(".deepseek").join("mcp_server.toml"))
 }
 
 fn default_expose_tools() -> Vec<String> {
@@ -561,7 +585,7 @@ fn initialize_response() -> Value {
     json!({
         "protocolVersion": "2024-11-05",
         "serverInfo": {
-            "name": "deepseek-mcp-server",
+            "name": "ghosty-mcp-server",
             "version": env!("CARGO_PKG_VERSION"),
         },
         "capabilities": {
@@ -589,6 +613,20 @@ fn respond_error(id: Option<&Value>, code: i64, message: String) -> Option<Value
 struct RpcError {
     code: i64,
     message: String,
+}
+
+fn model_client_init_error(error: impl std::fmt::Display) -> RpcError {
+    RpcError {
+        code: -32000,
+        message: format!("Failed to create Ghosty model client: {error}"),
+    }
+}
+
+fn model_provider_call_error(error: impl std::fmt::Display) -> RpcError {
+    RpcError {
+        code: -32000,
+        message: format!("Model provider call failed: {error}"),
+    }
 }
 
 #[cfg(test)]
@@ -621,5 +659,66 @@ mod tests {
             Some("apply_patch")
         );
         assert_eq!(map.get("shell").map(String::as_str), Some("exec_shell"));
+    }
+
+    #[test]
+    fn list_responses_omit_null_next_cursor() {
+        // MCP spec: `nextCursor` must be omitted (or be a string) when there
+        // are no further pages. Emitting `null` breaks strict clients such as
+        // Claude Code, which validate the response shape.
+        let settings = McpServerSettings {
+            expose_tools: vec!["deepseek".to_string(), "apply_patch".to_string()],
+            require_approval: false,
+        };
+        let server = McpServer::new(PathBuf::from("."), settings).expect("build server");
+
+        let tools_value = server.list_tools_response();
+        let tools = tools_value
+            .as_object()
+            .expect("tools/list response is an object");
+        assert!(tools.contains_key("tools"));
+        assert!(
+            tools.get("nextCursor").is_none(),
+            "tools/list must omit nextCursor when there are no more pages"
+        );
+
+        let resources_value = server.list_resources_response();
+        let resources = resources_value
+            .as_object()
+            .expect("resources/list response is an object");
+        assert!(resources.contains_key("resources"));
+        assert!(
+            resources.get("nextCursor").is_none(),
+            "resources/list must omit nextCursor when there are no more pages"
+        );
+    }
+
+    #[test]
+    fn initialize_uses_standard_mcp_shape_and_ghosty_identity() {
+        let response = initialize_response();
+        assert_eq!(response["protocolVersion"], "2024-11-05");
+        assert_eq!(response["serverInfo"]["name"], "ghosty-mcp-server");
+        assert_eq!(response["serverInfo"]["version"], env!("CARGO_PKG_VERSION"));
+        assert!(response["capabilities"]["tools"].is_object());
+    }
+
+    #[test]
+    fn model_failures_use_ghosty_provider_neutral_language() {
+        let init = model_client_init_error("missing credential");
+        assert_eq!(init.code, -32000);
+        assert_eq!(
+            init.message,
+            "Failed to create Ghosty model client: missing credential"
+        );
+
+        let request = model_provider_call_error("route unavailable");
+        assert_eq!(request.code, -32000);
+        assert_eq!(
+            request.message,
+            "Model provider call failed: route unavailable"
+        );
+
+        assert!(!init.message.contains("DeepSeek"));
+        assert!(!request.message.contains("DeepSeek"));
     }
 }

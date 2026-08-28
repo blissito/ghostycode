@@ -10,11 +10,15 @@ use uuid::Uuid;
 
 use crate::client::DeepSeekClient;
 use crate::core::events::Event;
-use crate::models::{ContentBlock, Message, MessageRequest, SystemPrompt, Usage};
+use crate::models::{
+    ContentBlock, Message, MessageRequest, SystemPrompt, Usage, is_incomplete_stop_reason,
+    stop_reason_detail,
+};
 use crate::repl::PythonRuntime;
 
 use super::bridge::{RlmBridge, RlmLlmClient};
 use super::prompt::rlm_system_prompt;
+use crate::models::Role;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -27,13 +31,11 @@ const MAX_RLM_ITERATIONS: u32 = 25;
 /// not the RLM contract.
 const MAX_CONSECUTIVE_NO_CODE: u32 = 3;
 /// Max output tokens for the root LLM — it just needs to generate code.
-const ROOT_MAX_TOKENS: u32 = 4096;
 /// Max chars of stdout shown as metadata to the root LLM in next iteration.
 const STDOUT_METADATA_PREVIEW_LEN: usize = 800;
 /// Max chars of `context` shown as a preview in the metadata.
 const PROMPT_PREVIEW_LEN: usize = 500;
 /// Temperature for root LLM calls.
-const ROOT_TEMPERATURE: f32 = 0.3;
 /// Bound on conversation history we keep across iterations.
 const MAX_HISTORY_MESSAGES: usize = 20;
 
@@ -238,6 +240,7 @@ async fn run_rlm_turn_impl(
     )];
 
     let mut consecutive_no_code: u32 = 0;
+    let mut consecutive_empty_rounds: u32 = 0;
     let mut last_response_text = String::new();
 
     let result = 'turn: {
@@ -266,7 +269,13 @@ async fn run_rlm_turn_impl(
                 .await;
 
             // 4a. Root LLM generates code from metadata-only context.
-            let request = build_root_request(&model, &messages, &system);
+            let request_route = client.effective_route_envelope(&model, chrono::Utc::now());
+            let request = build_root_request(
+                &model,
+                &messages,
+                &system,
+                client.effective_max_output_tokens(&request_route.model),
+            );
 
             let response = match client.create_message_boxed(request).await {
                 Ok(r) => r,
@@ -285,6 +294,22 @@ async fn run_rlm_turn_impl(
             };
 
             super::add_usage_with_prompt_cache(&mut total_usage, &response.usage);
+
+            if is_incomplete_stop_reason(response.stop_reason.as_deref()) {
+                let reason = stop_reason_detail(response.stop_reason.as_deref());
+                break 'turn RlmTurnResult {
+                    answer: String::new(),
+                    iterations: iteration + 1,
+                    duration: start.elapsed(),
+                    error: Some(format!(
+                        "RLM root model response incomplete: provider stop reason `{reason}`; partial FINAL/REPL output was not accepted."
+                    )),
+                    usage: total_usage,
+                    termination: RlmTermination::Error,
+                    trace: trace.clone(),
+                    total_rpcs,
+                };
+            }
 
             let response_text = extract_text_blocks(&response.content);
             last_response_text = response_text.clone();
@@ -312,14 +337,14 @@ async fn run_rlm_turn_impl(
                         };
                     }
                     messages.push(Message {
-                        role: "assistant".to_string(),
+                        role: Role::Assistant,
                         content: vec![ContentBlock::Text {
                             text: response_text.clone(),
                             cache_control: None,
                         }],
                     });
                     messages.push(Message {
-                        role: "user".to_string(),
+                        role: Role::User,
                         content: vec![ContentBlock::Text {
                             text: "You called FINAL(...) without ever running a ```repl block. \
                                    That defeats the recursive language model — you're guessing \
@@ -374,14 +399,14 @@ async fn run_rlm_turn_impl(
                         };
                     }
                     messages.push(Message {
-                        role: "assistant".to_string(),
+                        role: Role::Assistant,
                         content: vec![ContentBlock::Text {
                             text: response_text.clone(),
                             cache_control: None,
                         }],
                     });
                     messages.push(Message {
-                        role: "user".to_string(),
+                        role: Role::User,
                         content: vec![ContentBlock::Text {
                             text: "Reminder: emit Python inside a ```repl … ``` fence. \
                                    Use `llm_query`, `sub_query_sequence`, or \
@@ -465,9 +490,94 @@ async fn run_rlm_turn_impl(
                 };
             }
 
+            // 4e+. Empty/no-op guard — same contract as the normal Agent REPL path.
+            // If the block produced no stdout, no RPC, and no finalize(), tell the
+            // model plainly and count consecutive empties to avoid an infinite loop.
+            let is_empty_round = !round.has_error
+                && round.stdout.trim().is_empty()
+                && round.stderr.trim().is_empty()
+                && round.rpc_count == 0
+                && round.final_value.is_none();
+            if is_empty_round {
+                consecutive_empty_rounds = consecutive_empty_rounds.saturating_add(1);
+                let empty_feedback = if consecutive_empty_rounds >= MAX_CONSECUTIVE_NO_CODE {
+                    format!(
+                        "Your emitted ```repl block (round {}) result: no observable output — print something, call a helper, or stop emitting REPL blocks and answer. No output for {consecutive_empty_rounds} consecutive rounds; stopping empty loop.",
+                        iteration + 1
+                    )
+                } else {
+                    format!(
+                        "Your emitted ```repl block (round {}) result: no observable output — print something, call a helper, or stop emitting REPL blocks and answer",
+                        iteration + 1
+                    )
+                };
+                messages.push(Message {
+                    role: Role::Assistant,
+                    content: vec![ContentBlock::Text {
+                        text: format!("```repl\n{code_to_run}\n```"),
+                        cache_control: None,
+                    }],
+                });
+                messages.push(build_metadata_message(
+                    &prompt,
+                    root_prompt.as_deref(),
+                    iteration + 1,
+                    Some(&code_to_run),
+                    Some(&empty_feedback),
+                ));
+                if consecutive_empty_rounds >= MAX_CONSECUTIVE_NO_CODE {
+                    break 'turn RlmTurnResult {
+                        answer: last_response_text.clone(),
+                        iterations: iteration + 1,
+                        duration: start.elapsed(),
+                        error: Some(format!(
+                            "RLM: {MAX_CONSECUTIVE_NO_CODE} consecutive empty REPL rounds"
+                        )),
+                        usage: total_usage,
+                        termination: RlmTermination::NoCode,
+                        trace: trace.clone(),
+                        total_rpcs,
+                    };
+                }
+                if messages.len() > MAX_HISTORY_MESSAGES {
+                    let drop_from = messages.len() - MAX_HISTORY_MESSAGES + 1;
+                    let mut kept = vec![messages[0].clone()];
+                    kept.extend(messages.drain(drop_from..));
+                    messages = kept;
+                }
+                continue;
+            } else {
+                consecutive_empty_rounds = 0;
+            }
+
+            // Provenance: make round feedback unambiguous — it is always the
+            // assistant's own emitted block, never the user's.
+            let provenance_prefix = format!(
+                "Your emitted ```repl block (round {}) result:",
+                iteration + 1
+            );
+            let stdout_for_feedback = if round.has_error {
+                format!(
+                    "{provenance_prefix} error\nstdout:\n{}\nstderr:\n{}",
+                    round.stdout, round.stderr
+                )
+            } else if round.stdout.trim().is_empty() && round.rpc_count == 0 {
+                format!(
+                    "{provenance_prefix} no output — block produced no observable output — print something, call a helper, or stop emitting REPL blocks and answer\nstdout:\n{}\n[{} child query RPC(s)]",
+                    round.stdout, round.rpc_count
+                )
+            } else {
+                format!(
+                    "{provenance_prefix}\n[{} child query RPC(s)]\n{}",
+                    round.rpc_count, round.stdout
+                )
+            };
+            let stdout_preview_for_next =
+                truncate_text(stdout_for_feedback.trim(), STDOUT_METADATA_PREVIEW_LEN);
+
             // 4f. Build metadata for next iteration.
             messages.push(Message {
-                role: "assistant".to_string(),
+                role: Role::Assistant,
                 content: vec![ContentBlock::Text {
                     text: format!("```repl\n{code_to_run}\n```"),
                     cache_control: None,
@@ -478,7 +588,7 @@ async fn run_rlm_turn_impl(
                 root_prompt.as_deref(),
                 iteration + 1,
                 Some(&code_to_run),
-                Some(&stdout_preview),
+                Some(&stdout_preview_for_next),
             ));
 
             if messages.len() > MAX_HISTORY_MESSAGES {
@@ -534,11 +644,16 @@ fn write_context_file(prompt: &str) -> std::io::Result<PathBuf> {
     Ok(path)
 }
 
-fn build_root_request(model: &str, messages: &[Message], system: &SystemPrompt) -> MessageRequest {
+fn build_root_request(
+    model: &str,
+    messages: &[Message],
+    system: &SystemPrompt,
+    max_tokens: u32,
+) -> MessageRequest {
     MessageRequest {
         model: model.to_string(),
         messages: messages.to_vec(),
-        max_tokens: ROOT_MAX_TOKENS,
+        max_tokens,
         system: Some(system.clone()),
         tools: None,
         tool_choice: None,
@@ -546,8 +661,8 @@ fn build_root_request(model: &str, messages: &[Message], system: &SystemPrompt) 
         thinking: None,
         reasoning_effort: None,
         stream: Some(false),
-        temperature: Some(ROOT_TEMPERATURE),
-        top_p: Some(0.9_f32),
+        temperature: None,
+        top_p: None,
     }
 }
 
@@ -645,7 +760,7 @@ fn build_metadata_message(
     let text = parts.join("\n");
 
     Message {
-        role: "user".to_string(),
+        role: Role::User,
         content: vec![ContentBlock::Text {
             text,
             cache_control: None,
@@ -786,6 +901,67 @@ fn truncate_text(text: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm_client::mock::MockLlmClient;
+    use crate::models::MessageResponse;
+
+    #[tokio::test]
+    async fn max_tokens_complete_repl_is_not_executed_or_accepted() {
+        let workspace = tempfile::tempdir().expect("tempdir");
+        let marker = workspace.path().join("truncated-repl-executed.txt");
+        let marker_literal = serde_json::to_string(&marker.to_string_lossy())
+            .expect("marker path should serialize as a Python string literal");
+        let partial = format!(
+            "```repl\nfrom pathlib import Path\nPath({marker_literal}).write_text('executed')\nFINAL('partial answer')\n```"
+        );
+        let usage = Usage {
+            input_tokens: 17,
+            output_tokens: 4096,
+            ..Usage::default()
+        };
+        let mock = Arc::new(MockLlmClient::new(Vec::new()));
+        mock.push_message_response(MessageResponse {
+            id: "mock_truncated_rlm".to_string(),
+            r#type: "message".to_string(),
+            role: "assistant".to_string(),
+            content: vec![ContentBlock::Text {
+                text: partial,
+                cache_control: None,
+            }],
+            model: "mock-model".to_string(),
+            stop_reason: Some("max_tokens".to_string()),
+            stop_sequence: None,
+            container: None,
+            usage: usage.clone(),
+        });
+        let client: Arc<dyn RlmLlmClient> = mock.clone();
+        let (tx, _rx) = mpsc::channel(8);
+
+        let result = run_rlm_turn_inner(
+            client,
+            "root-model".to_string(),
+            "long context".to_string(),
+            None,
+            "child-model".to_string(),
+            tx,
+            0,
+        )
+        .await;
+
+        assert_eq!(result.termination, RlmTermination::Error);
+        assert!(
+            result.answer.is_empty(),
+            "partial FINAL must not be accepted"
+        );
+        let error = result.error.expect("truncation must fail the RLM turn");
+        assert!(error.contains("incomplete"), "{error}");
+        assert!(error.contains("max_tokens"), "{error}");
+        assert_eq!(result.usage, usage, "billed usage must still be charged");
+        assert_eq!(mock.call_count(), 1, "truncation must not retry");
+        assert!(
+            !marker.exists(),
+            "complete-looking code from a truncated response must not execute"
+        );
+    }
 
     #[test]
     fn extract_repl_code_finds_simple_block() {
@@ -889,9 +1065,12 @@ mod tests {
             None,
         )];
 
-        let request = build_root_request("root-model", &messages, &rlm_system_prompt());
+        let request = build_root_request("root-model", &messages, &rlm_system_prompt(), 8192);
         let payload = serde_json::to_string(&request).expect("request should serialize");
 
+        assert_eq!(request.max_tokens, 8192);
+        assert_eq!(request.temperature, None);
+        assert_eq!(request.top_p, None);
         assert!(payload.contains(&format!("- Length: {} chars", prompt.chars().count())));
         assert!(
             !payload.contains(secret_tail),
@@ -952,6 +1131,8 @@ mod tests {
                 cache_control: None,
             },
             ContentBlock::Thinking {
+                signature: None,
+                state: None,
                 thinking: "skip".to_string(),
             },
             ContentBlock::Text {

@@ -1,0 +1,105 @@
+# cargo-deny configuration for GhostyCode
+# https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Scan all workspace members with all features
+all-features = true
+
+[advisories]
+# Deny unmaintained and unsound crates
+unmaintained = "all"
+unsound = "all"
+# Ignore specific advisories (known issues in dependencies)
+ignore = [
+    "RUSTSEC-2024-0436",  # paste unmaintained - no safe upgrade
+    "RUSTSEC-2026-0192",  # ttf-parser unmaintained - no safe upgrade
+    "RUSTSEC-2024-0388",  # derivative unmaintained - transitive via starlark
+    "RUSTSEC-2025-0057",  # fxhash unmaintained - transitive via starlark
+    "RUSTSEC-2025-0141",  # bincode unmaintained - transitive via syntect, no safe upgrade (syntect 5.3.0 is latest)
+    "RUSTSEC-2024-0320",  # yaml-rust unmaintained - transitive via syntect, no safe upgrade (syntect 5.3.0 is latest)
+]
+
+[bans]
+# Duplicate-version ratchet (Epic #5249, issue #5248): keep the gate in
+# warn/dry-run until Hunter approves enforcement. Each entry below is a
+# duplicate that survives the 0.9.5 shrink and is blocked on an upstream
+# crate that has not yet released a compatible version. Adding a new
+# duplicate without extending this list will surface as a new `cargo deny`
+# warning, so the ratchet is warm but not yet blocking CI.
+# Surviving duplicates after the 708 -> 679 shrink (see PR body):
+# - reqwest 0.12 vs 0.13 — blocked on oauth2 5.0.0 which still depends on reqwest 0.12
+# - sha2 0.10 vs 0.11 — blocked on oauth2 (0.10) vs schemaui 0.12 (0.11)
+# - thiserror 1 vs 2 — blocked on portable-pty 0.9 via filedescriptor 0.8 (v1) vs workspace v2
+# - toml 0.8 vs 1.1 + toml_edit 0.22 vs 0.25 + winnow 0.7 vs 1.0 — blocked on rust-i18n 4.2 (0.8 stack) vs workspace 1.1
+# - strum 0.27 vs 0.28 — ratatui-widgets 0.3.0 (via ratatui 0.30.0) pins 0.27
+#   while ratatui-core 0.1.2 uses 0.28; unifies once widgets moves forward
+multiple-versions = "warn"
+wildcards = "deny"
+# Explicitly allow the surviving duplicates so `cargo deny` does not warn
+# on them again, but will warn on any *new* duplicate crate.
+skip = [
+    { name = "reqwest", version = "0.12.28" },
+    { name = "sha2", version = "0.10.9" },
+    { name = "thiserror", version = "1.0.69" },
+    { name = "thiserror-impl", version = "1.0.69" },
+    { name = "toml", version = "0.8.23" },
+    { name = "toml_datetime", version = "0.6.11" },
+    { name = "toml_edit", version = "0.22.27" },
+    { name = "winnow", version = "0.7.14" },
+    { name = "serde_spanned", version = "0.6.9" },
+    { name = "core-foundation", version = "0.9.4" },
+    { name = "fancy-regex", version = "0.16.2" },
+    { name = "itertools", version = "0.13.0" },
+    { name = "security-framework", version = "2.11.1" },
+    { name = "strum", version = "0.28.0" },
+    { name = "strum_macros", version = "0.28.0" },
+    { name = "windows-sys" },
+    { name = "windows-targets" },
+    { name = "windows_aarch64_gnullvm" },
+    { name = "windows_aarch64_msvc" },
+    { name = "windows_i686_gnu" },
+    { name = "windows_i686_msvc" },
+    { name = "windows_x86_64_gnu" },
+    { name = "windows_x86_64_gnullvm" },
+    { name = "windows_x86_64_msvc" },
+]
+# For crates where the version is not the discriminator, use skip-tree to
+# allow the duplicate tree regardless of version.
+skip-tree = [
+    { name = "portable-pty" },
+    { name = "rust-i18n" },
+    { name = "oauth2" },
+]
+
+[sources]
+# Deny unknown registries and git sources
+unknown-registry = "deny"
+unknown-git = "deny"
+# Allow only crates.io
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Allow git sources used by the project (add as needed)
+allow-git = []
+
+[licenses]
+# Confidence threshold for license inference from text
+confidence-threshold = 0.93
+# Allowed licenses (MIT for GhostyCode, plus common transitive deps)
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "MPL-2.0",
+    "CC0-1.0",
+    "BSL-1.0",
+    "CDLA-Permissive-2.0",
+]
+# License exceptions for specific crates if needed
+exceptions = []

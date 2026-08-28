@@ -1,6 +1,6 @@
 ---
 name: delegate
-description: Strategic delegation for multi-step coding, research, or verification work. Use when a task can be split into parent reasoning plus focused sub-agent execution through agent_open, agent_eval, and agent_close.
+description: Strategic delegation for multi-step coding, research, or verification work. Use when a task can be split into parent reasoning plus focused sub-agent execution through the agent tool.
 metadata:
   short-description: Delegate focused work to sub-agents
 ---
@@ -28,28 +28,30 @@ Delegate to sub-agents:
 
 Do not delegate tiny one-step tasks, ambiguous product decisions, destructive operations without a clear acceptance criterion, or final verification.
 
-## Open Focused Sessions
+## Launch Focused Work
 
-Prefer `agent_open` for a named child session, then `agent_eval` to fetch or wait on its result. Open independent children together so they can run in parallel.
+Use `agent` for a focused child run. Launch independent children together so they can run in parallel.
+
+Prefer provider-neutral `model_strength` over hardcoded model ids. Children inherit the active model by default (`model_strength: "same"`), including `type: "scout"`, so pass `model_strength: "faster"` explicitly to get the cheaper same-family sibling for read-only exploration:
 
 ```json
 {
   "name": "config_audit",
   "prompt": "Inspect crates/tui/src/config.rs and crates/tui/src/settings.rs for duplicate model-default logic. Return file/line findings only; do not edit files.",
-  "type": "explore",
-  "model": "deepseek-v4-flash",
+  "type": "scout",
+  "model_strength": "faster",
   "cwd": "."
 }
 ```
 
-For code changes, give the child a precise write boundary and tell it not to revert unrelated edits:
+For code changes, give the child a precise write boundary and tell it not to revert unrelated edits. Keep implementation children capable with `model_strength: "same"`:
 
 ```json
 {
   "name": "docs_patch",
   "prompt": "Update only docs/configuration.md to document the new [statusline] keys. Match the surrounding style. Do not edit other files.",
-  "type": "implementer",
-  "model": "deepseek-v4-flash",
+  "type": "builder",
+  "model_strength": "same",
   "cwd": "."
 }
 ```
@@ -58,26 +60,12 @@ Use `fork_context: true` only when the child genuinely needs the current convers
 
 ## Evaluate and Verify
 
-Use `agent_eval` with `block: true` when you need the result before continuing:
-
-```json
-{
-  "name": "docs_patch",
-  "block": true,
-  "timeout_ms": 120000
-}
-```
-
-Use `block: false` for a quick status projection while other work continues.
-
 Sub-agent outputs are self-reports. Re-check material claims before relying on them:
 
 - Read changed files directly.
 - Run the relevant tests locally.
 - Inspect unexpected diffs before committing.
 - Verify externally visible or destructive claims against source data.
-
-Close sessions that are no longer useful with `agent_close`.
 
 ## Prompt Shape
 

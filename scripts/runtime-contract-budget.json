@@ -1,0 +1,293 @@
+{
+  "_comment": "One-way numeric ceilings and exact structural identities for the provider-free runtime contract. Decreases pass; increases or identity changes fail. Lock in decreases with: python3 scripts/check-runtime-contract-budget.py --update The v0.9.8 child-receipt restore grew every production tool surface by 1496 schema bytes / 374 estimated tokens (agent tool). The v0.9.8 workshop read/tool-result byte fields then grew every production tool surface by 371 schema bytes / 93 estimated tokens. Both raises are explicit maintainer decisions; identities stay on the pre-raise digests only if the name set is unchanged \u2014 re-measure on Linux CI if Lint reports identity drift. The v0.9.8 pinned session prefix added the <context_update> sentence to the base prompt (5848 -> 6084 bytes, every representative stage re-hashed), and the host-side Workflow/Goal verbs plus honest child posture grew the tool catalog (active 16531 -> 16602 bytes, full 71473 -> 72371); both are explicit v0.9.8 maintainer decisions measured from the release train. The v0.9.9 configured-skills change hides only custom configured-root paths, preserves discoverable default-root paths, normalizes Windows prompt separators, and trims 50 redundant skills-prompt bytes. The skill/memory/goal/handoff identities were re-measured without raising any ceiling. Explicit maintainer decision for #5473/#5492. The v0.9.10 full surfaces intentionally add the safe read_media tool; their measured schemas remain below the prior byte/token ceilings. Representative prompt byte metrics now use the same host-independent normalized text as their identities; the normalized base is 6089 bytes. The v0.9.11 model-visible sub-agent surface intentionally retires six legacy agents/* tools in favor of the canonical agent tool; all affected schema and prompt metrics decrease.",
+  "document_kind": "ghosty.runtime_contract_budget",
+  "representative_context": {
+    "fixture_id": "representative-v1",
+    "stages": {
+      "base": {
+        "bytes": 6089,
+        "identity_sha256": "e1bbb7a700c2ed6eea8d2aad15e60c86d0ac386f0583afc659cfc2527db8ce58"
+      },
+      "goal": {
+        "bytes": 8136,
+        "delta_bytes": 81,
+        "identity_sha256": "ed533e2088da07b6dc09d887bd1b7afb0d6d169ce43b926635731037bc70bd54"
+      },
+      "handoff": {
+        "bytes": 8524,
+        "delta_bytes": 388,
+        "identity_sha256": "4e421fbd667404c24d98f82ea74e4eb8c907462d0b3c16d26f137f5b3450162a"
+      },
+      "instructions": {
+        "bytes": 6475,
+        "delta_bytes": 131,
+        "identity_sha256": "c95787a13b38144fb13c9c94c1eb2cf8a3804fbee532f2db42ec5cac705f1b9f"
+      },
+      "memory": {
+        "bytes": 8055,
+        "delta_bytes": 963,
+        "identity_sha256": "9ff8efdd6ca401b1796bceb82307dca4a0e7381c53580abd8d6deab28d881271"
+      },
+      "project": {
+        "bytes": 6344,
+        "delta_bytes": 255,
+        "identity_sha256": "60f8bb0c4387f88917a915fb617a178ccc2d611f4963003a91742a1319d2db74"
+      },
+      "skill": {
+        "bytes": 7092,
+        "delta_bytes": 617,
+        "identity_sha256": "95fc85284fb37ac3290231f04c234bd1f7fbabdb373bb02049570c2fd1b5832e"
+      }
+    },
+    "system_prompt_blocks": 6,
+    "total_bytes": 8524,
+    "total_tokens_est": 2131
+  },
+  "schema_version": 1,
+  "skill_discovery": {
+    "first_delta": {
+      "directories_visited": 1,
+      "root_discovery_calls": 1,
+      "skill_md_read_attempts": 1
+    },
+    "second_delta": {
+      "directories_visited": 0,
+      "root_discovery_calls": 0,
+      "skill_md_read_attempts": 0
+    }
+  },
+  "system_prompt": {
+    "modes": {
+      "act": {
+        "mode_instructions_bytes": 0,
+        "mode_instructions_tokens_est": 0,
+        "system_prompt_blocks": 4,
+        "system_prompt_bytes": 6084,
+        "system_prompt_tokens_est": 1521
+      },
+      "operate": {
+        "mode_instructions_bytes": 0,
+        "mode_instructions_tokens_est": 0,
+        "system_prompt_blocks": 4,
+        "system_prompt_bytes": 6084,
+        "system_prompt_tokens_est": 1521
+      },
+      "plan": {
+        "mode_instructions_bytes": 0,
+        "mode_instructions_tokens_est": 0,
+        "system_prompt_blocks": 4,
+        "system_prompt_bytes": 6084,
+        "system_prompt_tokens_est": 1521
+      }
+    }
+  },
+  "tool_catalog": {
+    "modes": {
+      "act": {
+        "active": {
+          "bytes": 12826,
+          "identity_sha256": "8411bddfc0d7fce72ec53dfeef341f28e6a3cfe37b98a721dc05b17d53b0a13e",
+          "tokens_est": 3207,
+          "tool_names": [
+            "agent",
+            "bash",
+            "edit",
+            "read",
+            "todo_write",
+            "tool_search",
+            "write"
+          ],
+          "tools": 7
+        },
+        "full": {
+          "bytes": 64848,
+          "identity_sha256": "37d9a2329fee3f5b8a69c20d97e048fc11191cc37490a62bcd738f6d995fed81",
+          "tokens_est": 16212,
+          "tool_names": [
+            "Git",
+            "Run",
+            "Web",
+            "agent",
+            "apply_patch",
+            "automation",
+            "bash",
+            "create_goal",
+            "diagnostics",
+            "edit",
+            "file_search",
+            "fim_edit",
+            "finance",
+            "get_goal",
+            "github",
+            "grep_files",
+            "handle_read",
+            "harness",
+            "list_dir",
+            "load_skill",
+            "lsp",
+            "note",
+            "notify",
+            "project_map",
+            "read",
+            "read_media",
+            "request_user_input",
+            "retrieve_tool_result",
+            "revert_turn",
+            "review",
+            "send_later",
+            "speech",
+            "task_shell_start",
+            "task_shell_wait",
+            "tasks",
+            "terminal/cancel",
+            "terminal/reset",
+            "terminal/run",
+            "terminal/send",
+            "terminal/wait",
+            "todo_write",
+            "tool_search",
+            "tts",
+            "tui_help",
+            "update_goal",
+            "validate_data",
+            "verify",
+            "web.run",
+            "workflow",
+            "write"
+          ],
+          "tools": 50
+        }
+      },
+      "operate": {
+        "active": {
+          "bytes": 12826,
+          "identity_sha256": "8411bddfc0d7fce72ec53dfeef341f28e6a3cfe37b98a721dc05b17d53b0a13e",
+          "tokens_est": 3207,
+          "tool_names": [
+            "agent",
+            "bash",
+            "edit",
+            "read",
+            "todo_write",
+            "tool_search",
+            "write"
+          ],
+          "tools": 7
+        },
+        "full": {
+          "bytes": 64848,
+          "identity_sha256": "37d9a2329fee3f5b8a69c20d97e048fc11191cc37490a62bcd738f6d995fed81",
+          "tokens_est": 16212,
+          "tool_names": [
+            "Git",
+            "Run",
+            "Web",
+            "agent",
+            "apply_patch",
+            "automation",
+            "bash",
+            "create_goal",
+            "diagnostics",
+            "edit",
+            "file_search",
+            "fim_edit",
+            "finance",
+            "get_goal",
+            "github",
+            "grep_files",
+            "handle_read",
+            "harness",
+            "list_dir",
+            "load_skill",
+            "lsp",
+            "note",
+            "notify",
+            "project_map",
+            "read",
+            "read_media",
+            "request_user_input",
+            "retrieve_tool_result",
+            "revert_turn",
+            "review",
+            "send_later",
+            "speech",
+            "task_shell_start",
+            "task_shell_wait",
+            "tasks",
+            "terminal/cancel",
+            "terminal/reset",
+            "terminal/run",
+            "terminal/send",
+            "terminal/wait",
+            "todo_write",
+            "tool_search",
+            "tts",
+            "tui_help",
+            "update_goal",
+            "validate_data",
+            "verify",
+            "web.run",
+            "workflow",
+            "write"
+          ],
+          "tools": 50
+        }
+      },
+      "plan": {
+        "active": {
+          "bytes": 12826,
+          "identity_sha256": "8411bddfc0d7fce72ec53dfeef341f28e6a3cfe37b98a721dc05b17d53b0a13e",
+          "tokens_est": 3207,
+          "tool_names": [
+            "agent",
+            "bash",
+            "edit",
+            "read",
+            "todo_write",
+            "tool_search",
+            "write"
+          ],
+          "tools": 7
+        },
+        "full": {
+          "bytes": 37907,
+          "identity_sha256": "28cf9153a4285ae29959162279193f0251a8090b33e84d380953916fc8c03ad6",
+          "tokens_est": 9477,
+          "tool_names": [
+            "Git",
+            "Web",
+            "agent",
+            "automation",
+            "bash",
+            "create_goal",
+            "diagnostics",
+            "edit",
+            "file_search",
+            "get_goal",
+            "github",
+            "grep_files",
+            "handle_read",
+            "list_dir",
+            "load_skill",
+            "notify",
+            "read",
+            "read_media",
+            "request_user_input",
+            "review",
+            "send_later",
+            "tasks",
+            "todo_write",
+            "tool_search",
+            "update_goal",
+            "validate_data",
+            "web.run",
+            "workflow",
+            "write"
+          ],
+          "tools": 29
+        }
+      }
+    },
+    "surface_profile": "production-default-builtins-no-mcp-no-host-interpreters-v1"
+  }
+}

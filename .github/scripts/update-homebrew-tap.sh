@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Update the Homebrew tap at blissito/homebrew-ghosty after a release.
+# Update the Homebrew tap after a release.
+#
+# The tap GitHub repo is still blissito/homebrew-ghosty until Hunter
+# renames it. The formula users type is `ghosty`. The legacy
+# `deepseek-tui` formula stays as a deprecated alias for one overlap release.
 #
 # Expected environment:
 #   TAG       – git tag, e.g. "v0.8.31"
-#   MANIFEST  – path to deepseek-artifacts-sha256.txt
+#   MANIFEST  – path to ghosty-artifacts-sha256.txt
 #   TAP_REPO  – owner/repo of the Homebrew tap
 #   TOKEN     – PAT with contents:write on TAP_REPO (optional; skips if unset)
+#   FORMULA_OUTPUT – optional local render path used by contract tests
+#   FORMULA_LEGACY_OUTPUT – optional local render path for the alias formula
 
 set -euo pipefail
 
@@ -13,7 +19,7 @@ set -euo pipefail
 : "${MANIFEST:?}"
 : "${TAP_REPO:?}"
 
-if [ -z "${TOKEN:-}" ]; then
+if [ -z "${TOKEN:-}" ] && [ -z "${FORMULA_OUTPUT:-}" ]; then
   echo "No Homebrew tap token configured; skipping."
   exit 0
 fi
@@ -34,72 +40,53 @@ sha() {
 
 # --- read checksums ---------------------------------------------------
 
-# Canonical dispatcher and TUI
-readonly SHA_COD_MACOS_ARM="$(sha ghosty-macos-arm64)"
-readonly SHA_TUI_MACOS_ARM="$(sha ghosty-tui-macos-arm64)"
-readonly SHA_COD_MACOS_X64="$(sha ghosty-macos-x64)"
-readonly SHA_TUI_MACOS_X64="$(sha ghosty-tui-macos-x64)"
-readonly SHA_COD_LINUX_ARM="$(sha ghosty-linux-arm64)"
-readonly SHA_TUI_LINUX_ARM="$(sha ghosty-tui-linux-arm64)"
-readonly SHA_COD_LINUX_X64="$(sha ghosty-linux-x64)"
-readonly SHA_TUI_LINUX_X64="$(sha ghosty-tui-linux-x64)"
-# Legacy shims (removed in v0.9.0)
-readonly SHA_LEG_MACOS_ARM="$(sha deepseek-macos-arm64)"
-readonly SHA_LEG_TUI_MACOS_ARM="$(sha deepseek-tui-macos-arm64)"
-readonly SHA_LEG_MACOS_X64="$(sha deepseek-macos-x64)"
-readonly SHA_LEG_TUI_MACOS_X64="$(sha deepseek-tui-macos-x64)"
-readonly SHA_LEG_LINUX_ARM="$(sha deepseek-linux-arm64)"
-readonly SHA_LEG_TUI_LINUX_ARM="$(sha deepseek-tui-linux-arm64)"
-readonly SHA_LEG_LINUX_X64="$(sha deepseek-linux-x64)"
-readonly SHA_LEG_TUI_LINUX_X64="$(sha deepseek-tui-linux-x64)"
+# One compiled runtime exposed under the two supported command names.
+SHA_COD_MACOS_ARM="$(sha ghosty-macos-arm64)"
+SHA_CODEW_MACOS_ARM="$(sha ghosty-tui-macos-arm64)"
+SHA_COD_MACOS_X64="$(sha ghosty-macos-x64)"
+SHA_CODEW_MACOS_X64="$(sha ghosty-tui-macos-x64)"
+SHA_COD_LINUX_ARM="$(sha ghosty-linux-arm64)"
+SHA_CODEW_LINUX_ARM="$(sha ghosty-tui-linux-arm64)"
+SHA_COD_LINUX_X64="$(sha ghosty-linux-x64)"
+SHA_CODEW_LINUX_X64="$(sha ghosty-tui-linux-x64)"
+readonly SHA_COD_MACOS_ARM SHA_CODEW_MACOS_ARM
+readonly SHA_COD_MACOS_X64 SHA_CODEW_MACOS_X64
+readonly SHA_COD_LINUX_ARM SHA_CODEW_LINUX_ARM
+readonly SHA_COD_LINUX_X64 SHA_CODEW_LINUX_X64
 
 # --- temp dirs --------------------------------------------------------
 
 FORMULA_FILE="$(mktemp)"
+LEGACY_FILE="$(mktemp)"
 TAP_DIR="$(mktemp -d)"
-trap 'rm -rf "${TAP_DIR}" "${FORMULA_FILE}"' EXIT
-
-# --- generate formula --------------------------------------------------
+trap 'rm -rf "${TAP_DIR}" "${FORMULA_FILE}" "${LEGACY_FILE}"' EXIT
 
 readonly BASE_URL="https://github.com/blissito/ghostycode/releases/download/${TAG}"
 
-cat > "${FORMULA_FILE}" << EOF
-class DeepseekTui < Formula
-  desc "Terminal-native coding agent for DeepSeek V4"
+render_formula() {
+  local class_name="${1:?}"
+  local extra_header="${2:-}"
+  cat << EOF
+class ${class_name} < Formula
+  desc "Agentic terminal for open-source and open-weight coding models"
   homepage "https://github.com/blissito/ghostycode"
   version "${VERSION}"
   license "MIT"
-
+${extra_header}
   on_macos do
     if Hardware::CPU.arm?
       url "${BASE_URL}/ghosty-macos-arm64", using: :nounzip
       sha256 "${SHA_COD_MACOS_ARM}"
-      resource "tui" do
+      resource "ghosty-tui" do
         url "${BASE_URL}/ghosty-tui-macos-arm64", using: :nounzip
-        sha256 "${SHA_TUI_MACOS_ARM}"
-      end
-      resource "legacy-shim" do
-        url "${BASE_URL}/deepseek-macos-arm64", using: :nounzip
-        sha256 "${SHA_LEG_MACOS_ARM}"
-      end
-      resource "legacy-tui-shim" do
-        url "${BASE_URL}/deepseek-tui-macos-arm64", using: :nounzip
-        sha256 "${SHA_LEG_TUI_MACOS_ARM}"
+        sha256 "${SHA_CODEW_MACOS_ARM}"
       end
     else
       url "${BASE_URL}/ghosty-macos-x64", using: :nounzip
       sha256 "${SHA_COD_MACOS_X64}"
-      resource "tui" do
+      resource "ghosty-tui" do
         url "${BASE_URL}/ghosty-tui-macos-x64", using: :nounzip
-        sha256 "${SHA_TUI_MACOS_X64}"
-      end
-      resource "legacy-shim" do
-        url "${BASE_URL}/deepseek-macos-x64", using: :nounzip
-        sha256 "${SHA_LEG_MACOS_X64}"
-      end
-      resource "legacy-tui-shim" do
-        url "${BASE_URL}/deepseek-tui-macos-x64", using: :nounzip
-        sha256 "${SHA_LEG_TUI_MACOS_X64}"
+        sha256 "${SHA_CODEW_MACOS_X64}"
       end
     end
   end
@@ -108,48 +95,46 @@ class DeepseekTui < Formula
     if Hardware::CPU.arm?
       url "${BASE_URL}/ghosty-linux-arm64", using: :nounzip
       sha256 "${SHA_COD_LINUX_ARM}"
-      resource "tui" do
+      resource "ghosty-tui" do
         url "${BASE_URL}/ghosty-tui-linux-arm64", using: :nounzip
-        sha256 "${SHA_TUI_LINUX_ARM}"
-      end
-      resource "legacy-shim" do
-        url "${BASE_URL}/deepseek-linux-arm64", using: :nounzip
-        sha256 "${SHA_LEG_LINUX_ARM}"
-      end
-      resource "legacy-tui-shim" do
-        url "${BASE_URL}/deepseek-tui-linux-arm64", using: :nounzip
-        sha256 "${SHA_LEG_TUI_LINUX_ARM}"
+        sha256 "${SHA_CODEW_LINUX_ARM}"
       end
     else
       url "${BASE_URL}/ghosty-linux-x64", using: :nounzip
       sha256 "${SHA_COD_LINUX_X64}"
-      resource "tui" do
+      resource "ghosty-tui" do
         url "${BASE_URL}/ghosty-tui-linux-x64", using: :nounzip
-        sha256 "${SHA_TUI_LINUX_X64}"
-      end
-      resource "legacy-shim" do
-        url "${BASE_URL}/deepseek-linux-x64", using: :nounzip
-        sha256 "${SHA_LEG_LINUX_X64}"
-      end
-      resource "legacy-tui-shim" do
-        url "${BASE_URL}/deepseek-tui-linux-x64", using: :nounzip
-        sha256 "${SHA_LEG_TUI_LINUX_X64}"
+        sha256 "${SHA_CODEW_LINUX_X64}"
       end
     end
   end
 
   def install
     bin.install Dir["*"].first => "ghosty"
-    resource("tui").stage { bin.install Dir["*"].first => "ghosty-tui" }
-    resource("legacy-shim").stage { bin.install Dir["*"].first => "deepseek" }
-    resource("legacy-tui-shim").stage { bin.install Dir["*"].first => "deepseek-tui" }
+    resource("ghosty-tui").stage { bin.install Dir["*"].first => "ghosty-tui" }
   end
 
   test do
     system "#{bin}/ghosty", "--version"
+    system "#{bin}/ghosty-tui", "--version"
   end
 end
 EOF
+}
+
+render_formula "Ghosty" "" > "${FORMULA_FILE}"
+render_formula "DeepseekTui" "  deprecate! date: \"2026-08-14\", because: \"renamed to ghosty\"
+" > "${LEGACY_FILE}"
+
+if [ -n "${FORMULA_OUTPUT:-}" ]; then
+  cp "${FORMULA_FILE}" "${FORMULA_OUTPUT}"
+  echo "Rendered Homebrew formula to ${FORMULA_OUTPUT}"
+  if [ -n "${FORMULA_LEGACY_OUTPUT:-}" ]; then
+    cp "${LEGACY_FILE}" "${FORMULA_LEGACY_OUTPUT}"
+    echo "Rendered legacy Homebrew formula to ${FORMULA_LEGACY_OUTPUT}"
+  fi
+  exit 0
+fi
 
 # --- push to tap repo --------------------------------------------------
 
@@ -159,13 +144,14 @@ TAP_URL="https://x-access-token:${ENCODED_TOKEN}@github.com/${TAP_REPO}.git"
 git clone --depth 1 "${TAP_URL}" "${TAP_DIR}"
 
 mkdir -p "${TAP_DIR}/Formula"
-cp "${FORMULA_FILE}" "${TAP_DIR}/Formula/deepseek-tui.rb"
+cp "${FORMULA_FILE}" "${TAP_DIR}/Formula/ghosty.rb"
+cp "${LEGACY_FILE}" "${TAP_DIR}/Formula/deepseek-tui.rb"
 
 cd "${TAP_DIR}"
 git config user.name  "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 
-git add Formula/deepseek-tui.rb
+git add Formula/ghosty.rb Formula/deepseek-tui.rb
 
 if git diff --cached --quiet; then
   echo "Formula unchanged (already at ${VERSION}); nothing to push."

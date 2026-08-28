@@ -1,5 +1,13 @@
 # Build artifacts
 /target
+/target-*
+.entire/
+.cursor/
+.plans/
+.ghosty-worktrees/
+docs/superpowers/
+ghosty-inference/
+/extensions/vscode/out/
 *.pdb
 *.exe
 *.dll
@@ -52,11 +60,17 @@ docs/*.pdf
 *.cmd
 !scripts/**
 !.github/scripts/**
+!web/public/install.sh
+!packaging/winget/**
 test.txt
 TODO*.md
 todo*.md
-CLAUDE.md
 AGENTS.md
+# …except the deliberate, maintained agent-guidance files:
+!/AGENTS.md
+!crates/tui/AGENTS.md
+!crates/tui/locales/AGENTS.md
+!web/AGENTS.md
 NEXT_SESSION.md
 AI_HANDOFF.md
 result.json
@@ -80,20 +94,16 @@ npm/*/bin/downloads/
 apps/
 
 # Claude Code runtime artifacts
-.claude/scheduled_tasks.lock
-.claude/worktrees/
 .worktrees/
 .ace-tool/
 
-# Local-only Claude / ralph notes
-.claude/*.local.md
-.claude/*.local.json
-
-# Maintainer handoff + codemap notes are working-state, not user-facing
-# artifacts. They've leaked into the public repo via .claude/ in the past
-# (HANDOFF_v0.8.28, CODEMAP_v0.8.25) — those files now live under
-# .private/handoffs/ instead. Block the patterns here so a future accidental
-# add doesn't silently land on main.
+# NOTE: the blanket `.claude/` rule further down already ignores everything
+# under .claude/ — `git check-ignore -v` attributes every path below to that
+# line, not to these. The handoff/codemap patterns are kept as defense in depth:
+# those notes are working state, not user-facing artifacts, and they leaked into
+# the public repo through .claude/ before (HANDOFF_v0.8.28, CODEMAP_v0.8.25).
+# They live under .private/handoffs/ now. If anyone ever narrows the blanket
+# rule to track part of .claude/, these must keep holding.
 .claude/HANDOFF_*
 .claude/CODEMAP_*
 .claude/handoff_*
@@ -102,11 +112,8 @@ apps/
 # Maintainer-internal design notes (trade-secret material, never published)
 .private/
 
-# Maintainer-local SWE-bench scratch (instance workspaces, venvs, predictions,
-# Docker harness logs). Never published.
-.swebench/
-deep-swe/
-all_preds.jsonl
+# Coverage reports (build artifacts)
+web/coverage/
 
 # Agent handoffs and version-specific setup plans are working-state notes, not
 # public docs. Keep durable setup guidance in docs/runbooks instead.
@@ -119,3 +126,35 @@ docs/*_PLAN.md
 .envrc
 .direnv
 scripts/run_deep_swe.py
+.claude/
+
+# Local run artifacts and caches re-included by !scripts/**
+results/
+scripts/**/__pycache__/
+
+# Maintainer-local verification artifacts
+.uv-bin/
+.uv-cache/
+.uv-tools/
+issues/
+logs/
+notes/
+
+# Agent-local roadmap and scratch (never commit — may hold unreleased plans)
+.agents/
+scratchpad/
+
+# Exploratory operations spec / prompt — never track (canonical copy lives at CW root)
+operations9.md
+OPERATIONS_0_9_0.md
+operations_0_9_0.md
+GHOSTY_0_9_0_CUTOVER.md
+
+# Hepha project metadata (local only, not upstream)
+.hepha/
+
+# Ralph agent scratch (local only)
+.ralph/
+
+# Estado local de Ghosty en este workspace (constitución/instrucciones viven en ~/.ghosty)
+.ghosty/

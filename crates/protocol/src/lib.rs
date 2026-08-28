@@ -1,36 +1,35 @@
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub mod runtime {
-    use super::*;
+pub mod agent_mail;
+pub mod agent_run;
+pub mod event_msg;
+pub mod fleet;
+pub mod ids;
+pub mod journal;
+pub mod op;
+pub mod runtime;
+pub mod workroom;
 
-    pub const RUNTIME_EVENT_ENVELOPE_SCHEMA_VERSION: u32 = 1;
+/// Common trait for lifecycle status enums across the protocol layer.
+///
+/// Every status enum — thread, goal, fleet run, worker, and job status —
+/// implements this trait so generic code can ask three universal questions
+/// without matching on every variant.
+pub trait Status {
+    /// Returns `true` when this status represents a final, non-progressable state
+    /// (e.g. Completed, Failed, Cancelled, Archived, Retired).
+    fn is_terminal(&self) -> bool;
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct RuntimeEventEnvelope {
-        #[serde(default = "default_runtime_event_envelope_schema_version")]
-        pub schema_version: u32,
-        pub seq: u64,
-        pub event: String,
-        pub kind: String,
-        pub thread_id: String,
-        pub turn_id: Option<String>,
-        pub item_id: Option<String>,
-        pub timestamp: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub created_at: Option<String>,
-        pub payload: Value,
-        #[serde(default)]
-        #[serde(flatten)]
-        pub extra: BTreeMap<String, Value>,
-    }
+    /// Returns `true` when work is currently in-flight
+    /// (e.g. Running, Active, Busy, Queued, Pending).
+    fn is_active(&self) -> bool;
 
-    fn default_runtime_event_envelope_schema_version() -> u32 {
-        RUNTIME_EVENT_ENVELOPE_SCHEMA_VERSION
-    }
+    /// Returns `true` when the item has been explicitly paused by the user
+    /// or system (e.g. Paused).
+    fn is_paused(&self) -> bool;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +49,18 @@ pub enum ThreadStatus {
     Failed,
     Paused,
     Archived,
+}
+
+impl Status for ThreadStatus {
+    fn is_terminal(&self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Archived)
+    }
+    fn is_active(&self) -> bool {
+        matches!(self, Self::Running)
+    }
+    fn is_paused(&self) -> bool {
+        matches!(self, Self::Paused)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,6 +89,44 @@ pub struct Thread {
     pub source: SessionSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ThreadGoalStatus {
+    Active,
+    Paused,
+    Blocked,
+    UsageLimited,
+    BudgetLimited,
+    Complete,
+}
+
+impl Status for ThreadGoalStatus {
+    fn is_terminal(&self) -> bool {
+        matches!(self, Self::Complete)
+    }
+    fn is_active(&self) -> bool {
+        matches!(self, Self::Active)
+    }
+    fn is_paused(&self) -> bool {
+        matches!(self, Self::Paused)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ThreadGoal {
+    pub thread_id: String,
+    pub goal_id: String,
+    pub objective: String,
+    pub status: ThreadGoalStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_budget: Option<i64>,
+    pub tokens_used: i64,
+    pub time_used_seconds: i64,
+    pub continuation_count: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +215,35 @@ pub struct ThreadSetNameParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreadGoalSetParams {
+    pub thread_id: String,
+    pub objective: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_budget: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreadGoalGetParams {
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreadGoalClearParams {
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreadGoalProgressParams {
+    pub thread_id: String,
+    #[serde(default)]
+    pub token_delta: i64,
+    #[serde(default)]
+    pub time_delta_seconds: i64,
+    #[serde(default)]
+    pub record_continuation: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ThreadRequest {
     Create {
@@ -178,6 +256,10 @@ pub enum ThreadRequest {
     List(ThreadListParams),
     Read(ThreadReadParams),
     SetName(ThreadSetNameParams),
+    GoalSet(ThreadGoalSetParams),
+    GoalGet(ThreadGoalGetParams),
+    GoalClear(ThreadGoalClearParams),
+    GoalRecordProgress(ThreadGoalProgressParams),
     Archive {
         thread_id: String,
     },
@@ -203,6 +285,9 @@ pub struct ThreadResponse {
     /// List of threads, populated by `List` requests.
     #[serde(default)]
     pub threads: Vec<Thread>,
+    /// Thread goal returned by goal get/set requests.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub goal: Option<ThreadGoal>,
     /// The model used for the thread, if applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
@@ -240,10 +325,31 @@ pub enum AppRequest {
     ConfigUnset { key: String },
     /// List all configuration entries.
     ConfigList,
+    /// Reload configuration from disk and apply to the live runtime.
+    ///
+    /// Re-reads both `config.toml` and the sibling `permissions.toml`,
+    /// refreshing the live `Runtime.config` and `Runtime.exec_policy`
+    /// so headless clients can pick up external config-file *and*
+    /// permission-rule edits without restarting.
+    ///
+    /// Mirrors the TUI `reload_runtime_config` codepath for everything
+    /// reachable from the headless `Runtime`. MCP server connections
+    /// are not refreshed — changing `mcp_config_path` or the referenced
+    /// `mcp.json` still requires a headless-runtime restart. The TUI's
+    /// explicit `/mcp reload` operation is not part of this protocol path.
+    ConfigReload,
     /// List available models.
     Models,
     /// List threads that are currently loaded in memory.
     ThreadLoadedList,
+    /// Submit answers to a prior [`EventFrame::UserInputRequest`].
+    ///
+    /// `request_id` must match a pending clarification request. Headless
+    /// clients use this to return the user's selections back to the runtime.
+    SubmitUserInput {
+        request_id: String,
+        answers: Vec<UserInputAnswerEvent>,
+    },
 }
 
 /// Response to an [`AppRequest`].
@@ -365,6 +471,21 @@ pub enum ToolOutput {
     },
 }
 
+impl ToolOutput {
+    /// Returns the tool's application-level success independently of transport.
+    ///
+    /// MCP success requires the top-level `isError` field to be omitted or the
+    /// literal boolean `false`; malformed present metadata fails closed.
+    pub fn success(&self) -> bool {
+        match self {
+            Self::Function { success, .. } => *success,
+            Self::Mcp { result } => {
+                matches!(result.get("isError"), None | Some(Value::Bool(false)))
+            }
+        }
+    }
+}
+
 /// Action to take for a network policy rule.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -457,6 +578,67 @@ pub struct NetworkApprovalContext {
     pub protocol: String,
 }
 
+/// A selectable option presented to the user in a clarification question.
+///
+/// Headless serialization shape for the `request_user_input` model tool,
+/// mirrored after the TUI's `UserInputOption`. Shared by the
+/// [`EventFrame::UserInputRequest`] frame and the [`AppRequest::SubmitUserInput`]
+/// reply path so both surfaces agree on the question schema.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UserInputOptionEvent {
+    /// Short label for the option (also the value submitted when picked).
+    pub label: String,
+    /// Longer description shown alongside the label.
+    pub description: String,
+}
+
+/// A single clarification question posed to the user.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UserInputQuestionEvent {
+    /// Compact header shown as the question title.
+    pub header: String,
+    /// Stable identifier used to correlate answers back to this question.
+    pub id: String,
+    /// The question body.
+    pub question: String,
+    /// 2-4 suggested answers.
+    pub options: Vec<UserInputOptionEvent>,
+    /// When `true`, the client should also offer a free-text response.
+    #[serde(default)]
+    pub allow_free_text: bool,
+    /// When `true`, the user may select more than one option.
+    #[serde(default)]
+    pub multi_select: bool,
+}
+
+/// An event requesting structured user input via a model-tool call.
+///
+/// Sibling of [`ExecApprovalRequestEvent`] for the clarification-question
+/// flow. Emitted fire-and-return by `Runtime::invoke_tool` when the model
+/// invokes `request_user_input` in a headless context.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UserInputRequestEvent {
+    /// Identifier of the tool call requesting input.
+    pub call_id: String,
+    /// The turn during which the request was made.
+    pub turn_id: String,
+    /// Unique identifier for this user-input request (clients reply with it).
+    pub request_id: String,
+    /// 1-3 questions to present.
+    pub questions: Vec<UserInputQuestionEvent>,
+}
+
+/// One answer to a clarification question.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UserInputAnswerEvent {
+    /// The `id` of the question this answer corresponds to.
+    pub id: String,
+    /// The selected option's label, or `"Other"` for a free-text response.
+    pub label: String,
+    /// The resolved value (option label, or the typed free-text).
+    pub value: String,
+}
+
 /// An event requesting user approval for a command execution or patch application.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecApprovalRequestEvent {
@@ -472,6 +654,9 @@ pub struct ExecApprovalRequestEvent {
     pub cwd: String,
     /// Human-readable reason why approval is needed.
     pub reason: String,
+    /// Policy rule that matched this approval request, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matched_rule: Option<Box<str>>,
     /// Network context if the approval involves network access.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network_approval_context: Option<NetworkApprovalContext>,
@@ -567,6 +752,11 @@ pub enum EventFrame {
     ExecApprovalRequest { request: ExecApprovalRequestEvent },
     /// User approval is needed for applying a patch.
     ApplyPatchApprovalRequest { request: ExecApprovalRequestEvent },
+    /// A model tool is requesting structured clarification input from the user.
+    ///
+    /// Headless sibling of the TUI's `request_user_input` modal flow.
+    /// `request_id` correlates with an [`AppRequest::SubmitUserInput`] reply.
+    UserInputRequest { request: UserInputRequestEvent },
     /// An MCP server is requesting user input (elicitation).
     ElicitationRequest {
         server_name: String,
@@ -589,6 +779,10 @@ pub enum EventFrame {
     TurnComplete { turn_id: String },
     /// A turn was aborted before completion.
     TurnAborted { turn_id: String, reason: String },
+    /// A thread goal was set or updated.
+    ThreadGoalUpdated { goal: ThreadGoal },
+    /// A thread goal was cleared.
+    ThreadGoalCleared { thread_id: String },
     /// An error occurred during processing.
     Error {
         response_id: String,

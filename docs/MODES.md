@@ -1,57 +1,161 @@
-# Modes and Approvals
+# Modes and Permission Postures
 
-ghosty has two related concepts:
+> 阅读简体中文版：[zh_hans/MODES.md](zh_hans/MODES.md)
 
-- **TUI mode**: what kind of visible interaction you're in (Plan/Agent/YOLO).
-- **Approval mode**: how aggressively the UI asks before executing tools.
+Ghosty has three related concepts:
+
+- **TUI mode**: what kind of visible interaction you're in (Plan/Work/Operate).
+- **Permission posture**: how aggressively the UI asks before executing tools.
+- **Workflow overlay**: optional long-running orchestration that can
+  run on top of any TUI mode when a task needs many coordinated workers.
 
 Model selection is separate. `--model auto` and `/model auto` route each turn to
 a concrete model and thinking level; they are not TUI modes and are not part of
 the `Tab` cycle.
 
-Each user turn includes a small `<turn_meta>` block with the current local date
-and the concrete model sent to the provider. When `--model auto` is active, the
-same block also records that the model was auto-routed.
+Workflow is also separate from the mode itself. It is the visible ordered
+orchestration layer for repeatable workflows and Fleet workers. High fan-out
+routes through durable Fleet-backed workers instead of prompt-only sub-agent
+fanout. The active mode
+still controls permissions; Workflow controls whether a large task is planned
+into a resumable workflow with its own progress view.
 
 ## TUI Modes
 
-Press `Tab` to complete composer menus, queue a draft as a next-turn follow-up
-while a turn is running, or cycle through the visible modes when the composer is
-otherwise idle: **Plan → Agent → YOLO → Plan**.
-Press `Shift+Tab` to cycle reasoning effort.
-Run `/mode` to open the mode picker, or switch directly with `/mode agent`,
-`/mode plan`, `/mode yolo`, `/mode 1`, `/mode 2`, or `/mode 3`.
+Press `Tab` to complete composer menus or cycle through the visible modes
+when the composer is empty: **Plan → Work → Operate → Plan**. `Tab` never sends
+or queues composer text; use `Enter` to send or queue it.
+Press `Shift+Tab` to cycle permission posture (Ask → Auto-Review → Full Access).
+Press `Ctrl+T` to cycle reasoning effort.
+Run `/mode` to open the mode picker, or switch directly with `/mode work`,
+`/mode plan`, or `/mode operate`.
 
-- **Plan**: design-first prompting. Read-only investigation tools stay available; shell and patch execution stay off. Use this when you want to think out loud and produce a plan to hand to a human (yourself later, or a reviewer).
-- **Agent**: multi-step tool use. Shell execution (`exec_shell`, `task_shell_start`, `task_shell_wait`) requires `allow_shell = true` in config; approval prompts gate each call. File writes are allowed without a prompt.
-- **YOLO**: enables shell + trust mode and auto-approves all tools. Use only in trusted repos.
+- **Plan**: design-first prompting. The stable primitive names remain familiar, but the runtime centrally refuses file mutation and shell execution. Read-only inspection and policy-allowed research, including deferred Web search/fetch, remain available.
+- **Work** (internally `agent`): ordinary multi-step execution. The small first-turn toolbox is `read`, `write`, `edit`, `bash`, `agent`, and `todo_write`; approval, sandbox, repository law, and managed policy still decide what may execute.
+- **Operate**: multitask conductor posture. It has the same primitive identities and execution authority as Work. The parent session is the **operator**: dispatching background workers is the default for independent or parallel work. Handle small or tightly coupled tasks in the parent; use background `agent` workers for separable streams, and use Workflow when order, phases, gates, shared budgets, or deterministic fan-in matter. **Dispatch is not completion** — write-capable children must return real verification evidence.
+
+`Act` and `/mode act` remain compatibility aliases for Work. Saved settings
+still normalize to the internal value `agent`.
 
 ### Tool availability by mode
 
-| Tool family | Plan | Agent | YOLO |
+| Tool family | Plan | Work | Operate |
 |:---|:---:|:---:|:---:|
-| Read-only file, search, and diagnostic tools | yes | yes | yes |
-| File write and patch tools | no | yes | yes |
-| Shell tools (`exec_shell`, `task_shell_start`, waits, interact, cancel) | no | approval-gated, when `allow_shell = true` | yes |
-| Paid or external-service tools | approval-gated | approval-gated | auto-approved |
-| Access outside the workspace root | no | only with trust mode | yes |
+| `read` and policy-allowed deferred research tools | yes | yes | yes |
+| `write` and `edit` | visible names; execution denied | approval- and policy-gated | same as Work |
+| `bash` | visible name; execution denied | approval- and policy-gated | same as Work; delegation is preferred when parallelism or isolation helps |
+| `agent` | yes, subject to child-depth authority | yes, subject to child-depth authority | yes, subject to child-depth authority |
+| Deferred native, MCP, and plugin tools | discoverable through `tool_search` when policy permits | same | same |
+| Paid or external-service tools | follows permission posture | follows permission posture | follows permission posture |
+| Access outside the workspace root | explicit trusted paths only | only through trusted paths or trust mode | same trusted-path/trust policy as Work; Fleet profiles never widen it |
 
-If a shell tool is missing from the model-visible catalog in Agent mode, check
-`allow_shell` first. The setting can come from the active config/profile or from
-the runtime session. YOLO turns shell access on together with trust mode and
-auto-approval, which is why shell commands may work there even when the Agent
-mode catalog does not list them.
+Operate changes scheduling emphasis, not authority. It neither adds a
+mode-specific tool denial nor bypasses the active approval, sandbox, shell,
+ask-rule, repository-law, or managed-policy boundary. Plan remains the
+mode-specific execution boundary for shell and write-capable tools; that
+authority difference does not require a different primitive vocabulary.
 
-All action-capable modes have access to persistent RLM sessions through `rlm_open`, `rlm_eval`, `rlm_configure`, and `rlm_close`. Inside an RLM Python REPL, `sub_query_batch` fans out 1-16 cheap parallel child calls pinned to `deepseek-v4-flash`. The model reaches for it when work is too large or repetitive for the parent transcript.
+### Operate loop (one screen)
+
+```text
+User message
+  → small / chat / one-file?  → parent does it (Work-equivalent tools)
+  → real / multi-stream work? → goal (if needed) → dispatch background workers
+       → each write child: implement → VERDICT PASS/FAIL with evidence
+       → ordered / gated fan-in? → Workflow (operate_* starters)
+       → high-stakes ambiguous? → best-of-n (N worktrees + reviewer; apply on PASS)
+  → parent synthesizes receipts; stays free for the next ask
+```
+
+Lifecycle claims stay exact: dispatched ≠ settled ≠ verified.
+
+`allow_shell` controls whether `bash` can execute; it does not rename the tool
+or make mode the approval authority. Durable tasks and automation keep
+conservative omitted-field defaults and receive shell authority only when their
+settings explicitly grant it. Stateful terminal/background controls are
+specialized deferred tools rather than fields on the small foreground `bash`
+schema. Full Access changes the permission posture while hard safety and
+repository-policy holds remain authoritative.
+
+Action-capable modes can discover the deferred `rlm` family through
+`tool_search`; its `open`, `eval`, `configure`, and `close` actions own persistent
+RLM sessions. The legacy split `rlm_*` spellings remain replay-only aliases.
+Inside an RLM Python REPL, `sub_query_batch` fans out 1-16 cheap parallel child
+calls pinned to `deepseek-v4-flash`.
 
 The fast `deepseek-v4-flash` / thinking-off path is called Fin in the product
 language. Fin is a seam for routing, summaries, cheap child calls, and
 coordination work; it does not change approval behavior.
 
-`/goal` sets a session objective with an optional token budget and keeps that
-objective visible as Work context. It does not change the active TUI mode,
-approval mode, or model route. This remains distinct from `--model auto`, which
+The orchestration controls remain available without taking over the starting
+screen: `/auto` turns on Auto-Review so the agent just works, `/goal` keeps one
+objective across turns, and `/workflow` prepares a repeatable ordered or
+fan-out workflow. They are directly callable and searchable through the full
+command palette, but are not pinned to the starter slash menu, idle welcome,
+footer, or default Hotbar. A bare `/` instead opens the small task-oriented
+starter set; use `/help` or the command palette for the complete inventory.
+
+`/goal <objective>` sets a session objective with an optional token budget and
+keeps active objectives visible as Work context. The agent may also create the
+goal itself when a direct request describes a verifiable end state that will
+take more than one turn ("until the tests pass", "make X work end to end"); it
+then shows one receipt line and you can `/goal pause` or `/goal clear` it. Bare
+`/goal` shows progress (state, elapsed, continuations, and how to continue when
+no turn is running); with no goal and no conversation yet it prints usage.
+`/goal pause` stops goal continuation without changing the objective, `/goal
+resume` resumes and sends the objective back into the turn, `/goal complete`
+marks it done, `/goal blocked` marks it blocked, and `/goal clear` removes it. Goal state does not change the active TUI mode,
+permission posture, or model route. This remains distinct from `--model auto`, which
 only controls model and thinking selection.
+
+Workflow builds on the same separation: a goal can ask the agent to keep
+working, while Workflow supplies the repeatable workflow/progress surface for
+large fanout. In the UI, a Workflow run should be shown as an overlay on the
+main screen, not as another mode beside Plan, Work, and Operate.
+
+App-server clients can persist a thread-scoped goal with `thread/goal/set`, read
+it with `thread/goal/get`, and clear it with `thread/goal/clear`. That persisted
+record carries `active`, `paused`, `blocked`, `usage_limited`, `budget_limited`,
+or `complete` status plus token/time accounting fields for clients that need
+thread resume semantics.
+
+## Mode Persistence
+
+Choosing a mode interactively also sets the mode a fresh session starts in.
+Tab/Shift+Tab cycling, the `Alt+A` / `Alt+P` / `Alt+Y` shortcuts, the hotbar's
+Plan/Work/Operate actions, and `/mode` all write `default_mode` to
+`~/.ghosty/settings.toml`, so switching to Operate survives a restart. The
+write happens off the event loop; if it fails, the TUI says so in a warning
+toast rather than reverting silently on the next launch.
+
+Mode, thinking level, and the model picker share one serialized writer, so the
+selection you made last is the one on disk — a burst of Tab presses cannot end
+up persisting whichever write happened to finish last — and a mode write never
+rolls back an unrelated key such as `default_model`.
+
+Two paths deliberately do **not** rewrite the startup default: restoring a saved
+session (which re-installs the mode that session was in) and a mode change
+refused because a turn is in flight. The legacy `yolo` entry point installs Work
+plus Full Access, and `agent` is what it persists — `yolo` is a permission
+alias, never a startup mode.
+
+Re-selecting the mode you are already in is not a no-op. After a restored
+session the live mode and `default_mode` routinely disagree, so choosing the
+live mode again is how you make it durable; Ghosty confirms with a
+"saved as startup default" receipt rather than reporting "already in that mode".
+
+While a turn is running, every change to the live route is refused — mode,
+model, thinking level, and provider — no matter which surface you use. That
+now includes the slash surfaces (`/mode`, `/model`, `/config <key> <value>`,
+`/config preset`), which are reachable mid-turn. Press
+Esc to interrupt first. The restart-only `default_mode` key is exempt, because
+it does not touch the running turn.
+
+Ghosty writes `settings.toml` under a lock that spans processes, and replaces
+the file atomically, so a second Ghosty instance on the same home directory
+cannot lose your selection or read a half-written file. At exit, queued writes
+are flushed before the terminal is restored; anything that failed is printed on
+the way out instead of disappearing with the alternate screen.
 
 ## Compatibility Notes
 
@@ -67,9 +171,13 @@ only controls model and thinking selection.
 - Clear the current input if text is present.
 - Otherwise it is a no-op.
 
-## Approval Mode
+## Permission Posture
 
-You can override approval behavior at runtime:
+Permission posture controls tool approval and whether a turn may pause for a
+missing user decision. It is one layer of the full
+[authorization order](AUTHORIZATION_ORDER.md), not a bypass for tool admission,
+repository law, or sandbox enforcement. Cycle it with `Shift+Tab`, or edit it
+at runtime:
 
 ```text
 /config
@@ -78,9 +186,102 @@ You can override approval behavior at runtime:
 
 Legacy note: `/set approval_mode ...` was retired in favor of `/config`.
 
-- `suggest` (default): uses the per-mode rules above.
-- `auto`: auto-approves all tools (similar to YOLO approval behavior, but without forcing YOLO mode).
-- `never`: blocks any tool that isn't considered safe/read-only.
+- `suggest` (**Ask**, default): tool approvals may interrupt, and Ghosty asks
+  when an unresolved user choice materially changes authority, cost, scope, or
+  outcome.
+- `auto` (**Auto-Review**): the fully autonomous posture. It never opens a user
+  question; the model resolves ambiguity from context, chooses a safe reversible
+  interpretation, or reports that it cannot proceed safely. Tool safety holds
+  remain separate from user questions. Two layers decide approvals. The
+  **deterministic floor** (configured block rules plus the built-in safety
+  floor) allows proven-safe calls and hard-blocks publish-like actions and
+  destructive background/headless work; it is never model-reviewed. Fallback
+  holds — calls the deterministic engine could not prove safe — escalate to a
+  one-shot **model guardian** (v0.9.8) that returns risk, allow/deny, and a
+  rationale. The guardian sees the exact held call and deterministic
+  observations in separate JSON fields; conversation history, skill
+  instructions, attachments, and expanded model context are excluded. It does
+  not infer user intent or compute a generic user-intent score.
+  High or critical risk cannot auto-run even if the model says allow. It has no
+  tools, remembers no rules, and denies rather than truncates an oversized
+  exact call. Exactly one reviewer request is made; incomplete or malformed
+  output, timeout, cancellation, or provider failure fails closed. Headless
+  adapters use the deterministic-only tier. Repo-law
+  holds that explicitly require a person block in Auto-Review rather than
+  opening a hidden approval modal.
+
+The LLM reviewer is closest to OpenAI Codex's experimental Auto-Review at
+commit [`6fc6b9d6d2580d62622fc9884b5f5707f6505a5e`](https://github.com/openai/codex/tree/6fc6b9d6d2580d62622fc9884b5f5707f6505a5e).
+Codex's [guardian entry point](https://github.com/openai/codex/blob/6fc6b9d6d2580d62622fc9884b5f5707f6505a5e/codex-rs/core/src/guardian/mod.rs)
+reconstructs conversation context and runs a dedicated review session.
+Ghosty deliberately adopts only the exact-action structured decision,
+90-second deadline, and fail-closed result. It does not copy Codex's transcript
+reconstruction, user-authorization score, reviewer tools, retries, persistent
+review session, or denial ledger.
+
+Kimi Code at commit
+[`1414d4602898f406e540b23342cb18db23ff9efc`](https://github.com/MoonshotAI/kimi-code/tree/1414d4602898f406e540b23342cb18db23ff9efc)
+also has no LLM reviewer. Its ordered
+[permission policy](https://github.com/MoonshotAI/kimi-code/blob/1414d4602898f406e540b23342cb18db23ff9efc/packages/agent-core-v2/src/agent/permissionPolicy/permissionPolicyService.ts)
+applies explicit deny rules and then its
+[Auto policy](https://github.com/MoonshotAI/kimi-code/blob/1414d4602898f406e540b23342cb18db23ff9efc/packages/agent-core-v2/src/agent/permissionPolicy/policies/auto-mode-approve.ts)
+returns `approve` directly. Ghosty borrows Kimi's no-question autonomous UX,
+not that blanket approval rule.
+
+The sandbox and escalation baseline is grounded in DeepSeek Harness
+`0.1.0-rc.5` at
+commit [`47f943859bef60e4160492346772ded9b24f765a`](https://github.com/deepseek-ai/deepseek-harness/tree/47f943859bef60e4160492346772ded9b24f765a):
+its [sandbox contract](https://github.com/deepseek-ai/deepseek-harness/blob/47f943859bef60e4160492346772ded9b24f765a/docs/subsystems/sandbox.md)
+defines per-call `read-only`, `workspace-write`, and `danger-full-access`
+boundaries and forbids silent unconfined fallback; its
+[approval contract](https://github.com/deepseek-ai/deepseek-harness/blob/47f943859bef60e4160492346772ded9b24f765a/docs/subsystems/approval.md)
+grants only `allowed-once` and fails closed on rejection, cancellation, or an
+unavailable answerer; and its
+[sandbox result contract](https://github.com/deepseek-ai/deepseek-harness/blob/47f943859bef60e4160492346772ded9b24f765a/packages/shell/bash-sandbox/README.md)
+tells the model to retry a denied command exactly once with the narrowest wider
+mode plus a justification. DeepSeek Harness does not add an LLM reviewer to
+that path. Ghosty's autonomous posture adds only the single stateless
+guardian request described above; deterministic hard blocks remain
+non-bypassable.
+- `bypass` (**Full Access**): ordinary tool calls do not show approval prompts,
+  while deliberate user questions remain available. Non-bypassable registered
+  holds auto-approve instead of opening a contradictory modal. Repository-law
+  and managed-policy holds fail closed as hard blocks instead of contradicting
+  Full Access with an approval modal.
+- `never`: blocks any tool that is not considered safe/read-only; deliberate
+  user questions remain available.
+
+The effective posture and its question discipline are projected into every
+turn from the same runtime authority that gates tools. A mode/posture change is
+therefore visible to the next turn. Untrusted runtime-generated input is
+narrowed before metadata is built and cannot invent approval authority. An
+explicit Full Access sub-agent handoff preserves the parent's standing posture
+so ordinary child work does not begin prompting again.
+
+### Children (sub-agents and Fleet workers)
+
+Children inherit the session posture faithfully rather than a bare
+auto-approve bit:
+
+- **Auto-Review**: a worker's held call goes through the same deterministic
+  policy (proven-safe calls run; publish-like and destructive background work
+  is hard-blocked) and, for holds it cannot prove safe, the same one-shot
+  model guardian using the child's own session client. No prompt is ever
+  opened for a child; an unavailable guardian denies, fail closed.
+- **Ask**: a call the role may delegate runs. A held call is raised as an
+  approval prompt in the parent's UI (`agent:<id>:approval:<n>`) when the
+  host is an interactive TUI; the worker waits visibly (`waiting for user`)
+  and the person's answer is routed back to it, whether the parent turn is
+  idle or itself awaiting an approval. Hosts that cannot prompt deny with the
+  reason.
+- **Full Access**: ordinary calls run; destructive detached work still fails
+  closed, because children are background workers.
+
+Role posture and the execution envelope are checked before and after this
+gate and never widen. Every decision a person did not make at a prompt is
+written to the audit log and to the child's transcript as a one-line note
+(`Auto-Review allowed 'bash' (low risk, model guardian): …`), visible when
+the worker is focused.
 
 ## Small-Screen Status Behavior
 
@@ -95,14 +296,20 @@ When terminal height is constrained, the status area compacts first so header/ch
 By default, file tools are restricted to the `--workspace` directory. Enable trust mode to allow file access outside the workspace:
 
 ```text
-/trust
+/trust on
 ```
 
-YOLO mode enables trust mode automatically.
+Bare `/trust` (like `/trust status`) only *reports* the current setting — it
+does not enable anything. Use `/trust off` to restrict access again.
+
+Full Access enables trust mode automatically.
 
 ## MCP Behavior
 
-MCP tools are exposed as `mcp_<server>_<tool>` and use the same approval flow as built-in tools. Read-only MCP helpers may auto-run in suggestive approval modes; MCP tools with possible side effects require approval.
+MCP tools are exposed as `mcp_<server>_<tool>` and use the same approval flow as
+built-in tools. Read-only MCP helpers may auto-run in Ask and Auto-Review when
+policy permits; MCP tools with possible side effects require approval. Full
+Access does not bypass hard policy holds.
 
 See `MCP.md`.
 
@@ -111,17 +318,15 @@ See `MCP.md`.
 Run `ghosty --help` for the canonical list. Common flags:
 
 - `-p, --prompt <TEXT>`: one-shot prompt mode (prints and exits)
-- `ghosty exec --auto --output-format stream-json <PROMPT>`: run the tool-backed non-interactive agent and emit one JSON object per line for harnesses and backend wrappers
+- `ghosty exec --auto --output-format stream-json <PROMPT>`: run the tool-backed non-interactive agent and emit one JSON object per line for harnesses and backend wrappers. Exit codes: `0` on success, `1` for genuine task/agent failures, `75` (`EX_TEMPFAIL`) when the turn ended on a retryable infrastructure failure (provider/transport `network`/`timeout` after all in-session retries) so harnesses can tell a retryable infra exit apart from a task failure; the terminal stream `metadata` event's `error_category` carries the same classification
 - `ghosty exec --resume <ID|PREFIX> <PROMPT>` / `--session-id <ID|PREFIX>`: continue a saved session non-interactively
 - `ghosty exec --continue <PROMPT>`: continue the most recent saved session for this workspace non-interactively
-- `ghosty swebench run --instance-id <ID> --issue-file <PATH>`: run the tool-backed agent on one SWE-bench task and write/update a prediction JSONL row
 - `ghosty fork <ID|PREFIX>` / `ghosty fork --last`: copy a saved session into a new sibling session; forked sessions retain additive parent-session metadata and show that lineage in session listings
 - `--model <MODEL>`: when using the `ghosty` facade, forward a DeepSeek model override to the TUI
 - `--workspace <DIR>`: workspace root for file tools
-- `--yolo`: start in YOLO mode
 - `-r, --resume <ID|PREFIX|latest>`: resume a saved session
 - `-c, --continue`: resume the most recent session in this workspace
-- `--max-subagents <N>`: clamp to `1..=20`
+- `--max-subagents <N>`: clamp to `1..=128`
 - `--mouse-capture` / `--no-mouse-capture`: opt in or out of internal mouse scrolling, transcript selection, right-click context actions, and transcript scrollbar dragging. Mouse capture is enabled by default on non-Windows terminals and on Windows Terminal/ConEmu/Cmder so drag selection copies only transcript text, removes visual wrap-column line breaks from paragraphs, and stays scoped to the transcript pane; hold Shift while dragging or use `--no-mouse-capture` for raw terminal selection. It defaults off on legacy Windows console (CMD without `WT_SESSION` / `ConEmuPID`) and inside JetBrains JediTerm — PyCharm/IDEA/CLion/etc. — where the terminal advertises mouse support but forwards SGR mouse events as raw text (#878, #898). Use `--mouse-capture` to opt in anywhere it's defaulted off. Raw terminal selection may cross the right sidebar and include visual wraps because the terminal, not the TUI, owns the selection.
 - `--profile <NAME>`: select config profile
 - `--config <PATH>`: config file path
@@ -129,7 +334,7 @@ Run `ghosty --help` for the canonical list. Common flags:
 
 ## Branching and Rollback
 
-DeepSeek-TUI has three related but intentionally separate recovery paths:
+Ghosty has three related but intentionally separate recovery paths:
 
 - `ghosty fork <ID>` creates a new saved session from an existing saved
   conversation and records the source session id. This is the safe way to
@@ -137,7 +342,8 @@ DeepSeek-TUI has three related but intentionally separate recovery paths:
 - Esc-Esc backtrack rewinds the live transcript to a previous user prompt and
   restores that prompt into the composer for editing.
 - `/restore` and the `revert_turn` tool restore workspace files from side-git
-  snapshots. They do not rewrite conversation history.
+  snapshots. `/restore list [N]` lists more snapshot options before choosing a
+  rollback point. They do not rewrite conversation history.
 
 A Pi-style in-file tree browser is a larger UI/data-model project. v0.8.40
 ships the bounded fork/backtrack primitives and explicit lineage metadata.

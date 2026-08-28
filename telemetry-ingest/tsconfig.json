@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    // `DOM` is here for the WHATWG names the Workers runtime shares with the
+    // browser — Request, Response, Headers, ReadableStream, TextDecoder — which
+    // is also what Node gives the tests. Deliberately not
+    // `@cloudflare/workers-types`: the tests drive the handler as a plain
+    // `fetch(request, env)` under Node, and two competing Request declarations
+    // would make the suite typecheck against something it never runs.
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+}

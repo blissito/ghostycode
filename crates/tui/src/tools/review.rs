@@ -1,9 +1,10 @@
 //! Tool for structured code reviews of files, diffs, or pull requests.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
+use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -17,11 +18,13 @@ use super::spec::{
     ApprovalRequirement, ToolCapability, ToolContext, ToolError, ToolResult, ToolSpec,
     optional_bool, optional_str, optional_u64, required_str,
 };
+use crate::models::Role;
 
 const DEFAULT_MAX_CHARS: usize = 200_000;
 const MAX_MAX_CHARS: usize = 1_000_000;
-const REVIEW_MAX_TOKENS: u32 = 2048;
 const FALLBACK_MAX_CHARS: usize = 4000;
+const REVIEW_RECEIPT_SCHEMA_VERSION: u32 = 1;
+const REVIEW_CLIENT_UNAVAILABLE: &str = "Review tool requires an active Ghosty model client";
 
 const REVIEW_SYSTEM_PROMPT: &str = "You are a senior code reviewer. Return ONLY valid JSON with \
 the following schema:\n\
@@ -129,6 +132,238 @@ impl ReviewOutput {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewReceipt {
+    pub schema_version: u32,
+    pub mode: String,
+    pub generated_at: String,
+    pub target: String,
+    pub diff_fingerprint: String,
+    pub diff_bytes: usize,
+    pub diff_lines: usize,
+    pub provider: String,
+    pub model: String,
+    pub checks_run: Vec<ReviewReceiptCheck>,
+    pub findings: ReviewReceiptFindings,
+    pub unresolved_risk: ReviewReceiptRisk,
+    pub review_content_sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewReceiptCheck {
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewReceiptFindings {
+    pub summary: String,
+    pub issue_count: usize,
+    pub suggestion_count: usize,
+    pub highest_severity: String,
+    pub issues: Vec<ReviewReceiptIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewReceiptIssue {
+    pub severity: String,
+    pub title: String,
+    pub path: Option<String>,
+    pub line: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewReceiptRisk {
+    pub unresolved: bool,
+    pub level: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewReceiptValidation {
+    pub passed: bool,
+    pub reason: String,
+    pub diff_fingerprint: String,
+    pub receipt_fingerprint: Option<String>,
+    pub receipt_path: Option<PathBuf>,
+    pub unresolved_risk: Option<ReviewReceiptRisk>,
+}
+
+#[must_use]
+pub fn build_review_receipt(
+    target: impl Into<String>,
+    diff: &str,
+    provider: impl Into<String>,
+    model: impl Into<String>,
+    output: &ReviewOutput,
+    review_content: &str,
+    checks_run: Vec<ReviewReceiptCheck>,
+) -> ReviewReceipt {
+    let highest_severity = highest_review_severity(output);
+    let unresolved = !output.issues.is_empty();
+    let risk_level = if unresolved {
+        highest_severity.clone()
+    } else {
+        "none".to_string()
+    };
+    let risk_summary = if unresolved {
+        format!(
+            "{} unresolved review issue(s); highest severity: {highest_severity}",
+            output.issues.len()
+        )
+    } else {
+        "No structured unresolved issues reported by review output.".to_string()
+    };
+
+    ReviewReceipt {
+        schema_version: REVIEW_RECEIPT_SCHEMA_VERSION,
+        mode: "pre_push_review".to_string(),
+        generated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        target: target.into(),
+        diff_fingerprint: diff_fingerprint(diff),
+        diff_bytes: diff.len(),
+        diff_lines: diff.lines().count(),
+        provider: provider.into(),
+        model: model.into(),
+        checks_run,
+        findings: ReviewReceiptFindings {
+            summary: output.summary.clone(),
+            issue_count: output.issues.len(),
+            suggestion_count: output.suggestions.len(),
+            highest_severity: highest_severity.clone(),
+            issues: output
+                .issues
+                .iter()
+                .map(|issue| ReviewReceiptIssue {
+                    severity: issue.severity.clone(),
+                    title: issue.title.clone(),
+                    path: issue.path.clone(),
+                    line: issue.line,
+                })
+                .collect(),
+        },
+        unresolved_risk: ReviewReceiptRisk {
+            unresolved,
+            level: risk_level,
+            summary: risk_summary,
+        },
+        review_content_sha256: sha256_hex(review_content.as_bytes()),
+    }
+}
+
+pub fn write_review_receipt(
+    receipt: &ReviewReceipt,
+    path_override: Option<&Path>,
+) -> anyhow::Result<PathBuf> {
+    let path = if let Some(path) = path_override {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        path.to_path_buf()
+    } else {
+        let dir = ghosty_config::ensure_state_dir("review-receipts")?;
+        let digest = receipt
+            .diff_fingerprint
+            .strip_prefix("sha256:")
+            .unwrap_or(receipt.diff_fingerprint.as_str());
+        let short = digest.chars().take(12).collect::<String>();
+        let stamp = Utc::now().format("%Y%m%dT%H%M%SZ");
+        dir.join(format!("{stamp}-{short}.json"))
+    };
+    let encoded = serde_json::to_string_pretty(receipt)?;
+    fs::write(&path, encoded)?;
+    Ok(path)
+}
+
+pub fn read_review_receipt(path: &Path) -> anyhow::Result<ReviewReceipt> {
+    let raw = fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&raw)?)
+}
+
+pub fn latest_review_receipt_for_diff(
+    diff: &str,
+) -> anyhow::Result<Option<(PathBuf, ReviewReceipt)>> {
+    let dir = ghosty_config::resolve_state_dir("review-receipts")?;
+    if !dir.is_dir() {
+        return Ok(None);
+    }
+
+    let expected = diff_fingerprint(diff);
+    let mut matches = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(receipt) = read_review_receipt(&path) else {
+            continue;
+        };
+        if receipt.diff_fingerprint != expected {
+            continue;
+        }
+        let modified = entry.metadata().and_then(|meta| meta.modified()).ok();
+        matches.push((modified, path, receipt));
+    }
+    matches.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    Ok(matches.pop().map(|(_, path, receipt)| (path, receipt)))
+}
+
+#[must_use]
+pub fn validate_review_receipt_for_diff(
+    diff: &str,
+    receipt: &ReviewReceipt,
+    receipt_path: Option<PathBuf>,
+) -> ReviewReceiptValidation {
+    let expected = diff_fingerprint(diff);
+    let mut validation = ReviewReceiptValidation {
+        passed: false,
+        reason: String::new(),
+        diff_fingerprint: expected.clone(),
+        receipt_fingerprint: Some(receipt.diff_fingerprint.clone()),
+        receipt_path,
+        unresolved_risk: Some(receipt.unresolved_risk.clone()),
+    };
+
+    if receipt.schema_version != REVIEW_RECEIPT_SCHEMA_VERSION {
+        validation.reason = format!(
+            "unsupported review receipt schema version {}",
+            receipt.schema_version
+        );
+        return validation;
+    }
+    if receipt.diff_fingerprint != expected {
+        validation.reason = "current diff fingerprint does not match receipt".to_string();
+        return validation;
+    }
+    if receipt.unresolved_risk.unresolved {
+        validation.reason = receipt.unresolved_risk.summary.clone();
+        return validation;
+    }
+    if let Some(check) = receipt
+        .checks_run
+        .iter()
+        .find(|check| !review_receipt_check_status_passes(&check.status))
+    {
+        validation.reason = format!(
+            "review receipt check '{}' did not pass: {}",
+            check.name, check.status
+        );
+        return validation;
+    }
+
+    validation.passed = true;
+    validation.reason = "receipt matches current diff and has no unresolved risk".to_string();
+    validation
+}
+
+#[must_use]
+pub fn diff_fingerprint(diff: &str) -> String {
+    format!("sha256:{}", sha256_hex(diff.as_bytes()))
+}
+
 fn parse_review_output_json(raw: &str) -> Option<ReviewOutput> {
     if let Ok(parsed) = serde_json::from_str::<ReviewOutput>(raw) {
         return Some(parsed);
@@ -141,6 +376,38 @@ fn parse_review_output_json(raw: &str) -> Option<ReviewOutput> {
         return None;
     }
     parse_review_output_json(&inner)
+}
+
+fn highest_review_severity(output: &ReviewOutput) -> String {
+    let mut highest = "none";
+    for issue in &output.issues {
+        let severity = issue.severity.as_str();
+        if severity_rank(severity) > severity_rank(highest) {
+            highest = severity;
+        }
+    }
+    highest.to_string()
+}
+
+fn severity_rank(severity: &str) -> u8 {
+    match severity {
+        "error" => 4,
+        "warning" => 3,
+        "info" => 2,
+        "none" => 1,
+        _ => 0,
+    }
+}
+
+fn review_receipt_check_status_passes(status: &str) -> bool {
+    matches!(
+        status.trim().to_ascii_lowercase().as_str(),
+        "passed" | "pass" | "success" | "ok"
+    )
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    crate::hashing::sha256_hex(bytes)
 }
 
 pub struct ReviewTool {
@@ -204,9 +471,7 @@ impl ToolSpec for ReviewTool {
 
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
         let Some(client) = self.client.clone() else {
-            return Err(ToolError::not_available(
-                "Review tool requires an active DeepSeek client".to_string(),
-            ));
+            return Err(ToolError::not_available(REVIEW_CLIENT_UNAVAILABLE));
         };
 
         let target = required_str(&input, "target")?.trim();
@@ -214,28 +479,33 @@ impl ToolSpec for ReviewTool {
             return Err(ToolError::invalid_input("target cannot be empty"));
         }
 
-        let kind = optional_str(&input, "kind").map(|s| s.trim().to_ascii_lowercase());
-        let base = optional_str(&input, "base").map(|s| s.trim().to_string());
-        let staged = optional_bool(&input, "staged", false);
+        let kind = optional_str(&input, "kind")?.map(|s| s.trim().to_ascii_lowercase());
+        let base = optional_str(&input, "base")?.map(|s| s.trim().to_string());
+        let staged = optional_bool(&input, "staged", false)?;
         let max_chars =
-            usize::try_from(optional_u64(&input, "max_chars", DEFAULT_MAX_CHARS as u64))
+            usize::try_from(optional_u64(&input, "max_chars", DEFAULT_MAX_CHARS as u64)?)
                 .unwrap_or(DEFAULT_MAX_CHARS)
                 .clamp(1, MAX_MAX_CHARS);
 
         let source =
-            resolve_review_source(target, kind.as_deref(), staged, base.as_deref(), context)?;
+            resolve_review_source(target, kind.as_deref(), staged, base.as_deref(), context)
+                .await?;
         let prompt = build_review_prompt(&source, max_chars);
 
+        let route = client.effective_route_envelope(&self.model, chrono::Utc::now());
         let request = MessageRequest {
             model: self.model.clone(),
             messages: vec![Message {
-                role: "user".to_string(),
+                role: Role::User,
                 content: vec![ContentBlock::Text {
                     text: prompt,
                     cache_control: None,
                 }],
             }],
-            max_tokens: REVIEW_MAX_TOKENS,
+            // A review is a deliberative call: on thinking-default routes the
+            // reasoning stream shares this budget, so it gets the route's
+            // normal output allowance, not a review-only ceiling.
+            max_tokens: client.effective_max_output_tokens(&route.model),
             system: Some(SystemPrompt::Text(REVIEW_SYSTEM_PROMPT.to_string())),
             tools: None,
             tool_choice: None,
@@ -243,8 +513,11 @@ impl ToolSpec for ReviewTool {
             thinking: None,
             reasoning_effort: None,
             stream: Some(false),
-            temperature: Some(0.2),
-            top_p: Some(0.9),
+            // Route parity with ordinary turns: no sampling params, so every
+            // provider's own defaults apply and fixed-sampling routes don't
+            // reject the request.
+            temperature: None,
+            top_p: None,
         };
 
         let response = client
@@ -252,27 +525,36 @@ impl ToolSpec for ReviewTool {
             .await
             .map_err(|e| ToolError::execution_failed(format!("Review request failed: {e}")))?;
 
+        if crate::models::is_incomplete_stop_reason(response.stop_reason.as_deref()) {
+            return Ok(ToolResult::error(format!(
+                "Review model response incomplete: provider stop reason `{}`; the partial review was not accepted.",
+                crate::models::stop_reason_detail(response.stop_reason.as_deref())
+            ))
+            .with_metadata(review_usage_metadata(&route, &response.usage)));
+        }
+
         let response_text = extract_text(&response.content);
         let output = ReviewOutput::from_str(&response_text);
-        let metadata = review_usage_metadata(&response.model, &response.usage);
+        let metadata = review_usage_metadata(&route, &response.usage);
         let result =
             ToolResult::json(&output).map_err(|e| ToolError::execution_failed(e.to_string()))?;
         Ok(result.with_metadata(metadata))
     }
 }
 
-fn review_usage_metadata(model: &str, usage: &Usage) -> Value {
-    json!({
+fn review_usage_metadata(
+    route: &crate::cost_status::EffectiveRouteEnvelope,
+    usage: &Usage,
+) -> Value {
+    let mut metadata = json!({
         "tool": "review",
         "input_tokens": usage.input_tokens,
         "output_tokens": usage.output_tokens,
-        "child_model": model,
-        "child_input_tokens": usage.input_tokens,
-        "child_output_tokens": usage.output_tokens,
-        "child_prompt_cache_hit_tokens": usage.prompt_cache_hit_tokens,
-        "child_prompt_cache_miss_tokens": usage.prompt_cache_miss_tokens,
-        "child_reasoning_tokens": usage.reasoning_tokens,
-    })
+    });
+    // Every billable class, from the one shared producer, so a child turn can be
+    // priced with the same completeness as a parent turn (#4318).
+    crate::cost_status::attach_child_usage_metadata(&mut metadata, route, usage);
+    metadata
 }
 
 enum ReviewSource {
@@ -281,7 +563,7 @@ enum ReviewSource {
     PullRequest { label: String, diff: String },
 }
 
-fn resolve_review_source(
+async fn resolve_review_source(
     target: &str,
     kind: Option<&str>,
     staged: bool,
@@ -291,16 +573,17 @@ fn resolve_review_source(
     if let Some(kind) = kind {
         return match kind {
             "file" => resolve_file_target(target, context),
-            "diff" => resolve_diff_target(context.workspace.as_path(), staged, base).map(|diff| {
-                ReviewSource::Diff {
+            "diff" => {
+                let diff = resolve_diff_target(context.workspace.as_path(), staged, base).await?;
+                Ok(ReviewSource::Diff {
                     label: "git diff".to_string(),
                     diff,
-                }
-            }),
+                })
+            }
             "pr" | "pull" | "pull_request" => {
                 let pr = parse_pr_url(target)
                     .ok_or_else(|| ToolError::invalid_input("Invalid pull request URL"))?;
-                let diff = gh_pr_diff(&pr, &context.workspace)?;
+                let diff = gh_pr_diff(&pr, &context.workspace).await?;
                 Ok(ReviewSource::PullRequest {
                     label: pr.label(),
                     diff,
@@ -313,7 +596,7 @@ fn resolve_review_source(
     }
 
     if let Some(pr) = parse_pr_url(target) {
-        let diff = gh_pr_diff(&pr, &context.workspace)?;
+        let diff = gh_pr_diff(&pr, &context.workspace).await?;
         return Ok(ReviewSource::PullRequest {
             label: pr.label(),
             diff,
@@ -322,7 +605,7 @@ fn resolve_review_source(
 
     if let Some(staged_override) = diff_mode_from_target(target) {
         let staged = staged || staged_override;
-        let diff = resolve_diff_target(context.workspace.as_path(), staged, base)?;
+        let diff = resolve_diff_target(context.workspace.as_path(), staged, base).await?;
         return Ok(ReviewSource::Diff {
             label: if staged {
                 "git diff --cached"
@@ -356,28 +639,81 @@ fn resolve_file_target(target: &str, context: &ToolContext) -> Result<ReviewSour
     Ok(ReviewSource::File { display, content })
 }
 
-fn resolve_diff_target(
+async fn resolve_diff_target(
     workspace: &Path,
     staged: bool,
     base: Option<&str>,
 ) -> Result<String, ToolError> {
-    let Some(mut cmd) = crate::dependencies::Git::command() else {
-        return Err(ToolError::execution_failed("git not found"));
+    let base = base.map(str::trim).filter(|base| !base.is_empty());
+    let base_commit = if let Some(base) = base {
+        // Resolve the user-supplied ref before placing it in `git diff`. This
+        // both rejects option-looking input and gives the staged path a real
+        // commit from which it can compute the merge base.
+        let revision = format!("{base}^{{commit}}");
+        let output = run_review_git(
+            workspace,
+            vec![
+                "rev-parse".to_string(),
+                "--verify".to_string(),
+                "--end-of-options".to_string(),
+                revision,
+            ],
+            "resolve review base",
+        )
+        .await?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(ToolError::invalid_input(format!(
+                "Invalid git base ref '{base}': {}",
+                stderr.trim()
+            )));
+        }
+        let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if commit.is_empty() || !commit.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(ToolError::execution_failed(format!(
+                "git resolved base ref '{base}' to an invalid commit id"
+            )));
+        }
+        Some(commit)
+    } else {
+        None
     };
-    cmd.arg("diff");
-    if staged {
-        cmd.arg("--cached");
-    }
-    if let Some(base) = base
-        && !base.trim().is_empty()
-    {
-        cmd.arg(format!("{base}...HEAD"));
-    }
-    cmd.current_dir(workspace);
 
-    let output = cmd
-        .output()
-        .map_err(|e| ToolError::execution_failed(format!("Failed to run git diff: {e}")))?;
+    let mut args = vec!["diff".to_string()];
+    if staged {
+        args.push("--cached".to_string());
+        if let Some(base_commit) = base_commit {
+            // `git diff --cached <base>...HEAD` is invalid because the index
+            // is already one side of this diff. Preserve triple-dot semantics
+            // by resolving the merge base first, then compare that tree with
+            // the index (committed branch work plus the staged snapshot).
+            let output = run_review_git(
+                workspace,
+                vec!["merge-base".to_string(), base_commit, "HEAD".to_string()],
+                "resolve staged review merge base",
+            )
+            .await?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(ToolError::execution_failed(format!(
+                    "git merge-base failed: {}",
+                    stderr.trim()
+                )));
+            }
+            let merge_base = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if merge_base.is_empty() || !merge_base.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err(ToolError::execution_failed(
+                    "git merge-base returned an invalid commit id",
+                ));
+            }
+            args.push(merge_base);
+        }
+    } else if let Some(base_commit) = base_commit {
+        args.push(format!("{base_commit}...HEAD"));
+    }
+    args.push("--".to_string());
+
+    let output = run_review_git(workspace, args, "generate review diff").await?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(ToolError::execution_failed(format!(
@@ -392,7 +728,25 @@ fn resolve_diff_target(
     Ok(diff)
 }
 
-fn gh_pr_diff(pr: &PullRequestRef, workspace: &Path) -> Result<String, ToolError> {
+async fn run_review_git(
+    workspace: &Path,
+    args: Vec<String>,
+    operation: &'static str,
+) -> Result<std::process::Output, ToolError> {
+    let workspace = workspace.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let Some(mut cmd) = crate::dependencies::Git::command() else {
+            return Err(ToolError::execution_failed("git not found"));
+        };
+        cmd.args(args).current_dir(workspace).output().map_err(|e| {
+            ToolError::execution_failed(format!("Failed to {operation} with git: {e}"))
+        })
+    })
+    .await
+    .map_err(|e| ToolError::execution_failed(format!("git {operation} task panicked: {e}")))?
+}
+
+async fn gh_pr_diff(pr: &PullRequestRef, workspace: &Path) -> Result<String, ToolError> {
     let Some(mut cmd) = crate::dependencies::Gh::command() else {
         return Err(ToolError::execution_failed("gh not found"));
     };
@@ -403,9 +757,12 @@ fn gh_pr_diff(pr: &PullRequestRef, workspace: &Path) -> Result<String, ToolError
         .arg(format!("{}/{}", pr.owner, pr.repo))
         .current_dir(workspace);
 
-    let output = cmd.output().map_err(|e| {
-        ToolError::execution_failed(format!("Failed to run gh pr diff (is gh installed?): {e}"))
-    })?;
+    let output = tokio::task::spawn_blocking(move || cmd.output())
+        .await
+        .map_err(|e| ToolError::execution_failed(format!("gh pr diff task panicked: {e}")))?
+        .map_err(|e| {
+            ToolError::execution_failed(format!("Failed to run gh pr diff (is gh installed?): {e}"))
+        })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(ToolError::execution_failed(format!(
@@ -544,6 +901,74 @@ fn parse_pr_url(url: &str) -> Option<PullRequestRef> {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn missing_review_client_uses_ghosty_provider_neutral_language() {
+        let tool = ReviewTool::new(None, "unused".to_string());
+        let context = ToolContext::new(PathBuf::from("."));
+
+        let error = tool
+            .execute(json!({}), &context)
+            .await
+            .expect_err("review requires a configured model client")
+            .to_string();
+
+        assert_eq!(
+            error,
+            "Failed to locate tool: Review tool requires an active Ghosty model client"
+        );
+        assert!(!error.contains("DeepSeek"));
+    }
+
+    fn fixture_git(workspace: &Path, args: &[&str]) -> std::process::Output {
+        let mut command = crate::dependencies::Git::command().expect("git test dependency");
+        let output = command
+            .args(args)
+            .current_dir(workspace)
+            .output()
+            .expect("run git fixture command");
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+    }
+
+    #[tokio::test]
+    async fn staged_diff_with_base_compares_merge_base_to_index() {
+        let repo = tempfile::TempDir::new().expect("temp git repository");
+        fixture_git(repo.path(), &["init"]);
+        fixture_git(repo.path(), &["config", "user.name", "Ghosty Test"]);
+        fixture_git(
+            repo.path(),
+            &["config", "user.email", "ghosty-test@example.invalid"],
+        );
+
+        let tracked = repo.path().join("tracked.txt");
+        fs::write(&tracked, "base\n").expect("write base fixture");
+        fixture_git(repo.path(), &["add", "tracked.txt"]);
+        fixture_git(repo.path(), &["commit", "-m", "base"]);
+        let base =
+            String::from_utf8_lossy(&fixture_git(repo.path(), &["rev-parse", "HEAD"]).stdout)
+                .trim()
+                .to_string();
+
+        fs::write(&tracked, "base\ncommitted\n").expect("write committed fixture");
+        fixture_git(repo.path(), &["add", "tracked.txt"]);
+        fixture_git(repo.path(), &["commit", "-m", "branch change"]);
+        fs::write(&tracked, "base\ncommitted\nstaged\n").expect("write staged fixture");
+        fixture_git(repo.path(), &["add", "tracked.txt"]);
+        fs::write(&tracked, "base\ncommitted\nstaged\nunstaged\n").expect("write unstaged fixture");
+
+        let diff = resolve_diff_target(repo.path(), true, Some(&base))
+            .await
+            .expect("staged review diff from base");
+        assert!(diff.contains("+committed"), "{diff}");
+        assert!(diff.contains("+staged"), "{diff}");
+        assert!(!diff.contains("unstaged"), "{diff}");
+    }
+
     #[test]
     fn parses_pr_url() {
         let pr =
@@ -635,8 +1060,16 @@ mod tests {
 
     #[test]
     fn review_usage_metadata_reports_child_tokens_for_cost_accrual() {
-        let metadata = review_usage_metadata(
+        let route = crate::cost_status::EffectiveRouteEnvelope::capture(
+            None,
+            crate::config::ApiProvider::Deepseek,
+            "deepseek",
             "deepseek-v4-flash",
+            Some("https://api.deepseek.com/v1"),
+            chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).expect("epoch"),
+        );
+        let metadata = review_usage_metadata(
+            &route,
             &Usage {
                 input_tokens: 123,
                 output_tokens: 45,
@@ -654,5 +1087,217 @@ mod tests {
         assert_eq!(metadata["child_prompt_cache_hit_tokens"], 100);
         assert_eq!(metadata["child_prompt_cache_miss_tokens"], 23);
         assert_eq!(metadata["child_reasoning_tokens"], 7);
+    }
+
+    #[test]
+    fn pre_push_diff_review_receipt_includes_fingerprint_and_risk() {
+        let diff = "diff --git a/src/lib.rs b/src/lib.rs\n+let risky = true;\n";
+        let output = ReviewOutput {
+            summary: "Found one issue".to_string(),
+            issues: vec![ReviewIssue {
+                severity: "warning".to_string(),
+                title: "Missing test".to_string(),
+                description: "Add coverage".to_string(),
+                path: Some("src/lib.rs".to_string()),
+                line: Some(12),
+            }],
+            suggestions: vec![ReviewSuggestion {
+                path: Some("src/lib.rs".to_string()),
+                line: Some(12),
+                suggestion: "Add a regression test".to_string(),
+            }],
+            overall_assessment: "Needs a test".to_string(),
+        };
+
+        let receipt = build_review_receipt(
+            "working-tree",
+            diff,
+            "deepseek",
+            "deepseek-v4-pro",
+            &output,
+            "review body",
+            vec![ReviewReceiptCheck {
+                name: "cargo test -p ghosty-tui".to_string(),
+                status: "passed".to_string(),
+            }],
+        );
+
+        assert_eq!(receipt.schema_version, REVIEW_RECEIPT_SCHEMA_VERSION);
+        assert_eq!(receipt.mode, "pre_push_review");
+        assert_eq!(receipt.target, "working-tree");
+        assert_eq!(receipt.diff_fingerprint, diff_fingerprint(diff));
+        assert_eq!(receipt.diff_lines, 2);
+        assert_eq!(receipt.provider, "deepseek");
+        assert_eq!(receipt.model, "deepseek-v4-pro");
+        assert_eq!(receipt.checks_run.len(), 1);
+        assert_eq!(receipt.findings.issue_count, 1);
+        assert_eq!(receipt.findings.suggestion_count, 1);
+        assert_eq!(receipt.findings.highest_severity, "warning");
+        assert!(receipt.unresolved_risk.unresolved);
+        assert_eq!(receipt.unresolved_risk.level, "warning");
+        assert_eq!(
+            receipt.review_content_sha256,
+            sha256_hex("review body".as_bytes())
+        );
+    }
+
+    #[test]
+    fn write_review_receipt_accepts_override_path() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("nested").join("receipt.json");
+        let output = ReviewOutput::from_str("Looks good");
+        let receipt = build_review_receipt(
+            "staged",
+            "diff --git a/a b/a\n",
+            "deepseek",
+            "deepseek-v4-flash",
+            &output,
+            "Looks good",
+            Vec::new(),
+        );
+
+        let written = write_review_receipt(&receipt, Some(&path)).expect("write receipt");
+
+        assert_eq!(written, path);
+        let raw = fs::read_to_string(&written).expect("read receipt");
+        let decoded: ReviewReceipt = serde_json::from_str(&raw).expect("decode receipt");
+        assert_eq!(decoded.diff_fingerprint, receipt.diff_fingerprint);
+        assert_eq!(decoded.unresolved_risk.level, "none");
+    }
+
+    #[test]
+    fn review_receipt_validation_passes_matching_clean_receipt() {
+        let diff = "diff --git a/a b/a\n+ok\n";
+        let output = ReviewOutput::from_str("Looks good");
+        let receipt = build_review_receipt(
+            "working-tree",
+            diff,
+            "deepseek",
+            "deepseek-v4-flash",
+            &output,
+            "Looks good",
+            vec![ReviewReceiptCheck {
+                name: "cargo test".to_string(),
+                status: "passed".to_string(),
+            }],
+        );
+
+        let validation = validate_review_receipt_for_diff(diff, &receipt, None);
+
+        assert!(validation.passed);
+        assert_eq!(validation.diff_fingerprint, diff_fingerprint(diff));
+        assert_eq!(
+            validation.reason,
+            "receipt matches current diff and has no unresolved risk"
+        );
+    }
+
+    #[test]
+    fn review_receipt_validation_rejects_changed_diff() {
+        let output = ReviewOutput::from_str("Looks good");
+        let receipt = build_review_receipt(
+            "working-tree",
+            "diff --git a/a b/a\n+old\n",
+            "deepseek",
+            "deepseek-v4-flash",
+            &output,
+            "Looks good",
+            Vec::new(),
+        );
+
+        let validation =
+            validate_review_receipt_for_diff("diff --git a/a b/a\n+new\n", &receipt, None);
+
+        assert!(!validation.passed);
+        assert_eq!(
+            validation.reason,
+            "current diff fingerprint does not match receipt"
+        );
+    }
+
+    #[test]
+    fn review_receipt_validation_rejects_unresolved_risk() {
+        let diff = "diff --git a/a b/a\n+risk\n";
+        let output = ReviewOutput {
+            summary: "Risk found".to_string(),
+            issues: vec![ReviewIssue {
+                severity: "error".to_string(),
+                title: "Unsafe change".to_string(),
+                description: "Needs work".to_string(),
+                path: Some("a".to_string()),
+                line: Some(1),
+            }],
+            suggestions: Vec::new(),
+            overall_assessment: String::new(),
+        };
+        let receipt = build_review_receipt(
+            "working-tree",
+            diff,
+            "deepseek",
+            "deepseek-v4-flash",
+            &output,
+            "Risk found",
+            Vec::new(),
+        );
+
+        let validation = validate_review_receipt_for_diff(diff, &receipt, None);
+
+        assert!(!validation.passed);
+        assert_eq!(validation.unresolved_risk.as_ref().unwrap().level, "error");
+        assert!(validation.reason.contains("unresolved review issue"));
+    }
+
+    #[test]
+    fn review_receipt_validation_rejects_failed_check() {
+        let diff = "diff --git a/a b/a\n+ok\n";
+        let output = ReviewOutput::from_str("Looks good");
+        let receipt = build_review_receipt(
+            "working-tree",
+            diff,
+            "deepseek",
+            "deepseek-v4-flash",
+            &output,
+            "Looks good",
+            vec![ReviewReceiptCheck {
+                name: "cargo test".to_string(),
+                status: "failed".to_string(),
+            }],
+        );
+
+        let validation = validate_review_receipt_for_diff(diff, &receipt, None);
+
+        assert!(!validation.passed);
+        assert!(
+            validation
+                .reason
+                .contains("review receipt check 'cargo test' did not pass")
+        );
+    }
+
+    #[test]
+    fn review_receipt_validation_rejects_attached_not_run_check() {
+        let diff = "diff --git a/a b/a\n+ok\n";
+        let output = ReviewOutput::from_str("Looks good");
+        let receipt = build_review_receipt(
+            "working-tree",
+            diff,
+            "deepseek",
+            "deepseek-v4-flash",
+            &output,
+            "Looks good",
+            vec![ReviewReceiptCheck {
+                name: "cargo test".to_string(),
+                status: "not_run".to_string(),
+            }],
+        );
+
+        let validation = validate_review_receipt_for_diff(diff, &receipt, None);
+
+        assert!(!validation.passed);
+        assert!(
+            validation
+                .reason
+                .contains("review receipt check 'cargo test' did not pass: not_run")
+        );
     }
 }

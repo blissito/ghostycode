@@ -1,271 +1,208 @@
 # Sandbox threat model
 
-Ghosty Code executes shell commands spawned by AI reasoning. The sandbox
-module restricts what those commands can do to the host system. This
-document describes what each platform's sandbox actually enforces,
-what is best-effort, and what is explicitly out of scope.
+Ghosty can launch shell commands proposed by a model. Approval policy,
+workspace-aware tools, and an operating-system command wrapper are separate
+controls: an approval is not a sandbox, and selecting `workspace-write` does
+not prove that the current platform has an OS wrapper available.
+
+This document describes only behavior wired into the command execution path.
+See [Authorization order](AUTHORIZATION_ORDER.md) for the policy layers that
+run before execution reaches this boundary.
 
 ## Platform overview
 
-| Mechanism | Platform | Type | Status |
+| Mechanism | Platform | Selection | What Ghosty reports |
 |---|---|---|---|
-| Seatbelt | macOS | Mandatory access control | Enforced |
-| Landlock | Linux | Filesystem access control | Enforced |
-| seccomp BPF | Linux | Syscall filter | Enforced |
-| Process hardening | Linux | Kernel prctl / rlimit | Enforced |
-| Bubblewrap (bwrap) | Linux | Namespace isolation | Optional |
-| Windows Job Object | Windows | Process-tree containment | v1 (PR #2220) |
+| Seatbelt (`sandbox-exec`) | macOS | Automatic when the runtime probe succeeds | `macos-seatbelt` |
+| Bubblewrap (`/usr/bin/bwrap`) | Linux | `prefer_bwrap = true` and the file is executable | `linux-bwrap` |
+| No OS wrapper | Linux without usable opt-in bwrap | Default | `none` |
+| No OS wrapper | Windows | Current implementation | `none` |
+| OpenSandbox-compatible service | Any supported host | `sandbox_backend = "opensandbox"` | External execution path |
 
-## Threat model: what each layer addresses
+The repository contains a seccomp implementation module plus a future Windows
+helper contract. They are not wired into child-command launch, so Ghosty
+does not advertise them as active sandboxes. Source-only sandbox code is not
+evidence that a command was restricted.
 
-### 1. Process hardening (Linux only)
+## macOS: Seatbelt
 
-**When it runs:** Before any threads are spawned, before Tokio boots,
-before any data is loaded into memory.
+Ghosty probes `/usr/bin/sandbox-exec` by running a minimal profile. When the
+probe succeeds and the selected `SandboxPolicy` requests a sandbox, the child
+command is wrapped with a generated Seatbelt profile.
 
-**What it does:**
+The profile can provide:
 
-- `PR_SET_DUMPABLE=0` — prevents ptrace, makes `/proc/<pid>/` root-owned
-- `PR_SET_NO_NEW_PRIVS=1` — irreversible; no child can ever gain privileges
-- `RLIMIT_CORE=0` — no core dumps, so sensitive data never hits disk
+- broad filesystem reads;
+- writes limited by the selected policy, including the workspace and specific
+  runtime/cache paths needed by supported tools;
+- network access only when the policy enables it.
 
-**What it protects against:**
-- Process inspection via ptrace/strace/gdb
-- Privilege escalation via setuid/setgid/fscaps
-- Core dumps leaking API keys, tokens, prompt content
+If the probe fails or `sandbox-exec` is unavailable, Ghosty reports no OS
+sandbox and launches the command without a Seatbelt wrapper. It does not set a
+Seatbelt marker on that fallback.
 
-**What it does NOT protect against:**
-- A compromised child reading its parent's `/proc/<pid>/mem` (already blocked
-  by `PR_SET_DUMPABLE=0` making `/proc/<pid>/` root-owned)
-- Kernel exploits that bypass prctl
+## Linux: opt-in bubblewrap
 
-### 2. Landlock (Linux, kernel 5.13+)
+Linux command sandboxing is opt-in. Set the top-level configuration key:
 
-**When it runs:** Applied to each child process at spawn time via a
-helper script or `landlock_restrict_self`. Only restrictable by the
-process itself — parent cannot force Landlock on a child.
+```toml
+prefer_bwrap = true
+```
 
-**What it does:**
-- Restricts filesystem access to a whitelist of paths
-- Handles: `EXECUTE`, `READ_FILE`, `READ_DIR`, `WRITE_FILE`, `REMOVE_DIR`,
-  `REMOVE_FILE`, `MAKE_DIR`, `MAKE_REG`, `MAKE_SYM`, `TRUNCATE`
+Ghosty selects bubblewrap only when `/usr/bin/bwrap` is a regular executable
+file. The wrapper derives its mounts and network namespace from the resolved
+`SandboxPolicy`:
 
-**What it protects against:**
-- Reading files outside the workspace (e.g., `/etc/passwd`, `~/.ssh`)
-- Writing to system directories (`/usr`, `/bin`, `/lib`)
-- Creating or deleting files in protected locations
+```text
+/usr/bin/bwrap \
+  --unshare-all \
+  [--share-net] \
+  --ro-bind / / \
+  --dev /dev \
+  --proc /proc \
+  --tmpfs /tmp \
+  [--dev-bind <device-root> <device-root> ...] \
+  --bind <writable-root> <writable-root> ... \
+  --ro-bind <protected-descendant> <protected-descendant> ... \
+  [--ro-bind <extra-ro-root> <extra-ro-root> ...] \
+  --chdir <cwd> \
+  -- <program> <args>
+```
 
-**What it does NOT protect against:**
-- Network access (Landlock is filesystem-only)
-- Process inspection (use seccomp for this)
-- Reading files that are already mapped (Landlock applies at `open()` time)
+The sandbox always gets a private `/dev` (fresh device nodes, so `>/dev/null`
+works), a private `/proc`, and a tmpfs `/tmp` (#5410). Two optional top-level
+config keys extend the mounts: `bwrap_ro_roots` (extra host paths bind-mounted
+read-only, applied last so they can narrow a policy-writable path) and
+`bwrap_dev_roots` (host character/block device nodes bind-mounted read-write;
+directories are never honored). Missing paths are skipped silently.
 
-**Detection:** `detect_denial()` checks stderr for `Permission denied`,
-`Operation not permitted`, `EACCES`, `EPERM`.
+That gives the child a read-only root view. For `workspace-write`, every safe,
+existing policy root is mounted read-write: the working directory, configured
+additional roots, `/tmp` and `TMPDIR` unless excluded, and verified Git
+worktree metadata roots. Existing `.ghosty` and `.deepseek` descendants are
+remounted read-only after their writable parent. Missing paths, non-directory
+paths, and `/` are not promoted to writable mounts.
 
-### 3. seccomp BPF (Linux only)
+For `read-only`, there are no writable binds, so the working directory remains
+inside the read-only root view. `--unshare-all` isolates the network namespace
+by default. Ghosty adds `--share-net` only when the policy's
+`network_access` is true. `danger-full-access` and `external-sandbox` bypass the
+local wrapper entirely.
 
-**When it runs:** Installed via `prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER)`
-on the child process.
+If the user does not opt in, or `/usr/bin/bwrap` is missing or non-executable,
+Ghosty reports `none` and launches the command without a Linux OS wrapper.
+There is no marker-only fallback to a different Linux sandbox.
 
-**What it does:**
-- Whitelist of ~100 safe syscalls (file I/O, memory, process, IPC,
-  synchronization, signals, time)
-- **Explicitly denied:** `ptrace`, `mount`, `umount2`, `kexec_load`,
-  `kexec_file_load`, `init_module`, `finit_module`, `delete_module`,
-  `bpf`, `reboot`, `swapon`, `swapoff`, `pivot_root`,
-  `setuid`/`setgid`/`setreuid`/`setregid`/`setresuid`/`setresgid`,
-  `personality`
-- Any syscall not on the whitelist → `SECCOMP_RET_KILL_PROCESS` (SIGSYS)
+Install bubblewrap separately when this opt-in fits the workflow:
 
-**What it protects against:**
-- Process hijacking via ptrace
-- Mounting filesystems (bypassing Landlock read-only restrictions)
-- Loading kernel modules
-- Loading BPF programs (would bypass seccomp itself!)
-- Rebooting the system
-- Privilege changes via setuid/setgid
-
-**What it does NOT protect against:**
-- Legitimate use of allowed syscalls for malicious purposes
-- Side-channel attacks via allowed syscalls (e.g., timing)
-
-**Detection:** `detect_denial()` checks exit code 31 (SIGSYS) or stderr
-for `Bad system call`, `bad system call`, `SIGSYS`, `seccomp`.
-
-### 4. Bubblewrap / bwrap (Linux, optional)
-
-**When it runs:** If `/usr/bin/bwrap` is present AND the config key
-`[sandbox] prefer_bwrap = true` is set. Runs as an outer wrapper around
-the child command.
-
-**What it does:**
-- Creates a new mount namespace with `--unshare-all`
-- Read-only bind-mounts the entire root filesystem
-- Bind-mounts the workspace directory with read-write access
-- Changes into the workspace with `--chdir`
-
-**What it protects against:**
-- Any filesystem write outside the workspace (stronger than Landlock alone
-  because it's enforced at the namespace level, not just filesystem access)
-- Accidental modification of system files
-
-**What it does NOT protect against:**
-- Network access (bwrap does not create a network namespace by default with
-  `--unshare-all`; the child still has full network access)
-- Process inspection
-- Memory attacks
-
-**Installation:** User must install bubblewrap themselves:
 - Ubuntu/Debian: `apt install bubblewrap`
 - Fedora: `dnf install bubblewrap`
 - Arch: `pacman -S bubblewrap`
 
-Ghosty Code does NOT vendor bwrap.
+Ghosty does not vendor bubblewrap.
 
-**Fallback:** If bwrap is not installed, the sandbox falls back to Landlock
-only.
+## Windows: no advertised OS sandbox
 
-### 5. Seatbelt (macOS)
+The Windows command path currently reports no OS sandbox. The source tree has
+a future helper contract for Job Object process-tree cleanup, but it is not
+wired into selection and must not be described as any of the following:
 
-**When it runs:** Applied via the `sandbox-exec` wrapper command. The
-seatbelt profile is generated dynamically based on the `SandboxPolicy`.
+- read-only filesystem or workspace-write enforcement;
+- network blocking;
+- registry isolation;
+- restricted-token or AppContainer isolation.
 
-**What it does:**
-- Restricts filesystem access based on the policy profile
-- Can restrict network access (when `network_access: false`)
+Windows host permissions and approval policy still apply, but they are not a
+Ghosty OS command sandbox.
 
-**What it protects against:**
-- Reading/writing files outside allowed paths
-- Network connections (when configured)
+## Linux process hardening is not a command sandbox
 
-**What it does NOT protect against:**
-- Process inspection (Seatbelt does not block ptrace)
-- Syscall-level attacks
+At startup on Linux, Ghosty best-effort applies `PR_SET_DUMPABLE=0`,
+`PR_SET_NO_NEW_PRIVS=1`, and `RLIMIT_CORE=0` to its own process. Each failure is
+logged and startup continues. These controls reduce process-inspection,
+privilege-escalation, and core-dump risk; they do not create filesystem or
+network isolation for a child command and are not listed as a sandbox backend.
 
-**Detection:** Checks stderr for `file-write` and `network` denial patterns.
+## External OpenSandbox execution
 
-### 6. Windows Job Object (v1, PR #2220)
-
-**When it runs:** Applied at process spawn time via
-`PROC_THREAD_ATTRIBUTE_JOB_LIST` and restricted token assignment.
-
-**What it does (v1):**
-- Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` — all child
-  processes terminate when the parent exits
-- Memory cap: 1 GB per process, 2 GB per job
-- Active process limit: 64
-- UI restrictions: no desktop handle access
-- Restricted token: drops Administrators group SID, sets medium-low
-  integrity level
-
-**What is deferred (v2):**
-- WFP (Windows Filtering Platform) firewall rules — network is open in v1
-- Filesystem ACL integration at spawn time (stub exists)
-- AppContainer isolation
-- Registry key isolation
-
-**Detection:** Checks stderr for `Access is denied`, `STATUS_ACCESS_DENIED`,
-`ERROR_ACCESS_DENIED`, `ERROR_PRIVILEGE_NOT_HELD`,
-`ERROR_ACCESS_DISABLED_BY_POLICY`, and integrity/AppContainer patterns.
-
-## Defense in depth
-
-The Linux sandbox applies layers in order:
-
-```
-Process hardening (prctl)    ← before threads
-    ↓
-Landlock (filesystem)        ← at child spawn
-    ↓
-seccomp BPF (syscalls)       ← at child spawn
-    ↓
-bwrap (namespace isolation)  ← optional outer wrapper
-```
-
-Each layer addresses a different threat surface. seccomp cannot protect the
-filesystem (that's Landlock's job). Landlock cannot stop ptrace (that's
-seccomp + PR_SET_DUMPABLE). bwrap adds namespace-level isolation that
-neither Landlock nor seccomp can provide.
-
-## Configuration
-
-Relevant config keys in `~/.ghosty/config.toml`:
+When `sandbox_backend = "opensandbox"` is configured, shell execution is sent
+to the configured OpenSandbox-compatible HTTP endpoint instead of starting a
+local child. Ghosty validates the request/response contract, but isolation
+guarantees belong to the configured service and its operator.
 
 ```toml
-# Sandbox policy mode
-sandbox_mode = "workspace-write"  # read-only | workspace-write | danger-full-access | external-sandbox
-
-# Linux bubblewrap passthrough
-prefer_bwrap = false              # requires `bubblewrap` package installed
-
-# External sandbox backend
-sandbox_backend = "none"          # "none" or "opensandbox"
+sandbox_backend = "opensandbox"
 sandbox_url = "http://localhost:8080"
 sandbox_api_key = "YOUR_API_KEY"
 ```
 
-Environment variable overrides:
+`sandbox_backend = "none"` (or omitting the key) keeps local execution.
 
-- `DEEPSEEK_SANDBOX_MODE` → `sandbox_mode`
-- `DEEPSEEK_PREFER_BWRAP=true` → `prefer_bwrap`
-- `DEEPSEEK_SANDBOX_BACKEND` → `sandbox_backend`
-- `DEEPSEEK_SANDBOX_URL` → `sandbox_url`
-- `DEEPSEEK_SANDBOX_API_KEY` → `sandbox_api_key`
+## Policies and fallbacks
 
-## Detecting sandbox denials
+The local `sandbox_mode` values are:
 
-When a command fails, the sandbox manager checks for denial patterns:
+```toml
+sandbox_mode = "workspace-write" # read-only | workspace-write | danger-full-access | external-sandbox
+```
 
-| Platform | Denial mechanism | Exit code | Stderr patterns |
-|---|---|---|---|
-| macOS Seatbelt | sandbox-exec violation | non-zero | `file-write`, `network` |
-| Linux Landlock | EACCES / EPERM | non-zero | `Permission denied`, `Operation not permitted` |
-| Linux seccomp | SIGSYS (31) | 31 or 159 | `Bad system call`, `SIGSYS` |
-| Linux bwrap | Mount/namespace failure | non-zero | varies |
-| Windows | Access denied / privilege | non-zero | `Access is denied`, `ERROR_PRIVILEGE_NOT_HELD` |
+- `read-only` and `workspace-write` are enforced by Seatbelt or bubblewrap only
+  when that wrapper is selected and available.
+- `danger-full-access` deliberately bypasses the local OS wrapper.
+- `external-sandbox` declares that execution is already externally isolated
+  and bypasses a second local wrapper.
+- When no wrapper is selected, the shell command runs without Ghosty OS
+  isolation. Approval rules and workspace-aware native file tools remain
+  separate controls.
 
-The `was_denied()` method on `SandboxManager` aggregates all platform-specific
-checks. The `denial_message()` method returns a human-readable explanation.
+Canonical environment overrides exist for `sandbox_mode` and the external
+backend:
+
+- `GHOSTY_SANDBOX_MODE`
+- `GHOSTY_SANDBOX_BACKEND`
+- `GHOSTY_SANDBOX_URL`
+- `GHOSTY_SANDBOX_API_KEY`
+
+There is no `GHOSTY_PREFER_BWRAP` environment override; use the top-level
+`prefer_bwrap` config key.
+
+## Diagnostics and failure attribution
+
+`ghosty setup --status`, `ghosty doctor`, `ghosty doctor --json`, and
+the `diagnostics` tool report the locally available wrapper after applying the
+resolved bubblewrap preference. An individual command can still bypass that
+wrapper when its policy does not request sandboxing. On Linux, merely finding
+a sandbox-related syscall or source module does not make `sandbox_available`
+true.
+
+Denial attribution is intentionally conservative:
+
+- Seatbelt uses its wrapper-specific denial patterns.
+- Bubblewrap setup errors must be prefixed by `bwrap:`; a read-only-filesystem
+  error from the bwrap filesystem view can also identify the boundary.
+- A child command's generic `Permission denied` or `Operation not permitted`
+  is not, by itself, proof that Ghosty's sandbox blocked it.
+- Unsandboxed command failures are never labeled sandbox denials.
 
 ## Limitations
 
-### What the sandbox does NOT protect against
+- Availability is checked before launch; the selected wrapper can still fail
+  because of host policy, container restrictions, or a race after the probe.
+- Bubblewrap ignores a configured writable root if it is missing, is not a
+  directory, or canonicalizes to `/`; a path can also disappear between policy
+  resolution and wrapper launch.
+- Seatbelt profiles are generated at runtime and must be tested against the
+  commands they are expected to support.
+- No current local wrapper is advertised on Windows.
+- An external sandbox backend is only as strong as its configured service.
+- No sandbox protects against kernel vulnerabilities or all resource-exhaustion
+  and side-channel attacks.
 
-- **Network attacks** — only macOS Seatbelt can block network; Linux and
-  Windows v1 leave network open
-- **Memory attacks** — no platform prevents a child process from reading
-  its own memory or exploiting memory corruption bugs
-- **Timing side channels** — allowed syscalls on Linux can be used for
-  timing-based information leaks
-- **Resource exhaustion** — the Linux job object limits memory and process
-  count, but does not limit CPU, file descriptors, or disk I/O
-- **Kernel vulnerabilities** — if the kernel itself has a vulnerability,
-  the sandbox cannot prevent exploitation (this applies to all platforms)
-- **Supply chain** — if the child process downloads and executes untrusted
-  code, the sandbox limits what that code can do, but does not prevent the
-  download
+## Implementation references
 
-### Platform-specific gaps
-
-- **Linux:** Landlock only protects filesystem access. seccomp adds syscall
-  filtering but uses a whitelist that may need updates for new syscalls.
-- **macOS:** Seatbelt profiles are generated at runtime. A misconfigured
-  profile could be too permissive.
-- **Windows v1:** No filesystem ACL enforcement at spawn time. Network is
-  fully open. Job Object is process-tree only.
-
-## Related
-
-- `crates/tui/src/sandbox/` — implementation
-- `crates/config/src/lib.rs` — config keys
-- `crates/tui/src/tools/diagnostics.rs` — `diagnostics` tool reports
-  `sandbox_available`, `sandbox_type`, `bwrap_available`, `cgroup_version`
-- `config.example.toml` — annotated config reference
-- Issue #2180 — this document
-- Issue #2182 — seccomp filter implementation
-- Issue #2183 — process hardening
-- Issue #2184 — bwrap passthrough
-- Issue #2185 — Windows Job Object v1
-- Issue #2186 — SandboxExecutor trait unification
-- Issue #2187 — sandbox parity tests
+- `crates/tui/src/sandbox/mod.rs` — truthful selection and public capability markers
+- `crates/tui/src/sandbox/seatbelt.rs` — macOS wrapper and availability probe
+- `crates/tui/src/sandbox/bwrap.rs` — Linux opt-in wrapper
+- `crates/tui/src/sandbox/process_hardening.rs` — Linux parent-process hardening
+- `crates/tui/src/sandbox/backend.rs` — external backend selection
+- `crates/tui/src/tools/diagnostics.rs` — machine-readable diagnostics

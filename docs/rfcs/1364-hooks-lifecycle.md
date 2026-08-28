@@ -1,12 +1,66 @@
 # RFC: Hook Lifecycle Data Flow
 
 **Issue:** #1364
-**Status:** Draft
+**Status:** Implemented (all three PRs landed)
 **Date:** 2026-05-28
+**Reference:** the shipped contract lives in [docs/HOOKS.md](../HOOKS.md);
+this RFC is kept as the design record. Where the two disagree, `docs/HOOKS.md`
+is correct and this document is history.
+
+**Scope:** everything below landed as a **TUI runtime** feature. No hook in
+this RFC fires from `ghosty exec`, the CLI subcommands, the app-server /
+ACP surfaces, or the `workflow` tool. The RFC's use of "GhostyCode" as the
+actor should be read as "the Ghosty TUI" throughout.
+
+## 0. Implementation status
+
+Verified against `crates/tui/src/hooks/` and its call sites:
+
+| Item | Status | Where |
+| --- | --- | --- |
+| PR 1 — mutable `message_submit` | implemented | `HookExecutor::execute_message_submit_transform`, called from `dispatch_user_message_with_recovery` |
+| PR 2 — `turn_end` | implemented | `HookEvent::TurnEnd`, `turn_end_payload`, fired by `execute_turn_end_observer_hook` |
+| PR 3 — subagent observers | implemented | `HookEvent::SubagentSpawn` / `SubagentComplete`, fired by `execute_subagent_observer_hook` |
+
+Two deliberate deltas from the text below, both shipped:
+
+- **`tool_call_before` also became mutable** (#3026), which this RFC listed as a
+  non-goal for PR 1. It carries its own stdout JSON contract
+  (`decision` / `reason` / `updatedInput` / `additionalContext`) plus the legacy
+  exit-code-`2` hard deny. `message_submit` is therefore no longer the only
+  event with a stdout contract; `shell_env`'s `KEY=VALUE` contract also predates
+  both.
+- **`turn_end` observers are not gated by `continue_on_error`.** The structured
+  observer path runs every matching hook regardless, because an observer that
+  fails must not suppress the observers behind it.
+
+Still unimplemented from the text below: nothing in scope. `stop_hook_active` is
+emitted as `false` and the re-entry protection it reserves room for has not been
+built.
+
+Four contract points hardened after this RFC, all documented in
+`docs/HOOKS.md`:
+
+- **One session identity.** The hook session id is minted once per TUI launch
+  and survives a workspace switch or a trust decision that adds project hooks.
+  `tool_call_before` reports that id rather than the engine's own session id,
+  and `mode_change` carries it at all (it previously carried no session id).
+- **Timeouts bind background hooks too.** A background hook is supervised on
+  its own thread; on expiry its process group is killed and reaped.
+- **`background` describes scheduling, not capability.** A background hook
+  receives the same stdin payload and environment as the foreground form; it
+  is simply never awaited, so its `HookResult` is flagged as a submission and
+  carries no exit code.
+- **Conditions that can never match are rejected at load** rather than left
+  silently inert — per entry, so a broken hook does not take a same-named or
+  likewise-unnamed sibling with it — and a `tool_call_before` gate that returns
+  no verdict does not read as permission when *that gate* declared
+  `continue_on_error = false`. Strictness rides on the hook result, so it
+  applies only to the hooks whose conditions matched the call in question.
 
 ## 1. Problem
 
-Ghosty Code already has lifecycle hooks and MCP support, but the current hook
+GhostyCode already has lifecycle hooks and MCP support, but the current hook
 surface is mostly observer-only. This blocks portable extensions that need to
 participate in the agent data flow:
 
@@ -63,6 +117,13 @@ Non-goals:
 - no change to turn status
 - no blocking of user input
 - no transcript mutation from `turn_end`
+
+Implementation note for the v0.9 branch: the narrow #2578 harvest uses the
+shared structured observer path introduced for sub-agent lifecycle hooks. It
+fires before queued follow-up dispatch, after queue-recovery state is known, so
+the payload can report the queued-message count without letting a hook change
+what gets sent next. Stdout is ignored for `turn_end`; only `message_submit`
+has a stdout mutation contract.
 
 ### PR 3: Subagent lifecycle observer hooks
 
@@ -251,7 +312,9 @@ transcript content in the first version.
 - Existing observer-only hooks keep working.
 - Existing env vars remain available.
 - `shell_env` keeps its existing stdout `KEY=VALUE` contract.
-- Structured stdout is interpreted only by `message_submit` in PR 1.
+- Structured stdout is interpreted only by `message_submit` in PR 1. Structured
+  observer hooks such as `turn_end`, `subagent_spawn`, and `subagent_complete`
+  receive JSON on stdin, but their stdout is ignored by the caller.
 
 ## 6. Review checkpoints
 

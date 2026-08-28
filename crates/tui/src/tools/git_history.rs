@@ -34,6 +34,10 @@ impl ToolSpec for GitLogTool {
         "git_log"
     }
 
+    fn model_visible(&self) -> bool {
+        false
+    }
+
     fn description(&self) -> &'static str {
         "Run `git log` in the workspace with optional path and author/date filters."
     }
@@ -83,12 +87,12 @@ impl ToolSpec for GitLogTool {
     }
 
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        let git_ctx = resolve_git_context(context, optional_str(&input, "path"))?;
+        let git_ctx = resolve_git_context(context, optional_str(&input, "path")?)?;
         let max_count =
-            optional_u64(&input, "max_count", DEFAULT_LOG_MAX_COUNT).clamp(1, MAX_LOG_MAX_COUNT);
-        let author = optional_str(&input, "author").map(ToOwned::to_owned);
-        let since = optional_str(&input, "since").map(ToOwned::to_owned);
-        let until = optional_str(&input, "until").map(ToOwned::to_owned);
+            optional_u64(&input, "max_count", DEFAULT_LOG_MAX_COUNT)?.clamp(1, MAX_LOG_MAX_COUNT);
+        let author = optional_str(&input, "author")?.map(ToOwned::to_owned);
+        let since = optional_str(&input, "since")?.map(ToOwned::to_owned);
+        let until = optional_str(&input, "until")?.map(ToOwned::to_owned);
 
         let mut args = vec![
             "log".to_string(),
@@ -112,7 +116,7 @@ impl ToolSpec for GitLogTool {
         }
 
         let command_str = format_command(&git_ctx.working_dir, &args);
-        let output = run_git_command(&git_ctx.working_dir, &args)?;
+        let output = run_git_command_async(git_ctx.working_dir.clone(), args).await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Ok(
@@ -149,6 +153,10 @@ pub struct GitShowTool;
 impl ToolSpec for GitShowTool {
     fn name(&self) -> &'static str {
         "git_show"
+    }
+
+    fn model_visible(&self) -> bool {
+        false
     }
 
     fn description(&self) -> &'static str {
@@ -204,10 +212,11 @@ impl ToolSpec for GitShowTool {
 
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
         let rev = required_str(&input, "rev")?;
-        let git_ctx = resolve_git_context(context, optional_str(&input, "path"))?;
-        let patch = optional_bool(&input, "patch", true);
-        let stat = optional_bool(&input, "stat", true);
-        let unified = optional_u64(&input, "unified", DEFAULT_UNIFIED).min(MAX_UNIFIED);
+        validate_git_rev(rev)?;
+        let git_ctx = resolve_git_context(context, optional_str(&input, "path")?)?;
+        let patch = optional_bool(&input, "patch", true)?;
+        let stat = optional_bool(&input, "stat", true)?;
+        let unified = optional_u64(&input, "unified", DEFAULT_UNIFIED)?.min(MAX_UNIFIED);
 
         let mut args = vec![
             "show".to_string(),
@@ -229,7 +238,7 @@ impl ToolSpec for GitShowTool {
         }
 
         let command_str = format_command(&git_ctx.working_dir, &args);
-        let output = run_git_command(&git_ctx.working_dir, &args)?;
+        let output = run_git_command_async(git_ctx.working_dir.clone(), args).await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Ok(ToolResult::error(format!(
@@ -266,6 +275,10 @@ pub struct GitBlameTool;
 impl ToolSpec for GitBlameTool {
     fn name(&self) -> &'static str {
         "git_blame"
+    }
+
+    fn model_visible(&self) -> bool {
+        false
     }
 
     fn description(&self) -> &'static str {
@@ -338,12 +351,13 @@ impl ToolSpec for GitBlameTool {
             ToolError::invalid_input(format!("Path has no parent directory: {path_str}"))
         })?;
         let pathspec = pathspec_from(working_dir, &resolved_path);
-        let rev = optional_str(&input, "rev").unwrap_or("HEAD");
-        let start_line = optional_u64(&input, "start_line", DEFAULT_BLAME_START_LINE).max(1);
-        let max_lines = optional_u64(&input, "max_lines", DEFAULT_BLAME_MAX_LINES)
+        let rev = optional_str(&input, "rev")?.unwrap_or("HEAD");
+        validate_git_rev(rev)?;
+        let start_line = optional_u64(&input, "start_line", DEFAULT_BLAME_START_LINE)?.max(1);
+        let max_lines = optional_u64(&input, "max_lines", DEFAULT_BLAME_MAX_LINES)?
             .clamp(1, MAX_BLAME_MAX_LINES);
         let end_line = start_line.saturating_add(max_lines.saturating_sub(1));
-        let porcelain = optional_bool(&input, "porcelain", false);
+        let porcelain = optional_bool(&input, "porcelain", false)?;
 
         let mut args = vec![
             "blame".to_string(),
@@ -358,7 +372,7 @@ impl ToolSpec for GitBlameTool {
         args.push(pathspec.display().to_string());
 
         let command_str = format_command(working_dir, &args);
-        let output = run_git_command(working_dir, &args)?;
+        let output = run_git_command_async(working_dir.to_path_buf(), args).await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Ok(ToolResult::error(format!(
@@ -431,6 +445,34 @@ fn resolve_git_context(context: &ToolContext, path: Option<&str>) -> Result<GitC
     })
 }
 
+fn validate_git_rev(rev: &str) -> Result<(), ToolError> {
+    let trimmed = rev.trim();
+    if trimmed.is_empty() {
+        return Err(ToolError::invalid_input(
+            "git revision must not be empty".to_string(),
+        ));
+    }
+    if trimmed.starts_with('-') {
+        return Err(ToolError::invalid_input(
+            "git revision must not start with '-'".to_string(),
+        ));
+    }
+    if trimmed.chars().any(char::is_whitespace) {
+        return Err(ToolError::invalid_input(
+            "git revision must not contain whitespace".to_string(),
+        ));
+    }
+    if trimmed
+        .chars()
+        .any(|ch| ch == '\0' || ch.is_ascii_control())
+    {
+        return Err(ToolError::invalid_input(
+            "git revision must not contain control characters".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn canonical_or_workspace(workspace: &Path) -> PathBuf {
     workspace
         .canonicalize()
@@ -459,6 +501,17 @@ fn run_git_command(working_dir: &Path, args: &[String]) -> Result<Output, ToolEr
             ToolError::execution_failed(format!("Failed to run git: {e}"))
         }
     })
+}
+
+/// Async wrapper that offloads the blocking `git` invocation onto a
+/// blocking-capable thread so the tokio worker is not stalled.
+async fn run_git_command_async(
+    working_dir: PathBuf,
+    args: Vec<String>,
+) -> Result<Output, ToolError> {
+    tokio::task::spawn_blocking(move || run_git_command(&working_dir, &args))
+        .await
+        .map_err(|e| ToolError::execution_failed(format!("git task panicked: {e}")))?
 }
 
 fn format_command(working_dir: &Path, args: &[String]) -> String {
@@ -513,11 +566,12 @@ mod tests {
 
     fn run_git(root: &Path, args: &[&str]) {
         let status = crate::dependencies::Git::status(args, root).expect("git should spawn");
-        assert!(status.success(), "git {:?} failed", args);
+        assert!(status.success(), "git {args:?} failed");
     }
 
     fn init_git_repo(root: &Path) {
         run_git(root, &["init", "-q"]);
+        run_git(root, &["config", "core.autocrlf", "false"]);
         run_git(root, &["config", "user.email", "test@example.com"]);
         run_git(root, &["config", "user.name", "Test User"]);
     }
@@ -573,6 +627,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn git_show_rejects_option_like_revision() {
+        let tmp = tempdir().expect("tempdir");
+        let ctx = ToolContext::new(tmp.path());
+        let err = GitShowTool
+            .execute(json!({ "rev": "--stat" }), &ctx)
+            .await
+            .expect_err("option-shaped rev should fail before git runs");
+        assert!(matches!(err, ToolError::InvalidInput { .. }));
+        assert!(err.to_string().contains("must not start with '-'"));
+    }
+
+    #[tokio::test]
+    async fn git_show_rejects_whitespace_revision_payload() {
+        let tmp = tempdir().expect("tempdir");
+        let ctx = ToolContext::new(tmp.path());
+        let err = GitShowTool
+            .execute(json!({ "rev": "HEAD --output=/tmp/ghosty-git-show" }), &ctx)
+            .await
+            .expect_err("whitespace rev payload should fail before git runs");
+        assert!(matches!(err, ToolError::InvalidInput { .. }));
+        assert!(err.to_string().contains("must not contain whitespace"));
+    }
+
+    #[tokio::test]
     async fn git_blame_reports_author_for_range() {
         if !git_available() {
             return;
@@ -602,6 +680,40 @@ mod tests {
             .expect("execute");
         assert!(result.success);
         assert!(result.content.contains("Test User"));
+    }
+
+    #[tokio::test]
+    async fn git_blame_rejects_option_like_revision() {
+        let tmp = tempdir().expect("tempdir");
+        let file = tmp.path().join("file.txt");
+        fs::write(&file, "one\n").expect("write");
+        let ctx = ToolContext::new(tmp.path());
+        let err = GitBlameTool
+            .execute(
+                json!({ "path": "file.txt", "rev": "--contents=/tmp/x" }),
+                &ctx,
+            )
+            .await
+            .expect_err("option-shaped rev should fail before git runs");
+        assert!(matches!(err, ToolError::InvalidInput { .. }));
+        assert!(err.to_string().contains("must not start with '-'"));
+    }
+
+    #[tokio::test]
+    async fn git_blame_rejects_whitespace_revision_payload() {
+        let tmp = tempdir().expect("tempdir");
+        let file = tmp.path().join("file.txt");
+        fs::write(&file, "one\n").expect("write");
+        let ctx = ToolContext::new(tmp.path());
+        let err = GitBlameTool
+            .execute(
+                json!({ "path": "file.txt", "rev": "HEAD --contents=/tmp/ghosty-git-blame" }),
+                &ctx,
+            )
+            .await
+            .expect_err("whitespace rev payload should fail before git runs");
+        assert!(matches!(err, ToolError::InvalidInput { .. }));
+        assert!(err.to_string().contains("must not contain whitespace"));
     }
 
     #[tokio::test]

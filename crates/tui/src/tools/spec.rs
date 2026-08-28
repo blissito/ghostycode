@@ -1,4 +1,4 @@
-//! Tool specification traits for the Ghosty Code agent system.
+//! Tool specification traits for the GhostyCode agent system.
 //!
 //! This module defines the core abstractions for tools:
 //! - `ToolSpec`: The main trait that all tools must implement
@@ -6,12 +6,17 @@
 //! - `ToolResult`: Unified result type for tool execution
 //! - `ToolCapability`: Capabilities and requirements of tools
 
+use std::collections::HashMap;
+use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::SystemTime;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::features::Features;
 use crate::lsp::LspManager;
@@ -21,11 +26,66 @@ use crate::rlm::session::{SharedRlmSessionStore, new_shared_rlm_session_store};
 use crate::sandbox::backend::SandboxBackend;
 use crate::tools::handle::{SharedHandleStore, new_shared_handle_store};
 use crate::tools::shell::{SharedShellManager, new_shared_shell_manager};
+use crate::worker_profile::ShellPolicy;
 #[allow(unused_imports)]
 pub use ghosty_tools::{
-    ApprovalRequirement, ToolCapability, ToolError, ToolResult, optional_bool, optional_str,
-    optional_u64, required_str, required_u64,
+    ApprovalRequirement, PreparedToolCall, ResourceClaim, ToolCapability, ToolError,
+    ToolExecutionOutcome, ToolResult, ToolResultContentBlock, ToolTerminalStatus, optional_bool,
+    optional_bool_opt, optional_str, optional_u64, required_str, required_u64,
+    schedule_non_conflicting, type_mismatch,
 };
+
+/// Text plus provider-neutral rich blocks at the conversation boundary.
+#[derive(Debug, Clone)]
+pub(crate) struct RichToolResult {
+    pub result: ToolResult,
+    pub content_blocks: Vec<ToolResultContentBlock>,
+}
+
+impl RichToolResult {
+    #[must_use]
+    pub fn plain(result: ToolResult) -> Self {
+        Self {
+            result,
+            content_blocks: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_content_blocks(
+        result: ToolResult,
+        content_blocks: Vec<ToolResultContentBlock>,
+    ) -> Self {
+        Self {
+            result,
+            content_blocks,
+        }
+    }
+
+    #[must_use]
+    pub fn into_result(self) -> ToolResult {
+        self.result
+    }
+}
+
+impl std::ops::Deref for RichToolResult {
+    type Target = ToolResult;
+
+    fn deref(&self) -> &Self::Target {
+        &self.result
+    }
+}
+
+#[async_trait]
+pub trait DynamicToolExecutor: Send + Sync {
+    async fn execute_dynamic_tool(
+        &self,
+        thread_id: Option<String>,
+        namespace: Option<String>,
+        name: String,
+        input: Value,
+    ) -> Result<ToolResult, ToolError>;
+}
 
 /// Optional durable runtime services made available to model-visible tools.
 ///
@@ -36,11 +96,17 @@ pub use ghosty_tools::{
 #[derive(Clone)]
 pub struct RuntimeToolServices {
     pub shell_manager: Option<SharedShellManager>,
+    /// True only for the real headless exec host after it has established the
+    /// explicit authority required to transfer `persist:true` services.
+    pub persist_services_enabled: bool,
     pub task_manager: Option<crate::task_manager::SharedTaskManager>,
     pub automations: Option<crate::automation_manager::SharedAutomationManager>,
     pub task_data_dir: Option<PathBuf>,
     pub active_task_id: Option<String>,
     pub active_thread_id: Option<String>,
+    pub dynamic_tool_executor: Option<Arc<dyn DynamicToolExecutor>>,
+    /// Active-session Work Graph authority plus its legacy Plan/To-do views.
+    pub work: Option<crate::work_graph::SharedWorkRuntime>,
     /// Hook executor for `shell_env` injection (#456) and any future
     /// tool-side hook events. `None` outside the live engine — test
     /// contexts that don't care about hooks get a no-op.
@@ -56,11 +122,14 @@ impl Default for RuntimeToolServices {
     fn default() -> Self {
         Self {
             shell_manager: None,
+            persist_services_enabled: false,
             task_manager: None,
             automations: None,
             task_data_dir: None,
             active_task_id: None,
             active_thread_id: None,
+            dynamic_tool_executor: None,
+            work: None,
             hook_executor: None,
             handle_store: new_shared_handle_store(),
             rlm_sessions: new_shared_rlm_session_store(),
@@ -72,16 +141,49 @@ impl std::fmt::Debug for RuntimeToolServices {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RuntimeToolServices")
             .field("shell_manager", &self.shell_manager.is_some())
+            .field("persist_services_enabled", &self.persist_services_enabled)
             .field("task_manager", &self.task_manager.is_some())
             .field("automations", &self.automations.is_some())
             .field("task_data_dir", &self.task_data_dir)
             .field("active_task_id", &self.active_task_id)
             .field("active_thread_id", &self.active_thread_id)
+            .field(
+                "dynamic_tool_executor",
+                &self.dynamic_tool_executor.is_some(),
+            )
+            .field("work", &self.work.is_some())
             .field("hook_executor", &self.hook_executor.is_some())
             .field("handle_store", &true)
             .field("rlm_sessions", &true)
             .finish()
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileReadSnapshot {
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
+#[derive(Debug, Default)]
+pub struct FileReadTracker {
+    reads: HashMap<PathBuf, FileReadSnapshot>,
+}
+
+pub type SharedFileReadTracker = Arc<Mutex<FileReadTracker>>;
+
+pub(crate) fn new_shared_file_read_tracker() -> SharedFileReadTracker {
+    Arc::new(Mutex::new(FileReadTracker::default()))
+}
+
+fn file_read_snapshot(path: &Path) -> Result<FileReadSnapshot, ToolError> {
+    let metadata = fs::metadata(path).map_err(|e| {
+        ToolError::execution_failed(format!("Failed to inspect {}: {e}", path.display()))
+    })?;
+    Ok(FileReadSnapshot {
+        len: metadata.len(),
+        modified: metadata.modified().ok(),
+    })
 }
 
 /// Sandbox policy for command execution.
@@ -92,13 +194,401 @@ pub enum SandboxPolicy {
     None,
 }
 
+/// Machine-readable mutation boundary for a headless worker process.
+///
+/// Fleet serializes this envelope onto the exact `ghosty exec` argv. The
+/// child installs it before constructing its engine, and every ToolContext in
+/// that process inherits the same outer cap. Nested agents may narrow this
+/// boundary, but cannot remove or expand it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolAuthorityEnvelope {
+    pub schema_version: u32,
+    pub owner: String,
+    pub authority: ToolMutationAuthority,
+    /// Optional outer network cap for headless workers. `None` preserves the
+    /// behavior of v1 envelopes written before this field existed; new Fleet
+    /// launches always carry the resolved worker permission explicitly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_access: Option<bool>,
+    /// Explicit shell cap for a headless worker. Older v1 envelopes omit this
+    /// field and therefore remain shell-less; mutation authority is never
+    /// treated as an implicit shell grant.
+    #[serde(default, skip_serializing_if = "ToolShellAuthority::is_none")]
+    pub shell: ToolShellAuthority,
+    /// Narrow process-start authority for the built-in verification surface.
+    /// This is separate from both mutation and shell authority: a verifier may
+    /// run classifier-bounded workspace checks, but that never grants Bash or
+    /// an operator-supplied command line.
+    #[serde(default, skip_serializing_if = "ToolVerificationAuthority::is_none")]
+    pub verification: ToolVerificationAuthority,
+    #[serde(default)]
+    pub writable_roots: Vec<String>,
+    #[serde(default)]
+    pub writable_files: Vec<String>,
+    #[serde(default)]
+    pub coordination_contracts: Vec<String>,
+}
+
+/// Shell authority carried across the Fleet subprocess boundary.
+///
+/// Full/arbitrary shell is intentionally not representable here. Fleet can
+/// opt a Scout/Reviewer worker into the classifier-proven read subset, while every
+/// other headless role keeps the historical shell-less posture.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolShellAuthority {
+    #[default]
+    None,
+    ReadOnly,
+}
+
+impl ToolShellAuthority {
+    #[must_use]
+    pub const fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    #[must_use]
+    const fn shell_policy(self) -> ShellPolicy {
+        match self {
+            Self::None => ShellPolicy::None,
+            Self::ReadOnly => ShellPolicy::ReadOnly,
+        }
+    }
+}
+
+/// Process authority for Fleet's dedicated verifier role.
+///
+/// Arbitrary execution is intentionally not representable. The registry and
+/// dispatch boundary admit only calls that the shared verification classifier
+/// proves are default workspace checks or pure test selection.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolVerificationAuthority {
+    #[default]
+    None,
+    Bounded,
+}
+
+impl ToolVerificationAuthority {
+    #[must_use]
+    pub const fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+/// Whether a headless Fleet process should register the one read-only Bash
+/// surface after intersecting the transported cap with explicit tool denies.
+#[must_use]
+pub(crate) fn fleet_exec_shell_enabled(
+    fleet_authority_active: bool,
+    shell_authority: ToolShellAuthority,
+    disallowed_tools: Option<&[String]>,
+) -> bool {
+    fleet_authority_active
+        && shell_authority == ToolShellAuthority::ReadOnly
+        && !disallowed_tools.is_some_and(|rules| {
+            rules.iter().any(|rule| {
+                let rule = rule.trim().to_ascii_lowercase();
+                rule.strip_suffix('*')
+                    .map_or_else(|| rule == "bash", |prefix| "bash".starts_with(prefix))
+            })
+        })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolMutationAuthority {
+    ReadOnly,
+    ScopedWrite,
+}
+
+static PROCESS_TOOL_AUTHORITY: OnceLock<Arc<ToolAuthorityEnvelope>> = OnceLock::new();
+
+impl ToolAuthorityEnvelope {
+    pub fn normalized(mut self) -> Result<Self, String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported tool authority schema version {}",
+                self.schema_version
+            ));
+        }
+        self.owner = bounded_authority_value("owner", &self.owner, 128)?;
+        self.writable_roots = normalize_authority_paths(&self.writable_roots, "writable_roots")?;
+        self.writable_files = normalize_authority_paths(&self.writable_files, "writable_files")?;
+        self.coordination_contracts = normalize_authority_values(
+            &self.coordination_contracts,
+            "coordination_contracts",
+            16,
+            128,
+        )?;
+        if self.authority == ToolMutationAuthority::ScopedWrite
+            && self.writable_roots.is_empty()
+            && self.writable_files.is_empty()
+            && self.coordination_contracts.is_empty()
+        {
+            return Err(
+                "scoped_write authority requires a writable root, exact file, or coordination contract"
+                    .to_string(),
+            );
+        }
+        if self.authority == ToolMutationAuthority::ReadOnly
+            && (!self.writable_roots.is_empty()
+                || !self.writable_files.is_empty()
+                || !self.coordination_contracts.is_empty())
+        {
+            return Err("read_only authority cannot carry mutation scope".to_string());
+        }
+        if self.verification == ToolVerificationAuthority::Bounded
+            && (self.authority != ToolMutationAuthority::ReadOnly
+                || self.shell != ToolShellAuthority::None)
+        {
+            return Err(
+                "bounded verification requires read_only mutation authority and no Bash authority"
+                    .to_string(),
+            );
+        }
+        Ok(self)
+    }
+
+    pub fn from_json(raw: &str) -> Result<Self, String> {
+        serde_json::from_str::<Self>(raw)
+            .map_err(|error| format!("invalid tool authority envelope: {error}"))?
+            .normalized()
+    }
+
+    #[cfg(test)]
+    fn is_within(&self, outer: &Self) -> bool {
+        if self.shell > outer.shell
+            || self.verification > outer.verification
+            || (outer.network_access == Some(false) && self.network_access != Some(false))
+        {
+            return false;
+        }
+        if self.authority == ToolMutationAuthority::ReadOnly {
+            return true;
+        }
+        if outer.authority != ToolMutationAuthority::ScopedWrite {
+            return false;
+        }
+        self.writable_roots.iter().all(|path| {
+            outer
+                .writable_roots
+                .iter()
+                .any(|root| authority_path_is_within_root(path, root))
+        }) && self.writable_files.iter().all(|path| {
+            outer.writable_files.contains(path)
+                || outer
+                    .writable_roots
+                    .iter()
+                    .any(|root| authority_path_is_within_root(path, root))
+        }) && self
+            .coordination_contracts
+            .iter()
+            .all(|contract| outer.coordination_contracts.contains(contract))
+    }
+
+    pub fn permits_mutation_path(
+        &self,
+        context: &ToolContext,
+        raw_path: &str,
+    ) -> Result<bool, ToolError> {
+        if self.authority == ToolMutationAuthority::ReadOnly {
+            return Ok(false);
+        }
+        let target = resolve_strict_authority_path(context, raw_path)?;
+        for file in &self.writable_files {
+            if resolve_strict_authority_path(context, file)? == target {
+                return Ok(true);
+            }
+        }
+        for root in &self.writable_roots {
+            if target.starts_with(resolve_strict_authority_path(context, root)?) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+}
+
+#[cfg(test)]
+fn authority_path_is_within_root(path: &str, root: &str) -> bool {
+    root == "."
+        || path == root
+        || path
+            .strip_prefix(root)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+pub fn install_process_tool_authority(envelope: ToolAuthorityEnvelope) -> Result<(), String> {
+    let envelope = Arc::new(envelope.normalized()?);
+    if let Some(existing) = PROCESS_TOOL_AUTHORITY.get() {
+        return if existing.as_ref() == envelope.as_ref() {
+            Ok(())
+        } else {
+            Err("tool authority envelope was already installed for this process".to_string())
+        };
+    }
+    PROCESS_TOOL_AUTHORITY
+        .set(envelope)
+        .map_err(|_| "tool authority envelope was already installed for this process".to_string())
+}
+
+fn process_tool_authority() -> Option<Arc<ToolAuthorityEnvelope>> {
+    PROCESS_TOOL_AUTHORITY.get().cloned()
+}
+
+fn bounded_authority_value(field: &str, value: &str, max_chars: usize) -> Result<String, String> {
+    let value = value.trim().nfc().collect::<String>();
+    if value.is_empty()
+        || value.chars().count() > max_chars
+        || value.chars().any(|ch| matches!(ch, '\0' | '\r' | '\n'))
+    {
+        return Err(format!(
+            "tool authority {field} must be one non-empty line of at most {max_chars} characters"
+        ));
+    }
+    Ok(value)
+}
+
+fn normalize_authority_paths(values: &[String], field: &str) -> Result<Vec<String>, String> {
+    if values.len() > 32 {
+        return Err(format!("tool authority {field} accepts at most 32 entries"));
+    }
+    let mut normalized = Vec::new();
+    for raw in values {
+        let raw = bounded_authority_value(field, raw, 512)?.replace('\\', "/");
+        let windows_drive = raw.as_bytes().get(1) == Some(&b':')
+            && raw.as_bytes().first().is_some_and(u8::is_ascii_alphabetic);
+        if raw.starts_with('/') || raw.starts_with("//") || windows_drive {
+            return Err(format!(
+                "tool authority {field} entries must be repo-relative"
+            ));
+        }
+        let mut segments = Vec::new();
+        for segment in raw.split('/') {
+            match segment {
+                "" | "." => {}
+                ".." => {
+                    return Err(format!(
+                        "tool authority {field} cannot contain parent traversal"
+                    ));
+                }
+                value => segments.push(value),
+            }
+        }
+        let path = if segments.is_empty() {
+            ".".to_string()
+        } else {
+            segments.join("/")
+        };
+        if !normalized.contains(&path) {
+            normalized.push(path);
+        }
+    }
+    Ok(normalized)
+}
+
+fn normalize_authority_values(
+    values: &[String],
+    field: &str,
+    max_entries: usize,
+    max_chars: usize,
+) -> Result<Vec<String>, String> {
+    if values.len() > max_entries {
+        return Err(format!(
+            "tool authority {field} accepts at most {max_entries} entries"
+        ));
+    }
+    let mut normalized = Vec::new();
+    for value in values {
+        let value = bounded_authority_value(field, value, max_chars)?;
+        if !normalized.contains(&value) {
+            normalized.push(value);
+        }
+    }
+    Ok(normalized)
+}
+
+pub(crate) fn resolve_strict_authority_path(
+    context: &ToolContext,
+    raw_path: &str,
+) -> Result<PathBuf, ToolError> {
+    let normalized = normalize_authority_paths(&[raw_path.to_string()], "mutation_path")
+        .map_err(ToolError::permission_denied)?
+        .into_iter()
+        .next()
+        .ok_or_else(|| ToolError::permission_denied("mutation path cannot be empty"))?;
+    let workspace = context.workspace.canonicalize().map_err(|error| {
+        ToolError::execution_failed(format!(
+            "Failed to canonicalize authority workspace {}: {error}",
+            context.workspace.display()
+        ))
+    })?;
+    let mut current = workspace.clone();
+    if normalized != "." {
+        for segment in normalized.split('/') {
+            current.push(segment);
+            match fs::symlink_metadata(&current) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(ToolError::permission_denied(format!(
+                        "machine-readable authority paths must not traverse symlinks: {}",
+                        current.display()
+                    )));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(ToolError::execution_failed(format!(
+                        "Failed to inspect authority path {}: {error}",
+                        current.display()
+                    )));
+                }
+            }
+        }
+    }
+    if !current.starts_with(&workspace) {
+        return Err(ToolError::permission_denied(format!(
+            "machine-readable authority path escapes workspace: {}",
+            current.display()
+        )));
+    }
+    Ok(current)
+}
+
 /// Context passed to tools during execution.
 #[derive(Clone)]
 pub struct ToolContext {
     /// The workspace root directory
     pub workspace: PathBuf,
+    /// Per-turn policy and attached services. Kept behind one owned group so
+    /// cloning a context preserves the historical value semantics while the
+    /// top-level context remains small and stable as services evolve.
+    pub execution: Box<ToolExecutionState>,
+}
+
+/// Policy and service state attached to one tool-execution context.
+///
+/// `ToolContext` dereferences to this group for source compatibility with
+/// existing tools. New code can use `context.execution` when the grouping is
+/// useful, without growing the top-level context by another field per feature.
+#[derive(Clone)]
+pub struct ToolExecutionState {
     /// Shared shell manager for background tasks and streaming IO.
     pub shell_manager: SharedShellManager,
+    /// Per-session snapshots for files successfully observed by `read_file`.
+    /// Mutation tools use this to reject narrow edits against unread or stale
+    /// content.
+    pub file_read_tracker: SharedFileReadTracker,
+    /// Sub-agent that owns tool work started through this context. Root user
+    /// turns leave this unset; child contexts stamp it so long-running shell
+    /// jobs can be attributed in UI surfaces.
+    pub owner_agent_id: Option<String>,
+    pub owner_agent_name: Option<String>,
+    /// Outer process authority cap installed by Fleet/headless dispatch.
+    /// `None` for ordinary interactive/root sessions.
+    pub(crate) tool_authority: Option<Arc<ToolAuthorityEnvelope>>,
     /// Whether to allow paths outside workspace
     pub trust_mode: bool,
     /// Current sandbox policy
@@ -109,24 +599,46 @@ pub struct ToolContext {
     /// MCP configuration path
     #[allow(dead_code)]
     pub mcp_config_path: PathBuf,
+    /// Explicit skills directory used for model-visible skill discovery.
+    pub skills_dir: Option<PathBuf>,
+    /// Restrict skill discovery to GhostyCode-owned roots plus `skills_dir`.
+    pub skills_scan_ghosty_only: bool,
+    /// Immutable registry snapshot for this workspace/engine context.
+    pub plugin_registry: Option<Arc<crate::plugins::PluginRegistry>>,
     /// Elevated sandbox policy override (used when retrying after sandbox denial).
     /// This overrides the default sandbox behavior for shell commands.
     pub elevated_sandbox_policy: Option<crate::sandbox::SandboxPolicy>,
+    /// Whether the enclosing host is the real headless `ghosty exec`
+    /// process. `persist:true` background services are only permitted there;
+    /// interactive TUI, desktop/app-server, and hosted runtime-thread engines
+    /// leave this false so the feature fails closed.
+    pub persist_services_enabled: bool,
     /// Optional user-facing hint for shell commands that fail because the
     /// active sandbox policy intentionally denies outbound network access.
     pub shell_network_denied_hint: Option<String>,
     /// Whether tools should auto-approve without safety checks (YOLO mode).
     /// When true, command safety analysis is skipped for shell execution.
     pub auto_approve: bool,
+    /// Effective shell policy for this execution context.
+    pub shell_policy: ShellPolicy,
     /// Effective feature flag set for the running session.
     pub features: Features,
     /// Namespace for tool state that should be scoped to the current session/thread.
     pub state_namespace: String,
+    /// Effective context window for the active provider/model route. Web tools
+    /// use this to keep inline page content below three percent of the route.
+    pub route_context_window: Option<u32>,
     /// User-trusted external paths the agent may read/write even when they
     /// fall outside `workspace`. Loaded from `~/.deepseek/workspace-trust.json`
     /// and refreshed when the user runs `/trust add <path>`. Distinct from
     /// `trust_mode`, which is the all-or-nothing legacy switch (#29).
     pub trusted_external_paths: Vec<PathBuf>,
+    /// Whether to follow symbolic links during file discovery and tool
+    /// operations. When `true`, symlinked directories are traversed and
+    /// symlinked paths that resolve outside the workspace are still allowed
+    /// (the symlink itself must be inside the workspace). Mirrors the
+    /// `workspace_follow_symlinks` setting.
+    pub follow_symlinks: bool,
     /// Per-domain network policy (#135). When `None`, network tools fall back
     /// to a permissive default that mirrors pre-v0.7.0 behavior so tests and
     /// other contexts that don't construct a real policy keep working.
@@ -162,13 +674,21 @@ pub struct ToolContext {
     /// routing (e.g. in sub-agents and test contexts to avoid recursion).
     pub large_output_router: Option<crate::tools::large_output_router::LargeOutputRouter>,
 
-    /// Which search backend `web_search` should use. Default: DuckDuckGo. Set via
+    /// Which search backend `web_search` should use. Default: Firecrawl. Set via
     /// `[search] provider` in config.toml.
     pub search_provider: crate::config::SearchProvider,
-    /// API key for Tavily, Bocha, Metaso, or Baidu. `None` for Bing or DuckDuckGo.
-    /// Metaso also falls back to `METASO_API_KEY` env var, then a built-in key.
+    /// Optional Firecrawl key, or required key for other API search providers.
+    /// Metaso also falls back to the `METASO_API_KEY` env var.
     /// Baidu also falls back to `BAIDU_SEARCH_API_KEY`.
     pub search_api_key: Option<String>,
+    /// Optional DuckDuckGo-compatible HTML endpoint override for `web_search`.
+    pub search_base_url: Option<String>,
+    /// Opaque client for the active route's documented first-party search
+    /// tool. It owns provider authentication internally and is attached only
+    /// when the exact route capability says server-side search is supported.
+    pub(crate) provider_native_search: Option<crate::client::ProviderNativeSearchClient>,
+    /// Exact active route capability facts. Unknown stays fail-closed.
+    pub(crate) route_capabilities: ghosty_config::route::RouteCapabilities,
 
     /// Per-session workshop variable store (#548). Holds the raw content of
     /// the most recent large-tool routing event so the parent can call
@@ -178,40 +698,45 @@ pub struct ToolContext {
     >,
 }
 
+impl std::ops::Deref for ToolContext {
+    type Target = ToolExecutionState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.execution
+    }
+}
+
+impl std::ops::DerefMut for ToolContext {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.execution
+    }
+}
+
 impl ToolContext {
+    /// Create an inert context for a registry that intentionally has no tools.
+    ///
+    /// Empty paths are deliberate: isolated Runtime Chat must not retain the
+    /// host workspace or derive project notes and MCP paths. Isolation comes
+    /// from callers pairing this context with an empty registry and allow-list
+    /// plus a zero tool-call budget; this constructor is not a security
+    /// boundary by itself.
+    #[must_use]
+    pub(crate) fn for_empty_registry() -> Self {
+        Self::with_options(PathBuf::new(), false, PathBuf::new(), PathBuf::new())
+    }
+
     /// Create a new `ToolContext` with default settings.
     #[must_use]
     pub fn new(workspace: impl Into<PathBuf>) -> Self {
         let workspace = workspace.into();
-        let shell_manager = new_shared_shell_manager(workspace.clone());
         // Prefer .ghosty, fall back to .deepseek for project-local state
-        let notes_path = ghosty_config::resolve_project_state_dir(&workspace, "notes.md").1;
-        let mcp_config_path = ghosty_config::resolve_project_state_dir(&workspace, "mcp.json").1;
-        Self {
-            workspace,
-            shell_manager,
-            trust_mode: false,
-            sandbox_policy: SandboxPolicy::None,
-            notes_path,
-            mcp_config_path,
-            elevated_sandbox_policy: None,
-            shell_network_denied_hint: None,
-            auto_approve: false,
-            features: Features::with_defaults(),
-            state_namespace: "workspace".to_string(),
-            trusted_external_paths: Vec::new(),
-            network_policy: None,
-            runtime: RuntimeToolServices::default(),
-            session_objects: None,
-            cancel_token: None,
-            sandbox_backend: None,
-            memory_path: None,
-            lsp_manager: None,
-            large_output_router: None,
-            search_provider: crate::config::SearchProvider::default(),
-            search_api_key: None,
-            workshop_vars: None,
-        }
+        let notes_path = ghosty_config::resolve_project_state_dir(&workspace, "notes.md")
+            .expect("hardcoded project notes state path is valid")
+            .1;
+        let mcp_config_path = ghosty_config::resolve_project_state_dir(&workspace, "mcp.json")
+            .expect("hardcoded project MCP state path is valid")
+            .1;
+        Self::with_options(workspace, false, notes_path, mcp_config_path)
     }
 
     /// Create a `ToolContext` with all settings specified.
@@ -224,30 +749,51 @@ impl ToolContext {
     ) -> Self {
         let workspace = workspace.into();
         let shell_manager = new_shared_shell_manager(workspace.clone());
+        let tool_authority = process_tool_authority();
+        let shell_policy = match tool_authority.as_deref() {
+            Some(cap) => cap.shell.shell_policy(),
+            None => ShellPolicy::Full,
+        };
         Self {
             workspace,
-            shell_manager,
-            trust_mode,
-            sandbox_policy: SandboxPolicy::None,
-            notes_path: notes_path.into(),
-            mcp_config_path: mcp_config_path.into(),
-            elevated_sandbox_policy: None,
-            shell_network_denied_hint: None,
-            auto_approve: false,
-            features: Features::with_defaults(),
-            state_namespace: "workspace".to_string(),
-            trusted_external_paths: Vec::new(),
-            network_policy: None,
-            runtime: RuntimeToolServices::default(),
-            session_objects: None,
-            cancel_token: None,
-            sandbox_backend: None,
-            memory_path: None,
-            lsp_manager: None,
-            large_output_router: None,
-            search_provider: crate::config::SearchProvider::default(),
-            search_api_key: None,
-            workshop_vars: None,
+            execution: Box::new(ToolExecutionState {
+                shell_manager,
+                file_read_tracker: new_shared_file_read_tracker(),
+                owner_agent_id: None,
+                owner_agent_name: None,
+                tool_authority,
+                trust_mode,
+                sandbox_policy: SandboxPolicy::None,
+                notes_path: notes_path.into(),
+                mcp_config_path: mcp_config_path.into(),
+                skills_dir: None,
+                skills_scan_ghosty_only: false,
+                plugin_registry: None,
+                elevated_sandbox_policy: None,
+                persist_services_enabled: false,
+                shell_network_denied_hint: None,
+                auto_approve: false,
+                shell_policy,
+                features: Features::with_defaults(),
+                state_namespace: "workspace".to_string(),
+                route_context_window: None,
+                trusted_external_paths: Vec::new(),
+                follow_symlinks: false,
+                network_policy: None,
+                runtime: RuntimeToolServices::default(),
+                session_objects: None,
+                cancel_token: None,
+                sandbox_backend: None,
+                memory_path: None,
+                lsp_manager: None,
+                large_output_router: None,
+                search_provider: crate::config::SearchProvider::default(),
+                search_api_key: None,
+                search_base_url: None,
+                provider_native_search: None,
+                route_capabilities: ghosty_config::route::RouteCapabilities::default(),
+                workshop_vars: None,
+            }),
         }
     }
 
@@ -259,33 +805,9 @@ impl ToolContext {
         mcp_config_path: impl Into<PathBuf>,
         auto_approve: bool,
     ) -> Self {
-        let workspace = workspace.into();
-        let shell_manager = new_shared_shell_manager(workspace.clone());
-        Self {
-            workspace,
-            shell_manager,
-            trust_mode,
-            sandbox_policy: SandboxPolicy::None,
-            notes_path: notes_path.into(),
-            mcp_config_path: mcp_config_path.into(),
-            elevated_sandbox_policy: None,
-            shell_network_denied_hint: None,
-            auto_approve,
-            features: Features::with_defaults(),
-            state_namespace: "workspace".to_string(),
-            trusted_external_paths: Vec::new(),
-            network_policy: None,
-            runtime: RuntimeToolServices::default(),
-            session_objects: None,
-            cancel_token: None,
-            sandbox_backend: None,
-            memory_path: None,
-            lsp_manager: None,
-            large_output_router: None,
-            search_provider: crate::config::SearchProvider::default(),
-            search_api_key: None,
-            workshop_vars: None,
-        }
+        let mut context = Self::with_options(workspace, trust_mode, notes_path, mcp_config_path);
+        context.auto_approve = auto_approve;
+        context
     }
 
     /// Attach a per-domain network policy to this context (#135).
@@ -302,6 +824,57 @@ impl ToolContext {
         self
     }
 
+    /// Stamp tool work with the sub-agent that owns it.
+    #[must_use]
+    pub fn with_owner_agent(
+        mut self,
+        agent_id: impl Into<String>,
+        agent_name: impl Into<String>,
+    ) -> Self {
+        let agent_id = agent_id.into();
+        let agent_name = agent_name.into();
+        self.owner_agent_id = (!agent_id.trim().is_empty()).then_some(agent_id);
+        self.owner_agent_name = (!agent_name.trim().is_empty()).then_some(agent_name);
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_tool_authority(
+        mut self,
+        envelope: ToolAuthorityEnvelope,
+    ) -> Result<Self, String> {
+        let envelope = envelope.normalized()?;
+        if let Some(outer) = self.tool_authority.as_ref()
+            && !envelope.is_within(outer)
+        {
+            return Err(
+                "nested tool authority cannot expand its process authority cap".to_string(),
+            );
+        }
+        self.tool_authority = Some(Arc::new(envelope));
+        self.shell_policy = self.authority_clamped_shell_policy(self.shell_policy);
+        Ok(self)
+    }
+
+    /// Attach skill discovery settings for tools that need to resolve
+    /// model-visible skills by name.
+    #[must_use]
+    pub fn with_skills_config(
+        mut self,
+        skills_dir: impl Into<PathBuf>,
+        scan_ghosty_only: bool,
+    ) -> Self {
+        self.skills_dir = Some(skills_dir.into());
+        self.skills_scan_ghosty_only = scan_ghosty_only;
+        self
+    }
+
+    #[must_use]
+    pub fn with_plugin_registry(mut self, registry: Arc<crate::plugins::PluginRegistry>) -> Self {
+        self.plugin_registry = Some(registry);
+        self
+    }
+
     /// Attach active prompt/history/session symbolic objects for RLM tools.
     #[must_use]
     pub fn with_session_objects(mut self, snapshot: SessionObjectSnapshot) -> Self {
@@ -314,6 +887,27 @@ impl ToolContext {
     pub fn with_cancel_token(mut self, cancel_token: CancellationToken) -> Self {
         self.cancel_token = Some(cancel_token);
         self
+    }
+
+    /// Attach the effective shell policy for this turn.
+    #[must_use]
+    pub fn with_shell_policy(mut self, policy: ShellPolicy) -> Self {
+        self.shell_policy = self.authority_clamped_shell_policy(policy);
+        self
+    }
+
+    /// Replace the turn shell policy while retaining the process authority as
+    /// an outer ceiling. Live mode changes rebuild this value on every tool
+    /// call, so the clamp belongs here rather than only at engine startup.
+    pub(crate) fn set_shell_policy(&mut self, policy: ShellPolicy) {
+        self.shell_policy = self.authority_clamped_shell_policy(policy);
+    }
+
+    fn authority_clamped_shell_policy(&self, policy: ShellPolicy) -> ShellPolicy {
+        match self.tool_authority.as_deref() {
+            Some(cap) => policy.min_with(cap.shell.shell_policy()),
+            None => policy,
+        }
     }
 
     /// Attach an external sandbox backend for remote shell execution.
@@ -333,6 +927,16 @@ impl ToolContext {
         self
     }
 
+    /// Set whether tools should follow symbolic links. When `true`,
+    /// `resolve_path` allows symlinked paths that resolve outside the
+    /// workspace, and walk-based tools traverse symlinked directories.
+    /// Mirrors the `workspace_follow_symlinks` setting.
+    #[must_use]
+    pub fn with_follow_symlinks(mut self, follow: bool) -> Self {
+        self.follow_symlinks = follow;
+        self
+    }
+
     /// Attach an LSP manager so that edit tools can auto-inject diagnostics
     /// into their results after a successful file modification (#428).
     #[must_use]
@@ -340,6 +944,65 @@ impl ToolContext {
     pub fn with_lsp_manager(mut self, manager: Arc<LspManager>) -> Self {
         self.lsp_manager = Some(manager);
         self
+    }
+
+    /// Remember that the caller has observed the current on-disk state of a
+    /// file. This is intentionally best-effort so successful reads/writes do
+    /// not fail after completing only because a post-operation metadata lookup
+    /// raced with filesystem changes.
+    pub fn note_file_read(&self, path: &Path) {
+        let Ok(snapshot) = file_read_snapshot(path) else {
+            return;
+        };
+        let Ok(mut tracker) = self.file_read_tracker.lock() else {
+            return;
+        };
+        tracker.reads.insert(path.to_path_buf(), snapshot);
+    }
+
+    /// Require a successful, still-fresh `read_file` snapshot before a narrow
+    /// in-place edit. This catches model edits made against guessed or stale
+    /// content while leaving transactional patch preflight separate.
+    pub fn require_fresh_file_read(
+        &self,
+        path: &Path,
+        requested_path: &str,
+    ) -> Result<(), ToolError> {
+        let prior = {
+            let tracker = self.file_read_tracker.lock().map_err(|_| {
+                ToolError::execution_failed(
+                    "Failed to check read-before-edit state: tracker lock poisoned".to_string(),
+                )
+            })?;
+            tracker.reads.get(path).cloned()
+        };
+
+        let Some(prior) = prior else {
+            return Err(ToolError::execution_failed(format!(
+                "Refusing File action=\"edit\" for {} because it has not been read in this session. \
+                 Recovery: call File with action=\"read\" path=\"{requested_path}\" to inspect the current contents, \
+                 then retry File action=\"edit\" with a unique search string.",
+                path.display()
+            )));
+        };
+
+        let current = file_read_snapshot(path).map_err(|e| {
+            ToolError::execution_failed(format!(
+                "Refusing File action=\"edit\" for {} because the file could not be checked for staleness ({e}). \
+                 Recovery: call File with action=\"read\" path=\"{requested_path}\" again, then retry File action=\"edit\".",
+                path.display()
+            ))
+        })?;
+
+        if current != prior {
+            return Err(ToolError::execution_failed(format!(
+                "Refusing File action=\"edit\" for {} because it changed since the last File action=\"read\" call. \
+                 Recovery: call File with action=\"read\" path=\"{requested_path}\" again and retry with the current contents.",
+                path.display()
+            )));
+        }
+
+        Ok(())
     }
 
     /// Resolve a path relative to workspace, validating it doesn't escape.
@@ -375,6 +1038,30 @@ impl ToolContext {
             .workspace
             .canonicalize()
             .unwrap_or_else(|_| self.workspace.clone());
+
+        // When follow_symlinks is enabled, check the non-canonical (symlink)
+        // path against the workspace first. A symlink inside the workspace
+        // that resolves outside is allowed — the symlink itself is the gate.
+        if self.follow_symlinks {
+            let candidate_normalized = normalize_path(&candidate);
+            let workspace_normalized = normalize_path(&self.workspace);
+            let workspace_canonical_normalized = normalize_path(&workspace_canonical);
+
+            if candidate_normalized.starts_with(&workspace_normalized)
+                || candidate_normalized.starts_with(&workspace_canonical_normalized)
+            {
+                // The symlink (or plain path) is inside the workspace.
+                // Return the canonicalized target so file I/O works correctly.
+                if candidate.exists() {
+                    return Ok(candidate.canonicalize().unwrap_or(candidate));
+                }
+                // Non-existent path: canonicalize the deepest existing ancestor
+                return self.resolve_nonexistent_path(candidate, &workspace_canonical);
+            }
+
+            // Path is outside workspace even before resolving symlinks.
+            // Fall through to the standard escape check.
+        }
 
         // For the initial check, also try to canonicalize the candidate if possible
         // This handles symlinks like /var -> /private/var on macOS
@@ -418,8 +1105,19 @@ impl ToolContext {
             return Ok(canonical);
         }
 
-        // For non-existent paths (e.g., files to be created), validate via parent
-        // Find the deepest existing ancestor and canonicalize it
+        self.resolve_nonexistent_path(candidate, &workspace_canonical)
+    }
+
+    /// Resolve a non-existent path by canonicalizing its deepest existing
+    /// ancestor and validating the result is under the workspace or a
+    /// trusted external path.
+    fn resolve_nonexistent_path(
+        &self,
+        candidate: PathBuf,
+        workspace_canonical: &Path,
+    ) -> Result<PathBuf, ToolError> {
+        let workspace_normalized = normalize_path(workspace_canonical);
+        let workspace_plain = normalize_path(&self.workspace);
         let mut existing_ancestor = candidate.clone();
         let mut suffix_parts: Vec<std::ffi::OsString> = Vec::new();
 
@@ -437,6 +1135,7 @@ impl ToolContext {
                 }
             }
         }
+        let ancestor_normalized = normalize_path(&existing_ancestor);
 
         let canonical_ancestor = if existing_ancestor.exists() {
             existing_ancestor
@@ -453,10 +1152,17 @@ impl ToolContext {
         }
         let canonical = normalize_path(&canonical);
 
+        if self.follow_symlinks
+            && (ancestor_normalized.starts_with(&workspace_plain)
+                || ancestor_normalized.starts_with(&workspace_normalized))
+        {
+            return Ok(canonical);
+        }
+
         // Validate it's under workspace, OR is under a user-trusted external
         // path (`/trust add <path>` from the slash command, persisted in
         // `~/.deepseek/workspace-trust.json`).
-        if !canonical.starts_with(&workspace_canonical)
+        if !canonical.starts_with(workspace_canonical)
             && !canonical.starts_with(&workspace_normalized)
             && !self.is_trusted_external_path(&canonical)
         {
@@ -500,6 +1206,14 @@ impl ToolContext {
         self
     }
 
+    /// Reuse the engine's session-scoped read snapshots across tool-context
+    /// rebuilds. A fresh context is assembled for each turn, but successful
+    /// reads must remain authoritative until the observed file changes.
+    pub fn with_file_read_tracker(mut self, tracker: SharedFileReadTracker) -> Self {
+        self.file_read_tracker = tracker;
+        self
+    }
+
     /// Set the elevated sandbox policy override.
     ///
     /// This is used when retrying a tool after a sandbox denial, to run
@@ -518,6 +1232,13 @@ impl ToolContext {
     /// Set the namespace used for session-scoped tool state.
     pub fn with_state_namespace(mut self, namespace: impl Into<String>) -> Self {
         self.state_namespace = namespace.into();
+        self
+    }
+
+    /// Attach the active route's effective context window.
+    #[must_use]
+    pub fn with_route_context_window(mut self, context_window: u32) -> Self {
+        self.route_context_window = (context_window > 0).then_some(context_window);
         self
     }
 
@@ -567,7 +1288,7 @@ pub async fn lsp_diagnostics_for_paths(context: &ToolContext, paths: &[PathBuf])
     render_blocks(&blocks)
 }
 
-fn normalize_path(path: &Path) -> PathBuf {
+pub(crate) fn normalize_path(path: &Path) -> PathBuf {
     let mut prefix: Option<std::ffi::OsString> = None;
     let mut is_root = false;
     let mut stack: Vec<std::ffi::OsString> = Vec::new();
@@ -638,6 +1359,11 @@ pub trait ToolSpec: Send + Sync {
         }
     }
 
+    /// Returns the approval requirement for this concrete tool input.
+    fn approval_requirement_for(&self, _input: &Value) -> ApprovalRequirement {
+        self.approval_requirement()
+    }
+
     /// Returns whether this tool is sandboxable.
     #[allow(dead_code)]
     fn is_sandboxable(&self) -> bool {
@@ -652,9 +1378,44 @@ pub trait ToolSpec: Send + Sync {
             && !caps.contains(&ToolCapability::ExecutesCode)
     }
 
+    /// Returns whether this concrete tool input is read-only.
+    fn is_read_only_for(&self, _input: &Value) -> bool {
+        self.is_read_only()
+    }
+
     /// Returns whether this tool can be executed in parallel with others.
     fn supports_parallel(&self) -> bool {
         false
+    }
+
+    /// Returns whether this concrete tool input can run in parallel.
+    fn supports_parallel_for(&self, _input: &Value) -> bool {
+        self.supports_parallel()
+    }
+
+    /// Returns whether this input starts durable/detached work and returns
+    /// immediately. Detached starts are not read-only, but in auto-approved
+    /// turns they do not need to block neighboring read-only inspections.
+    fn starts_detached_for(&self, _input: &Value) -> bool {
+        false
+    }
+
+    /// Resolve input-specific policy without performing external side effects.
+    ///
+    /// Resource claims deliberately default to global exclusivity until a
+    /// first-party tool opts into narrower, canonicalized claims. The initial
+    /// seam records this decision but leaves the existing scheduler unchanged.
+    fn prepare(&self, input: Value, _context: &ToolContext) -> Result<PreparedToolCall, ToolError> {
+        Ok(PreparedToolCall {
+            name: self.name().to_string(),
+            description: self.description().to_string(),
+            read_only: self.is_read_only_for(&input),
+            supports_parallel: self.supports_parallel_for(&input),
+            starts_detached: self.starts_detached_for(&input),
+            approval: self.approval_requirement_for(&input),
+            resources: vec![ResourceClaim::GlobalExclusive],
+            input,
+        })
     }
 
     /// Returns whether this tool should be excluded from the model-visible
@@ -664,182 +1425,30 @@ pub trait ToolSpec: Send + Sync {
         false
     }
 
+    /// Returns whether this tool should be advertised in the model-facing
+    /// catalog. Hidden compatibility tools remain registered and executable
+    /// by name so saved transcripts can replay without teaching new sessions
+    /// the deprecated spelling.
+    fn model_visible(&self) -> bool {
+        true
+    }
+
     /// Execute the tool with the given input and context.
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError>;
-}
 
-// === Unit Tests ===
+    /// Execute with rich result blocks. Existing tools inherit text-only
+    /// behavior; tools such as lowercase `read` can opt in without changing
+    /// the published `ToolResult` struct.
+    async fn execute_rich(
+        &self,
+        input: Value,
+        context: &ToolContext,
+    ) -> Result<RichToolResult, ToolError> {
+        self.execute(input, context)
+            .await
+            .map(RichToolResult::plain)
+    }
+}
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    use tempfile::tempdir;
-
-    #[test]
-    fn test_tool_result_success() {
-        let result = ToolResult::success("hello");
-        assert!(result.success);
-        assert_eq!(result.content, "hello");
-        assert!(result.metadata.is_none());
-    }
-
-    #[test]
-    fn test_tool_result_error() {
-        let result = ToolResult::error("something failed");
-        assert!(!result.success);
-        assert_eq!(result.content, "something failed");
-    }
-
-    #[test]
-    fn test_tool_result_json() {
-        let data = json!({"key": "value"});
-        let result = ToolResult::json(&data).unwrap();
-        assert!(result.success);
-        assert!(result.content.contains("key"));
-    }
-
-    #[test]
-    fn test_tool_result_with_metadata() {
-        let result = ToolResult::success("content").with_metadata(json!({"extra": true}));
-        assert!(result.metadata.is_some());
-    }
-
-    #[test]
-    fn test_tool_context_resolve_path_relative() {
-        let tmp = tempdir().expect("tempdir");
-        let ctx = ToolContext::new(tmp.path().to_path_buf());
-
-        // Create a test file
-        let test_file = tmp.path().join("test.txt");
-        std::fs::write(&test_file, "test").expect("write");
-
-        let resolved = ctx.resolve_path("test.txt").expect("resolve");
-        assert!(resolved.ends_with("test.txt"));
-    }
-
-    #[test]
-    fn test_tool_context_resolve_path_escape() {
-        let tmp = tempdir().expect("tempdir");
-        let ctx = ToolContext::new(tmp.path().to_path_buf());
-
-        // Try to escape workspace
-        let result = ctx.resolve_path("/etc/passwd");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_tool_context_resolve_path_parent_traversal() {
-        let tmp = tempdir().expect("tempdir");
-        let ctx = ToolContext::new(tmp.path().to_path_buf());
-
-        let result = ctx.resolve_path("../escape.txt");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_tool_context_resolve_path_normalizes_parent() {
-        let tmp = tempdir().expect("tempdir");
-        let ctx = ToolContext::new(tmp.path().to_path_buf());
-
-        let result = ctx.resolve_path("new/../safe.txt");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_tool_context_trust_mode() {
-        let tmp = tempdir().expect("tempdir");
-        let ctx = ToolContext::new(tmp.path().to_path_buf()).with_trust_mode(true);
-
-        // In trust mode, absolute paths should work
-        let result = ctx.resolve_path("/tmp");
-        assert!(result.is_ok());
-    }
-
-    /// Issue #29: paths under a user-trusted external directory resolve
-    /// successfully even though they fall outside the workspace, while
-    /// untrusted external paths still error with `PathEscape`.
-    #[test]
-    fn test_tool_context_trusted_external_path_allows_escape() {
-        let workspace = tempdir().expect("workspace tempdir");
-        let trusted_root = tempdir().expect("trusted tempdir");
-        let trusted_file = trusted_root.path().join("notes.md");
-        std::fs::write(&trusted_file, "shared notes").unwrap();
-
-        let ctx =
-            ToolContext::new(workspace.path().to_path_buf()).with_trusted_external_paths(vec![
-                trusted_root
-                    .path()
-                    .canonicalize()
-                    .unwrap_or_else(|_| trusted_root.path().to_path_buf()),
-            ]);
-
-        let resolved = ctx
-            .resolve_path(trusted_file.to_str().unwrap())
-            .expect("trusted path should resolve");
-        assert!(resolved.ends_with("notes.md"));
-
-        // Path outside workspace AND outside the trust list should still fail.
-        let other = tempdir().expect("untrusted tempdir");
-        let other_file = other.path().join("secret.md");
-        std::fs::write(&other_file, "x").unwrap();
-        let err = ctx
-            .resolve_path(other_file.to_str().unwrap())
-            .expect_err("untrusted path must error");
-        assert!(matches!(err, ToolError::PathEscape { .. }));
-    }
-
-    #[test]
-    fn test_required_str() {
-        let input = json!({"name": "test", "count": 42});
-        assert_eq!(required_str(&input, "name").unwrap(), "test");
-        assert!(required_str(&input, "missing").is_err());
-        assert!(required_str(&input, "count").is_err()); // not a string
-    }
-
-    #[test]
-    fn test_optional_str() {
-        let input = json!({"name": "test"});
-        assert_eq!(optional_str(&input, "name"), Some("test"));
-        assert_eq!(optional_str(&input, "missing"), None);
-    }
-
-    #[test]
-    fn test_required_u64() {
-        let input = json!({"count": 42});
-        assert_eq!(required_u64(&input, "count").unwrap(), 42);
-        assert!(required_u64(&input, "missing").is_err());
-    }
-
-    #[test]
-    fn test_optional_u64() {
-        let input = json!({"count": 42});
-        assert_eq!(optional_u64(&input, "count", 0), 42);
-        assert_eq!(optional_u64(&input, "missing", 100), 100);
-    }
-
-    #[test]
-    fn test_optional_bool() {
-        let input = json!({"flag": true});
-        assert!(optional_bool(&input, "flag", false));
-        assert!(!optional_bool(&input, "missing", false));
-    }
-
-    #[test]
-    fn test_tool_error_display() {
-        let err = ToolError::missing_field("path");
-        assert_eq!(
-            format!("{err}"),
-            "Failed to validate input: missing required field 'path'"
-        );
-
-        let err = ToolError::execution_failed("boom");
-        assert_eq!(format!("{err}"), "Failed to execute tool: boom");
-    }
-
-    #[test]
-    fn test_approval_requirement_default() {
-        let level = ApprovalRequirement::default();
-        assert_eq!(level, ApprovalRequirement::Auto);
-    }
-}
+mod tests;

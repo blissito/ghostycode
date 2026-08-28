@@ -48,12 +48,6 @@ const HIGH_EFFORT_KEYWORDS: &[&str] = &[
     // English (unchanged from the original keyword set).
     "debug",
     "error",
-    // Spanish.
-    "depurar",
-    "falla",
-    "falló",
-    "fallo",
-    "analiza",
     // Simplified / Traditional Chinese.
     "\u{8c03}\u{8bd5}", // 调试
     "\u{9519}\u{8bef}", // 错误
@@ -73,12 +67,6 @@ const HIGH_EFFORT_KEYWORDS: &[&str] = &[
 const LOW_EFFORT_KEYWORDS: &[&str] = &[
     "search",
     "lookup",
-    // Spanish.
-    "buscar",
-    "busca",
-    "consulta",
-    "rápido",
-    "rapido",
     "\u{641c}\u{7d22}", // 搜索
     "\u{67e5}\u{627e}", // 查找
     "\u{67e5}\u{8be2}", // 查询

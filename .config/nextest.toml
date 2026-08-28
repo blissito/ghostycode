@@ -1,0 +1,60 @@
+# cargo-nextest profile for contributors (`cargo nextest run --workspace`).
+#
+# `cargo test --workspace --all-features --locked` remains the authoritative
+# release gate. nextest is a faster local loop: it runs each test in its own
+# process, so the 10k-test ghosty-tui unit suite finishes in well under
+# half the wall-clock time of libtest on a multi-core machine, and slow or
+# hanging tests are named instead of stalling the whole binary.
+#
+# Because tests no longer share a process, integration suites that serialize
+# on in-process locks must be bounded here when they contend for mock-server
+# ports or wall-clock timing budgets.
+
+[profile.default]
+# Name tests that take longer than this so contributors see where the time goes.
+slow-timeout = { period = "30s" }
+# Keep failures visible in the final summary and never retry silently:
+# a flaky test is a bug report, not something to paper over.
+retries = 0
+fail-fast = false
+final-status-level = "slow"
+# RUST_MIN_STACK is not a nextest.toml key. CI and scripts/dev-test.sh
+# export 16 MiB so local nextest matches the product thread stack.
+
+[test-groups]
+# Integration tests that spawn the real `ghosty` binary and wait on
+# service start-up deadlines; bounded so a fully parallel run on a busy
+# machine cannot starve them past their 30 s budgets.
+spawns-binaries = { max-threads = 3 }
+# Telemetry contract tests also spawn the real binary, and their fixture's
+# in-process mutex cannot serialize nextest's one-process-per-test workers.
+# Keep one telemetry process alongside the other three integration workers.
+telemetry-contract = { max-threads = 1 }
+# Persistent-service exec tests wait on a pid file from a real child. Under
+# parallel load the file never appears (#5355). Serialize them; do not drop
+# the tests.
+exec-persistent-service = { max-threads = 1 }
+
+# First matching test-group override wins. Keep these more-specific
+# integration filters before binary(integration) so they are not stolen
+# by the three-thread group.
+[[profile.default.overrides]]
+filter = 'binary(integration) & test(/^telemetry_contract::/)'
+test-group = 'telemetry-contract'
+
+[[profile.default.overrides]]
+filter = 'binary(integration) & test(/^exec_persistent_service::/)'
+test-group = 'exec-persistent-service'
+slow-timeout = { period = "120s" }
+
+[[profile.default.overrides]]
+filter = 'binary(integration)'
+test-group = 'spawns-binaries'
+
+# CI (profiles inherit from default): the final summary lists every failure and
+# slow test in full so the run log is enough to diagnose without rerunning.
+[profile.ci]
+retries = 0
+fail-fast = false
+final-status-level = "slow"
+failure-output = "immediate-final"

@@ -3,12 +3,12 @@
   "version": "0.8.49",
   "private": true,
   "description": "Deprecated legacy package name. Install `ghosty` instead; this package is not republished.",
-  "author": "blissito",
+  "author": "Hmbown",
   "license": "MIT",
   "funding": [
     {
       "type": "github",
-      "url": "https://github.com/sponsors/blissito"
+      "url": "https://github.com/sponsors/Hmbown"
     },
     {
       "type": "buymeacoffee",

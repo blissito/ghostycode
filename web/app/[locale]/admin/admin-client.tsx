@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { AgentDraft } from "@/lib/community-agent";
+import { draftStorageKey, type AgentDraft } from "@/lib/community-agent";
 
 interface Props {
   drafts: AgentDraft[];
@@ -28,11 +28,11 @@ export function AdminClient({ drafts, posted, isZh, typeLabels }: Props) {
       const data = await res.json();
       if (data.ok) {
         if (action === "discard") {
-          setItems((prev) => prev.filter((d) => `draft:${d.type}:${d.id}` !== draftKey));
+          setItems((prev) => prev.filter((d) => draftStorageKey(d) !== draftKey));
         } else if (action === "post") {
-          const posted = items.find((d) => `draft:${d.type}:${d.id}` === draftKey);
+          const posted = items.find((d) => draftStorageKey(d) === draftKey);
           if (posted) {
-            setItems((prev) => prev.filter((d) => `draft:${d.type}:${d.id}` !== draftKey));
+            setItems((prev) => prev.filter((d) => draftStorageKey(d) !== draftKey));
             setPostedItems((prev) => [{ ...posted, posted: true }, ...prev]);
           }
         }
@@ -48,9 +48,9 @@ export function AdminClient({ drafts, posted, isZh, typeLabels }: Props) {
   };
 
   const startEdit = (draft: AgentDraft) => {
-    const key = `draft:${draft.type}:${draft.id}`;
+    const key = draftStorageKey(draft);
     setEditing(key);
-    setEditBody(draft.bodyEn);
+    setEditBody(isZh ? draft.bodyZh : draft.bodyEn);
   };
 
   return (
@@ -62,7 +62,7 @@ export function AdminClient({ drafts, posted, isZh, typeLabels }: Props) {
             {isZh ? "待审阅" : "Pending"} <span className="font-mono text-sm text-ink-mute ml-2">({items.length})</span>
           </h2>
           {items.map((draft) => {
-            const key = `draft:${draft.type}:${draft.id}`;
+            const key = draftStorageKey(draft);
             const label = typeLabels[draft.type] ?? { en: draft.type, zh: draft.type };
             return (
               <div key={key} className="hairline-t hairline-b hairline-l hairline-r bg-paper">
@@ -147,7 +147,7 @@ export function AdminClient({ drafts, posted, isZh, typeLabels }: Props) {
             {isZh ? "已发布" : "Posted"} <span className="font-mono text-sm text-ink-mute ml-2">({postedItems.length})</span>
           </h2>
           {postedItems.map((draft) => {
-            const key = `draft:${draft.type}:${draft.id}`;
+            const key = draftStorageKey(draft);
             const label = typeLabels[draft.type] ?? { en: draft.type, zh: draft.type };
             return (
               <div key={key} className="hairline-t py-3 px-4 opacity-60">
@@ -160,7 +160,7 @@ export function AdminClient({ drafts, posted, isZh, typeLabels }: Props) {
                   )}
                   <span className="ml-auto pill pill-jade text-[0.6rem]">{isZh ? "已发布" : "posted"}</span>
                 </div>
-                <p className="text-xs text-ink-mute line-clamp-2">{draft.bodyEn.slice(0, 120)}…</p>
+                <p className="text-xs text-ink-mute line-clamp-2">{(isZh ? draft.bodyZh : draft.bodyEn).slice(0, 120)}…</p>
               </div>
             );
           })}

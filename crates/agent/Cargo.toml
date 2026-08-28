@@ -2,10 +2,14 @@
 name = "ghosty-agent"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Model/provider registry and fallback strategy for DeepSeek workspace architecture"
+description = "Model/provider registry and fallback strategy for Ghosty"
+
+[lints]
+workspace = true
 
 [dependencies]
-ghosty-config = { path = "../config", version = "0.0.14" }
+ghosty-config = { path = "../config", version = "0.0.15" }
 serde.workspace = true

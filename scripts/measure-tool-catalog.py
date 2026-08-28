@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Measure serialized tool catalog size before and after default deferral.
+"""Measure canonical production-built tool catalogs by visible mode.
 
-This delegates catalog construction to an ignored Rust test so the measurement
-uses the same tool definitions, JSON serialization, and deferral policy as the
-runtime. Token counts are deterministic estimates using ceil(serialized_bytes/4).
+This delegates to an ignored Rust test that runs the production registry,
+catalog, and active-request planner with inert wiring. Token counts are
+deterministic estimates using ceil(serialized_bytes/4).
 """
 
 from __future__ import annotations
@@ -20,18 +20,22 @@ def main() -> int:
     cmd = [
         "cargo",
         "test",
+        "--locked",
         "-p",
         "ghosty-tui",
-        "print_agent_tool_catalog_metrics",
+        "--lib",
+        "core::engine::tests::print_mode_tool_catalog_metrics",
         "--",
         "--ignored",
+        "--exact",
         "--nocapture",
         "--test-threads=1",
     ]
     proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
     sys.stderr.write(proc.stderr)
 
-    for line in proc.stdout.splitlines():
+    combined = proc.stdout.splitlines() + proc.stderr.splitlines()
+    for line in combined:
         if MARKER in line:
             metrics = json.loads(line.split(MARKER, 1)[1])
             print(json.dumps(metrics, indent=2, sort_keys=True))

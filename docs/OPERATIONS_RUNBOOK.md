@@ -8,8 +8,8 @@ This runbook covers practical debugging and incident response for the local CLI/
    - `cargo run -- --version`
    - `cat ~/.ghosty/config.toml` (or inspect configured profile)
 2. Enable verbose logs:
-   - `RUST_LOG=deepseek_cli=debug cargo run`
-   - For HTTP retries/reconnects: `RUST_LOG=deepseek_cli::client=debug cargo run`
+   - `RUST_LOG=ghosty_tui=debug cargo run`
+   - For HTTP retries/reconnects: `RUST_LOG=ghosty_tui::client=debug cargo run`
 3. Capture current state:
    - `ls ~/.ghosty/sessions`
    - `ls ~/.ghosty/sessions/checkpoints`
@@ -22,14 +22,14 @@ Symptoms:
 - partial assistant output with no completion
 
 Checks:
-1. Inspect retry/health logs (`deepseek_cli::client`)
+1. Inspect retry/health logs (`ghosty_tui::client`)
 2. Verify endpoint connectivity:
    - `curl -sS https://api.deepseek.com/beta/models -H "Authorization: Bearer $DEEPSEEK_API_KEY"`
 3. Confirm no local sandbox/permission deadlock in tool output
 
 Actions:
-1. If a foreground shell command is running, press `Ctrl+B` and choose whether to background it or cancel the current turn.
-2. If the command was started in the background, ask the assistant to cancel it with `exec_shell_cancel` and the returned task id.
+1. If a foreground shell command is running, press `Ctrl+B` to move it to the background (the turn keeps running and the command becomes a background job under `/jobs`); use `Ctrl+C` instead if you want to cancel the turn.
+2. If the command was started in the background, ask the assistant to use `Bash` with `action: "cancel"` and the returned process id.
 3. Use `Esc` or `Ctrl+C` to interrupt the current turn when you want to stop the request itself.
 4. Retry prompt; if still failing, restart TUI.
 5. On restart, verify the previous queued/in-flight runtime turn is shown as interrupted rather than left in a running state.

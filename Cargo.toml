@@ -2,25 +2,31 @@
 members = [
     "crates/agent",
     "crates/app-server",
+    "crates/build-support",
     "crates/cli",
+    "crates/command-contract",
     "crates/config",
     "crates/core",
     "crates/execpolicy",
     "crates/hooks",
+    "crates/lane",
     "crates/mcp",
+    "crates/paths",
     "crates/protocol",
     "crates/release",
     "crates/secrets",
     "crates/state",
+    "crates/telemetry",
     "crates/tools",
     "crates/tui",
-    "crates/tui-core",
+    "crates/workflow",
+    "crates/workflow-js",
 ]
-default-members = ["crates/cli", "crates/app-server", "crates/tui"]
+default-members = ["crates/cli"]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.14"
+version = "0.0.15"
 edition = "2024"
 # Rust 1.88 stabilized `let_chains` in `if`/`while` conditions, which the
 # codebase relies on extensively. Cargo enforces this so users on older
@@ -30,6 +36,13 @@ rust-version = "1.88"
 license = "MIT"
 repository = "https://github.com/blissito/ghostycode"
 
+# Record the policy CI already applies via `RUSTFLAGS: -Dwarnings`.
+# Member crates opt in with `[lints] workspace = true`. This does not add
+# new lints; it makes the existing gate visible in the manifest so
+# `cargo check` without extra flags matches CI.
+[workspace.lints.rust]
+warnings = "deny"
+
 [workspace.dependencies]
 anyhow = "1.0.100"
 async-trait = "0.1.89"
@@ -38,17 +51,69 @@ chrono = { version = "0.4.43", features = ["serde"] }
 clap = { version = "4.5.54", features = ["derive"] }
 clap_complete = "4.5"
 dirs = "6.0.0"
-reqwest = { version = "0.13.1", default-features = false, features = ["json", "rustls", "socks"] }
-rusqlite = { version = "0.32.1", features = ["bundled"] }
+encoding_rs = "0.8.35"
+# Pinned to the jsonschema line schemaui 0.12 requires (^0.46) so the graph
+# carries one jsonschema/jsonschema-regex/referencing/fancy-regex stack.
+# Move both together when schemaui catches up (dependabot: keep in step).
+jsonschema = { version = "0.46", default-features = false }
+reqwest = { version = "0.13.1", default-features = false, features = ["json", "rustls-no-provider", "socks"] }
+# NOT "parallel": the Workflow VM stays single-threaded and bridges to the
+# multi-thread engine over channels (see crates/workflow-js).
+rquickjs = { version = "0.12", features = ["futures"] }
+rustls = { version = "0.23.36", default-features = false, features = ["ring", "std", "tls12"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 semver = "1.0.28"
 thiserror = "2.0"
-tokio = { version = "1.49.0", features = ["full"] }
-toml = "0.9.7"
-sha2 = "0.10"
-tower-http = { version = "0.6", features = ["cors"] }
+tempfile = "3.27"
+tokio = { version = "1.50.0", features = ["fs", "io-util", "io-std", "macros", "net", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
+toml = "1.0.6"
+toml_edit = "0.25.12"
+sha2 = "0.11"
+tower-http = { version = "0.7", features = ["cors"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tokio-util = { version = "0.7.16", features = ["io", "full"] }
 uuid = { version = "1.11", features = ["v4"] }
+mimalloc = { version = "0.1", default-features = false }
+
+# The everyday `--release` gate (AGENTS.md pre-push build): optimized but
+# fast to produce. Shipping artifacts use `--profile dist` below — fat LTO on
+# a 680k-line crate belongs in release CI, not in every contributor's loop
+# (#5246; community-reported 8–16 minute local release builds, #4991).
+# Dev/test carry line tables instead of full debug info. Backtraces still name
+# the file and line of every frame — the thing anyone actually reads — but the
+# per-variable DWARF that no one inspects without a debugger attached is gone.
+# The debug binary was 227 MB and target/debug had grown past 260 GB; those
+# links are IO-bound, so the debuginfo is paid on every incremental build.
+# Anyone stepping through under lldb can override this locally.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.release]
+lto = "thin"
+strip = true
+codegen-units = 16
+
+# Shipping profile: exactly the optimization the released binaries have
+# always had. Every workflow that uploads a binary to users builds with
+# `--profile dist` and collects from `target/**/dist/`.
+# NOTE: no `panic = "abort"` here — the TUI's panic supervision
+# (catch_unwind/spawn_supervised) needs unwinding so one panicking tool call
+# or task fails gracefully instead of aborting the whole session.
+[profile.dist]
+inherits = "release"
+lto = true
+strip = true
+codegen-units = 1
+
+# Patch unicode-width so that width() uses CJK tables when the cjk feature
+# is enabled. Vanilla unicode-width 0.2.2 provides width_cjk() as a separate
+# method but the original width() always uses non-CJK tables, so Ratatui
+# (which calls width() internally) measures ambiguous-width characters
+# (circled digits, enclosed alphanumerics) as 1 column. CJK terminals render
+# them as 2 columns, causing cell-offset rendering glitches. (#4479)
+[patch.crates-io]
+unicode-width = { path = "patches/unicode-width-0.2.2" }

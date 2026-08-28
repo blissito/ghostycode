@@ -48,7 +48,7 @@ export async function chat(
   return data.choices[0]?.message?.content ?? "";
 }
 
-const SYSTEM_PROMPT = `You are the editor of "今日要闻 / Today's Dispatch", a daily-ish digest for the Ghosty Code open source project.
+const SYSTEM_PROMPT = `You are the editor of "今日要闻 / Today's Dispatch", a daily-ish digest for the Ghosty open source project.
 
 You receive: repo stats and a list of recently updated issues, PRs, and releases.
 Output a single JSON object — no prose around it — matching this exact shape:

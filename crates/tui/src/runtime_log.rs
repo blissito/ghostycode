@@ -154,12 +154,26 @@ pub fn init() -> Result<TuiLogGuard> {
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap_or_else(|_| EnvFilter::new("info"));
 
+    let log_path_clone = log_path.clone();
     let subscriber = tracing_subscriber::registry().with(env_filter).with(
         fmt::layer()
-            .with_writer(move || {
-                subscriber_file
-                    .try_clone()
-                    .expect("clone log file handle for tracing writer")
+            .with_writer(move || -> Box<dyn std::io::Write + Send> {
+                // Clone the file handle for each write. If clone fails (fd exhaustion),
+                // fall back to reopening the same path, or ultimately stderr.
+                match subscriber_file.try_clone() {
+                    Ok(f) => Box::new(f),
+                    Err(e) => {
+                        tracing::warn!("Failed to clone log file handle: {e}, reopening");
+                        match std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&log_path_clone)
+                        {
+                            Ok(f) => Box::new(f),
+                            Err(_) => Box::new(std::io::stderr()),
+                        }
+                    }
+                }
             })
             .with_ansi(false)
             .with_target(true)
@@ -176,7 +190,10 @@ pub fn init() -> Result<TuiLogGuard> {
     #[cfg(windows)]
     let (saved_stderr_handle, redirected_stderr_handle) = match redirect_stderr_to(&file) {
         Ok((saved, dup)) => (Some(saved), Some(dup)),
-        Err(_) => (None, None),
+        Err(e) => {
+            tracing::warn!("Failed to redirect stderr to log file: {e}");
+            (None, None)
+        }
     };
 
     Ok(TuiLogGuard {
@@ -192,6 +209,16 @@ pub fn init() -> Result<TuiLogGuard> {
 }
 
 pub(crate) fn log_directory() -> Option<PathBuf> {
+    // $GHOSTY_HOME is a hard override of the base data directory
+    // (docs/CONFIGURATION.md): when SET, logs live under it and we do NOT fall
+    // back to the legacy ~/.deepseek path — silent fallback would defeat the
+    // isolation the override promises (CI, containers, test harnesses). We
+    // check the env var directly rather than ghosty_home()'s Ok/Err because
+    // that helper succeeds (returns $HOME/.ghosty) even when the override is
+    // unset, which would short-circuit the legacy fallback below.
+    if let Some(home) = ghosty_paths::ghosty_home_override().ok().flatten() {
+        return Some(home.join("logs"));
+    }
     let resolve = |base: PathBuf| -> Option<PathBuf> {
         let primary = base.join(".ghosty").join("logs");
         if primary.exists() {
@@ -203,17 +230,7 @@ pub(crate) fn log_directory() -> Option<PathBuf> {
         }
         Some(primary)
     };
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from)
-        && !home.as_os_str().is_empty()
-    {
-        return resolve(home);
-    }
-    if let Some(userprofile) = std::env::var_os("USERPROFILE").map(PathBuf::from)
-        && !userprofile.as_os_str().is_empty()
-    {
-        return resolve(userprofile);
-    }
-    dirs::home_dir().and_then(resolve)
+    ghosty_paths::user_home().and_then(resolve)
 }
 
 fn log_file_name(date: &str, pid: u32) -> String {
@@ -343,6 +360,38 @@ mod tests {
     use super::*;
     use std::fs::FileTimes;
 
+    #[test]
+    fn whitespace_home_override_is_consistent_across_tui_state_entry_points() {
+        let _lock = crate::test_support::lock_test_env();
+        let tmp = tempfile::TempDir::new().expect("temporary root");
+        let home = tmp.path().join("home");
+        let userprofile = tmp.path().join("userprofile");
+        let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
+        let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &userprofile);
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", " \t ");
+        let _config_path = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
+        let _legacy_config_path = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
+        let primary = home.join(".ghosty");
+
+        assert_eq!(crate::config::effective_home_dir(), Some(home.clone()));
+        assert_eq!(
+            crate::config::workspace_trust_config_candidate_paths(),
+            vec![
+                primary.join("config.toml"),
+                home.join(".deepseek").join("config.toml")
+            ]
+        );
+        assert_eq!(log_directory(), Some(primary.join("logs")));
+        assert_eq!(
+            crate::automation_manager::default_automations_dir(),
+            primary.join("automations")
+        );
+        assert_eq!(
+            crate::session_manager::default_sessions_dir().expect("session directory"),
+            primary.join("sessions")
+        );
+    }
+
     fn set_modified(path: &Path, modified: SystemTime) {
         let file = OpenOptions::new().write(true).open(path).unwrap();
         file.set_times(FileTimes::new().set_modified(modified))
@@ -467,5 +516,23 @@ mod tests {
         assert!(!stale.exists());
         assert!(!legacy_stale.exists());
         assert!(unrelated.exists());
+    }
+
+    #[test]
+    fn log_directory_honors_ghosty_home_as_hard_override() {
+        let _lock = crate::test_support::lock_test_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        // SAFETY: serialised by lock_test_env.
+        unsafe {
+            std::env::set_var("GHOSTY_HOME", tmp.path());
+        }
+        // $GHOSTY_HOME IS the home dir (no ".ghosty" appended), and the
+        // legacy ~/.deepseek fallback is bypassed entirely.
+        let resolved = log_directory().expect("log_directory should resolve");
+        assert_eq!(resolved, tmp.path().join("logs"));
+        // SAFETY: cleanup under the same lock.
+        unsafe {
+            std::env::remove_var("GHOSTY_HOME");
+        }
     }
 }

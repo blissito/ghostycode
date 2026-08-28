@@ -6,26 +6,149 @@
 //! V4 does not currently accept inline image input on its Chat Completions
 //! endpoint, so we materialize the bytes to disk instead of base64-embedding
 //! them in the request).
+//!
+//! OpenHarmony deliberately excludes native desktop/Wayland clipboard APIs.
+//! Copy falls back to OSC 52 (or tmux `load-buffer -w`), paste arrives through
+//! terminal input, and image clipboard reads are unavailable.
 
+use std::ffi::OsStr;
+#[cfg(any(not(test), all(test, unix)))]
+use std::io::Write;
 #[cfg(not(test))]
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, IsTerminal};
 use std::path::{Path, PathBuf};
-#[cfg(any(
-    all(test, unix),
-    all(
-        any(target_os = "macos", target_os = "windows", target_os = "linux"),
-        not(test)
-    )
-))]
+#[cfg(any(not(test), all(test, unix)))]
 use std::process::{Command, Stdio};
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 use arboard::{Clipboard, ImageData};
 use base64::Engine as _;
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 use image::{ImageBuffer, Rgba};
 
 const OSC52_MAX_BYTES: usize = 100 * 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClipboardEndpoint {
+    /// The TUI and desktop clipboard live on the same host.
+    NativeHost,
+    /// SSH exported a graphical display (X11 or Wayland), so the native
+    /// clipboard intentionally addresses that forwarded display.
+    ForwardedDisplay,
+    /// No graphical endpoint is available over SSH. Clipboard transfer must
+    /// be requested from the terminal client instead.
+    TerminalClient,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClipboardWriteOrder {
+    /// An SSH TUI without an exported graphical display must target the
+    /// terminal client. A native clipboard on the remote host can succeed
+    /// while writing to the wrong machine.
+    TerminalClientOnly,
+    /// A local TUI should prefer the native clipboard (including images) and
+    /// retain OSC 52 as the terminal fallback.
+    NativeHostThenTerminal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TerminalClipboardContext {
+    endpoint: ClipboardEndpoint,
+    in_tmux: bool,
+}
+
+impl TerminalClipboardContext {
+    fn detect() -> Self {
+        let ssh_client = std::env::var_os("SSH_CLIENT");
+        let ssh_connection = std::env::var_os("SSH_CONNECTION");
+        let ssh_tty = std::env::var_os("SSH_TTY");
+        let display = std::env::var_os("DISPLAY");
+        let wayland_display = std::env::var_os("WAYLAND_DISPLAY");
+        let ssh_clipboard = std::env::var_os("GHOSTY_SSH_CLIPBOARD");
+        let tmux = std::env::var_os("TMUX");
+        Self::from_env_values(
+            ssh_client.as_deref(),
+            ssh_connection.as_deref(),
+            ssh_tty.as_deref(),
+            display.as_deref(),
+            wayland_display.as_deref(),
+            ssh_clipboard.as_deref(),
+            tmux.as_deref(),
+        )
+    }
+
+    fn from_env_values(
+        ssh_client: Option<&OsStr>,
+        ssh_connection: Option<&OsStr>,
+        ssh_tty: Option<&OsStr>,
+        display: Option<&OsStr>,
+        wayland_display: Option<&OsStr>,
+        ssh_clipboard: Option<&OsStr>,
+        tmux: Option<&OsStr>,
+    ) -> Self {
+        let in_ssh_session = [ssh_client, ssh_connection, ssh_tty]
+            .into_iter()
+            .flatten()
+            .any(|value| !value.is_empty());
+        let has_graphical_display = [display, wayland_display]
+            .into_iter()
+            .flatten()
+            .any(|value| !value.is_empty());
+        let forwarded_x11 = display.and_then(OsStr::to_str).is_some_and(|value| {
+            ["localhost:", "127.0.0.1:", "[::1]:", "::1:"]
+                .iter()
+                .any(|prefix| value.starts_with(prefix))
+        });
+        let use_graphical_display = match ssh_clipboard.and_then(OsStr::to_str) {
+            Some("graphical") => has_graphical_display,
+            Some("terminal") => false,
+            _ => forwarded_x11,
+        };
+
+        Self {
+            // OpenSSH normally exports SSH_CLIENT and SSH_CONNECTION.
+            // SSH_TTY is an additional PTY-only marker and is independently
+            // sufficient when wrappers preserve it without the other two.
+            endpoint: match (in_ssh_session, use_graphical_display) {
+                (false, _) => ClipboardEndpoint::NativeHost,
+                (true, true) => ClipboardEndpoint::ForwardedDisplay,
+                (true, false) => ClipboardEndpoint::TerminalClient,
+            },
+            in_tmux: tmux.is_some_and(|value| !value.is_empty()),
+        }
+    }
+
+    fn write_order(self) -> ClipboardWriteOrder {
+        if self.endpoint == ClipboardEndpoint::TerminalClient {
+            ClipboardWriteOrder::TerminalClientOnly
+        } else {
+            ClipboardWriteOrder::NativeHostThenTerminal
+        }
+    }
+
+    fn permits_native_read(self) -> bool {
+        self.endpoint != ClipboardEndpoint::TerminalClient
+    }
+
+    fn requires_terminal_paste(self) -> bool {
+        self.endpoint == ClipboardEndpoint::TerminalClient
+    }
+}
 
 // === Types ===
 
@@ -53,17 +176,106 @@ impl PastedImage {
 }
 
 /// Clipboard payloads supported by the TUI.
+#[cfg_attr(
+    all(
+        any(target_env = "ohos", target_os = "android", target_os = "netbsd"),
+        not(test)
+    ),
+    allow(dead_code)
+)]
 pub enum ClipboardContent {
     Text(String),
     Image(PastedImage),
 }
 
+struct TerminalClipboardWriteRequest {
+    text: String,
+    in_tmux: bool,
+}
+
+type TerminalClipboardWriteCompletion = std::result::Result<(), String>;
+
+/// Serializes terminal-client clipboard writes on a bounded background lane.
+///
+/// OSC 52 ultimately writes to the terminal output stream, which can block
+/// indefinitely under backpressure. tmux transport can likewise wait on a
+/// stalled server. Keeping both operations on this worker means copy actions
+/// never park the TUI input/render loop, while the single request slot bounds
+/// memory and preserves copy order.
+struct TerminalClipboardWriter {
+    request_tx: std::sync::mpsc::SyncSender<TerminalClipboardWriteRequest>,
+    completion_rx: std::sync::mpsc::Receiver<TerminalClipboardWriteCompletion>,
+}
+
+impl TerminalClipboardWriter {
+    #[cfg(not(test))]
+    fn spawn() -> Result<Self> {
+        Self::spawn_with(|request| write_text_to_terminal_client(&request.text, request.in_tmux))
+    }
+
+    fn spawn_with<F>(write: F) -> Result<Self>
+    where
+        F: Fn(TerminalClipboardWriteRequest) -> Result<()> + Send + 'static,
+    {
+        let (request_tx, request_rx) = std::sync::mpsc::sync_channel(1);
+        let (completion_tx, completion_rx) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("terminal-clipboard-writer".to_string())
+            .spawn(move || {
+                while let Ok(request) = request_rx.recv() {
+                    let completion = write(request).map_err(|err| format!("{err:#}"));
+                    if completion_tx.send(completion).is_err() {
+                        break;
+                    }
+                }
+            })
+            .context("spawn terminal clipboard writer")?;
+        Ok(Self {
+            request_tx,
+            completion_rx,
+        })
+    }
+
+    fn enqueue(&self, text: &str, in_tmux: bool) -> Result<()> {
+        let request = TerminalClipboardWriteRequest {
+            text: text.to_string(),
+            in_tmux,
+        };
+        self.request_tx.try_send(request).map_err(|err| match err {
+            std::sync::mpsc::TrySendError::Full(_) => {
+                anyhow::anyhow!("another terminal clipboard write is still queued")
+            }
+            std::sync::mpsc::TrySendError::Disconnected(_) => {
+                anyhow::anyhow!("terminal clipboard writer stopped")
+            }
+        })
+    }
+
+    fn poll_completion(&self) -> Option<TerminalClipboardWriteCompletion> {
+        self.completion_rx.try_recv().ok()
+    }
+}
+
 /// Clipboard reader/writer helper.
 pub struct ClipboardHandler {
+    terminal_context: TerminalClipboardContext,
+    terminal_writer: Option<TerminalClipboardWriter>,
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     clipboard: Option<Clipboard>,
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     clipboard_init_attempted: bool,
     #[cfg(test)]
     written_text: Vec<String>,
+    #[cfg(test)]
+    fail_text_writes: bool,
 }
 
 impl ClipboardHandler {
@@ -73,12 +285,58 @@ impl ClipboardHandler {
     /// (`ensure_clipboard`) so that startup on hosts without an X11/Wayland
     /// server (headless, WSL2) never blocks the TUI event loop.
     pub fn new() -> Self {
+        Self::with_terminal_context(TerminalClipboardContext::detect())
+    }
+
+    fn with_terminal_context(terminal_context: TerminalClipboardContext) -> Self {
         Self {
+            terminal_context,
+            terminal_writer: None,
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "windows",
+                all(target_os = "linux", not(target_env = "ohos"))
+            ))]
             clipboard: None,
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "windows",
+                all(target_os = "linux", not(target_env = "ohos"))
+            ))]
             clipboard_init_attempted: false,
             #[cfg(test)]
             written_text: Vec::new(),
+            #[cfg(test)]
+            fail_text_writes: false,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test(in_ssh_session: bool, in_tmux: bool) -> Self {
+        Self::with_terminal_context(TerminalClipboardContext {
+            endpoint: if in_ssh_session {
+                ClipboardEndpoint::TerminalClient
+            } else {
+                ClipboardEndpoint::NativeHost
+            },
+            in_tmux,
+        })
+    }
+
+    /// Construct a deterministic unavailable clipboard for command tests.
+    #[cfg(test)]
+    pub(crate) fn unavailable_for_test(in_ssh_session: bool) -> Self {
+        let mut handler = Self::for_test(in_ssh_session, false);
+        handler.fail_text_writes = true;
+        handler
+    }
+
+    /// SSH without a forwarded graphical display cannot synchronously read
+    /// the terminal client's clipboard. Paste must be initiated by the local
+    /// terminal so it arrives as bracketed paste (or a raw paste burst on
+    /// older terminals).
+    pub(crate) fn requires_terminal_paste(&self) -> bool {
+        self.terminal_context.requires_terminal_paste()
     }
 
     /// Try to connect to the system clipboard, bounded by a short timeout.
@@ -89,6 +347,11 @@ impl ClipboardHandler {
     /// temporary thread and give it 500 ms; if it doesn't return in time the
     /// handler stays in fallback/no-op mode and `read`/`write_text` fall
     /// through to their OSC 52 and pbcopy/powershell fallbacks.
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     fn ensure_clipboard(&mut self) {
         if self.clipboard_init_attempted {
             return;
@@ -110,46 +373,85 @@ impl ClipboardHandler {
     /// `workspace` is used as a fallback location when `~/.ghosty/` cannot
     /// be resolved (e.g. running with a stripped HOME in CI sandboxes).
     pub fn read(&mut self, workspace: &Path) -> Option<ClipboardContent> {
-        #[cfg(all(target_os = "linux", not(test)))]
+        // With no display exported over SSH there is no synchronously readable
+        // clipboard endpoint. A forwarded X11/Wayland display is explicit and
+        // remains readable, including its image clipboard.
+        if !self.terminal_context.permits_native_read() {
+            return None;
+        }
+
+        #[cfg(all(target_os = "linux", not(target_env = "ohos"), not(test)))]
         if let Ok(text) = read_text_with_wlpaste() {
             return Some(ClipboardContent::Text(text));
         }
 
-        self.ensure_clipboard();
-        let clipboard = self.clipboard.as_mut()?;
-        if let Ok(text) = clipboard.get_text() {
-            return Some(ClipboardContent::Text(text));
-        }
-
-        if let Ok(image) = clipboard.get_image()
-            && let Ok(pasted) = save_image_as_png(workspace, &image)
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "windows",
+            all(target_os = "linux", not(target_env = "ohos"))
+        ))]
         {
-            return Some(ClipboardContent::Image(pasted));
+            self.ensure_clipboard();
+            let clipboard = self.clipboard.as_mut()?;
+            if let Ok(text) = clipboard.get_text() {
+                return Some(ClipboardContent::Text(text));
+            }
+
+            if let Ok(image) = clipboard.get_image()
+                && let Ok(pasted) = save_image_as_png(workspace, &image)
+            {
+                return Some(ClipboardContent::Image(pasted));
+            }
         }
 
+        let _ = workspace;
         None
     }
 
-    /// Write text to the clipboard (no-op if unavailable).
+    /// Write text to the clipboard.
+    ///
+    /// Native clipboard transports complete before this method returns. OSC 52
+    /// and tmux terminal-client writes are validated and admitted to a bounded
+    /// background worker; asynchronous transport failures are exposed through
+    /// [`Self::poll_write_completion`].
     pub fn write_text(&mut self, text: &str) -> Result<()> {
         #[cfg(test)]
         {
+            if let Some(writer) = self.terminal_writer.as_ref() {
+                return writer.enqueue(text, self.terminal_context.in_tmux);
+            }
+            if self.fail_text_writes {
+                bail!("test clipboard unavailable");
+            }
             self.written_text.push(text.to_string());
             Ok(())
         }
 
         #[cfg(not(test))]
         {
-            #[cfg(target_os = "linux")]
+            if self.terminal_context.write_order() == ClipboardWriteOrder::TerminalClientOnly {
+                return self
+                    .enqueue_terminal_write(text)
+                    .map_err(|err| anyhow::anyhow!("Clipboard unavailable: {err}"));
+            }
+
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             if write_text_with_wlcopy(text).is_ok() {
                 return Ok(());
             }
 
-            self.ensure_clipboard();
-            if let Some(clipboard) = self.clipboard.as_mut()
-                && clipboard.set_text(text.to_string()).is_ok()
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "windows",
+                all(target_os = "linux", not(target_env = "ohos"))
+            ))]
             {
-                return Ok(());
+                self.ensure_clipboard();
+                if let Some(clipboard) = self.clipboard.as_mut()
+                    && clipboard.set_text(text.to_string()).is_ok()
+                {
+                    return Ok(());
+                }
             }
 
             #[cfg(target_os = "macos")]
@@ -162,9 +464,40 @@ impl ClipboardHandler {
                 return Ok(());
             }
 
-            write_text_with_osc52(text)
+            self.enqueue_terminal_write(text)
                 .map_err(|err| anyhow::anyhow!("Clipboard unavailable: {err}"))
         }
+    }
+
+    #[cfg(not(test))]
+    fn enqueue_terminal_write(&mut self, text: &str) -> Result<()> {
+        if !self.terminal_context.in_tmux {
+            if text.len() > OSC52_MAX_BYTES {
+                bail!("selection is too large for OSC 52 clipboard fallback");
+            }
+            if !io::stdout().is_terminal() {
+                bail!("OSC 52 clipboard fallback requires a terminal");
+            }
+        }
+
+        if self.terminal_writer.is_none() {
+            self.terminal_writer = Some(TerminalClipboardWriter::spawn()?);
+        }
+        self.terminal_writer
+            .as_ref()
+            .expect("terminal clipboard writer initialized")
+            .enqueue(text, self.terminal_context.in_tmux)
+    }
+
+    /// Return one completed background terminal clipboard write, if available.
+    ///
+    /// Successes are intentionally quiet because callers already show their
+    /// normal copy receipt. Failures are drained by the event loop and replace
+    /// that optimistic receipt with an actionable error.
+    pub(crate) fn poll_write_completion(&self) -> Option<TerminalClipboardWriteCompletion> {
+        self.terminal_writer
+            .as_ref()
+            .and_then(TerminalClipboardWriter::poll_completion)
     }
 
     #[cfg(test)]
@@ -215,17 +548,17 @@ fn write_text_with_stdin_command(
     Ok(())
 }
 
-#[cfg(all(target_os = "linux", not(test)))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), not(test)))]
 fn write_text_with_wlcopy(text: &str) -> Result<()> {
     write_text_with_wlcopy_using_argv("wl-copy", text)
 }
 
-#[cfg(all(target_os = "linux", not(test)))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), not(test)))]
 fn read_text_with_wlpaste() -> Result<String> {
     read_text_with_wlpaste_using_argv("wl-paste")
 }
 
-#[cfg(any(all(test, unix), target_os = "linux"))]
+#[cfg(any(all(test, unix), all(target_os = "linux", not(target_env = "ohos"))))]
 fn read_text_with_wlpaste_using_argv(program: &str) -> Result<String> {
     let output = Command::new(program)
         .arg("--no-newline")
@@ -241,7 +574,7 @@ fn read_text_with_wlpaste_using_argv(program: &str) -> Result<String> {
     String::from_utf8(output.stdout).context("wl-paste returned non-UTF-8 text")
 }
 
-#[cfg(all(target_os = "linux", not(test)))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), not(test)))]
 fn write_text_with_wlcopy_using_argv(program: &str, text: &str) -> Result<()> {
     let mut child = Command::new(program)
         .stdin(Stdio::piped())
@@ -265,31 +598,81 @@ fn write_text_with_wlcopy_using_argv(program: &str, text: &str) -> Result<()> {
 }
 
 #[cfg(not(test))]
+fn write_text_to_terminal_client(text: &str, in_tmux: bool) -> Result<()> {
+    if in_tmux {
+        return write_text_with_tmux(text);
+    }
+    write_text_with_osc52(text)
+}
+
+#[cfg(not(test))]
+fn write_text_with_tmux(text: &str) -> Result<()> {
+    write_text_with_tmux_using_argv("tmux", &[], text)
+}
+
+/// Ask tmux to set both its paste buffer and the attached client's clipboard.
+/// Unlike DCS passthrough, `load-buffer -w` works with tmux's default
+/// `allow-passthrough off` policy and returns a non-zero status when tmux
+/// cannot honor the command.
+#[cfg(any(not(test), all(test, unix)))]
+fn write_text_with_tmux_using_argv(program: &str, prefix_args: &[&str], text: &str) -> Result<()> {
+    let mut child = Command::new(program)
+        .args(prefix_args)
+        .args(["load-buffer", "-w", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to run tmux load-buffer -w: {e}"))?;
+
+    let write_result = child
+        .stdin
+        .take()
+        .context("open tmux clipboard input")
+        .and_then(|mut stdin| {
+            stdin
+                .write_all(text.as_bytes())
+                .context("write tmux clipboard input")
+        });
+    let output = child
+        .wait_with_output()
+        .context("wait for tmux load-buffer -w")?;
+    write_result?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        let detail = detail.trim();
+        if detail.is_empty() {
+            bail!("tmux load-buffer -w exited with {}", output.status);
+        }
+        bail!(
+            "tmux load-buffer -w exited with {}: {detail}",
+            output.status
+        );
+    }
+    Ok(())
+}
+
+#[cfg(not(test))]
 fn write_text_with_osc52(text: &str) -> Result<()> {
     let mut stdout = io::stdout();
     if !stdout.is_terminal() {
         bail!("OSC 52 clipboard fallback requires a terminal");
     }
 
-    let in_tmux = std::env::var_os("TMUX").is_some();
-    let sequence = osc52_sequence(text, in_tmux)?;
+    let sequence = osc52_sequence(text)?;
     stdout
         .write_all(sequence.as_bytes())
         .context("write OSC 52 clipboard sequence")?;
     stdout.flush().context("flush OSC 52 clipboard sequence")
 }
 
-fn osc52_sequence(text: &str, in_tmux: bool) -> Result<String> {
+fn osc52_sequence(text: &str) -> Result<String> {
     if text.len() > OSC52_MAX_BYTES {
         bail!("selection is too large for OSC 52 clipboard fallback");
     }
 
     let encoded = base64::engine::general_purpose::STANDARD.encode(text.as_bytes());
-    let sequence = format!("\x1b]52;c;{encoded}\x07");
-    if in_tmux {
-        return Ok(format!("\x1bPtmux;\x1b{sequence}\x1b\\"));
-    }
-    Ok(sequence)
+    Ok(format!("\x1b]52;c;{encoded}\x07"))
 }
 
 /// Resolve the directory pasted images should land in. Prefers
@@ -297,7 +680,7 @@ fn osc52_sequence(text: &str, in_tmux: bool) -> Result<String> {
 /// matches the location described in user-facing docs; falls back to
 /// `<workspace>/clipboard-images/` if the home dir is unavailable.
 pub(crate) fn clipboard_images_dir(workspace: &Path) -> PathBuf {
-    let home = dirs::home_dir();
+    let home = crate::config::effective_home_dir();
     clipboard_images_dir_for_home(workspace, home.as_deref())
 }
 
@@ -308,76 +691,24 @@ fn clipboard_images_dir_for_home(workspace: &Path, home: Option<&Path>) -> PathB
     workspace.join("clipboard-images")
 }
 
-/// Interpret pasted text as a dropped image file and copy it somewhere
-/// durable.
-///
-/// Dragging a screenshot onto the terminal does not paste pixels — it pastes
-/// a *path*, often into `$TMPDIR` (`/var/folders/…/T/` on macOS), which the
-/// OS purges out from under us. Copying into `~/.ghosty/clipboard-images/`
-/// keeps the file readable for the rest of the session. Returns `None` when
-/// the text is not a single path to an existing image.
-pub fn dropped_image_from_text(workspace: &Path, text: &str) -> Option<PastedImage> {
-    let path = parse_dropped_path(text)?;
-    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
-    if !matches!(
-        ext.as_str(),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tif" | "tiff"
-    ) {
-        return None;
-    }
-    if !path.is_file() {
-        return None;
-    }
-
-    let dir = clipboard_images_dir(workspace);
-    std::fs::create_dir_all(&dir).ok()?;
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let stem = path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("dropped");
-    let destination = dir.join(format!("dropped-{timestamp}-{stem}.{ext}"));
-    std::fs::copy(&path, &destination).ok()?;
-
-    let byte_len = std::fs::metadata(&destination)
-        .map(|meta| meta.len() as usize)
-        .unwrap_or(0);
-    let (width, height) = image::image_dimensions(&destination).unwrap_or((0, 0));
-    Some(PastedImage {
-        path: destination,
-        width,
-        height,
-        byte_len,
-    })
-}
-
-/// Extract a filesystem path from dropped text: terminals wrap paths with
-/// spaces in quotes, backslash-escape them, or hand over a `file://` URL.
-fn parse_dropped_path(text: &str) -> Option<PathBuf> {
-    let trimmed = text.trim();
-    if trimmed.is_empty() || trimmed.contains('\n') {
-        return None;
-    }
-    let unquoted = trimmed.trim_matches('"').trim_matches('\'');
-    let unescaped = unquoted.replace("\\ ", " ");
-    let raw = unescaped
-        .strip_prefix("file://")
-        .map_or(unescaped.as_str(), |rest| rest);
-    let path = PathBuf::from(raw);
-    path.is_absolute().then_some(path)
-}
-
 /// Encode an RGBA `ImageData` from arboard as PNG and persist it. Returns
 /// the resulting path along with metadata used to render the paste hint.
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 fn save_image_as_png(workspace: &Path, image: &ImageData) -> Result<PastedImage> {
     save_image_as_png_in(&clipboard_images_dir(workspace), image)
 }
 
 /// Lower-level variant that writes into an explicit directory. Exposed so the
 /// unit tests don't have to scribble inside the user's real home directory.
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 fn save_image_as_png_in(dir: &Path, image: &ImageData) -> Result<PastedImage> {
     std::fs::create_dir_all(dir).context("create clipboard-images dir")?;
 
@@ -422,10 +753,104 @@ fn save_image_as_png_in(dir: &Path, image: &ImageData) -> Result<PastedImage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // ImageData from arboard is only available on these platforms.
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     use std::borrow::Cow;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
+    #[test]
+    fn terminal_clipboard_write_does_not_wait_for_slow_transport() {
+        let (transport_started_tx, transport_started_rx) = std::sync::mpsc::channel();
+        let (release_transport_tx, release_transport_rx) = std::sync::mpsc::channel();
+        let writer = TerminalClipboardWriter::spawn_with(move |request| {
+            assert_eq!(request.text, "copied");
+            assert!(!request.in_tmux);
+            transport_started_tx
+                .send(())
+                .expect("announce transport start");
+            release_transport_rx.recv().expect("release slow transport");
+            Ok(())
+        })
+        .expect("spawn clipboard writer");
+        let mut clipboard = ClipboardHandler::for_test(true, false);
+        clipboard.terminal_writer = Some(writer);
+
+        let (caller_returned_tx, caller_returned_rx) = std::sync::mpsc::channel();
+        let caller = std::thread::spawn(move || {
+            let result = clipboard.write_text("copied");
+            caller_returned_tx
+                .send((clipboard, result))
+                .expect("report caller completion");
+        });
+
+        let (clipboard, result) =
+            match caller_returned_rx.recv_timeout(std::time::Duration::from_millis(250)) {
+                Ok(value) => value,
+                Err(err) => {
+                    let _ = release_transport_tx.send(());
+                    caller.join().expect("join clipboard caller");
+                    panic!("clipboard caller waited for slow transport: {err}");
+                }
+            };
+        result.expect("queue clipboard write");
+        transport_started_rx
+            .recv_timeout(std::time::Duration::from_millis(250))
+            .expect("worker started transport");
+        assert!(
+            clipboard.poll_write_completion().is_none(),
+            "transport must remain pending until explicitly released"
+        );
+
+        release_transport_tx.send(()).expect("release transport");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            if let Some(completion) = clipboard.poll_write_completion() {
+                completion.expect("background clipboard completion");
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "background clipboard completion timed out"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        caller.join().expect("join clipboard caller");
+    }
+
+    #[test]
+    fn terminal_clipboard_write_reports_background_failure() {
+        let writer =
+            TerminalClipboardWriter::spawn_with(|_| bail!("terminal clipboard transport denied"))
+                .expect("spawn clipboard writer");
+        writer
+            .enqueue("copied", false)
+            .expect("queue clipboard write");
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            if let Some(completion) = writer.poll_completion() {
+                let err = completion.expect_err("transport should fail");
+                assert!(err.contains("transport denied"), "{err}");
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "background clipboard failure timed out"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     fn solid_rgba(width: u16, height: u16, rgba: [u8; 4]) -> ImageData<'static> {
         let mut bytes = Vec::with_capacity((width as usize) * (height as usize) * 4);
         for _ in 0..(width as usize * height as usize) {
@@ -439,6 +864,11 @@ mod tests {
     }
 
     #[test]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     fn save_image_as_png_writes_valid_png() {
         let dir = tempfile::tempdir().unwrap();
         let img = solid_rgba(8, 4, [255, 0, 0, 255]);
@@ -492,24 +922,334 @@ mod tests {
     }
 
     #[test]
-    fn osc52_sequence_encodes_text_clipboard_write() {
-        let sequence = osc52_sequence("hello", false).expect("sequence");
-        assert_eq!(sequence, "\x1b]52;c;aGVsbG8=\x07");
+    fn ssh_detection_covers_openssh_markers_and_ignores_empty_values() {
+        let client = TerminalClipboardContext::from_env_values(
+            Some(OsStr::new("192.0.2.10 51234 22")),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let connection = TerminalClipboardContext::from_env_values(
+            None,
+            Some(OsStr::new("192.0.2.10 51234 192.0.2.20 22")),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let tty = TerminalClipboardContext::from_env_values(
+            None,
+            None,
+            Some(OsStr::new("/dev/pts/4")),
+            None,
+            None,
+            None,
+            None,
+        );
+        let empty = TerminalClipboardContext::from_env_values(
+            Some(OsStr::new("")),
+            Some(OsStr::new("")),
+            Some(OsStr::new("")),
+            Some(OsStr::new("")),
+            Some(OsStr::new("")),
+            Some(OsStr::new("")),
+            Some(OsStr::new("")),
+        );
+
+        assert_eq!(client.endpoint, ClipboardEndpoint::TerminalClient);
+        assert_eq!(connection.endpoint, ClipboardEndpoint::TerminalClient);
+        assert_eq!(tty.endpoint, ClipboardEndpoint::TerminalClient);
+        assert_eq!(empty.endpoint, ClipboardEndpoint::NativeHost);
+        assert!(!empty.in_tmux);
     }
 
     #[test]
-    fn osc52_sequence_wraps_for_tmux_passthrough() {
-        let sequence = osc52_sequence("copy", true).expect("sequence");
-        assert_eq!(sequence, "\x1bPtmux;\x1b\x1b]52;c;Y29weQ==\x07\x1b\\");
+    fn ssh_without_display_targets_terminal_client() {
+        let remote_tmux = TerminalClipboardContext::from_env_values(
+            Some(OsStr::new("192.0.2.10 51234 22")),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(OsStr::new("/tmp/tmux-1000/default,1,0")),
+        );
+        let local =
+            TerminalClipboardContext::from_env_values(None, None, None, None, None, None, None);
+
+        assert_eq!(
+            remote_tmux.write_order(),
+            ClipboardWriteOrder::TerminalClientOnly
+        );
+        assert!(!remote_tmux.permits_native_read());
+        assert!(remote_tmux.requires_terminal_paste());
+        assert!(remote_tmux.in_tmux);
+        assert_eq!(
+            local.write_order(),
+            ClipboardWriteOrder::NativeHostThenTerminal
+        );
+        assert!(local.permits_native_read());
+        assert!(!local.requires_terminal_paste());
+    }
+
+    #[test]
+    fn ssh_uses_forwarded_x11_or_explicit_graphical_clipboard_endpoint() {
+        let x11 = TerminalClipboardContext::from_env_values(
+            None,
+            Some(OsStr::new("192.0.2.10 51234 192.0.2.20 22")),
+            None,
+            Some(OsStr::new("localhost:10.0")),
+            None,
+            None,
+            None,
+        );
+        let wayland = TerminalClipboardContext::from_env_values(
+            Some(OsStr::new("192.0.2.10 51234 22")),
+            None,
+            None,
+            None,
+            Some(OsStr::new("wayland-1")),
+            Some(OsStr::new("graphical")),
+            None,
+        );
+
+        for context in [x11, wayland] {
+            assert_eq!(context.endpoint, ClipboardEndpoint::ForwardedDisplay);
+            assert_eq!(
+                context.write_order(),
+                ClipboardWriteOrder::NativeHostThenTerminal
+            );
+            assert!(context.permits_native_read());
+            assert!(!context.requires_terminal_paste());
+        }
+
+        let ambient_remote = TerminalClipboardContext::from_env_values(
+            Some(OsStr::new("192.0.2.10 51234 22")),
+            None,
+            None,
+            Some(OsStr::new(":0")),
+            Some(OsStr::new("wayland-0")),
+            None,
+            None,
+        );
+        assert_eq!(ambient_remote.endpoint, ClipboardEndpoint::TerminalClient);
+
+        let forced_terminal = TerminalClipboardContext::from_env_values(
+            Some(OsStr::new("192.0.2.10 51234 22")),
+            None,
+            None,
+            Some(OsStr::new("localhost:10.0")),
+            None,
+            Some(OsStr::new("terminal")),
+            None,
+        );
+        assert_eq!(forced_terminal.endpoint, ClipboardEndpoint::TerminalClient);
+    }
+
+    #[test]
+    fn osc52_sequence_encodes_text_clipboard_write() {
+        let sequence = osc52_sequence("hello").expect("sequence");
+        assert_eq!(sequence, "\x1b]52;c;aGVsbG8=\x07");
     }
 
     #[test]
     fn osc52_sequence_rejects_oversized_selection() {
         let text = "x".repeat(OSC52_MAX_BYTES + 1);
-        let err = osc52_sequence(&text, false).expect_err("oversized should fail");
+        let err = osc52_sequence(&text).expect_err("oversized should fail");
         assert!(
             err.to_string().contains("too large"),
             "unexpected error: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tmux_helper_reports_command_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("tmux");
+        std::fs::write(
+            &script,
+            r#"#!/bin/sh
+cat >/dev/null
+echo 'clipboard denied' >&2
+exit 42
+"#,
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let err = write_text_with_tmux_using_argv(script.to_str().unwrap(), &[], "copy")
+            .expect_err("non-zero tmux status should fail");
+
+        assert!(err.to_string().contains("exited with"));
+        assert!(err.to_string().contains("clipboard denied"));
+    }
+
+    #[cfg(all(unix, not(target_env = "ohos")))]
+    #[test]
+    fn tmux_load_buffer_w_reaches_attached_client_with_default_passthrough_disabled() {
+        use std::io::Read as _;
+
+        let version = match Command::new("tmux").arg("-V").output() {
+            Ok(output) if output.status.success() => output,
+            _ => return,
+        };
+        assert!(
+            String::from_utf8_lossy(&version.stdout).starts_with("tmux "),
+            "unexpected tmux version output"
+        );
+
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let socket = format!("ghosty-clipboard-{}-{nonce}", std::process::id());
+
+        struct TmuxServer(String);
+        impl Drop for TmuxServer {
+            fn drop(&mut self) {
+                let _ = Command::new("tmux")
+                    .args(["-L", self.0.as_str(), "kill-server"])
+                    .status();
+            }
+        }
+        let server = TmuxServer(socket);
+        let started = Command::new("tmux")
+            .args([
+                "-L",
+                server.0.as_str(),
+                "-f",
+                "/dev/null",
+                "new-session",
+                "-d",
+            ])
+            .status()
+            .expect("start isolated tmux server");
+        assert!(started.success(), "isolated tmux server should start");
+
+        let option = |name: &str| {
+            let output = Command::new("tmux")
+                .args(["-L", server.0.as_str(), "show-options", "-gv", name])
+                .output()
+                .expect("read tmux option");
+            assert!(output.status.success(), "read tmux option {name}");
+            String::from_utf8(output.stdout)
+                .expect("tmux option should be utf-8")
+                .trim()
+                .to_string()
+        };
+        assert_eq!(option("allow-passthrough"), "off");
+        assert_eq!(option("set-clipboard"), "external");
+
+        let pty_system = portable_pty::native_pty_system();
+        let pair = pty_system
+            .openpty(portable_pty::PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("open attached-client PTY");
+        let mut attach = portable_pty::CommandBuilder::new("tmux");
+        for arg in ["-L", server.0.as_str(), "attach-session", "-t", "0"] {
+            attach.arg(arg);
+        }
+        attach.env("TERM", "xterm-256color");
+        let mut attached_client = pair
+            .slave
+            .spawn_command(attach)
+            .expect("attach tmux client to PTY");
+        drop(pair.slave);
+
+        let mut reader = pair
+            .master
+            .try_clone_reader()
+            .expect("clone attached-client PTY reader");
+        let (output_tx, output_rx) = std::sync::mpsc::channel();
+        let reader_thread = std::thread::spawn(move || {
+            let mut chunk = [0_u8; 4096];
+            loop {
+                match reader.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(len) => {
+                        if output_tx.send(chunk[..len].to_vec()).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        let attach_deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            let clients = Command::new("tmux")
+                .args(["-L", server.0.as_str(), "list-clients"])
+                .output()
+                .expect("list attached tmux clients");
+            if clients.status.success() && !clients.stdout.is_empty() {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < attach_deadline,
+                "tmux client did not attach to the test PTY"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        while output_rx.try_recv().is_ok() {}
+
+        let copied_text = "copy through default tmux";
+        write_text_with_tmux_using_argv("tmux", &["-L", server.0.as_str()], copied_text)
+            .expect("tmux-native clipboard request");
+
+        let encoded = base64::engine::general_purpose::STANDARD.encode(copied_text.as_bytes());
+        let expected_receipts = [
+            format!("\x1b]52;;{encoded}\x07").into_bytes(),
+            format!("\x1b]52;c;{encoded}\x07").into_bytes(),
+            format!("\x1b]52;;{encoded}\x1b\\").into_bytes(),
+            format!("\x1b]52;c;{encoded}\x1b\\").into_bytes(),
+        ];
+        let receipt_deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let mut attached_output = Vec::new();
+        let receipt_received = loop {
+            if expected_receipts.iter().any(|receipt| {
+                attached_output
+                    .windows(receipt.len())
+                    .any(|window| window == receipt)
+            }) {
+                break true;
+            }
+            if std::time::Instant::now() >= receipt_deadline {
+                break false;
+            }
+            match output_rx.recv_timeout(std::time::Duration::from_millis(50)) {
+                Ok(bytes) => attached_output.extend_from_slice(&bytes),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break false,
+            }
+        };
+
+        let buffer = Command::new("tmux")
+            .args(["-L", server.0.as_str(), "show-buffer"])
+            .output()
+            .expect("read tmux buffer");
+        assert!(buffer.status.success(), "tmux buffer should be readable");
+        assert_eq!(buffer.stdout, copied_text.as_bytes());
+
+        let _ = attached_client.kill();
+        let _ = attached_client.wait();
+        drop(pair.master);
+        drop(output_rx);
+        let _ = reader_thread.join();
+
+        assert!(
+            receipt_received,
+            "attached tmux client did not receive the OSC 52 clipboard request: {attached_output:?}"
         );
     }
 

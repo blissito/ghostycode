@@ -21,19 +21,14 @@
 //! `AppendLog` / `TurnScratch` / `ThreeZoneRequest` are type scaffolding
 //! for future phases — not yet wired into the request path.
 
+use crate::models::Role;
 use crate::models::{Message, SystemPrompt, Tool};
-use sha2::{Digest, Sha256};
-
 // ── helpers ────────────────────────────────────────────────────────────
 
-#[allow(dead_code)]
 fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    crate::hashing::sha256_hex(bytes)
 }
 
-#[allow(dead_code)]
 fn system_text(system: Option<&SystemPrompt>) -> String {
     match system {
         Some(SystemPrompt::Text(text)) => text.clone(),
@@ -50,7 +45,6 @@ fn system_text(system: Option<&SystemPrompt>) -> String {
 }
 
 /// Serialize tools to a deterministic, sorted JSON string for hashing.
-#[allow(dead_code)]
 fn tool_catalog_digest(tools: &[Tool]) -> String {
     let mut serialized: Vec<String> = tools
         .iter()
@@ -60,7 +54,6 @@ fn tool_catalog_digest(tools: &[Tool]) -> String {
     serialized.join("\n")
 }
 
-#[allow(dead_code)]
 fn combined_hash(system_text: &str, tools: &[Tool]) -> String {
     let system_sha = sha256_hex(system_text.as_bytes());
     let tools_digest = tool_catalog_digest(tools);
@@ -77,14 +70,12 @@ fn combined_hash(system_text: &str, tools: &[Tool]) -> String {
 ///
 /// Use [`PinnedPrefix::freeze`] to produce one.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
 pub struct FrozenPrefix {
     pub(crate) system_text: String,
     pub(crate) tool_catalog: String,
     pub(crate) combined_sha256: String,
 }
 
-#[allow(dead_code)]
 impl FrozenPrefix {
     /// Verify that `current_system_text` and `current_tools` match the frozen
     /// prefix. Returns `Ok(())` when stable, `Err(PrefixDrift)` on mismatch.
@@ -134,13 +125,11 @@ impl FrozenPrefix {
 /// A mutable prefix builder. Construct from the system prompt and tool
 /// catalog, then call [`freeze`](Self::freeze) to produce a [`FrozenPrefix`].
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct PinnedPrefix {
     system_text: String,
     tools: Vec<Tool>,
 }
 
-#[allow(dead_code)]
 impl PinnedPrefix {
     #[must_use]
     pub fn new(system: Option<&SystemPrompt>, tools: Vec<Tool>) -> Self {
@@ -168,7 +157,6 @@ impl PinnedPrefix {
 
 /// Describes how the current prefix differs from the frozen baseline.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
 pub struct PrefixDrift {
     pub system_changed: bool,
     pub tools_changed: bool,
@@ -195,16 +183,17 @@ impl std::fmt::Display for PrefixDrift {
 
 // ── AppendLog ──────────────────────────────────────────────────────────
 
-/// Append-only conversation history. Only exposes `push`-style mutations.
+/// Append-only conversation history. Derefs to `&[Message]` via
+/// [`Deref`](std::ops::Deref) for transparent read access; mutations go
+/// through explicit methods (`push`, `truncate_to`, `trim_front`, `clear`)
+/// whose names make cache impact obvious.
 ///
-/// **Phase 1 scaffolding** — not yet wired into the engine request path.
-#[allow(dead_code)]
+/// Phase 4: backing store for `Session.messages` (#2264).
 #[derive(Debug, Clone)]
 pub struct AppendLog {
     messages: Vec<Message>,
 }
 
-#[allow(dead_code)]
 impl AppendLog {
     pub fn new() -> Self {
         Self {
@@ -216,27 +205,53 @@ impl AppendLog {
         Self { messages }
     }
 
+    /// Append a message to the log. A single-message push is the cheapest
+    /// mutation for prefix-cache stability — it extends the byte sequence
+    /// without disturbing earlier turns.
     pub fn push(&mut self, message: Message) {
         self.messages.push(message);
     }
 
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.messages.len()
+    /// Append multiple messages in one operation (fewer cache-line
+    /// invalidations than repeated `push`).
+    pub fn push_batch(&mut self, batch: Vec<Message>) {
+        self.messages.extend(batch);
     }
 
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.messages.is_empty()
+    /// Truncate to keep only the first `new_len` messages.
+    /// Discards newer messages (and their prefix-cache contribution)
+    /// from the tail.
+    pub fn truncate_to(&mut self, new_len: usize) {
+        self.messages.truncate(new_len);
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Message> {
-        self.messages.iter()
+    /// Remove `count` messages from the front (oldest first).
+    /// Cache-destroying: drops the prefix that earlier turns share.
+    pub fn trim_front(&mut self, count: usize) {
+        if count >= self.messages.len() {
+            self.messages.clear();
+        } else {
+            self.messages.drain(0..count);
+        }
     }
 
+    /// Remove all messages. Resets cache state completely.
+    pub fn clear(&mut self) {
+        self.messages.clear();
+    }
+
+    /// Return a mutable reference to the last message, if any.
+    /// Prefer this over `last_mut()` on the inner vec — the name signals
+    /// that only the most recent turn's content is being modified.
     #[must_use]
-    pub fn as_slice(&self) -> &[Message] {
-        &self.messages
+    pub fn last_mut(&mut self) -> Option<&mut Message> {
+        self.messages.last_mut()
+    }
+
+    /// Consume and return the inner `Vec<Message>`.
+    #[must_use]
+    pub fn into_inner(self) -> Vec<Message> {
+        self.messages
     }
 }
 
@@ -246,19 +261,39 @@ impl Default for AppendLog {
     }
 }
 
+impl From<Vec<Message>> for AppendLog {
+    fn from(messages: Vec<Message>) -> Self {
+        Self { messages }
+    }
+}
+
+impl From<AppendLog> for Vec<Message> {
+    fn from(log: AppendLog) -> Self {
+        log.messages
+    }
+}
+
+impl std::ops::Deref for AppendLog {
+    type Target = Vec<Message>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.messages
+    }
+}
+
 // ── TurnScratch ────────────────────────────────────────────────────────
 
 /// Per-turn ephemeral data. Cleared at every turn boundary.
 ///
 /// **Phase 1 scaffolding** — not yet wired into the engine request path.
-#[allow(dead_code)]
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Default)]
 pub struct TurnScratch {
     pub working_set: Vec<String>,
     pub user_message: Option<Message>,
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(test), allow(dead_code))]
 impl TurnScratch {
     pub fn new() -> Self {
         Self::default()
@@ -280,8 +315,8 @@ impl TurnScratch {
 /// A composed three-zone request ready for DeepSeek API serialization.
 ///
 /// **Phase 1 scaffolding** — not yet wired into the engine request path.
-/// Currently the engine continues to use [`MessageRequest`] directly.
-#[allow(dead_code)]
+/// Currently the engine continues to use `MessageRequest` directly.
+#[expect(dead_code)]
 #[derive(Debug, Clone)]
 pub struct ThreeZoneRequest<'a> {
     pub prefix: &'a FrozenPrefix,
@@ -300,7 +335,7 @@ pub struct ThreeZoneRequest<'a> {
     pub metadata: Option<serde_json::Value>,
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(test), expect(dead_code))]
 impl<'a> ThreeZoneRequest<'a> {
     /// Build the full message list from system prompt, append-log messages,
     /// and scratch user message. The returned vector is serialized as the
@@ -312,7 +347,7 @@ impl<'a> ThreeZoneRequest<'a> {
         match self.system.as_ref() {
             Some(SystemPrompt::Text(text)) => {
                 messages.push(Message {
-                    role: "system".to_string(),
+                    role: Role::System,
                     content: vec![crate::models::ContentBlock::Text {
                         text: text.clone(),
                         cache_control: None,
@@ -328,7 +363,7 @@ impl<'a> ThreeZoneRequest<'a> {
                     })
                     .collect();
                 messages.push(Message {
-                    role: "system".to_string(),
+                    role: Role::System,
                     content,
                 });
             }
@@ -381,7 +416,7 @@ mod tests {
 
     fn make_message(role: &str, text: &str) -> Message {
         Message {
-            role: role.to_string(),
+            role: Role::from(role),
             content: vec![ContentBlock::Text {
                 text: text.to_string(),
                 cache_control: None,

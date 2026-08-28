@@ -13,13 +13,39 @@
  * Both surface as drafts in CURATED_KV under `draft:linkcheck:<...>` and
  * `draft:semantic-drift:<...>`, picked up by the existing /admin listing.
  */
-import { agentChat, saveDraft, type AgentDraft, type DeepSeekEnv, VOICE_CONSTRAINTS } from "./community-agent";
+import { agentChat, draftStorageKey, getDraft, saveDraft, type AgentDraft, type DeepSeekEnv, VOICE_CONSTRAINTS } from "./community-agent";
 
 interface KVNamespace {
   get(k: string): Promise<string | null>;
   put(k: string, v: string, o?: { expirationTtl?: number }): Promise<void>;
   list(o?: { prefix?: string; limit?: number }): Promise<{ keys: { name: string }[] }>;
   delete(k: string): Promise<void>;
+}
+
+// --- Canonical draft identities ---
+//
+// Watcher draft IDs are deterministic: a readable slug plus a ~64-bit
+// SHA-256 suffix over the finding's full identity, capped at 80 characters.
+// Re-running a watcher over an unchanged finding reproduces the same key (so
+// the open-draft dedup check skips it); any change to the finding's identity
+// produces a new key (so changed findings are drafted again instead of being
+// silently swallowed by a truncated-prefix collision).
+const WATCH_DRAFT_ID_MAX = 80;
+const WATCH_DRAFT_HASH_HEX = 16; // 64 bits of SHA-256
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function slugify(input: string): string {
+  return input.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
+}
+
+export async function watchDraftId(slugSource: string, identity: string): Promise<string> {
+  const hash = (await sha256Hex(identity)).slice(0, WATCH_DRAFT_HASH_HEX);
+  const slug = slugify(slugSource).slice(0, WATCH_DRAFT_ID_MAX - WATCH_DRAFT_HASH_HEX - 1);
+  return `${slug}-${hash}`;
 }
 
 interface WatchEnv {
@@ -52,8 +78,8 @@ const LINK_TARGETS: { url: string; label: string }[] = [
   { url: "https://github.com/blissito/ghostycode/blob/main/SECURITY.md", label: "Security policy" },
   { url: "https://github.com/blissito/ghostycode/blob/main/CONTRIBUTING.md", label: "Contributing guide" },
   { url: "https://github.com/blissito/ghostycode/blob/main/.github/PULL_REQUEST_TEMPLATE.md", label: "PR template" },
-  { url: "https://github.com/blissito/homebrew-deepseek-tui", label: "Homebrew tap" },
-  { url: "https://github.com/sponsors/blissito", label: "Support link (GitHub Sponsors)" },
+  { url: "https://github.com/blissito/homebrew-ghosty", label: "Homebrew tap" },
+  { url: "https://github.com/sponsors/Hmbown", label: "Support link (GitHub Sponsors)" },
   { url: "https://buymeacoffee.com/hmbown", label: "Support link (BMC)" },
   { url: "https://registry.npmjs.org/ghosty", label: "npm package (registry API)" },
   // crates.io intentionally not in this list — both their HTML and JSON API return 403 to
@@ -98,22 +124,23 @@ export async function runLinkCheck(env: WatchEnv): Promise<{ ok: boolean; checke
     results,
   }), { expirationTtl: 60 * 60 * 24 * 14 });
 
-  // Write drafts ONLY for new breakages — dedup by URL on the open-draft list.
+  // Write drafts ONLY for new breakages — dedup on the canonical draft key,
+  // derived from the full URL identity (the hash suffix keeps long URLs with
+  // identical slug prefixes distinct).
   for (const b of broken) {
-    const id = b.url.replace(/[^a-z0-9]+/gi, "-").slice(0, 80);
-    const key = `draft:linkcheck:${id}`;
-    const existing = await env.CURATED_KV.get(key);
-    if (existing) continue; // already flagged; don't churn
-
+    const id = await watchDraftId(b.url, `linkcheck\n${b.url}`);
     const draft: AgentDraft = {
       id,
-      type: "triage", // reuse existing draft type so /admin renders it
+      type: "linkcheck",
       targetUrl: b.url,
       bodyEn: `**Broken link** (auto-detected by daily watch cron)\n\n- Label: **${b.label}**\n- URL: ${b.url}\n- HTTP status: ${b.status}\n- Latency: ${b.ms}ms\n\nThis URL is referenced in ghosty.net copy. Update the source page or fix the destination.\n\n— drafted by community assistant, pending maintainer review`,
       bodyZh: `**链接失效**（每日巡检自动发现）\n\n- 名称：**${b.label}**\n- 地址：${b.url}\n- HTTP 状态：${b.status}\n- 延迟：${b.ms}ms\n\n该地址被 ghosty.net 文案引用，请更新源页面或修复目标。\n\n— 由社区助理草拟，待维护者审阅`,
       generatedAt: new Date().toISOString(),
       posted: false,
     };
+    const existing = await getDraft(env.CURATED_KV, draftStorageKey(draft));
+    if (existing) continue; // already flagged; don't churn
+
     await saveDraft(env.CURATED_KV, draft);
   }
 
@@ -122,7 +149,7 @@ export async function runLinkCheck(env: WatchEnv): Promise<{ ok: boolean; checke
 
 // --- Semantic drift ---
 
-const SEMANTIC_DRIFT_PROMPT = `You are reviewing copy on a community website (ghosty.net) for the open-source Ghosty Code project.
+const SEMANTIC_DRIFT_PROMPT = `You are reviewing copy on a community website (ghosty.net) for the open-source Ghosty project.
 
 Given:
 1. The CHANGELOG entries below (most recent first)
@@ -216,6 +243,41 @@ function stripHtmlForPrompt(input: string): string {
   return collapseWhitespace(out).slice(0, 8000);
 }
 
+// The model's drift list is untrusted input: bound it before any KV fanout so
+// a runaway or hostile response cannot flood the draft queue, and drop entries
+// whose shape does not match the prompt's contract.
+const MAX_DRIFT_DRAFTS_PER_RUN = 10;
+const DRIFT_FIELD_MAX = 2_000;
+const DRIFT_PAGES = new Set(["homepage", "docs", "install", "contribute", "roadmap"]);
+
+interface DriftFinding {
+  page: string;
+  claim: string;
+  evidence: string;
+  suggested_replacement: string;
+}
+
+function validateDriftFindings(raw: unknown): DriftFinding[] {
+  if (!Array.isArray(raw)) return [];
+  const findings: DriftFinding[] = [];
+  for (const entry of raw) {
+    if (findings.length >= MAX_DRIFT_DRAFTS_PER_RUN) break;
+    if (typeof entry !== "object" || entry === null) continue;
+    const { page, claim, evidence, suggested_replacement } = entry as Record<string, unknown>;
+    if (typeof page !== "string" || !DRIFT_PAGES.has(page)) continue;
+    if (typeof claim !== "string" || !claim.trim()) continue;
+    if (typeof evidence !== "string" || !evidence.trim()) continue;
+    if (typeof suggested_replacement !== "string" || !suggested_replacement.trim()) continue;
+    findings.push({
+      page,
+      claim: claim.slice(0, DRIFT_FIELD_MAX),
+      evidence: evidence.slice(0, DRIFT_FIELD_MAX),
+      suggested_replacement: suggested_replacement.slice(0, DRIFT_FIELD_MAX),
+    });
+  }
+  return findings;
+}
+
 export async function runSemanticDrift(env: WatchEnv): Promise<{ ok: boolean; drafted: number; reason?: string }> {
   if (!env.CURATED_KV || !env.DEEPSEEK_API_KEY) {
     return { ok: false, drafted: 0, reason: "missing CURATED_KV or DEEPSEEK_API_KEY" };
@@ -272,7 +334,7 @@ ${docsText}`;
   }
 
   // Extract JSON (jsonMode usually returns clean JSON, but defend against fences)
-  let parsed: { drifts?: { page: string; claim: string; evidence: string; suggested_replacement: string }[] };
+  let parsed: { drifts?: unknown };
   try {
     const trimmed = response.content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
     parsed = JSON.parse(trimmed);
@@ -280,24 +342,27 @@ ${docsText}`;
     return { ok: false, drafted: 0, reason: "LLM returned non-JSON" };
   }
 
-  const drifts = parsed.drifts ?? [];
+  const drifts = validateDriftFindings(parsed.drifts);
   let drafted = 0;
   for (const d of drifts) {
-    const id = `${d.page}-${d.claim.slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`.slice(0, 80);
-    const key = `draft:semantic-drift:${id}`;
-    const existing = await env.CURATED_KV.get(key);
-    if (existing) continue;
-
+    // Identity covers the full finding — page, claim, evidence, and
+    // replacement — so a re-run over an unchanged finding dedups, while a
+    // changed finding lands under a new key as a fresh draft.
+    const identity = [d.page, d.claim, d.evidence, d.suggested_replacement].join("\n");
+    const id = await watchDraftId(`${d.page}-${d.claim.slice(0, 40)}`, `semantic-drift\n${identity}`);
     const body = `Page: **${d.page}**\n\nClaim that may be drifted:\n> ${d.claim}\n\nEvidence:\n> ${d.evidence}\n\nSuggested replacement:\n> ${d.suggested_replacement}\n\n— drafted by community assistant, pending maintainer review`;
     const draft: AgentDraft = {
       id,
-      type: "triage",
+      type: "semantic-drift",
       targetUrl: `https://ghosty.net/en/${d.page === "homepage" ? "" : d.page}`,
       bodyEn: body,
       bodyZh: body,
       generatedAt: new Date().toISOString(),
       posted: false,
     };
+    const existing = await getDraft(env.CURATED_KV, draftStorageKey(draft));
+    if (existing) continue;
+
     await saveDraft(env.CURATED_KV, draft);
     drafted++;
   }

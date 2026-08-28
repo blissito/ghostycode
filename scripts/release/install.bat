@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
-:: Ghosty Code Windows installer
-:: Copies ghosty.exe and ghosty-tui.exe to %USERPROFILE%\bin
+:: GhostyCode Windows installer
+:: Copies ghosty.exe, ghosty-tui.exe, and ghosty.bat to %USERPROFILE%\bin (single binary, no ghosty-tui.exe)
 
 set "BIN_DIR=%USERPROFILE%\bin"
 set "SCRIPT_DIR=%~dp0"
@@ -22,8 +22,14 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
+copy /Y "%SCRIPT_DIR%ghosty.bat" "%BIN_DIR%\ghosty.bat" >nul
+if %ERRORLEVEL% neq 0 (
+    echo ERROR: Failed to copy ghosty.bat
+    exit /b 1
+)
+
 echo.
-echo Done. Both binaries installed to %BIN_DIR%.
+echo Done. Commands installed to %BIN_DIR%.
 echo.
 echo Add %BIN_DIR% to your PATH:
 echo   1. Open Start, search "environment variables"
@@ -36,3 +42,4 @@ echo Or run this in an admin PowerShell:
 echo   [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';%BIN_DIR%', 'User')
 echo.
 echo Then run: ghosty
+echo Double-click ghosty.bat (not ghosty.exe) to open Windows Terminal when it is installed.

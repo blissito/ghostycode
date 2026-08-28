@@ -41,7 +41,10 @@ pub enum TranscriptLineMeta {
         copy_prefix_width: usize,
         copy_separator_after: CopyLineSeparator,
     },
-    Spacer,
+    /// A block separator row inserted between two cells. Usually empty, but
+    /// separators inside a tool-card rail group carry the rail glyph so the
+    /// card box survives the gap — hence a copy prefix to strip.
+    Spacer { copy_prefix_width: usize },
 }
 
 impl TranscriptLineMeta {
@@ -54,7 +57,7 @@ impl TranscriptLineMeta {
                 line_in_cell,
                 ..
             } => Some((cell_index, line_in_cell)),
-            TranscriptLineMeta::Spacer => None,
+            TranscriptLineMeta::Spacer { .. } => None,
         }
     }
 
@@ -65,7 +68,7 @@ impl TranscriptLineMeta {
                 copy_separator_after,
                 ..
             } => copy_separator_after,
-            TranscriptLineMeta::Spacer => CopyLineSeparator::Newline,
+            TranscriptLineMeta::Spacer { .. } => CopyLineSeparator::Newline,
         }
     }
 
@@ -75,7 +78,7 @@ impl TranscriptLineMeta {
             TranscriptLineMeta::CellLine {
                 copy_prefix_width, ..
             } => copy_prefix_width,
-            TranscriptLineMeta::Spacer => 0,
+            TranscriptLineMeta::Spacer { copy_prefix_width } => copy_prefix_width,
         }
     }
 }
@@ -311,7 +314,9 @@ mod tests {
                 meta.push(cell_line(cell, line));
             }
             if cell + 1 < cell_count {
-                meta.push(TranscriptLineMeta::Spacer);
+                meta.push(TranscriptLineMeta::Spacer {
+                    copy_prefix_width: 0,
+                });
             }
         }
         meta

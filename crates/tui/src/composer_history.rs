@@ -1,8 +1,10 @@
 //! Cross-session composer input history (#366).
 //!
-//! Persists user-typed prompts to `~/.deepseek/composer_history.txt` so
-//! pressing Up-arrow at the composer recalls submissions from previous
-//! sessions, not just the current one. One entry per line, oldest first,
+//! Persists user-typed prompts to `~/.ghosty/composer_history.txt`
+//! (falling back to a legacy `~/.deepseek/composer_history.txt` only when
+//! one already exists, #3240) so pressing Up-arrow at the composer recalls
+//! submissions from previous sessions, not just the current one. One entry
+//! per line, oldest first,
 //! capped at [`MAX_HISTORY_ENTRIES`] entries (older entries are pruned
 //! at append time).
 //!
@@ -35,7 +37,29 @@ pub const MAX_HISTORY_ENTRIES: usize = 1000;
 const HISTORY_FILE_NAME: &str = "composer_history.txt";
 
 fn default_history_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".deepseek").join(HISTORY_FILE_NAME))
+    history_path_with_home(crate::config::effective_home_dir())
+}
+
+/// Resolve the composer-history file under `home`, preferring the GhostyCode
+/// root and only falling back to the legacy `.deepseek` root when a legacy
+/// file already exists.
+///
+/// On a fresh install (neither file present) this returns the `.ghosty`
+/// path, so the writer never recreates `~/.deepseek/` at runtime (#3240),
+/// while users who haven't migrated keep reading and appending to their
+/// existing legacy history. Mirrors the primary/legacy resolution used by
+/// `snapshot::paths` and `artifacts`.
+fn history_path_with_home(home: Option<PathBuf>) -> Option<PathBuf> {
+    let home = home?;
+    let primary = home.join(".ghosty").join(HISTORY_FILE_NAME);
+    if primary.exists() {
+        return Some(primary);
+    }
+    let legacy = home.join(".deepseek").join(HISTORY_FILE_NAME);
+    if legacy.exists() {
+        return Some(legacy);
+    }
+    Some(primary)
 }
 
 /// Read the persisted history into memory. Returns an empty vec if the
@@ -266,7 +290,7 @@ mod tests {
 
     /// Tests use the path-injecting `*_from` / `*_to` helpers so they
     /// don't have to mutate `HOME` (which is not honored by
-    /// `dirs::home_dir()` on Windows — it reads `USERPROFILE` /
+    /// `crate::config::effective_home_dir()` on Windows — it reads `USERPROFILE` /
     /// `SHGetKnownFolderPath` instead). This makes the suite portable
     /// across all three CI runners without per-platform env juggling.
     fn temp_history_path() -> (tempfile::TempDir, PathBuf) {
@@ -283,6 +307,45 @@ mod tests {
         done_rx
             .recv_timeout(timeout)
             .expect("history writer flush timed out");
+    }
+
+    // #3240: a fresh install must resolve the history file under `.ghosty`,
+    // never the legacy `.deepseek` dir, so normal use doesn't recreate it.
+    #[test]
+    fn fresh_install_uses_ghosty_not_legacy() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = history_path_with_home(Some(tmp.path().to_path_buf()))
+            .expect("path resolves with a home dir");
+        assert_eq!(path, tmp.path().join(".ghosty").join(HISTORY_FILE_NAME));
+        assert!(
+            !path.starts_with(tmp.path().join(".deepseek")),
+            "fresh install must not target the legacy .deepseek dir: {path:?}"
+        );
+    }
+
+    // Migration care: an existing legacy history is still read/appended.
+    #[test]
+    fn existing_legacy_history_is_still_used() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let legacy = tmp.path().join(".deepseek").join(HISTORY_FILE_NAME);
+        fs::create_dir_all(legacy.parent().expect("legacy parent")).expect("mkdir legacy");
+        fs::write(&legacy, "old entry\n").expect("seed legacy history");
+        let path = history_path_with_home(Some(tmp.path().to_path_buf())).expect("path resolves");
+        assert_eq!(path, legacy);
+    }
+
+    // Once a `.ghosty` history exists it wins over any legacy file.
+    #[test]
+    fn ghosty_history_preferred_over_legacy() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let primary = tmp.path().join(".ghosty").join(HISTORY_FILE_NAME);
+        let legacy = tmp.path().join(".deepseek").join(HISTORY_FILE_NAME);
+        for p in [&primary, &legacy] {
+            fs::create_dir_all(p.parent().expect("parent")).expect("mkdir");
+            fs::write(p, "x\n").expect("seed");
+        }
+        let path = history_path_with_home(Some(tmp.path().to_path_buf())).expect("path resolves");
+        assert_eq!(path, primary);
     }
 
     #[test]
@@ -327,9 +390,11 @@ mod tests {
     #[test]
     fn pruned_to_cap_at_append_time() {
         let (_tmp, path) = temp_history_path();
-        for i in 0..(MAX_HISTORY_ENTRIES + 50) {
-            append_history_to(&path, &format!("entry {i}"));
-        }
+        // One batched rewrite — a per-entry loop would fsync 1000+ times.
+        let entries: Vec<String> = (0..(MAX_HISTORY_ENTRIES + 50))
+            .map(|i| format!("entry {i}"))
+            .collect();
+        append_history_entries_to(&path, entries.iter().map(String::as_str));
         let history = load_history_from(&path);
         assert_eq!(history.len(), MAX_HISTORY_ENTRIES);
         // Newest entries survive; oldest 50 were pruned.
@@ -337,6 +402,28 @@ mod tests {
         assert_eq!(
             history.last().map(String::as_str),
             Some(format!("entry {}", MAX_HISTORY_ENTRIES + 49)).as_deref()
+        );
+
+        // Keep a cheap boundary check on the singleton production wrapper:
+        // seed to one below the cap in one write, then cross it with only two
+        // fsyncing appends. The second append must prune exactly the oldest
+        // entry rather than only enforcing the cap for batched callers.
+        let (_boundary_tmp, boundary_path) = temp_history_path();
+        let seeded: Vec<String> = (0..(MAX_HISTORY_ENTRIES - 1))
+            .map(|i| format!("entry {i}"))
+            .collect();
+        append_history_entries_to(&boundary_path, seeded.iter().map(String::as_str));
+        append_history_to(
+            &boundary_path,
+            &format!("entry {}", MAX_HISTORY_ENTRIES - 1),
+        );
+        append_history_to(&boundary_path, &format!("entry {MAX_HISTORY_ENTRIES}"));
+        let boundary = load_history_from(&boundary_path);
+        assert_eq!(boundary.len(), MAX_HISTORY_ENTRIES);
+        assert_eq!(boundary.first().map(String::as_str), Some("entry 1"));
+        assert_eq!(
+            boundary.last().map(String::as_str),
+            Some(format!("entry {MAX_HISTORY_ENTRIES}")).as_deref()
         );
     }
 

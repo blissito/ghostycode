@@ -1,5 +1,5 @@
 [Unit]
-Description=Ghosty Code Telegram Phone Bridge
+Description=GhostyCode Telegram Phone Bridge
 Wants=network-online.target ghosty-runtime.service
 After=network-online.target ghosty-runtime.service
 

@@ -1,37 +1,62 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { locales, type Locale } from "@/lib/i18n/config";
+import { ALL_LOCALES } from "@/lib/i18n/config";
+import { fill, getChrome } from "@/lib/i18n/dictionaries";
+import { replacePathLocale } from "@/lib/i18n/path";
 
-const LABELS: Record<Locale, string> = { en: "EN", zh: "中文" };
+/** Labels for the dropdown. Keyed by locale code, displayed in native script. */
+const LOCALE_LABELS: Record<string, string> = {};
+for (const l of ALL_LOCALES) {
+  LOCALE_LABELS[l.code] = l.label;
+}
+
+/** Routed locales that appear in the switcher (shipped + partial). */
+const ROUTED = ALL_LOCALES.filter((l) => l.status === "shipped" || l.status === "partial");
 
 export function LocaleSwitcher({ current }: { current: string }) {
   const router = useRouter();
   const pathname = usePathname();
+  const chrome = getChrome(current);
 
-  const switchTo = current === "zh" ? "en" : "zh";
-  const other = LABELS[switchTo as Locale];
-
-  const handleClick = () => {
-    // Replace locale segment in path
-    const segments = pathname.split("/");
-    if (locales.includes(segments[1] as Locale)) {
-      segments[1] = switchTo;
-    } else {
-      segments.splice(1, 0, switchTo);
-    }
-    const newPath = segments.join("/") || `/${switchTo}`;
-    document.cookie = `NEXT_LOCALE=${switchTo};path=/;max-age=${60 * 60 * 24 * 365}`;
-    router.push(newPath);
+  const switchLocale = (code: string) => {
+    if (code === current) return;
+    document.cookie = `NEXT_LOCALE=${code};path=/;max-age=${60 * 60 * 24 * 365}`;
+    router.push(replacePathLocale(pathname, code));
   };
 
+  // If only 1 routed locale, no switcher needed.
+  if (ROUTED.length <= 1) return null;
+
+  // If exactly 2 routed locales, show a simple toggle.
+  if (ROUTED.length === 2) {
+    const other = ROUTED.find((l) => l.code !== current);
+    if (!other) return null;
+    return (
+      <button
+        onClick={() => switchLocale(other.code)}
+        className="font-mono text-[0.72rem] uppercase text-ink-mute hover:text-indigo transition-colors px-2 py-1"
+        aria-label={fill(chrome.switcherSwitchTo, { label: other.label })}
+      >
+        {other.label}
+      </button>
+    );
+  }
+
+  // 3+ routed locales: show a dropdown. Partial packs carry a visible
+  // badge so the incomplete scope is honest at the point of selection.
   return (
-    <button
-      onClick={handleClick}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 hairline-t hairline-b hairline-l hairline-r font-mono text-[0.7rem] uppercase tracking-wider hover:bg-paper-deep transition-colors"
-      title={current === "zh" ? "Switch to English" : "切换到中文"}
+    <select
+      value={current}
+      onChange={(e) => switchLocale(e.target.value)}
+      className="font-mono text-[0.72rem] uppercase text-ink-mute bg-transparent hairline-t hairline-b hairline-l hairline-r px-2 py-1 cursor-pointer hover:text-indigo transition-colors"
+      aria-label={chrome.switcherLabel}
     >
-      <span className="font-cjk normal-case tracking-normal">{other}</span>
-    </button>
+      {ROUTED.map((l) => (
+        <option key={l.code} value={l.code}>
+          {l.status === "partial" ? `${l.label} ${chrome.partialBadge}` : l.label}
+        </option>
+      ))}
+    </select>
   );
 }

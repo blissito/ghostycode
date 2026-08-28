@@ -11,12 +11,22 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
 use crate::tools::spec::{
     ApprovalRequirement, ToolCapability, ToolContext, ToolError, ToolResult, ToolSpec,
 };
+
+/// Ceiling on everything the handle store holds in memory (#5472 findings 4-5).
+///
+/// Handles exist so an expensive payload never enters the parent transcript,
+/// but the payload still lives here. Eviction was per-session only
+/// (`evict_session`), driven by sub-agent retirement — so RLM sessions, whose
+/// producers have no such lifecycle, had no eviction path at all, and a long
+/// session accumulated every handle it ever minted. Past this budget the
+/// least-recently-inserted records are dropped; `handle_read` on an evicted
+/// handle already reports "not found" rather than inventing content.
+const HANDLE_STORE_MAX_BYTES: usize = 64 * 1024 * 1024;
 
 const DEFAULT_MAX_CHARS: usize = 12_000;
 const HARD_MAX_CHARS: usize = 50_000;
@@ -62,6 +72,12 @@ pub struct HandleKey {
 pub struct HandleRecord {
     pub handle: VarHandle,
     pub value: HandleValue,
+    /// Insertion order, for least-recently-inserted eviction under the store's
+    /// byte budget. `HashMap` has no order of its own.
+    seq: u64,
+    /// Payload size, measured once at insert so the budget sweep does not
+    /// re-serialize every JSON value it inspects.
+    bytes: usize,
 }
 
 #[allow(dead_code)] // Producers land in later v0.8.33 slices; handle_read is first.
@@ -112,6 +128,8 @@ impl HandleValue {
 #[derive(Debug, Default)]
 pub struct HandleStore {
     records: HashMap<HandleKey, HandleRecord>,
+    next_seq: u64,
+    retained_bytes: usize,
 }
 
 #[allow(dead_code)] // Insertors are for producer tools; this PR wires the reader first.
@@ -141,6 +159,22 @@ impl HandleStore {
         self.records.get(&handle.key())
     }
 
+    /// Remove all handles for `session_id`. Called when an agent's records
+    /// are retired so resident transcript payloads are freed without waiting
+    /// for a full session reset (#3885).
+    pub fn evict_session(&mut self, session_id: &str) {
+        let mut freed = 0usize;
+        self.records.retain(|key, record| {
+            if key.session_id == session_id {
+                freed = freed.saturating_add(record.bytes);
+                false
+            } else {
+                true
+            }
+        });
+        self.retained_bytes = self.retained_bytes.saturating_sub(freed);
+    }
+
     fn insert(
         &mut self,
         session_id: impl Into<String>,
@@ -159,14 +193,50 @@ impl HandleStore {
             sha256: sha256_hex(&value.stable_bytes()),
         };
         let key = HandleKey { session_id, name };
-        self.records.insert(
+        let bytes = value.stable_bytes().len();
+        let seq = self.next_seq;
+        self.next_seq = self.next_seq.wrapping_add(1);
+        if let Some(replaced) = self.records.insert(
             key,
             HandleRecord {
                 handle: handle.clone(),
                 value,
+                seq,
+                bytes,
             },
-        );
+        ) {
+            self.retained_bytes = self.retained_bytes.saturating_sub(replaced.bytes);
+        }
+        self.retained_bytes = self.retained_bytes.saturating_add(bytes);
+        self.enforce_byte_budget();
         handle
+    }
+
+    /// Drop least-recently-inserted records until the store fits its budget.
+    fn enforce_byte_budget(&mut self) {
+        if self.retained_bytes <= HANDLE_STORE_MAX_BYTES {
+            return;
+        }
+        let mut oldest_first: Vec<(u64, HandleKey)> = self
+            .records
+            .iter()
+            .map(|(key, record)| (record.seq, key.clone()))
+            .collect();
+        oldest_first.sort_unstable_by_key(|(seq, _)| *seq);
+        for (_, key) in oldest_first {
+            if self.retained_bytes <= HANDLE_STORE_MAX_BYTES {
+                break;
+            }
+            if let Some(removed) = self.records.remove(&key) {
+                self.retained_bytes = self.retained_bytes.saturating_sub(removed.bytes);
+            }
+        }
+    }
+
+    /// Bytes currently held across every session.
+    #[must_use]
+    pub fn retained_bytes(&self) -> usize {
+        self.retained_bytes
     }
 }
 
@@ -183,7 +253,7 @@ impl ToolSpec for HandleReadTool {
          as RLM sessions or sub-agents. This does not read artifact ids \
          (`art_...`), tool-call ids (`call_...`), SHA refs, or files; use \
          retrieve_tool_result for spilled tool results/artifacts and \
-         read_file for workspace files. Provide \
+         File action=\"read\" for workspace files. Provide \
          exactly one projection: `slice` for char/line slices, `range` for \
          one-based line ranges, `count` for metadata counts, or `jsonpath` \
          for a small JSON-path projection. This retrieves from the handle's \
@@ -477,13 +547,20 @@ fn count_projection(record: &HandleRecord) -> Value {
             "lines": text.lines().count(),
             "bytes": text.len(),
         }),
-        HandleValue::Json(value) => json!({
-            "handle": record.handle,
-            "projection": "count",
-            "json_type": json_type(value),
-            "length": record.handle.length,
-            "bytes": value.to_string().len(),
-        }),
+        HandleValue::Json(value) => {
+            let bytes = {
+                let mut cw = crate::utils::CountingWriter::new();
+                let _ = serde_json::to_writer(&mut cw, value);
+                cw.count()
+            };
+            json!({
+                "handle": record.handle,
+                "projection": "count",
+                "json_type": json_type(value),
+                "length": record.handle.length,
+                "bytes": bytes,
+            })
+        }
     }
 }
 
@@ -646,10 +723,12 @@ fn bounded_text_projection(
     })
 }
 
-fn record_text(record: &HandleRecord) -> String {
+fn record_text(record: &HandleRecord) -> std::borrow::Cow<'_, str> {
     match &record.value {
-        HandleValue::Text(text) => text.clone(),
-        HandleValue::Json(value) => serde_json::to_string_pretty(value).unwrap_or_default(),
+        HandleValue::Text(text) => std::borrow::Cow::Borrowed(text),
+        HandleValue::Json(value) => {
+            std::borrow::Cow::Owned(serde_json::to_string_pretty(value).unwrap_or_default())
+        }
     }
 }
 
@@ -763,9 +842,7 @@ fn truncate_chars(text: &str, max_chars: usize) -> String {
 
 #[allow(dead_code)] // Used when producer tools register handle payloads.
 fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    crate::hashing::sha256_hex(bytes)
 }
 
 fn json_type(value: &Value) -> &'static str {
@@ -923,5 +1000,51 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("retrieve_tool_result"));
         assert!(message.contains("artifact/tool-result ref"));
+    }
+
+    // === #5472 findings 4-5: the store is bounded across all sessions ===
+
+    #[test]
+    fn handle_store_evicts_oldest_records_past_its_byte_budget() {
+        let mut store = HandleStore::default();
+        // 96 x 1 MiB across distinct sessions — the RLM shape, which had no
+        // eviction path at all because nothing ever calls `evict_session` for it.
+        let payload = "z".repeat(1024 * 1024);
+        for index in 0..96 {
+            let _ = store.insert_text(format!("rlm-session-{index}"), "value", payload.clone());
+        }
+        assert!(
+            store.retained_bytes() <= HANDLE_STORE_MAX_BYTES,
+            "store held {} bytes, over the {HANDLE_STORE_MAX_BYTES} budget",
+            store.retained_bytes()
+        );
+        let newest = VarHandle {
+            kind: "var_handle".to_string(),
+            session_id: "rlm-session-95".to_string(),
+            name: "value".to_string(),
+            type_name: "str".to_string(),
+            length: payload.chars().count(),
+            repr_preview: String::new(),
+            sha256: String::new(),
+        };
+        assert!(
+            store.get(&newest).is_some(),
+            "the most recent handle must survive — it is the one still referenced"
+        );
+    }
+
+    #[test]
+    fn evicting_a_session_returns_its_bytes_to_the_budget() {
+        let mut store = HandleStore::default();
+        let _ = store.insert_text("session-a", "value", "a".repeat(4096));
+        let _ = store.insert_text("session-b", "value", "b".repeat(4096));
+        let before = store.retained_bytes();
+        assert_eq!(before, 8192);
+        store.evict_session("session-a");
+        assert_eq!(
+            store.retained_bytes(),
+            4096,
+            "per-session eviction must not leave phantom bytes on the budget"
+        );
     }
 }

@@ -2,22 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---------- root tokens — DeepSeek-aligned ---------- */
+/* ---------- root tokens — Ghosty ocean ---------- */
 :root {
-  --paper: #ffffff;
-  --paper-deep: #f4f6fb;
-  --paper-edge: #e5e8f0;
-  --paper-line: #0e0e10;
-  --paper-line-soft: #d4d8e2;
-  --ink: #0e0e10;
-  --ink-soft: #2e2e33;
-  --ink-mute: #6b7280;
-  --indigo: #4d6bfe;
-  --indigo-deep: #3a52cc;
-  --indigo-pale: #e9eefe;
-  --ochre: #9c7a3f;
-  --jade: #0ab68b;
-  --cobalt: #1f3a8a;
+  /* RGB channel triples backing the Tailwind surface/ink tokens (see
+     tailwind.config.ts). These carry the same light values as the hex vars
+     below; the docs routes override them for dark mode. */
+  --c-paper: 244 247 251;
+  --c-paper-deep: 232 238 248;
+  --c-paper-edge: 203 211 223;
+  --c-ink: 20 33 58;
+  --c-ink-soft: 69 81 104;
+  --c-ink-mute: 91 103 128;
+  --c-stage-soft: 182 192 212;
+
+  /* Paper-newspaper baseline (issue #4934) uses Blue Stage light tokens so
+     the editorial sheet stays in lockstep with the TUI palette. Ocean deep
+     values below power the terminal chrome accents only. */
+  --paper: #f4f7fb;
+  --paper-deep: #e8eef8;
+  --paper-edge: #cbd3df;
+  /* Blue Stage Light's LIGHT_PANEL — cwc's `--surface`. This is the product's
+     *card* value, not its page value: the desktop capture is ivory cards on a
+     blue-grey page. Raising the sheet itself to ivory would break lockstep in
+     the other direction, so warmth arrives only where the product puts it. */
+  --paper-card: #fffdf8;
+  --paper-line: #1b2230;
+  --paper-line-soft: #cbd3df;
+  --ink: #14213a;
+  --ink-soft: #455168;
+  --ink-mute: #5b6780;
+  --indigo: #315fd8;
+  --indigo-deep: #2448a6;
+  --indigo-pale: #e8eef8;
+  --action-on-dark: #6aaef2;
+  --ochre: #7a5500;
+  --jade: #08766d;
+  --seafoam: #4fd1c5;
+  --cobalt: #315fd8;
+  --settings-state-active: var(--indigo-deep);
+  --settings-state-ready: var(--jade);
+  --settings-state-muted: var(--ink-mute);
+  --ocean-deep: #03070d;
+  --ocean-mid: #0e1729;
+  --ocean-current: #d1ebf4;
+  --ocean-mist: #b6c0d4;
+  --ocean-coral: #ff7a59;
+  --signal-gold: #f6c453;
+  --stage-text: #f6f2e8;
+  --stage-soft: #b6c0d4;
+  --stage-muted: #93a0b8;
+
+  /* Blue Stage field, verbatim from crates/tui/src/palette/tokens.rs. These
+     back the single water column below the waterline: one gradient sampled by
+     absolute page position across four DOM bands, exactly as the TUI samples
+     one column across header / transcript / phase / composer. No widget
+     restarts its own gradient. */
+  --stage-field-top: #0e1729; /* WHALE_PANEL — surface */
+  --stage-field-mid: #08111c; /* WHALE_CHROME — the authored 42% break */
+  --stage-field-deep: #03070d; /* WHALE_BG — deep field, and the footer seabed */
+  --stage-ambient: #264866;
+  --stage-composer: #162238; /* WHALE_COMPOSER — the raised input plate */
+  --stage-elevated: #182742; /* WHALE_ELEVATED */
+  --stage-line: #263e5c; /* WHALE_BORDER — blue at 25% on stage */
+  --stage-hint: #8491aa;
+  --stage-dim: #697791;
+  --violet: #ad88ff; /* WHALE_MODE_OPERATE — 1px rules only, never text */
+
+  /* Hairline + code surfaces routed through vars so the docs dark theme can
+     lighten hairlines and raise the code panel without touching every rule. */
+  --hairline: rgba(20, 35, 70, 0.14);
+  --code-bg: #03070d;
+  --code-fg: #f6f2e8;
+
+  /* One site container and one vertical rhythm. Every page gutter aligns
+     with the nav; every hero and section shares a single padding token. */
+  --container: min(100% - 2rem, 76rem);
+  --hero-pad: clamp(3rem, 6vw, 4.75rem);
+  --section-pad: clamp(2.75rem, 5vw, 4rem);
 }
 
 /* ---------- base ---------- */
@@ -38,31 +99,14 @@ body {
   position: relative;
 }
 
-/* faint vertical column rule — desktop only, printed-almanac feel.
-   Hidden on phones because it slices visibly through narrow content. */
-@media (min-width: 1024px) {
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background-image: linear-gradient(
-      to right,
-      transparent 0,
-      transparent calc(50% - 0.5px),
-      rgba(14,14,16,0.04) calc(50% - 0.5px),
-      rgba(14,14,16,0.04) calc(50% + 0.5px),
-      transparent calc(50% + 0.5px)
-    );
-    pointer-events: none;
-    z-index: 0;
-  }
-}
+.ghosty-mark-primary { fill: var(--signal-gold); }
+.ghosty-mark-current { fill: #48d7ff; }
 
 main, header, footer, nav { position: relative; z-index: 1; }
 
 /* ---------- type ---------- */
 .font-display { font-family: var(--font-display), "Fraunces", "Noto Serif SC", Georgia, serif; }
-.font-cjk { font-family: "Noto Serif SC", "Source Han Serif SC", serif; }
+.font-cjk { font-family: var(--font-cjk), "Noto Serif SC", "Source Han Serif SC", serif; }
 
 /* CJK paragraph rhythm — looser leading, wider tracking for body; tighter for headings */
 .cjk-body {
@@ -83,16 +127,67 @@ main, header, footer, nav { position: relative; z-index: 1; }
 }
 .font-mono { font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace; }
 
+/* ---------- the ` · ` chain ---------- */
+/* The single most recognisable thing about the TUI — its header, empty state
+   and footer all speak in dot chains — and the grammar the product's voice is
+   carried by on this site, on both sides of the waterline. The separator is
+   punctuation emitted by CSS, never copy: no locale translates it, and no
+   string is ever concatenated around one. No uppercase and no wide tracking:
+   the TUI header has neither, and both are what break Han. */
+.dotline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+/* The separator hangs off the END of the preceding item, not the start of the
+   next one. When a long chain wraps, a line ending in `·` reads as
+   continuation; a line beginning with one reads as a bullet list. */
+.dotline > *:not(:last-child)::after {
+  content: "·";
+  margin-inline: 0.5em;
+  color: var(--stage-dim);
+}
+
+html[lang="zh"] .dotline,
+html[lang="ja"] .dotline,
+html[lang="ko"] .dotline {
+  letter-spacing: 0;
+}
+
 h1, h2, h3, h4 {
   font-family: var(--font-display), "Fraunces", "Noto Serif SC", Georgia, serif;
   font-weight: 600;
-  letter-spacing: -0.018em;
+  letter-spacing: -0.03em;
   color: var(--ink);
 }
 
-h1 { font-size: clamp(2.1rem, 5vw, 4.2rem); line-height: 1; word-break: keep-all; overflow-wrap: anywhere; }
-h2 { font-size: clamp(1.5rem, 2.8vw, 2.4rem); line-height: 1.1; word-break: keep-all; overflow-wrap: anywhere; }
+h1 { font-size: clamp(2.25rem, 5vw, 4.75rem); line-height: 0.98; word-break: keep-all; overflow-wrap: anywhere; }
+h2 { font-size: clamp(1.5rem, 2.8vw, 2.6rem); line-height: 1.08; word-break: keep-all; overflow-wrap: anywhere; }
 h3 { font-size: 1.18rem; line-height: 1.25; }
+
+/* `overflow-wrap: anywhere` keeps long English headings safe, but can strand
+   CJK punctuation — or a lone numeral — on a line of its own. Strict CJK
+   line-breaking keeps punctuation attached while still allowing breaks between
+   Han characters. ja and ko want the same rule: ja for the identical reason as
+   zh, ko because it has real word boundaries and should break on them. */
+html[lang="zh"] h1,
+html[lang="zh"] h2,
+html[lang="zh"] h3,
+html[lang="ja"] h1,
+html[lang="ja"] h2,
+html[lang="ja"] h3,
+html[lang="ko"] h1,
+html[lang="ko"] h2,
+html[lang="ko"] h3 {
+  line-break: strict;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
 
 @media (max-width: 640px) {
   h1 .font-cjk {
@@ -100,23 +195,49 @@ h3 { font-size: 1.18rem; line-height: 1.25; }
     font-size: clamp(1.6rem, 7.5vw, 2.2rem);
     overflow-wrap: anywhere;
   }
-  /* prevent latin/CJK heading from blowing past the viewport */
+  /* Keep headings inside the viewport without inserting awkward English hyphens. */
   h1, h2 { hyphens: auto; }
+  html[lang="en"] h1,
+  html[lang="en"] h2 { hyphens: none; }
 }
 
 /* ---------- structural primitives ---------- */
 /* Hairlines stay charcoal but softened with a touch of opacity so a pure-white
    background doesn't read as harsh black-on-white office stationery. */
-.hairline { border-color: rgba(14,14,16,0.18); }
-.hairline-t { border-top: 1px solid rgba(14,14,16,0.18); }
-.hairline-b { border-bottom: 1px solid rgba(14,14,16,0.18); }
-.hairline-l { border-left: 1px solid rgba(14,14,16,0.18); }
-.hairline-r { border-right: 1px solid rgba(14,14,16,0.18); }
+.hairline { border-color: var(--hairline); }
+.hairline-t { border-top: 1px solid var(--hairline); }
+.hairline-b { border-bottom: 1px solid var(--hairline); }
+.hairline-l { border-left: 1px solid var(--hairline); }
+.hairline-r { border-right: 1px solid var(--hairline); }
+
+/* The single site container: width + auto margins so every page's gutters
+   line up with the nav. */
+.site-container {
+  width: var(--container);
+  margin-inline: auto;
+}
+
+/* The single hero band shared by home, docs, and the community portals. */
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--hairline);
+  background:
+    radial-gradient(circle at 82% 0%, rgba(125, 177, 197, 0.16), transparent 28rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--paper) 72%, white) 0%, var(--paper-deep) 100%);
+  color: var(--ink);
+  padding-block: var(--hero-pad);
+}
+
+/* The single section rhythm for per-route hero/section blocks. */
+.section {
+  padding-block: var(--section-pad);
+}
 
 .double-rule {
   background-image:
-    linear-gradient(rgba(14,14,16,0.18), rgba(14,14,16,0.18)),
-    linear-gradient(rgba(14,14,16,0.18), rgba(14,14,16,0.18));
+    linear-gradient(var(--hairline), var(--hairline)),
+    linear-gradient(var(--hairline), var(--hairline));
   background-size: 100% 1px, 100% 1px;
   background-position: top, bottom;
   background-repeat: no-repeat;
@@ -124,11 +245,11 @@ h3 { font-size: 1.18rem; line-height: 1.25; }
 }
 
 .col-rule > * + * {
-  border-left: 1px solid rgba(14,14,16,0.18);
+  border-left: 1px solid var(--hairline);
 }
 /* Single-column phones: drop the column rules so cards stack flush. */
 @media (max-width: 767px) {
-  .col-rule > * + * { border-left: 0; border-top: 1px solid rgba(14,14,16,0.18); }
+  .col-rule > * + * { border-left: 0; border-top: 1px solid var(--hairline); }
 }
 
 /* small-caps eyebrow */
@@ -141,7 +262,7 @@ h3 { font-size: 1.18rem; line-height: 1.25; }
   color: var(--ink-mute);
 }
 
-/* ---------- the seal — ink-stamped, not vermillion ---------- */
+/* ---------- compact section marker retained on legacy routes ---------- */
 .seal {
   display: inline-flex;
   align-items: center;
@@ -152,31 +273,21 @@ h3 { font-size: 1.18rem; line-height: 1.25; }
   font-weight: 700;
   width: 2.6rem;
   height: 2.6rem;
-  border-radius: 1px;
+  border-radius: 4px;
   letter-spacing: -0.04em;
-  box-shadow:
-    inset 0 0 0 1px rgba(244,241,232,0.18),
-    inset 0 0 0 3px var(--ink);
-  transform: rotate(-1.5deg);
-  position: relative;
-}
-.seal::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  background:
-    radial-gradient(rgba(244,241,232,0.35) 1px, transparent 1px) 0 0 / 4px 4px;
-  mix-blend-mode: screen;
-  border-radius: 1px;
-  pointer-events: none;
 }
 
-/* indigo-stamped variant — used sparingly for the brand mark / featured anchor */
+/* Indigo variant for the few routes that need a stronger section marker. */
 .seal-indigo {
   background: var(--indigo);
-  box-shadow:
-    inset 0 0 0 1px rgba(244,241,232,0.22),
-    inset 0 0 0 3px var(--indigo);
+}
+
+/* Below the waterline the seal inverts. An ink block on the field reads as a
+   hole punched in the water; ivory-on-deep reads as the last editorial device
+   before the seabed. */
+.ocean-column .seal {
+  background: var(--stage-text);
+  color: var(--ocean-deep);
 }
 
 /* ---------- pills / status ---------- */
@@ -203,7 +314,7 @@ h3 { font-size: 1.18rem; line-height: 1.25; }
 /* ---------- numbers ---------- */
 .tabular { font-variant-numeric: tabular-nums; }
 .bignum {
-  font-family: var(--font-display), "Fraunces", serif;
+  font-family: var(--font-body), "IBM Plex Sans", system-ui, sans-serif;
   font-weight: 600;
   font-size: 2.2rem;
   line-height: 1;
@@ -213,15 +324,15 @@ h3 { font-size: 1.18rem; line-height: 1.25; }
 
 /* ---------- code blocks ---------- */
 pre.code-block {
-  background: #0e0e10;
-  color: #e6e8f0;
+  background: var(--code-bg);
+  color: var(--code-fg);
   max-width: 100%;
   min-width: 0;
   padding: 1rem 1.1rem;
   font-family: var(--font-mono), monospace;
   font-size: 0.82rem;
   line-height: 1.55;
-  border: 1px solid rgba(14,14,16,0.18);
+  border: 1px solid var(--hairline);
   overflow-x: auto;
   position: relative;
   white-space: pre;
@@ -232,11 +343,11 @@ pre.code-block::before {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--indigo) 0 70%, var(--jade) 70% 100%);
+  background: linear-gradient(90deg, var(--action-on-dark) 0 70%, var(--seafoam) 70% 100%);
 }
-pre.code-block .prompt { color: var(--indigo); }
+pre.code-block .prompt { color: var(--action-on-dark); }
 pre.code-block .comment { color: #8b8f9a; }
-pre.code-block .key { color: var(--ochre); }
+pre.code-block .key { color: var(--signal-gold); }
 
 @media (max-width: 640px) {
   pre.code-block { font-size: 0.76rem; padding: 0.85rem 0.95rem; }
@@ -244,18 +355,268 @@ pre.code-block .key { color: var(--ochre); }
 
 code.inline {
   background: var(--paper-deep);
-  border: 1px solid rgba(14,14,16,0.14);
+  border: 1px solid var(--hairline);
   padding: 0.05rem 0.32rem;
   font-family: var(--font-mono), monospace;
   font-size: 0.85em;
   border-radius: 2px;
 }
 
+
+/* ---------- search ---------- */
+.search-input {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 1rem;
+  padding: 0.75rem 2.5rem 0.75rem 1rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.search-input::placeholder { color: var(--ink-mute); }
+.search-input:focus {
+  outline: none;
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px var(--indigo-pale);
+}
+
+mark.search-highlight {
+  background: var(--indigo-pale);
+  color: var(--indigo-deep);
+  padding: 0.02em 0.08em;
+  border-radius: 2px;
+}
+
 /* ---------- nav link ---------- */
-.nav-link {
-  font-family: var(--font-mono), monospace;
-  font-size: 0.78rem;
+.site-nav {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(244, 247, 251, 0.94);
+  backdrop-filter: blur(10px);
+}
+
+.site-nav-inner {
+  display: flex;
+  width: var(--container);
+  min-height: 4.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-inline: auto;
+}
+
+.site-wordmark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--ink);
+  font-family: var(--font-display), "Fraunces", Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+/* Newspaper masthead (issue #4934 baseline) */
+.paper-issue-bar {
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper);
+}
+
+.paper-issue-inner {
+  display: flex;
+  width: var(--container);
+  margin-inline: auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.4rem;
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.paper-issue-left,
+.paper-issue-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.paper-issue-sep { opacity: 0.55; }
+
+.paper-nav-inner {
+  min-height: 3.85rem;
+  padding-block: 0.55rem;
+}
+
+.paper-wordmark {
+  /* The old `flex: 1 1 auto` with `min-width: 0` let long-locale strips
+     (de, pt-BR, id) collapse the home control to a zero-width hit target.
+     `min-width` is a hard flexbox floor, so the shrink factor stays at 1:
+     the box gives back space down to 8.75rem and no further. Refusing to
+     shrink at all instead pushes the overflow onto the compact controls —
+     at 375px on a docs route the menu toggle is the item that gets clipped.
+     The tag still ellipsizes inside this box. */
+  flex: 0 1 auto;
+  gap: 0.75rem;
+  max-width: 15rem;
+  min-width: 8.75rem;
+  overflow: hidden;
+}
+
+.paper-wordmark-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
+}
+
+.paper-wordmark-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1.25rem;
+  letter-spacing: -0.03em;
+}
+
+.paper-wordmark-whale {
+  color: var(--indigo);
+  flex-shrink: 0;
+}
+
+.paper-wordmark-tag {
+  margin-top: 0.18rem;
+  font-family: "Noto Serif SC", "Source Han Serif SC", serif;
+  font-size: 0.66rem;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: var(--ink-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.paper-star-badge {
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.68rem;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.paper-install-cta {
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.85rem;
+  background: var(--indigo);
+  color: var(--paper);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background-color 150ms ease;
+}
+
+.paper-install-cta:hover {
+  background: var(--indigo-deep);
+  color: var(--paper);
+}
+
+.paper-auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.paper-auth-signin,
+.paper-auth-register {
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.75rem;
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.paper-auth-signin {
+  color: var(--ink);
+}
+
+.paper-auth-signin:hover {
+  color: var(--indigo);
+}
+
+.paper-auth-register {
+  color: var(--indigo);
+  border: 1px solid var(--indigo);
+}
+
+.paper-auth-register:hover {
+  background: var(--indigo);
+  color: var(--paper);
+}
+
+.site-nav-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.site-nav-actions > * { flex-shrink: 0; }
+
+/* Native <select> sizes to the selected option (Safari) or the longest
+   option (Chrome). Unbounded, "Bahasa Indonesia (sebagian)" / "Deutsch
+   (teilweise)" push the compact controls past overflow-x: clip. */
+.site-nav-actions select {
+  width: 6.75rem;
+  max-width: 6.75rem;
+  min-width: 0;
+}
+
+.site-github-link {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  font-family: var(--font-body), "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.site-github-link:hover { border-color: var(--ink); }
+
+.site-discord-link {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  color: var(--ink);
+}
+
+.site-discord-link:hover { border-color: var(--ink); }
+
+.brand-mark { width: 1rem; height: 1rem; display: block; }
+
+.paper-star-badge .brand-mark { margin-right: 0.3rem; }
+
+.nav-link {
+  font-family: var(--font-body), "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0;
   color: var(--ink);
   position: relative;
   padding: 0.25rem 0;
@@ -272,7 +633,63 @@ code.inline {
 }
 .nav-link:hover::after, .nav-link[aria-current="page"]::after { transform: scaleX(1); }
 
+/* ---------- footer ---------- */
+.site-footer {
+  border-top: 1px solid rgb(var(--c-stage-soft) / 0.13);
+  background: var(--ocean-deep);
+  color: var(--stage-soft);
+}
+
+.site-footer-main,
+.site-footer-meta {
+  width: var(--container);
+  margin-inline: auto;
+}
+
+.site-footer-main {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1.25fr) minmax(18rem, 0.75fr);
+  gap: 4rem;
+  padding-block: 2.8rem;
+}
+
+.site-wordmark-footer,
+.site-wordmark-footer span { color: var(--stage-text); }
+.site-footer-brand p { max-width: 30rem; margin-top: 0.8rem; color: rgb(var(--c-stage-soft) / 0.62); font-size: 0.86rem; line-height: 1.6; }
+
+.site-footer-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem;
+}
+
+.site-footer-links > div { display: flex; flex-direction: column; gap: 0.55rem; }
+.site-footer-links span { margin-bottom: 0.25rem; color: var(--ocean-current); font-family: var(--font-mono), "JetBrains Mono", monospace; font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.site-footer-links a { color: rgb(var(--c-stage-soft) / 0.76); font-size: 0.82rem; }
+.site-footer-links a:hover { color: var(--stage-text); }
+
+.site-footer-meta {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 1.5rem;
+  align-items: center;
+  padding-block: 1rem;
+  border-top: 1px solid rgb(var(--c-stage-soft) / 0.13);
+  color: rgb(var(--c-stage-soft) / 0.5);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+}
+
+.site-footer-meta a:hover { color: var(--ocean-current); }
+.site-footer-meta > div { display: flex; gap: 1rem; }
+
 /* ---------- ticker ---------- */
+.ticker-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
 .ticker-track {
   display: inline-flex;
   gap: 3rem;
@@ -283,6 +700,304 @@ code.inline {
 @keyframes ticker {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
+}
+
+/* One wire entry: verb, number or tag, title, by-line, age. Baseline-aligned
+   so the mono verb sits on the same line as the title it qualifies. */
+.ticker-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+/* The verb carries the state. Merges are the headline case, so they get the
+   one warm-neutral ink on the sheet; releases take ochre; anything closed
+   recedes to mute. Everything else is the action blue. */
+.ticker-verb {
+  color: var(--indigo);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ticker-verb[data-event="merged"] { color: var(--jade); }
+.ticker-verb[data-event="published"] { color: var(--ochre); }
+.ticker-verb[data-event="closed"] { color: var(--ink-mute); }
+
+.ticker-num,
+.ticker-tag,
+.ticker-by,
+.ticker-age {
+  color: var(--ink-mute);
+}
+
+.ticker-title {
+  color: var(--ink);
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The contributor's handle is the point of the line, not a footnote. */
+.ticker-handle {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ticker-first {
+  padding: 0 0.35rem;
+  border: 1px solid var(--ochre);
+  color: var(--ochre);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ticker-sep { color: var(--paper-line-soft); }
+
+/* ---------- terminal player caret ---------- */
+.tp-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--action-on-dark);
+  animation: tp-blink 1.06s steps(1, end) infinite;
+}
+@keyframes tp-blink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-caret { animation: none; }
+  .ticker-track { animation: none; }
+  /* A frozen track would clip every entry past the fold with no way to reach
+     them. Stopping the motion must not also remove the content. */
+  .ticker-viewport { overflow-x: auto; }
+}
+
+/* ---------- ambient ---------- */
+/*
+ * Two effects, both OPT-IN under `no-preference` rather than opted out under
+ * `reduce`. A `reduce` override can be defeated by specificity; a gate cannot.
+ * Reduced motion freezes the field — it never removes it, so the column's
+ * gradient and the whale below are unconditional and only the movement is not.
+ *
+ * The TUI's ambient life — fish, jellyfish, bubbles, the whale cameo — stays
+ * out of scope. This page quotes the product's restraint doctrine in its own
+ * copy. The standing loops on the whole site are four — ticker, caret, and
+ * these two. Entrances are transitions, and the one-shot settles live in the
+ * Motion section below under the same no-preference gate.
+ */
+
+/* M1 — the column breath. Opacity only, on a 90s cycle: the TUI's authored
+   0.018–0.055 phase bias expressed as the same fraction of a mix. Opacity is
+   the one property that cannot cause layout work on an element four bands
+   tall. No position change, no hue shift, no filter. */
+@keyframes cw-breath {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.045; }
+}
+
+/* M2 — the caustic. `ambient_life.rs`'s literal behaviour: ~1.3s crossing the
+   mark, parked off-canvas for the remaining ~2.7s, peak 0.33. The easing is a
+   sine in-out, i.e. the raised cosine it is meant to be. */
+@keyframes cw-caustic {
+  0% { transform: translateX(0); }
+  32.5% { transform: translateX(160px); }
+  100% { transform: translateX(160px); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ocean-column::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: var(--stage-ambient);
+    opacity: 0;
+    animation: cw-breath 90s ease-in-out infinite;
+  }
+
+  .ghosty-caustic {
+    animation: cw-caustic 4s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Motion — entrances, considered hovers, and one-shot settles        */
+/* ------------------------------------------------------------------ */
+/*
+ * Grammar: content settles into place the way type is laid on the sheet —
+ * a short rise, an ease-out, and done; groups that read as groups arrive in
+ * sequence. Everything in this section animates transform and/or opacity
+ * only: nothing here can trigger layout, and the moving rules are gated on
+ * `no-preference`, so reduced motion is the *absence* of motion rather than
+ * an override fighting it.
+ *
+ * Arming is a JS concern (components/reveal-on-scroll.tsx): [data-reveal]
+ * elements and [data-reveal-group] children are hidden only once the observer
+ * has confirmed they are below the fold. Without JS, without
+ * IntersectionObserver, or with reduced motion, the marks are inert and the
+ * page is complete and static.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal].reveal-armed,
+  [data-reveal-group] > .reveal-armed {
+    opacity: 0;
+    transform: translateY(var(--reveal-rise, 14px));
+    transition:
+      opacity 340ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+      transform 340ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  /* Group children arrive in sequence; a tighter rise keeps the queue reading
+     as one gesture rather than as separate hops. */
+  [data-reveal-group] > .reveal-armed {
+    --reveal-rise: 10px;
+  }
+
+  [data-reveal].reveal-armed.reveal-in,
+  [data-reveal-group] > .reveal-armed.reveal-in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* A print or a reader-mode capture taken mid-scroll must not lose sections to
+   an armed-but-never-revealed state. */
+@media print {
+  [data-reveal].reveal-armed,
+  [data-reveal-group] > .reveal-armed {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The nav-link underline draw, extended to the other mono-voice links. Hover
+   draws the rule; the transition is the whole effect, so reduced motion keeps
+   the existing colour change and simply skips the draw. */
+.product-start-links a,
+.gs-step-link,
+.product-surfaces > .product-container > a,
+.product-community nav a {
+  position: relative;
+}
+
+.product-start-links a::after,
+.gs-step-link::after,
+.product-surfaces > .product-container > a::after,
+.product-community nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 180ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .product-start-links a:hover::after,
+  .gs-step-link:hover::after,
+  .product-surfaces > .product-container > a:hover::after,
+  .product-community nav a:hover::after {
+    transform: scaleX(1);
+  }
+}
+
+/* The primary-button arrow leans into the direction it points. */
+.product-button > span[aria-hidden="true"] {
+  display: inline-block;
+  transition: transform 150ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .product-button:hover > span[aria-hidden="true"],
+  .product-button:focus-visible > span[aria-hidden="true"] {
+    transform: translateX(2px);
+  }
+}
+
+/* Copy-to-clipboard: the press is a stamp, the confirmation a jade seal —
+   the wire's merge verb colour, borrowed for one beat. The colour change is
+   unconditional (it is the confirmation); only the motion is gated. */
+.copy-btn[data-copied="true"] {
+  background: var(--jade);
+  color: var(--paper);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .copy-btn {
+    transition: background-color 150ms ease, color 150ms ease, transform 120ms ease;
+  }
+
+  .copy-btn:active {
+    transform: scale(0.95);
+  }
+
+  .copy-btn[data-copied="true"] {
+    animation: copy-settle 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+}
+
+@keyframes copy-settle {
+  0% { transform: scale(1); }
+  35% { transform: scale(0.93); }
+  70% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+/* Mobile menu: the sheet drops a few points while its items settle in
+   sequence; exit is a short fade. The exit is driven by a delayed unmount in
+   components/mobile-menu.tsx — with reduced motion the menu mounts and
+   unmounts instantly, exactly as before. */
+@media (prefers-reduced-motion: no-preference) {
+  .mm-panel {
+    animation: mm-in 240ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  }
+
+  .mm-panel.mm-closing {
+    animation: mm-out 170ms cubic-bezier(0.4, 0, 0.8, 0.4) both;
+    pointer-events: none;
+  }
+
+  .mm-panel li,
+  .mm-panel nav > a {
+    animation: mm-rise 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  }
+
+  .mm-panel li:nth-child(1) { animation-delay: 34ms; }
+  .mm-panel li:nth-child(2) { animation-delay: 58ms; }
+  .mm-panel li:nth-child(3) { animation-delay: 82ms; }
+  .mm-panel li:nth-child(4) { animation-delay: 106ms; }
+  .mm-panel li:nth-child(5) { animation-delay: 130ms; }
+  .mm-panel li:nth-child(6) { animation-delay: 154ms; }
+  .mm-panel li:nth-child(7) { animation-delay: 178ms; }
+  .mm-panel li:nth-child(8) { animation-delay: 202ms; }
+  .mm-panel nav > a { animation-delay: 226ms; }
+}
+
+@keyframes mm-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mm-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+@keyframes mm-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ---------- decorative big CJK in margin ---------- */
@@ -314,21 +1029,6 @@ a.body-link {
 }
 a.body-link:hover { background-size: 100% 6px; color: var(--ink); }
 
-/* ---------- mermaid container ----------
-   Mermaid renders its own SVG; we just give it room to breathe and a
-   horizontal scroll on phones so the diagram never overflows the viewport. */
-.mermaid-frame {
-  max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.mermaid-frame svg {
-  display: block;
-  margin: 0 auto;
-  height: auto;
-  max-width: 100%;
-}
-
 /* ---------- mobile-only adjustments ---------- */
 @media (max-width: 640px) {
   /* Big CJK margin glyph already hidden via tailwind's `hidden lg:block`,
@@ -339,5 +1039,2372 @@ a.body-link:hover { background-size: 100% 6px; color: var(--ink); }
   .ticker-track { gap: 1.5rem; padding-right: 1.5rem; }
 }
 
+@media (max-width: 900px) {
+  .site-nav-inner { gap: 1rem; }
+  .site-github-link,
+  .site-discord-link { display: none; }
+  .site-footer-main { grid-template-columns: 1fr; gap: 2.5rem; }
+  .site-footer-meta { grid-template-columns: 1fr; gap: 0.7rem; }
+}
+
+@media (max-width: 700px) {
+  .site-wordmark { font-size: 1.05rem; }
+}
+
 /* Anchor fallback; page-level scroll-mt utilities should be able to override it. */
 :where([id]) { scroll-margin-top: 5rem; }
+
+/* ------------------------------------------------------------------ */
+/*  Documentation-led public home                                    */
+/* ------------------------------------------------------------------ */
+
+.portal-home {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.portal-container {
+  width: var(--container);
+  margin-inline: auto;
+}
+
+.portal-current {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  pointer-events: none;
+  background-image: repeating-radial-gradient(
+    ellipse 82% 44% at 24% -22%,
+    transparent 0,
+    transparent 2.7rem,
+    rgba(104, 143, 157, 0.18) 2.76rem,
+    transparent 2.83rem
+  );
+  mask-image: linear-gradient(to bottom, transparent, black 24%, black 72%, transparent);
+}
+
+.portal-hero-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(20rem, 0.88fr);
+  gap: clamp(2.5rem, 6vw, 5rem);
+  align-items: center;
+  padding-block: clamp(3.25rem, 6vw, 4.75rem);
+}
+
+.portal-hero-copy {
+  max-width: 42rem;
+}
+
+.portal-mark {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 1.25rem;
+  color: var(--ink-mute);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.portal-mark svg {
+  color: var(--signal-gold);
+}
+
+.portal-hero h1 {
+  max-width: 41rem;
+  font-size: clamp(2.4rem, 5vw, 3.7rem);
+  line-height: 1.01;
+}
+
+.portal-lede {
+  max-width: 40rem;
+  margin-top: 1.35rem;
+  color: var(--ink-soft);
+  font-size: clamp(1rem, 1.7vw, 1.18rem);
+  line-height: 1.7;
+}
+
+.portal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 1.7rem;
+}
+
+.portal-button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.portal-button-primary {
+  border-color: var(--indigo-deep);
+  background: var(--indigo-deep);
+  color: #fff;
+}
+
+.portal-button-primary:hover {
+  background: var(--ocean-deep);
+}
+
+.portal-button-secondary {
+  border-color: var(--paper-line-soft);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+}
+
+.portal-button-secondary:hover {
+  border-color: var(--ink-soft);
+  background: #fff;
+}
+
+.portal-meta {
+  max-width: 38rem;
+  margin-top: 0.9rem;
+  color: var(--ink-mute);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.portal-quickstart {
+  padding: clamp(1.35rem, 3vw, 2rem);
+  border: 1px solid rgba(209, 235, 244, 0.22);
+  border-radius: 8px;
+  background: var(--ocean-deep);
+  box-shadow: 0 1.25rem 3rem rgba(5, 12, 24, 0.16);
+  color: var(--stage-soft);
+}
+
+.portal-quickstart > span {
+  color: var(--stage-muted);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.portal-quickstart h2 {
+  margin-top: 0.65rem;
+  color: var(--stage-text);
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+  letter-spacing: -0.02em;
+}
+
+.portal-quickstart p {
+  margin-top: 0.7rem;
+  color: rgb(var(--c-stage-soft) / 0.7);
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.portal-quickstart pre.code-block {
+  margin-top: 1.15rem;
+  border-color: rgba(209, 235, 244, 0.2);
+  background: rgba(2, 8, 18, 0.6);
+}
+
+.portal-quickstart > a {
+  display: inline-block;
+  margin-top: 1rem;
+  color: var(--ocean-current);
+  font-size: 0.76rem;
+}
+
+.portal-quickstart > a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.portal-section {
+  padding-block: clamp(3.25rem, 6vw, 4.75rem);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.portal-section-muted {
+  background: var(--paper-deep);
+}
+
+/* ---------- read-only settings reference ---------- */
+.settings-preview {
+  background: color-mix(in srgb, var(--paper-deep) 52%, var(--paper));
+}
+
+.settings-preview-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 32px;
+  align-items: end;
+  width: min(100%, 800px);
+  margin: 0 auto 24px;
+}
+
+.settings-preview-heading span,
+.settings-pane-heading > div > span,
+.settings-provider-heading {
+  color: var(--settings-state-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-preview-heading h2 {
+  margin-top: 8px;
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+}
+
+.settings-preview-heading p {
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.settings-shell {
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr);
+  width: min(100%, 800px);
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper-card);
+  box-shadow: 0 16px 40px rgba(5, 12, 24, 0.08);
+}
+
+.settings-rail {
+  min-width: 0;
+  padding: 20px 12px;
+  border-right: 1px solid var(--hairline);
+  background: var(--paper-deep);
+}
+
+.settings-rail-title {
+  padding: 0 8px 16px;
+  color: var(--ink);
+  font-family: var(--font-display), "Fraunces", "Noto Serif SC", Georgia, serif;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.settings-rail ul {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-rail-item {
+  min-width: 0;
+  padding: 12px 8px;
+  border-radius: 4px;
+  color: var(--settings-state-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.settings-rail-item-active {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--indigo-pale);
+  color: var(--settings-state-active);
+  font-weight: 600;
+}
+
+.settings-rail-item-active > span:last-child {
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: var(--settings-state-muted);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.5625rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-pane {
+  min-width: 0;
+  padding: 24px;
+}
+
+.settings-pane-heading {
+  display: flex;
+  gap: 16px;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.settings-pane-heading h3 {
+  margin-top: 4px;
+  font-size: 1.125rem;
+  letter-spacing: -0.02em;
+}
+
+.settings-readonly-badge {
+  flex: none;
+  padding: 4px 8px;
+  border: 1px solid var(--paper-line-soft);
+  border-radius: 4px;
+  color: var(--settings-state-muted);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-default-model {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.4fr);
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.settings-default-model > div {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--paper);
+}
+
+.settings-default-model dt {
+  color: var(--settings-state-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.settings-default-model dd {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.settings-provider-heading {
+  display: grid;
+  grid-template-columns: minmax(144px, 0.8fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+  padding: 0 12px 8px;
+}
+
+.settings-provider-list {
+  border-top: 1px solid var(--hairline);
+}
+
+.settings-provider-list li {
+  display: grid;
+  grid-template-columns: minmax(144px, 0.8fr) minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+  padding: 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.settings-provider-list li > div {
+  min-width: 0;
+}
+
+.settings-provider-list strong {
+  display: block;
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.settings-provider-code {
+  display: block;
+  min-width: 0;
+  margin-top: 4px;
+  color: var(--ink-mute);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.625rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.settings-provider-auth {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  align-items: start;
+}
+
+.settings-registry-marker {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: var(--settings-state-muted);
+}
+
+.settings-docs-action {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding-top: 16px;
+}
+
+.settings-docs-action p {
+  max-width: 360px;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.settings-preview a {
+  display: inline-flex;
+  min-height: 44px;
+  flex: none;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--settings-state-active);
+  border-radius: 4px;
+  color: var(--settings-state-active);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.settings-preview a:hover {
+  background: var(--indigo-pale);
+}
+
+.settings-preview a:focus-visible {
+  outline: 2px solid var(--settings-state-active);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .settings-preview-heading {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .settings-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-rail {
+    padding: 16px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .settings-rail-title {
+    padding-bottom: 12px;
+  }
+
+  .settings-rail ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-pane {
+    padding: 20px 16px;
+  }
+
+  .settings-provider-heading,
+  .settings-provider-list li {
+    grid-template-columns: minmax(128px, 0.8fr) minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-default-model,
+  .settings-provider-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-provider-heading {
+    display: none;
+  }
+
+  .settings-docs-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-preview a {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+.portal-section-grid {
+  display: grid;
+  grid-template-columns: minmax(14rem, 0.62fr) minmax(0, 1.38fr);
+  gap: clamp(2.5rem, 7vw, 6.5rem);
+}
+
+.portal-section-copy > span,
+.portal-docs-heading span,
+.portal-community-grid > div:first-child > span {
+  color: var(--ink-mute);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.portal-section-copy h2,
+.portal-docs-heading h2,
+.portal-community h2 {
+  margin-top: 0.65rem;
+  font-size: clamp(1.55rem, 3vw, 2.4rem);
+}
+
+.portal-section-copy p {
+  margin-top: 0.9rem;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+.portal-topic-list {
+  border-top: 1px solid var(--hairline);
+}
+
+.portal-topic-list > a {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.42fr) minmax(0, 1fr) auto;
+  gap: 1.25rem;
+  align-items: start;
+  padding-block: 1.15rem;
+  border-bottom: 1px solid var(--hairline);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.portal-topic-list > a:hover {
+  color: var(--indigo-deep);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.portal-topic-list strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.portal-topic-list span {
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.portal-topic-list span:last-child {
+  color: var(--ink-mute);
+}
+
+.portal-docs-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.portal-docs-heading a {
+  flex: none;
+  color: var(--indigo-deep);
+  font-size: 0.78rem;
+}
+
+.portal-docs-heading a:hover,
+.portal-community-links a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.portal-doc-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(2.5rem, 6vw, 5rem);
+}
+
+.portal-doc-groups h3 {
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.portal-doc-groups section > p {
+  min-height: 4.5rem;
+  margin-top: 0.55rem;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.portal-doc-groups .portal-topic-list {
+  margin-top: 1.25rem;
+}
+
+.portal-doc-groups .portal-topic-list > a {
+  grid-template-columns: minmax(7rem, 0.42fr) minmax(0, 1fr) auto;
+  gap: 0.9rem;
+}
+
+.portal-community {
+  padding-block: clamp(3.25rem, 6vw, 4.75rem);
+  background:
+    radial-gradient(circle at 84% -30%, rgba(111, 183, 204, 0.14), transparent 30rem),
+    var(--ocean-deep);
+  color: var(--stage-soft);
+}
+
+.portal-community-grid {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.85fr) minmax(0, 1.15fr);
+  gap: clamp(2.5rem, 7vw, 7rem);
+}
+
+.portal-community-grid > div:first-child > span {
+  color: var(--stage-muted);
+}
+
+.portal-community h2 {
+  color: var(--stage-text);
+}
+
+.portal-community p {
+  color: rgb(var(--c-stage-soft) / 0.76);
+  font-size: 0.96rem;
+  line-height: 1.75;
+}
+
+.portal-community-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1.5rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(209, 235, 244, 0.18);
+}
+
+.portal-community-links a {
+  color: var(--ocean-current);
+  font-size: 0.78rem;
+}
+
+.contribute-path-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--hairline);
+}
+
+.contribute-path-grid article {
+  padding: 1.5rem 1.5rem 1.5rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.contribute-path-grid article:nth-child(even) {
+  padding-inline: 1.5rem 0;
+  border-left: 1px solid var(--hairline);
+}
+
+.contribute-path-grid h3 {
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.contribute-path-grid p {
+  margin-top: 0.55rem;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.contribute-path-grid a,
+.contribute-steps a {
+  display: inline-block;
+  margin-top: 0.9rem;
+  color: var(--indigo-deep);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.contribute-path-grid a:hover,
+.contribute-steps a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.22rem;
+}
+
+.contribute-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--hairline);
+}
+
+.contribute-steps li {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1.5rem 1.5rem 1.5rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.contribute-steps li:nth-child(even) {
+  padding-inline: 1.5rem 0;
+  border-left: 1px solid var(--hairline);
+}
+
+.contribute-steps li > span {
+  color: var(--indigo-deep);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.contribute-steps h3 {
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.contribute-steps p {
+  margin-top: 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+.contribute-review-list {
+  border-top: 1px solid var(--hairline);
+}
+
+.contribute-review-list li {
+  padding-block: 1rem;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.contribute-dev-loop {
+  padding-block: clamp(3.25rem, 6vw, 4.75rem);
+  background: var(--ocean-deep);
+}
+
+.contribute-dev-loop .portal-section-copy > span {
+  color: var(--stage-muted);
+}
+
+.contribute-dev-loop .portal-section-copy h2 {
+  color: var(--stage-text);
+}
+
+.contribute-dev-loop .portal-section-copy p {
+  color: rgb(var(--c-stage-soft) / 0.76);
+}
+
+.contribute-dev-loop pre.code-block {
+  border-color: rgba(209, 235, 244, 0.2);
+  background: rgba(2, 8, 18, 0.62);
+}
+
+@media (max-width: 900px) {
+  .portal-hero-grid,
+  .portal-section-grid,
+  .portal-community-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-hero-copy {
+    max-width: 48rem;
+  }
+
+  .portal-quickstart {
+    max-width: 42rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .portal-doc-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-doc-groups section > p {
+    min-height: 0;
+  }
+
+  .contribute-path-grid,
+  .contribute-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .contribute-path-grid article,
+  .contribute-path-grid article:nth-child(even),
+  .contribute-steps li,
+  .contribute-steps li:nth-child(even) {
+    padding-inline: 0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .portal-hero-grid {
+    gap: 2.25rem;
+    padding-block: 2.75rem;
+  }
+
+  .portal-actions,
+  .portal-docs-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .portal-button {
+    width: 100%;
+  }
+
+  .portal-topic-list > a,
+  .portal-doc-groups .portal-topic-list > a {
+    grid-template-columns: 1fr auto;
+    gap: 0.45rem 1rem;
+  }
+
+  .portal-topic-list > a span:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+
+  .portal-topic-list > a span:last-child {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .portal-community-links {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Product home — newspaper baseline + ocean terminal accents        */
+/*  (issue #4934: restore crisp editorial sheet; fit underwater to it) */
+/* ------------------------------------------------------------------ */
+
+.product-home {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.product-container {
+  width: var(--container);
+  margin-inline: auto;
+}
+
+/* Product hero background is now the shared `.hero` band defined above. */
+
+.product-hero-brandline {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1.35rem;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.product-hero-brandline em {
+  margin-left: 0.25rem;
+  padding: 0.2rem 0.48rem;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink-mute);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.product-kicker {
+  margin: 0 0 0.85rem;
+  color: var(--ink-mute);
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.product-hero-grid,
+.paper-hero-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(22rem, 1fr) minmax(22rem, 1fr);
+  gap: clamp(1.75rem, 3.5vw, 3.5rem);
+  align-items: start;
+  min-height: 0;
+}
+
+.product-hero-copy h1,
+.paper-hero-copy h1 {
+  color: var(--ink);
+  max-width: 38rem;
+  font-size: clamp(2.35rem, 4.6vw, 4.15rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+
+.product-hero-copy,
+.product-install {
+  min-width: 0;
+}
+
+.product-hero-copy h1 span,
+.paper-hero-accent {
+  color: var(--indigo);
+}
+
+.paper-hero-lede,
+.product-hero-copy > p {
+  max-width: 38rem;
+  margin-top: 1.35rem;
+  color: var(--ink-soft);
+  font-size: clamp(1rem, 1.5vw, 1.12rem);
+  line-height: 1.72;
+}
+
+.product-actions,
+.paper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.55rem;
+}
+
+.product-button {
+  display: inline-flex;
+  min-width: 6.4rem;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  color: var(--ink);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.product-button:hover {
+  border-color: var(--indigo);
+  background: var(--indigo-pale);
+  color: var(--indigo-deep);
+}
+
+.product-button-primary {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.product-button-primary:hover {
+  border-color: var(--indigo);
+  background: var(--indigo);
+  color: var(--paper);
+}
+
+.product-button-ghost {
+  border-color: transparent;
+  color: var(--ink-mute);
+}
+
+.product-button-ghost:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--indigo);
+}
+
+.product-install,
+.paper-install {
+  max-width: 32rem;
+  margin-top: 1.5rem;
+}
+
+.product-install pre.code-block,
+.paper-install pre.code-block {
+  border-color: var(--ocean-mid);
+  background: linear-gradient(180deg, #131d31 0%, #060b16 100%);
+  color: var(--stage-text);
+}
+
+.paper-install-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-top: 0.55rem;
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  color: var(--ink-mute);
+}
+
+/* The hero status line is the TUI header, typeset on paper: a `cw` chip and
+   then a dot chain of the facts the binary would report about itself. Spacing
+   comes from `.dotline`; the separators are CSS punctuation. */
+.product-facts,
+.paper-facts {
+  margin-top: 1.1rem;
+  /* !important because this <p> is also `.product-hero-copy > p`, which sets
+     the lede's clamp at higher specificity. The status line is not a lede. */
+  font-size: 0.72rem !important;
+  color: var(--ink-mute);
+  line-height: 1.55;
+}
+
+.paper-facts .dotline-chip {
+  padding: 0.08rem 0.36rem;
+  border-radius: 3px;
+  background: var(--paper-deep);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.paper-facts > *:not(:last-child)::after {
+  color: var(--ink-mute);
+}
+
+/* Ocean terminal frame around the newest session capture */
+.product-shot,
+.paper-shot {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(15, 22, 38, 0.88);
+  border-radius: 6px;
+  background: var(--ocean-deep);
+  box-shadow:
+    0 0 0 1px rgba(79, 209, 197, 0.08),
+    0 18px 48px rgba(3, 7, 13, 0.18);
+}
+
+.product-shot-toolbar,
+.paper-shot-toolbar {
+  display: flex;
+  min-height: 2.55rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid rgba(79, 209, 197, 0.16);
+  background: linear-gradient(180deg, #131d31 0%, #0a1220 100%);
+  color: var(--stage-muted);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.product-shot-toolbar > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--signal-gold);
+}
+
+.product-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--ocean-deep);
+}
+
+.product-shot figcaption {
+  padding: 0.6rem 0.8rem;
+  border-top: 1px solid rgba(79, 209, 197, 0.12);
+  background: #060b16;
+  color: var(--stage-muted);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.64rem;
+  text-align: right;
+}
+
+/* Paper home keeps light sticky nav (no dark ocean override). */
+body:has(.product-home) .site-nav {
+  border-color: var(--hairline);
+  background: rgba(244, 247, 251, 0.94);
+}
+
+body:has(.product-home) .site-wordmark,
+body:has(.product-home) .nav-link,
+body:has(.product-home) .site-github-link,
+body:has(.product-home) .site-nav-actions button,
+body:has(.product-home) .site-nav-actions select {
+  color: var(--ink);
+}
+
+body:has(.product-home) .site-nav-actions button,
+body:has(.product-home) .site-nav-actions select,
+body:has(.product-home) .site-github-link {
+  border-color: var(--hairline);
+}
+
+/* Constitution trace pane */
+.paper-decides {
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper-deep);
+  padding-block: clamp(2.5rem, 5vw, 4rem);
+}
+
+.paper-decides-grid {
+  display: grid;
+  grid-template-columns: minmax(14rem, 0.85fr) minmax(20rem, 1.15fr);
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: start;
+}
+
+.paper-decides-lede {
+  max-width: 28rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+/* The trace plate lifts off the paper-deep band the way the hero capture
+   lifts off the sheet. Depth as hierarchy: ocean objects cast, paper objects
+   stay flat — the ivory cards keep their no-shadow rule. */
+.terminal-frame {
+  box-shadow: 0 14px 36px rgba(3, 7, 13, 0.16);
+}
+
+.paper-start {
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper);
+  padding-block: clamp(2.75rem, 5vw, 4.5rem);
+}
+
+.paper-start .product-start-lede {
+  margin-bottom: 1.5rem;
+}
+
+/* The one pull-quote on the page: a raised editorial sheet, so it takes the
+   ivory card value rather than the raw white it used to bypass tokens with. */
+.product-proof {
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper-card);
+}
+
+.product-proof-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+  gap: clamp(2rem, 6vw, 6rem);
+  align-items: center;
+  padding-block: clamp(2.7rem, 5vw, 4.5rem);
+}
+
+.product-proof h2 {
+  font-size: clamp(1.8rem, 3.3vw, 3rem);
+}
+
+.product-proof p {
+  padding-left: clamp(1.5rem, 4vw, 3rem);
+  border-left: 1px solid var(--paper-edge);
+  color: var(--ink-soft);
+  line-height: 1.75;
+}
+
+/* Workflow is paper. It is four numbered editorial steps that happen to quote
+   a receipt; making the whole band ocean is what stopped the receipt reading
+   as evidence. The receipt below stays an ocean plate ON paper. */
+.product-workflow {
+  position: relative;
+  overflow: hidden;
+  padding-block: clamp(4rem, 8vw, 7rem);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper);
+}
+
+.product-workflow h2 {
+  max-width: 54rem;
+  color: var(--ink);
+  font-size: clamp(1.8rem, 3.3vw, 3rem);
+}
+
+/* Hairline-ruled ivory cards on the cool page — cwc's exact card grammar, and
+   the only place the warmth the sheet is asking for actually belongs. No
+   shadow: paper stays flat, and the hairline stays sharp because it is. */
+.product-workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: clamp(2.5rem, 5vw, 4.5rem);
+}
+
+.product-workflow-steps li {
+  position: relative;
+  min-height: 12rem;
+  padding: 1.35rem 1.5rem 1.5rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper-card);
+}
+
+.product-workflow-steps li > span {
+  color: var(--indigo);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.product-workflow-steps h3 {
+  margin-top: 2.5rem;
+  color: var(--ink);
+  font-size: 1.12rem;
+}
+
+.product-workflow-steps p {
+  margin-top: 0.65rem;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.product-receipt {
+  display: grid;
+  gap: 0.45rem;
+  max-width: 58rem;
+  margin-top: 2.5rem;
+  padding: 1.35rem 1.5rem;
+  border: 1px solid var(--stage-line);
+  background: var(--stage-field-top);
+  color: var(--stage-soft);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: clamp(0.68rem, 1.2vw, 0.8rem);
+  line-height: 1.45;
+  /* An ocean plate resting on the sheet — the same lift as the trace pane. */
+  box-shadow: 0 14px 34px rgba(3, 7, 13, 0.12);
+}
+
+.product-receipt span:first-child {
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--stage-line);
+  color: var(--stage-text);
+}
+
+.product-receipt strong {
+  color: var(--signal-gold);
+  font-weight: 500;
+}
+
+/* ---------- product: start-here band + shared getting-started steps ---------- */
+
+.product-start {
+  padding-block: clamp(4rem, 8vw, 7rem);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.product-start h2 {
+  max-width: 54rem;
+  font-size: clamp(1.8rem, 3.3vw, 3rem);
+}
+
+.product-start-lede {
+  margin-top: 0.9rem;
+  max-width: 46rem;
+  color: var(--ink-soft);
+  line-height: 1.75;
+}
+
+.product-start-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.product-start-links a {
+  color: var(--indigo);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+}
+
+.product-start-links a:hover {
+  color: var(--indigo-deep);
+}
+
+/* Shared step list rendered by <GettingStartedSteps> (homepage band and the
+   /docs/guide page). Light tokens; the docs dark theme re-themes it through
+   the same --hairline/--ink-* vars as the rest of the docs subtree. */
+.gs-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: clamp(2rem, 4vw, 3rem);
+  padding: 0;
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+}
+
+.gs-steps li {
+  padding: 1.35rem 1.5rem 1.5rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.gs-steps li + li {
+  padding-left: 1.5rem;
+  border-left: 1px solid var(--hairline);
+}
+
+.gs-step-index {
+  color: var(--indigo);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.gs-steps h3 {
+  margin-top: 1.1rem;
+  font-size: 1.05rem;
+}
+
+.gs-steps p {
+  margin-top: 0.6rem;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.7;
+}
+
+.gs-step-commands {
+  margin-top: 0.9rem;
+  font-size: 0.72rem;
+}
+
+.gs-step-link {
+  display: inline-block;
+  margin-top: 0.9rem;
+  color: var(--indigo);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.gs-step-link:hover {
+  color: var(--indigo-deep);
+}
+
+/* ---------- a11y: skip link ---------- */
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3.5rem;
+  z-index: 60;
+  padding: 0.55rem 0.9rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.skip-link:focus-visible {
+  top: 0.5rem;
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+/* ---------- honest status badges ---------- */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--hairline);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.status-badge-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+}
+
+.status-badge-experimental .status-badge-dot { background: var(--ochre); }
+.status-badge-preview .status-badge-dot { background: var(--indigo); }
+.status-badge-pending .status-badge-dot { background: var(--ochre); }
+.status-badge-unavailable .status-badge-dot { background: var(--ink-mute); }
+
+/* ---------- session media (real-session surface) ---------- */
+
+.session-media {
+  border: 1px solid var(--hairline);
+}
+
+.session-media video {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--ocean-deep);
+}
+
+.session-media-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.9rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper-deep);
+}
+
+.session-media-pending-note {
+  max-width: 44rem;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.session-media-caption {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.session-media-caption strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.session-media-caption a {
+  color: var(--indigo);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.session-media-caption a:hover {
+  color: var(--indigo-deep);
+}
+
+/* Last band above the waterline. It ends with no rule: a hairline here would be
+   an editorial rule trespassing into water. The transition is the transition. */
+.product-boundaries {
+  padding-block: clamp(4rem, 8vw, 7rem);
+  background: var(--paper);
+}
+
+.product-boundaries-grid {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.8fr) minmax(0, 1.2fr);
+  gap: clamp(3rem, 8vw, 8rem);
+}
+
+.product-boundaries h2 {
+  font-size: clamp(2.5rem, 5vw, 4.7rem);
+}
+
+.product-boundaries h2 span {
+  color: var(--indigo);
+}
+
+.product-boundaries-grid > div > p {
+  max-width: 31rem;
+  margin-top: 1.25rem;
+  color: var(--ink-soft);
+  line-height: 1.75;
+}
+
+.product-boundary-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.product-boundary-list > div {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.85fr) minmax(0, 1.15fr);
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 1.25rem 1.4rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper-card);
+}
+
+.product-boundary-list dt {
+  font-weight: 700;
+}
+
+.product-boundary-list dd {
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+/* ---------- the waterline ---------- */
+/*                                                                            */
+/*  Paper is the editorial voice ABOUT the machine. Ocean is the machine       */
+/*  speaking in its own voice. The page dives exactly once, between            */
+/*  Boundaries and Surfaces — where it stops describing and starts handing     */
+/*  over — and never comes back up.                                           */
+/*                                                                            */
+/*  One column, one gradient, sampled by absolute page position across the     */
+/*  three bands it wraps. The footer's --ocean-deep is the same value as the   */
+/*  column's deep stop, so the seabed continues without a seam and            */
+/*  `.site-footer` needs no change. There is no rule at the waterline.         */
+/* -------------------------------------------------------------------------- */
+.ocean-column {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(38, 72, 102, 0.35), transparent),
+    linear-gradient(
+      180deg,
+      var(--stage-field-top) 0%,
+      var(--stage-field-mid) 42%,
+      var(--stage-field-deep) 100%
+    );
+}
+
+/* Bands inside the column carry no field of their own. */
+.ocean-column > section {
+  position: relative;
+  background: transparent;
+}
+
+/* One line weight below the waterline. The ink hairline is invisible on the
+   field, and the three ad-hoc action-blue alphas it replaced were three
+   different answers to a question the product settled once. */
+.ocean-column .hairline,
+.ocean-column .hairline-t,
+.ocean-column .hairline-b,
+.ocean-column .hairline-l {
+  border-color: var(--stage-line);
+}
+
+/* Below the waterline, hierarchy comes the TUI way — colour weight and ` · `
+   chains, not scale. A 4rem high-contrast serif on deep field was the loudest
+   object on the page and the least like either product. */
+.ocean-column h2 {
+  max-width: 54rem;
+  color: var(--stage-text);
+  font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+}
+
+/* Tight tracking flatters Fraunces and collides Han; Noto Serif SC also wants
+   the extra leading at this optical size. Extend the existing zh overrides
+   rather than routing around them. */
+html[lang="zh"] .ocean-column h2,
+html[lang="ja"] .ocean-column h2,
+html[lang="ko"] .ocean-column h2 {
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.product-surfaces {
+  padding-block: clamp(4rem, 8vw, 7rem);
+}
+
+.product-surface-list {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--stage-line);
+}
+
+.product-surface-list > div {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.7fr) minmax(0, 1.3fr);
+  gap: 2rem;
+  padding: 1.2rem 0;
+  border-bottom: 1px solid var(--stage-line);
+}
+
+.product-surface-list strong {
+  color: var(--stage-text);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 1rem;
+}
+
+.product-surface-list span {
+  color: var(--stage-soft);
+}
+
+.product-surfaces > .product-container > a {
+  display: inline-block;
+  margin-top: 1.5rem;
+  color: var(--action-on-dark);
+  font-size: 0.82rem;
+}
+
+/* The install band is the TUI composer.
+ *
+ * It used to be `--indigo-deep` full-bleed: a third register belonging to
+ * neither system, and the last thing on the page that looked like a generic
+ * marketing CTA. The composer is a *raised* plate in the product, so this one
+ * band is opaque over the column rather than transparent through it, bracketed
+ * above by Signal Gold and below by Operate violet — the product's exact
+ * composer framing, and the one place gold is legitimate here, because what it
+ * brackets is the point of human intent.
+ *
+ * The descendant selector is deliberate: it has to out-rank
+ * `.ocean-column > section { background: transparent }`.
+ */
+.ocean-column .product-install-band {
+  padding-block: clamp(3rem, 6vw, 5rem);
+  border-top: 1px solid color-mix(in srgb, var(--signal-gold) 40%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--violet) 40%, transparent);
+  background: var(--stage-composer);
+  color: var(--stage-text);
+}
+
+.product-install-grid {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.65fr) minmax(0, 1.35fr);
+  gap: clamp(2rem, 7vw, 7rem);
+  align-items: start;
+}
+
+/* `❯` sits inside the plate, where the TUI puts it — a code-owned literal in
+   the same class as `Ghosty` and `npm install -g ghosty`. */
+.product-composer {
+  position: relative;
+}
+
+.product-composer pre.code-block {
+  padding-left: 2.6rem;
+}
+
+/* The copy control sits on `--paper` and must not inherit the band's ivory. */
+.product-composer button {
+  color: var(--ink);
+}
+
+.product-composer-prompt {
+  position: absolute;
+  top: 1rem;
+  left: 1.1rem;
+  z-index: 1;
+  color: var(--action-on-dark);
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .product-composer pre.code-block {
+    padding-left: 2.3rem;
+  }
+
+  .product-composer-prompt {
+    top: 0.85rem;
+    left: 0.95rem;
+    font-size: 0.76rem;
+  }
+}
+
+.product-install-band pre.code-block {
+  margin: 0;
+  border-color: var(--stage-line);
+}
+
+.product-install-band .dotline {
+  margin-top: 1rem;
+  color: var(--stage-hint);
+}
+
+.product-install-band a {
+  display: inline-block;
+  margin-top: 1.2rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid var(--stage-line);
+  color: var(--action-on-dark);
+  font-size: 0.82rem;
+  transition: border-color 150ms ease;
+}
+
+/* The underline is already there; hover just sharpens it to the link's own
+   blue. No draw needed where a hairline already sits. */
+.product-install-band a:hover {
+  border-color: var(--action-on-dark);
+}
+
+.product-community {
+  padding-block: clamp(3.5rem, 7vw, 6rem);
+}
+
+.product-community-grid {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.42fr) minmax(0, 1.08fr) minmax(16rem, 0.75fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: end;
+}
+
+.product-community-illustration {
+  display: grid;
+  min-height: 10rem;
+  place-items: center;
+}
+
+.product-community-illustration svg {
+  max-width: 100%;
+}
+
+/* The editorial full stop stays, in Ice rather than Signal Gold. Gold's budget
+   on this page is three marks — the whale, the composer's upper hairline, the
+   receipt's `report` line — and a decorative period is not one of them. */
+.product-community h2::after {
+  content: ".";
+  color: var(--ocean-current);
+}
+
+.product-community p {
+  max-width: 42rem;
+  margin-top: 1rem;
+  color: var(--stage-soft);
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.product-community nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--stage-line);
+}
+
+.product-community nav a {
+  color: var(--ocean-current);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.product-community nav a:hover {
+  color: var(--stage-text);
+}
+
+.product-home a:focus-visible {
+  outline: 3px solid var(--signal-gold);
+  outline-offset: 4px;
+}
+
+@media (max-width: 1050px) {
+  .product-hero-grid,
+  .paper-hero-grid,
+  .paper-decides-grid {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .product-hero-copy {
+    max-width: 48rem;
+  }
+
+  .product-shot {
+    width: min(100%, 56rem);
+  }
+}
+
+@media (max-width: 760px) {
+  .paper-wordmark-tag {
+    max-width: 11rem;
+  }
+
+  .product-proof-grid,
+  .product-boundaries-grid,
+  .product-install-grid,
+  .product-community-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .product-proof p {
+    padding-top: 1.5rem;
+    padding-left: 0;
+    border-top: 1px solid var(--paper-edge);
+    border-left: 0;
+  }
+
+  .product-workflow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gs-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gs-steps li:nth-child(3) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .product-boundary-list > div,
+  .product-surface-list > div {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .site-nav-inner {
+    gap: 0.5rem;
+  }
+
+  .site-nav-actions {
+    min-width: 0;
+    gap: 0.35rem;
+  }
+
+  .site-nav-actions select {
+    width: 6.75rem;
+    min-width: 0;
+  }
+
+  .paper-wordmark {
+    max-width: 9.75rem;
+  }
+
+  .paper-wordmark-tag {
+    display: none;
+  }
+
+  .product-hero-copy h1,
+  .paper-hero-copy h1 {
+    max-width: 100%;
+    font-size: clamp(2.15rem, 11vw, 3rem);
+  }
+
+  .paper-install-cta {
+    display: none;
+  }
+
+  .product-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .product-workflow-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .product-workflow-steps li,
+  .product-workflow-steps li + li,
+  .product-workflow-steps li:nth-child(3) {
+    min-height: 0;
+    padding: 1.25rem 0;
+    border-left: 0;
+  }
+
+  .gs-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .gs-steps li,
+  .gs-steps li + li,
+  .gs-steps li:nth-child(3) {
+    padding: 1.25rem 0;
+    border-left: 0;
+  }
+
+  .product-workflow-steps h3 {
+    margin-top: 1.25rem;
+  }
+
+  .product-receipt {
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .product-community nav {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Documentation portal                                              */
+/* ------------------------------------------------------------------ */
+
+.docs-portal {
+  background: var(--paper);
+}
+
+.docs-portal-hero-inner,
+.community-welcome-inner {
+  position: relative;
+}
+
+.hero .portal-mark {
+  margin-bottom: 1rem;
+}
+
+.docs-portal-hero-inner .docs-hero-title,
+.docs-portal-hero-inner h1,
+.community-welcome-inner h1 {
+  max-width: 50rem;
+  font-size: clamp(2.2rem, 4.8vw, 3.55rem);
+  line-height: 1.03;
+}
+
+.community-welcome-inner h1 {
+  margin-top: 0.85rem;
+}
+
+.docs-portal-hero-inner p:not(.docs-hero-title),
+.community-welcome-inner p {
+  max-width: 47rem;
+  margin-top: 1rem;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.docs-shell {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.28fr) minmax(0, 0.72fr);
+  grid-template-areas: "sidebar content";
+  gap: clamp(2rem, 5vw, 4.5rem);
+  align-items: start;
+  padding-block: clamp(2.25rem, 5vw, 4rem);
+}
+
+.docs-sidebar {
+  grid-area: sidebar;
+  border-top: 1px solid var(--hairline);
+}
+
+.docs-sidebar-heading {
+  padding-block: 0.9rem;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.docs-sidebar-heading a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.docs-sidebar-heading a > span:last-child {
+  color: var(--ink-mute);
+  font-size: 0.72rem;
+}
+
+.docs-sidebar-group {
+  padding-block: 0.9rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.docs-sidebar-category {
+  margin-bottom: 0.35rem;
+  color: var(--ink-mute);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.docs-sidebar-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding-block: 0.32rem;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  transition: color 150ms ease;
+}
+
+.docs-sidebar-link:hover,
+.docs-sidebar-link-current {
+  color: var(--docs-accent);
+}
+
+.docs-sidebar-link-current {
+  font-weight: 600;
+}
+
+.docs-sidebar-link > span:last-child:not(:first-child) {
+  color: var(--ink-mute);
+  font-size: 0.68rem;
+}
+
+.docs-content {
+  grid-area: content;
+  width: 100%;
+  max-width: 52rem;
+}
+
+.docs-breadcrumb {
+  margin-bottom: 1.15rem;
+  color: var(--ink-mute);
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+}
+
+.docs-breadcrumb ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.docs-breadcrumb li:not(:last-child)::after {
+  content: "/";
+  margin-inline: 0.5em;
+  color: var(--ink-mute);
+}
+
+.docs-breadcrumb a {
+  color: var(--indigo);
+}
+
+.docs-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.docs-breadcrumb [aria-current="page"] {
+  color: var(--ink);
+}
+
+.docs-search-block {
+  margin-bottom: 2.25rem;
+}
+
+.docs-search-label {
+  display: block;
+  margin-bottom: 0.55rem;
+  color: var(--ink-mute);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.docs-search-input {
+  min-height: 3rem;
+  padding-right: 3rem;
+  border-color: var(--paper-line-soft);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+}
+
+.docs-search-clear {
+  position: absolute;
+  right: 0.9rem;
+  top: 50%;
+  translate: 0 -50%;
+  color: var(--ink-mute);
+  font-size: 0.82rem;
+}
+
+.docs-search-clear:hover {
+  color: var(--ink);
+}
+
+.docs-search-count {
+  margin-top: 0.55rem;
+  color: var(--ink-mute);
+  font-size: 0.72rem;
+}
+
+.docs-result-groups {
+  display: grid;
+  gap: 2.5rem;
+}
+
+.docs-result-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.55rem;
+}
+
+.docs-result-heading h2 {
+  font-size: 1.28rem;
+  letter-spacing: -0.02em;
+}
+
+.docs-result-heading > span {
+  color: var(--ink-mute);
+  font-size: 0.7rem;
+}
+
+.docs-topic-list {
+  border-top: 1px solid var(--hairline);
+}
+
+.docs-topic-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 0.34fr) auto;
+  gap: 1.25rem;
+  align-items: center;
+  padding-block: 1rem;
+  border-bottom: 1px solid var(--hairline);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.docs-topic-row:hover {
+  color: var(--docs-accent);
+  background: color-mix(in srgb, var(--paper-deep) 68%, transparent);
+}
+
+.docs-topic-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.docs-topic-title > span:last-child {
+  color: var(--ink-mute);
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.docs-topic-main p {
+  margin-top: 0.28rem;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.docs-topic-source {
+  overflow: hidden;
+  color: var(--ink-mute);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+}
+
+.docs-topic-arrow {
+  color: var(--ink-mute);
+  font-size: 0.78rem;
+}
+
+.docs-empty {
+  padding-block: 3.5rem;
+  border-block: 1px solid var(--hairline);
+  text-align: center;
+}
+
+.docs-empty > p:first-child {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.docs-empty > p:nth-child(2) {
+  margin: 0.5rem auto 1.25rem;
+  color: var(--ink-mute);
+  font-size: 0.8rem;
+}
+
+.docs-source-note {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.docs-source-note p {
+  max-width: 42rem;
+  color: var(--ink-mute);
+  font-size: 0.74rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .docs-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "content"
+      "sidebar";
+  }
+
+  .docs-sidebar nav { display: none; }
+}
+
+@media (max-width: 640px) {
+  .docs-topic-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.6rem 1rem;
+  }
+
+  .docs-topic-source {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .docs-topic-arrow {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+/* ---------- community release record ---------- */
+.community-credit-section {
+  border-bottom: 0;
+}
+
+.community-record-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.community-record-links a {
+  color: var(--indigo-deep);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.community-record-links a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.22rem;
+}
+
+.community-credit-groups {
+  display: grid;
+  gap: 2rem;
+}
+
+.community-credit-groups section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.community-credit-groups h3 {
+  margin-bottom: 0.9rem;
+  color: var(--ink-mute);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.community-credit-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.community-credit-list a {
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--hairline);
+  color: var(--ink-soft);
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.community-credit-list a:hover {
+  border-color: var(--indigo);
+  color: var(--indigo-deep);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Dark mode — scoped to the /docs routes                            */
+/*                                                                    */
+/*  A full site-wide inversion is unsafe here: several marketing      */
+/*  surfaces are intentionally dark (`bg-ink text-paper` — the hero   */
+/*  closer, the terminal player, the LIVE ticker badge) and would     */
+/*  invert into light blocks. The reference-site minimum is dark      */
+/*  docs, so the dark token overrides are set ON the `.docs-theme`    */
+/*  wrapper only. Because the Tailwind surface/ink utilities resolve  */
+/*  through these vars, everything inside the docs subtree re-themes  */
+/*  while the rest of the site (and the shared nav/footer) stays      */
+/*  light. Default follows prefers-color-scheme; an explicit          */
+/*  data-theme on <html> wins.                                        */
+/* ------------------------------------------------------------------ */
+
+.docs-theme {
+  --docs-accent: #315fd8;
+  --docs-button-bg: #fff;
+  --docs-button-border: #aeb8c6;
+  --docs-button-text: #1b2230;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.docs-theme .portal-button-secondary {
+  border-color: var(--docs-button-border);
+  background: var(--docs-button-bg);
+  color: var(--docs-button-text);
+}
+
+.docs-theme .portal-button-secondary:hover {
+  border-color: var(--docs-accent);
+  background: var(--docs-button-bg);
+  color: var(--docs-accent);
+}
+
+.docs-theme .portal-button-secondary:focus-visible,
+.docs-sidebar-link:focus-visible {
+  outline: 2px solid var(--docs-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .docs-theme {
+    color-scheme: dark;
+    --c-paper: 3 7 13;
+    --c-paper-deep: 14 23 41;
+    --c-paper-edge: 38 62 92;
+    --c-ink: 246 242 232;
+    --c-ink-soft: 182 192 212;
+    --c-ink-mute: 147 160 184;
+    --paper: #03070d;
+    --paper-deep: #0e1729;
+    --paper-edge: #263e5c;
+    --paper-card: #182742;
+    --ink: #f6f2e8;
+    --ink-soft: #b6c0d4;
+    --ink-mute: #93a0b8;
+    --hairline: rgba(106, 174, 242, 0.22);
+    --code-bg: #08111c;
+    --code-fg: #f6f2e8;
+    --docs-accent: #6aaef2;
+    --docs-button-bg: #182742;
+    --docs-button-border: #263e5c;
+    --docs-button-text: #f6f2e8;
+  }
+}
+
+[data-theme="dark"] .docs-theme {
+  color-scheme: dark;
+  --c-paper: 3 7 13;
+  --c-paper-deep: 14 23 41;
+  --c-paper-edge: 38 62 92;
+  --c-ink: 246 242 232;
+  --c-ink-soft: 182 192 212;
+  --c-ink-mute: 147 160 184;
+  --paper: #03070d;
+  --paper-deep: #0e1729;
+  --paper-edge: #263e5c;
+  --paper-card: #182742;
+  --ink: #f6f2e8;
+  --ink-soft: #b6c0d4;
+  --ink-mute: #93a0b8;
+  --hairline: rgba(106, 174, 242, 0.22);
+  --code-bg: #08111c;
+  --code-fg: #f6f2e8;
+  --docs-accent: #6aaef2;
+  --docs-button-bg: #182742;
+  --docs-button-border: #263e5c;
+  --docs-button-text: #f6f2e8;
+}

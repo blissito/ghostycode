@@ -46,6 +46,10 @@ pub struct FrameRateLimiter {
     last_emitted_at: Option<Instant>,
     /// When true, use the 30 FPS cap instead of 120 FPS.
     low_motion: bool,
+    /// Optional measured display cadence. Never used under low_motion; when
+    /// set, clamps draws no faster than this interval (and never faster than
+    /// [`MIN_FRAME_INTERVAL`]).
+    adaptive_interval: Option<Duration>,
 }
 
 impl FrameRateLimiter {
@@ -85,12 +89,19 @@ impl FrameRateLimiter {
         self.low_motion = low_motion;
     }
 
+    /// Apply a measured display-refresh interval. Low-motion still wins.
+    /// When `interval` is `None`, keep the historical fixed caps.
+    pub fn set_adaptive_interval(&mut self, interval: Option<Duration>) {
+        self.adaptive_interval = interval;
+    }
+
     fn interval(&self) -> Duration {
         if self.low_motion {
-            LOW_MOTION_MIN_FRAME_INTERVAL
-        } else {
-            MIN_FRAME_INTERVAL
+            return LOW_MOTION_MIN_FRAME_INTERVAL;
         }
+        self.adaptive_interval
+            .unwrap_or(MIN_FRAME_INTERVAL)
+            .max(MIN_FRAME_INTERVAL)
     }
 }
 
@@ -160,6 +171,31 @@ mod tests {
         // After 34 ms, draw is allowed.
         let after_34 = t0 + Duration::from_millis(34);
         assert!(limiter.time_until_next_draw(after_34).is_none());
+    }
+
+    #[test]
+    fn adaptive_interval_clamps_but_never_under_min() {
+        let t0 = Instant::now();
+        let mut limiter = FrameRateLimiter::default();
+        // Ask for 200 FPS (5ms) — must still respect MIN_FRAME_INTERVAL.
+        limiter.set_adaptive_interval(Some(Duration::from_millis(5)));
+        limiter.mark_emitted(t0);
+        let too_soon = t0 + Duration::from_millis(1);
+        assert_eq!(limiter.clamp_deadline(too_soon), t0 + MIN_FRAME_INTERVAL);
+    }
+
+    #[test]
+    fn low_motion_wins_over_adaptive_interval() {
+        let t0 = Instant::now();
+        let mut limiter = FrameRateLimiter::default();
+        limiter.set_adaptive_interval(Some(Duration::from_millis(5)));
+        limiter.set_low_motion(true);
+        limiter.mark_emitted(t0);
+        let too_soon = t0 + Duration::from_millis(5);
+        assert_eq!(
+            limiter.clamp_deadline(too_soon),
+            t0 + LOW_MOTION_MIN_FRAME_INTERVAL
+        );
     }
 
     #[test]

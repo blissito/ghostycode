@@ -1,7 +1,7 @@
 //! Parked-draft stash for the composer (#440).
 //!
 //! A stash is a side-channel from history: it holds drafts the user
-//! parked deliberately (Ctrl+S) instead of submissions made in the
+//! parked deliberately (Ctrl+G or Ctrl+S) instead of submissions made in the
 //! past (which live in `composer_history.rs`). Pop semantics make it
 //! a LIFO — the most recent stash comes back first.
 //!
@@ -34,6 +34,24 @@ use serde::{Deserialize, Serialize};
 
 const STASH_FILE_NAME: &str = "composer_stash.jsonl";
 
+/// Read-only stash facts for diagnostic output.
+///
+/// Unlike the ordinary composer helpers, this report never creates a state
+/// directory or falls back outside an explicit `GHOSTY_HOME` boundary. It
+/// rejects a stash-file symlink observed during inspection; Unix opens also
+/// use `O_NOFOLLOW` for the final leaf open.
+#[derive(Debug, Clone)]
+pub(crate) struct DiagnosticStashReport {
+    /// Candidate stash path, when the Ghosty home could be resolved.
+    pub(crate) path: Option<PathBuf>,
+    /// Whether a regular stash file was present at that path.
+    pub(crate) present: bool,
+    /// Number of valid, non-empty draft records observed without mutation.
+    pub(crate) count: usize,
+    /// A safe path-shape or read error, if inspection could not complete.
+    pub(crate) error: Option<String>,
+}
+
 /// Hard cap so a runaway script can't fill the user's home with
 /// parked drafts. Older entries are pruned at push time when the
 /// stash exceeds this count.
@@ -52,7 +70,7 @@ pub struct StashedDraft {
 }
 
 fn default_stash_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| {
+    crate::config::effective_home_dir().map(|home| {
         let primary = home.join(".ghosty").join(STASH_FILE_NAME);
         let legacy = home.join(".deepseek").join(STASH_FILE_NAME);
         if primary.exists() || !legacy.exists() {
@@ -60,6 +78,173 @@ fn default_stash_path() -> Option<PathBuf> {
         }
         legacy
     })
+}
+
+/// Inspect the composer stash for `doctor` without changing product state.
+///
+/// Ordinary composer reads retain their historical legacy fallback behavior.
+/// Diagnostics follow the same behavior only when no explicit
+/// `GHOSTY_HOME` is configured; an explicit home is an isolation boundary
+/// and must not cause doctor to inspect an ambient `$HOME/.ghosty` or
+/// `$HOME/.deepseek` stash.
+pub(crate) fn diagnostic_stash_report() -> DiagnosticStashReport {
+    let primary = match ghosty_config::ghosty_home() {
+        Ok(home) => home.join(STASH_FILE_NAME),
+        Err(error) => {
+            return DiagnosticStashReport {
+                path: None,
+                present: false,
+                count: 0,
+                error: Some(format!("could not resolve the Ghosty stash path: {error}")),
+            };
+        }
+    };
+
+    let explicit_home = ghosty_config::ghosty_home_is_explicit();
+    let legacy = if explicit_home {
+        None
+    } else {
+        match ghosty_config::legacy_deepseek_home() {
+            Ok(home) => Some(home.join(STASH_FILE_NAME)),
+            Err(error) => {
+                return DiagnosticStashReport {
+                    path: Some(primary),
+                    present: false,
+                    count: 0,
+                    error: Some(format!(
+                        "could not resolve the legacy composer stash path: {error}"
+                    )),
+                };
+            }
+        }
+    };
+
+    diagnostic_stash_report_from_paths(primary, legacy, explicit_home)
+}
+
+fn diagnostic_stash_report_from_paths(
+    primary: PathBuf,
+    legacy: Option<PathBuf>,
+    explicit_home: bool,
+) -> DiagnosticStashReport {
+    let path = match std::fs::symlink_metadata(&primary) {
+        Ok(_) => primary,
+        Err(error) if error.kind() == io::ErrorKind::NotFound && !explicit_home => {
+            let Some(legacy) = legacy else {
+                return diagnostic_stash_report_at(primary);
+            };
+            match std::fs::symlink_metadata(&legacy) {
+                Ok(_) => legacy,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => primary,
+                Err(error) => {
+                    return DiagnosticStashReport {
+                        path: Some(legacy),
+                        present: false,
+                        count: 0,
+                        error: Some(format!(
+                            "could not inspect legacy composer stash metadata: {error}"
+                        )),
+                    };
+                }
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => primary,
+        Err(error) => {
+            return DiagnosticStashReport {
+                path: Some(primary),
+                present: false,
+                count: 0,
+                error: Some(format!(
+                    "could not inspect composer stash metadata: {error}"
+                )),
+            };
+        }
+    };
+    diagnostic_stash_report_at(path)
+}
+
+fn diagnostic_stash_report_at(path: PathBuf) -> DiagnosticStashReport {
+    let metadata = match std::fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return DiagnosticStashReport {
+                path: Some(path),
+                present: false,
+                count: 0,
+                error: None,
+            };
+        }
+        Err(error) => {
+            return DiagnosticStashReport {
+                path: Some(path),
+                present: false,
+                count: 0,
+                error: Some(format!(
+                    "could not inspect composer stash metadata: {error}"
+                )),
+            };
+        }
+    };
+    if metadata.file_type().is_symlink() {
+        return DiagnosticStashReport {
+            path: Some(path),
+            present: false,
+            count: 0,
+            error: Some("composer stash path is a symlink; doctor did not follow it".to_string()),
+        };
+    }
+    if !metadata.file_type().is_file() {
+        return DiagnosticStashReport {
+            path: Some(path),
+            present: false,
+            count: 0,
+            error: Some("composer stash path is not a regular file".to_string()),
+        };
+    }
+
+    match load_stash_for_diagnostic(&path) {
+        Ok(entries) => DiagnosticStashReport {
+            path: Some(path),
+            present: true,
+            count: entries.len(),
+            error: None,
+        },
+        Err(error) => DiagnosticStashReport {
+            path: Some(path),
+            present: false,
+            count: 0,
+            error: Some(error),
+        },
+    }
+}
+
+fn load_stash_for_diagnostic(path: &Path) -> Result<Vec<StashedDraft>, String> {
+    #[cfg(unix)]
+    let file = {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(path)
+    };
+    #[cfg(not(unix))]
+    let file = fs::File::open(path);
+    let file = file.map_err(|error| format!("could not open composer stash read-only: {error}"))?;
+
+    let mut entries = Vec::new();
+    for line in BufReader::new(file).lines() {
+        let line = line.map_err(|error| format!("could not read composer stash: {error}"))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Ok(draft) = serde_json::from_str::<StashedDraft>(&line)
+            && !draft.text.is_empty()
+        {
+            entries.push(draft);
+        }
+    }
+    Ok(entries)
 }
 
 /// Load every stashed draft from disk in the order they were
@@ -88,7 +273,7 @@ fn load_stash_from(path: &Path) -> Vec<StashedDraft> {
 }
 
 /// Push a new draft onto the stash. Empty / whitespace-only text
-/// is silently dropped so a stray Ctrl+S on an empty composer
+/// is silently dropped so a stray stash shortcut on an empty composer
 /// doesn't pollute the file. Failures are logged but never
 /// propagated — stash is a UX nicety, not a correctness concern.
 pub fn push_stash(text: &str) {
@@ -306,6 +491,50 @@ this is not json
         assert_eq!(
             entries[entries.len() - 1].text,
             format!("draft {}", MAX_STASH_ENTRIES + 5 - 1)
+        );
+    }
+
+    #[test]
+    fn diagnostic_stash_honors_an_explicit_home_without_legacy_fallback() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let primary = tmp.path().join("isolated-ghosty").join(STASH_FILE_NAME);
+        let legacy = tmp.path().join("ambient-deepseek").join(STASH_FILE_NAME);
+        std::fs::create_dir_all(legacy.parent().expect("legacy parent")).expect("legacy parent");
+        std::fs::write(&legacy, r#"{"text":"ambient draft"}"#).expect("legacy stash");
+
+        let report = diagnostic_stash_report_from_paths(primary.clone(), Some(legacy), true);
+
+        assert_eq!(report.path.as_deref(), Some(primary.as_path()));
+        assert!(!report.present);
+        assert_eq!(report.count, 0);
+        assert!(report.error.is_none());
+        assert!(
+            !primary.parent().expect("primary parent").exists(),
+            "diagnostic lookup must not create an explicit state home"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn diagnostic_stash_rejects_a_symlink_leaf_without_following_it() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let external = tmp.path().join("external-stash.jsonl");
+        let primary = tmp.path().join("composer_stash.jsonl");
+        std::fs::write(&external, r#"{"text":"external draft"}"#).expect("external stash");
+        symlink(&external, &primary).expect("symlink stash");
+
+        let report = diagnostic_stash_report_from_paths(primary.clone(), None, true);
+
+        assert_eq!(report.path.as_deref(), Some(primary.as_path()));
+        assert!(!report.present);
+        assert_eq!(report.count, 0);
+        assert!(
+            report
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("symlink"))
         );
     }
 }

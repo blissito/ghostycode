@@ -1,13 +1,12 @@
 //! Compact receipts for oversized tool outputs in saved session history.
 
-use std::collections::HashMap;
+use crate::artifacts::{ArtifactKind, ArtifactRecord};
 
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
-use crate::artifacts::{ArtifactKind, ArtifactRecord, format_artifact_relative_path};
+use crate::fast_hash::FastHashMap;
+use crate::localization::{Locale, MessageId, tr};
 use crate::models::{ContentBlock, Message};
-use crate::tools::truncate;
 
 /// Match the provider-wire budget so persisted/resumed history does not keep a
 /// larger raw body than the model would receive on a fresh request.
@@ -40,19 +39,25 @@ struct ToolUseInfo {
 #[derive(Debug, Clone)]
 enum DetailHandle {
     Artifact(ArtifactRecord),
-    Sha { sha: String, persisted: bool },
+    /// Raw legacy result with no session-owned artifact. Compacted
+    /// truthfully, but never given a retrieval handle: a process-wide
+    /// SHA store cannot prove which session owns the bytes.
+    Unavailable,
 }
 
 /// Return a copy of `messages` with oversized raw tool-result bodies replaced
 /// by compact receipts. Full output is kept behind existing session artifacts
-/// when available; otherwise a SHA-addressed spillover copy is written for
-/// `retrieve_tool_result`.
+/// when available. Raw legacy results without a session-owned artifact are
+/// compacted truthfully, but never receive a retrieval handle: a process-wide
+/// SHA store cannot prove which session owns the bytes.
 pub fn compact_messages_for_persistence(
     messages: &[Message],
     artifacts: &[ArtifactRecord],
 ) -> (Vec<Message>, ToolOutputReceiptStats) {
+    // Tool-call IDs here come from engine transcript blocks and artifact records,
+    // making this save/resume bookkeeping a safe FastHashMap target.
     let artifacts_by_call = artifacts_by_tool_call(artifacts);
-    let mut tool_uses: HashMap<String, ToolUseInfo> = HashMap::new();
+    let mut tool_uses: FastHashMap<String, ToolUseInfo> = FastHashMap::default();
     let mut stats = ToolOutputReceiptStats::default();
     let mut compacted = Vec::with_capacity(messages.len());
 
@@ -89,18 +94,10 @@ pub fn compact_messages_for_persistence(
                         .get(tool_use_id.as_str())
                         .cloned()
                         .map(|artifact| DetailHandle::Artifact((*artifact).clone()))
-                        .unwrap_or_else(|| DetailHandle::Sha {
-                            sha: sha256_hex(content.as_bytes()),
-                            persisted: persist_sha_tool_result(content),
-                        });
+                        .unwrap_or(DetailHandle::Unavailable);
                     let source = match &handle {
                         DetailHandle::Artifact(_) => ReceiptSource::Artifact,
-                        DetailHandle::Sha {
-                            persisted: true, ..
-                        } => ReceiptSource::Sha,
-                        DetailHandle::Sha {
-                            persisted: false, ..
-                        } => ReceiptSource::Unavailable,
+                        DetailHandle::Unavailable => ReceiptSource::Unavailable,
                     };
 
                     *content = render_tool_output_receipt(
@@ -114,7 +111,6 @@ pub fn compact_messages_for_persistence(
                     stats.original_chars = stats.original_chars.saturating_add(char_count);
                     match source {
                         ReceiptSource::Artifact => stats.artifact_receipts += 1,
-                        ReceiptSource::Sha => stats.sha_receipts += 1,
                         ReceiptSource::Unavailable => stats.unavailable_receipts += 1,
                     }
                 }
@@ -156,33 +152,39 @@ pub fn tool_output_status(messages: &[Message], artifacts: &[ArtifactRecord]) ->
     status
 }
 
-pub fn format_tool_output_status(status: &ToolOutputStatus) -> String {
+pub fn format_tool_output_status(status: &ToolOutputStatus, locale: Locale) -> String {
     let mut parts = Vec::new();
     if status.raw_large_count > 0 {
-        parts.push(format!(
-            "{} raw over cap (~{} chars) adding context pressure",
-            status.raw_large_count,
-            format_count(status.raw_large_chars)
-        ));
+        parts.push(
+            tr(locale, MessageId::StatusToolRawPressure)
+                .replace("{count}", &status.raw_large_count.to_string())
+                .replace("{chars}", &format_count(status.raw_large_chars)),
+        );
     }
     if status.receipt_count > 0 {
-        parts.push(format!("{} compact receipt(s)", status.receipt_count));
+        parts.push(
+            tr(locale, MessageId::StatusToolCompactReceipts)
+                .replace("{count}", &status.receipt_count.to_string()),
+        );
     }
     if status.artifact_count > 0 {
-        parts.push(format!(
-            "{} artifact(s), {} stored",
-            status.artifact_count,
-            crate::artifacts::format_byte_size(status.artifact_bytes)
-        ));
+        parts.push(
+            tr(locale, MessageId::StatusToolArtifacts)
+                .replace("{count}", &status.artifact_count.to_string())
+                .replace(
+                    "{bytes}",
+                    &crate::artifacts::format_byte_size(status.artifact_bytes),
+                ),
+        );
     }
     if parts.is_empty() {
-        "no large outputs tracked".to_string()
+        tr(locale, MessageId::StatusToolNone).into_owned()
     } else {
         parts.join("; ")
     }
 }
 
-fn artifacts_by_tool_call(artifacts: &[ArtifactRecord]) -> HashMap<&str, &ArtifactRecord> {
+fn artifacts_by_tool_call(artifacts: &[ArtifactRecord]) -> FastHashMap<&str, &ArtifactRecord> {
     artifacts
         .iter()
         .filter(|artifact| artifact.kind == ArtifactKind::ToolOutput)
@@ -193,7 +195,6 @@ fn artifacts_by_tool_call(artifacts: &[ArtifactRecord]) -> HashMap<&str, &Artifa
 #[derive(Debug, Clone, Copy)]
 enum ReceiptSource {
     Artifact,
-    Sha,
     Unavailable,
 }
 
@@ -225,26 +226,6 @@ fn render_tool_output_receipt(
     };
     let exit_status = infer_exit_status(original_content).unwrap_or_else(|| "unknown".to_string());
     let preview = preview_for_receipt(handle, original_content);
-    let (detail_handle, retrieve, storage) = match handle {
-        DetailHandle::Artifact(record) => (
-            record.id.clone(),
-            format!("retrieve_tool_result ref={}", record.id),
-            format_artifact_relative_path(&record.storage_path),
-        ),
-        DetailHandle::Sha { sha, persisted } => {
-            let handle = format!("sha:{sha}");
-            let storage = if *persisted {
-                "content-addressed spillover".to_string()
-            } else {
-                "unavailable; spillover write failed".to_string()
-            };
-            (
-                handle.clone(),
-                format!("retrieve_tool_result ref={handle}"),
-                storage,
-            )
-        }
-    };
 
     format!(
         "[TOOL_OUTPUT_RECEIPT]\n\
@@ -254,10 +235,7 @@ fn render_tool_output_receipt(
          exit_status: {exit_status}\n\
          elapsed: unknown\n\
          output: {bytes} ({chars} chars, ~{tokens} tokens)\n\
-         truncation: raw output omitted from saved/resumed context\n\
-         detail_handle: {detail_handle}\n\
-         retrieve: {retrieve}\n\
-         storage: {storage}\n\
+         truncation: raw output omitted — full output in the tool details view\n\
          command_or_query: {command_or_query}\n\
          preview: {preview}\n\
          [/TOOL_OUTPUT_RECEIPT]",
@@ -265,19 +243,6 @@ fn render_tool_output_receipt(
         chars = format_count(original_chars),
         tokens = format_count(approx_tokens(original_chars)),
     )
-}
-
-fn persist_sha_tool_result(content: &str) -> bool {
-    let sha = sha256_hex(content.as_bytes());
-    match truncate::write_sha_spillover(&sha, content) {
-        Ok(_) => true,
-        Err(err) => {
-            crate::logging::warn(format!(
-                "tool-output receipt SHA spillover write failed for sha={sha}: {err}"
-            ));
-            false
-        }
-    }
 }
 
 fn preview_for_receipt(handle: &DetailHandle, original_content: &str) -> String {
@@ -335,12 +300,6 @@ fn summarize_text(text: &str, max_chars: usize) -> String {
     summary
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
-}
-
 fn approx_tokens(chars: usize) -> usize {
     chars.div_ceil(4)
 }
@@ -351,29 +310,29 @@ fn format_count(value: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::models::Role;
     use std::path::{Path, PathBuf};
 
+    use super::*;
     use chrono::Utc;
     use serde_json::json;
-    use tempfile::tempdir;
-
-    use super::*;
 
     fn tool_use_message(id: &str, name: &str, input: Value) -> Message {
         Message {
-            role: "assistant".to_string(),
+            role: Role::Assistant,
             content: vec![ContentBlock::ToolUse {
                 id: id.to_string(),
                 name: name.to_string(),
                 input,
                 caller: None,
+                thought_signature: None,
             }],
         }
     }
 
     fn tool_result_message(id: &str, content: &str) -> Message {
         Message {
-            role: "user".to_string(),
+            role: Role::User,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: id.to_string(),
                 content: content.to_string(),
@@ -420,30 +379,15 @@ mod tests {
         assert!(!content.contains("RAW_SENTINEL"));
         assert!(content.contains("[TOOL_OUTPUT_RECEIPT]"));
         assert!(content.contains("tool: exec_shell"));
-        assert!(content.contains("detail_handle: art_call-big"));
-        assert!(content.contains("retrieve: retrieve_tool_result ref=art_call-big"));
+        assert!(!content.contains("detail_handle"));
+        assert!(!content.contains("retrieve_tool_result"));
+        assert!(content.contains("full output in the tool details view"));
         assert!(content.contains("command_or_query: {\"command\":\"cargo test -p ghosty-tui\"}"));
     }
 
     #[test]
-    fn compacts_large_tool_result_to_sha_receipt_when_no_artifact_exists() {
-        let _guard = crate::tools::truncate::TEST_SPILLOVER_GUARD
-            .lock()
-            .unwrap_or_else(|err| err.into_inner());
-        let tmp = tempdir().expect("tempdir");
-        let prior = crate::tools::truncate::set_test_spillover_root(Some(
-            tmp.path().join(".deepseek").join("tool_outputs"),
-        ));
-        struct Restore(Option<PathBuf>);
-        impl Drop for Restore {
-            fn drop(&mut self) {
-                crate::tools::truncate::set_test_spillover_root(self.0.take());
-            }
-        }
-        let _restore = Restore(prior);
-
+    fn compacts_unowned_large_tool_result_without_false_storage_claims() {
         let raw = format!("{}\n{}", "H".repeat(320), "NO_ARTIFACT_RAW\n".repeat(2_000));
-        let sha = sha256_hex(raw.as_bytes());
         let messages = vec![
             tool_use_message("call-big", "grep_files", json!({"pattern": "TODO"})),
             tool_result_message("call-big", &raw),
@@ -455,12 +399,13 @@ mod tests {
         };
 
         assert_eq!(stats.compacted_count, 1);
-        assert_eq!(stats.sha_receipts, 1);
+        assert_eq!(stats.sha_receipts, 0);
+        assert_eq!(stats.unavailable_receipts, 1);
         assert!(!content.contains("NO_ARTIFACT_RAW"));
-        assert!(content.contains(&format!("detail_handle: sha:{sha}")));
-        assert!(content.contains(&format!("retrieve: retrieve_tool_result ref=sha:{sha}")));
-        let path = crate::tools::truncate::sha_spillover_path(&sha).expect("sha path");
-        assert_eq!(std::fs::read_to_string(path).expect("read sha"), raw);
+        assert!(!content.contains("detail_handle"));
+        assert!(!content.contains("storage:"));
+        assert!(!content.contains("retrieve_tool_result"));
+        assert!(content.contains("full output in the tool details view"));
     }
 
     #[test]
@@ -482,7 +427,7 @@ mod tests {
     #[test]
     fn status_reports_raw_large_receipts_and_artifacts() {
         let raw = "RAW_STATUS\n".repeat(2_000);
-        let receipt = "[TOOL_OUTPUT_RECEIPT]\ndetail_handle: art_call-big";
+        let receipt = "[TOOL_OUTPUT_RECEIPT]\ntruncation: raw output omitted — full output in the tool details view";
         let messages = vec![
             tool_result_message("call-raw", &raw),
             tool_result_message("call-receipt", receipt),
@@ -497,7 +442,7 @@ mod tests {
         assert_eq!(status.receipt_count, 1);
         assert_eq!(status.artifact_count, 1);
 
-        let rendered = format_tool_output_status(&status);
+        let rendered = format_tool_output_status(&status, Locale::En);
         assert!(rendered.contains("raw over cap"));
         assert!(rendered.contains("compact receipt"));
         assert!(rendered.contains("artifact"));

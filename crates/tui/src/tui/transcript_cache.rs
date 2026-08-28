@@ -21,6 +21,12 @@ use std::collections::VecDeque;
 
 use ratatui::text::Line;
 
+#[derive(Debug, Clone)]
+pub(crate) struct CachedTranscriptLine {
+    pub line: Line<'static>,
+    pub links: Vec<crate::tui::osc8::LineLink>,
+}
+
 /// Soft cap on the number of cached entries before insertion-order eviction
 /// kicks in. Sized for the worst-case "5,000-line transcript at 200 cells,
 /// resize twice" pattern; well under a megabyte even with 10 KB cells.
@@ -49,7 +55,7 @@ struct Key {
 #[derive(Debug)]
 pub struct TranscriptCache {
     capacity: usize,
-    entries: HashMap<Key, Vec<Line<'static>>>,
+    entries: HashMap<Key, Vec<CachedTranscriptLine>>,
     /// Insertion order so we can evict the oldest entry when full. Two-step
     /// (HashMap + VecDeque) so insertion is O(1) and lookup stays O(1).
     insertion_order: VecDeque<Key>,
@@ -79,7 +85,7 @@ impl TranscriptCache {
     /// Look up wrapped lines previously rendered at this exact key. Returns
     /// `None` if the cell never wrapped at this width/revision before.
     #[must_use]
-    pub fn get(&self, cell: CellId, width: u16, revision: u64) -> Option<&[Line<'static>]> {
+    pub fn get(&self, cell: CellId, width: u16, revision: u64) -> Option<&[CachedTranscriptLine]> {
         let key = Key {
             cell,
             width,
@@ -90,7 +96,13 @@ impl TranscriptCache {
 
     /// Cache a fresh wrap result. If the cache is at capacity the oldest
     /// inserted entry is evicted first.
-    pub fn insert(&mut self, cell: CellId, width: u16, revision: u64, lines: Vec<Line<'static>>) {
+    pub fn insert(
+        &mut self,
+        cell: CellId,
+        width: u16,
+        revision: u64,
+        lines: Vec<CachedTranscriptLine>,
+    ) {
         let key = Key {
             cell,
             width,
@@ -128,8 +140,11 @@ mod tests {
     use super::*;
     use ratatui::text::Span;
 
-    fn line(s: &str) -> Line<'static> {
-        Line::from(Span::raw(s.to_string()))
+    fn line(s: &str) -> CachedTranscriptLine {
+        CachedTranscriptLine {
+            line: Line::from(Span::raw(s.to_string())),
+            links: Vec::new(),
+        }
     }
 
     #[test]
@@ -147,7 +162,7 @@ mod tests {
             .get(CellId::History(0), 80, 1)
             .expect("entry should be cached");
         assert_eq!(got.len(), 2);
-        assert_eq!(got[0].spans[0].content, "hello");
+        assert_eq!(got[0].line.spans[0].content, "hello");
     }
 
     #[test]
@@ -174,11 +189,11 @@ mod tests {
         cache.insert(CellId::History(0), 80, 1, vec![line("history")]);
         cache.insert(CellId::Active(0), 80, 1, vec![line("active")]);
         assert_eq!(
-            cache.get(CellId::History(0), 80, 1).unwrap()[0].spans[0].content,
+            cache.get(CellId::History(0), 80, 1).unwrap()[0].line.spans[0].content,
             "history"
         );
         assert_eq!(
-            cache.get(CellId::Active(0), 80, 1).unwrap()[0].spans[0].content,
+            cache.get(CellId::Active(0), 80, 1).unwrap()[0].line.spans[0].content,
             "active"
         );
     }

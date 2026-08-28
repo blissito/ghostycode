@@ -14,6 +14,7 @@
 //! `core::engine::tool_catalog::ensure_advanced_tooling` for the
 //! catalog-side dispatch.
 
+use std::ffi::OsString;
 use std::path::Path;
 use std::time::Duration;
 
@@ -30,6 +31,58 @@ pub const JS_EXECUTION_TOOL_NAME: &str = "js_execution";
 /// Anthropic message API expects so the wire shape stays stable
 /// across the two interpreters.
 const JS_EXECUTION_TOOL_TYPE: &str = "code_execution_20250825";
+const NODE_USE_ENV_PROXY: &str = "NODE_USE_ENV_PROXY";
+const NODE_PROXY_PAIRS: &[(&str, &str)] =
+    &[("HTTP_PROXY", "http_proxy"), ("HTTPS_PROXY", "https_proxy")];
+
+fn first_non_empty_env_from(
+    keys: &[&str],
+    env: &impl Fn(&str) -> Option<OsString>,
+) -> Option<OsString> {
+    keys.iter()
+        .filter_map(|key| env(key))
+        .find(|value| !value.is_empty())
+}
+
+fn node_proxy_env_overrides_from(
+    env: impl Fn(&str) -> Option<OsString>,
+) -> Vec<(&'static str, OsString)> {
+    let all_proxy = first_non_empty_env_from(&["ALL_PROXY", "all_proxy"], &env);
+    let proxy_configured = all_proxy.is_some()
+        || NODE_PROXY_PAIRS
+            .iter()
+            .any(|(upper, lower)| first_non_empty_env_from(&[upper, lower], &env).is_some());
+
+    let mut overrides = Vec::new();
+    if proxy_configured && first_non_empty_env_from(&[NODE_USE_ENV_PROXY], &env).is_none() {
+        overrides.push((NODE_USE_ENV_PROXY, OsString::from("1")));
+    }
+
+    for (upper, lower) in NODE_PROXY_PAIRS {
+        if first_non_empty_env_from(&[upper], &env).is_none()
+            && let Some(value) =
+                first_non_empty_env_from(&[lower], &env).or_else(|| all_proxy.clone())
+        {
+            overrides.push((*upper, value));
+        }
+    }
+
+    if first_non_empty_env_from(&["NO_PROXY"], &env).is_none()
+        && let Some(value) = first_non_empty_env_from(&["no_proxy"], &env)
+    {
+        overrides.push(("NO_PROXY", value));
+    }
+
+    overrides
+}
+
+fn node_proxy_env_overrides() -> Vec<(&'static str, OsString)> {
+    node_proxy_env_overrides_from(|key| std::env::var_os(key))
+}
+
+fn apply_node_execution_env(cmd: &mut tokio::process::Command) {
+    crate::child_env::apply_to_tokio_command(cmd, node_proxy_env_overrides());
+}
 
 /// Build the `Tool` definition the catalog should advertise when
 /// Node.js is present on the host. Kept as a constructor (rather
@@ -41,7 +94,7 @@ pub fn js_execution_tool_definition() -> Tool {
         tool_type: Some(JS_EXECUTION_TOOL_TYPE.to_string()),
         name: JS_EXECUTION_TOOL_NAME.to_string(),
         description:
-            "Execute JavaScript code in a local sandboxed Node.js runtime and return stdout/stderr/return_code as JSON."
+            "Execute JavaScript code with the local Node.js runtime in the workspace and return stdout/stderr/return_code as JSON."
                 .to_string(),
         input_schema: json!({
             "type": "object",
@@ -87,7 +140,21 @@ pub async fn execute_js_execution_tool(
     let mut cmd = crate::dependencies::Node::tokio_command().ok_or_else(|| {
         ToolError::execution_failed("js_execution: Node.js runtime became unavailable".to_string())
     })?;
+    // Recent Node releases use this startup env to make fetch/http(s) honor
+    // standard proxy variables; older runtimes ignore it and keep prior behavior.
+    apply_node_execution_env(&mut cmd);
     cmd.arg(&script_path).current_dir(workspace);
+
+    // #3273: Node's built-in `fetch` (undici) ignores HTTP(S)_PROXY env vars
+    // unless `NODE_USE_ENV_PROXY` is set (Node >= 24). This child already
+    // inherits GhostyCode's proxy environment, so enabling the flag lets
+    // `js_execution`'s `fetch()` reach the network through the same proxy/VPN
+    // as the rest of the app and honor `NO_PROXY`. Only default it on when the
+    // user hasn't chosen a value, so an explicit opt-out (`NODE_USE_ENV_PROXY=0`)
+    // still wins. No-op on Node < 24, which ignores the unknown variable.
+    if std::env::var_os("NODE_USE_ENV_PROXY").is_none() {
+        cmd.env("NODE_USE_ENV_PROXY", "1");
+    }
 
     let output = tokio::time::timeout(Duration::from_secs(120), cmd.output())
         .await
@@ -116,6 +183,8 @@ pub async fn execute_js_execution_tool(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{EnvVarGuard, lock_test_env};
+    use std::ffi::OsString;
     use tempfile::tempdir;
 
     /// Skip helper — `js_execution` is a no-op on hosts without Node.
@@ -125,11 +194,21 @@ mod tests {
         crate::dependencies::resolve_node().is_some()
     }
 
+    fn proxy_env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
+        move |key| {
+            pairs
+                .iter()
+                .find_map(|(name, value)| (*name == key).then(|| OsString::from(value)))
+        }
+    }
+
     #[test]
     fn tool_definition_advertises_js_execution_name_and_required_code_field() {
         let tool = js_execution_tool_definition();
         assert_eq!(tool.name, JS_EXECUTION_TOOL_NAME);
         assert_eq!(tool.tool_type.as_deref(), Some(JS_EXECUTION_TOOL_TYPE));
+        assert!(tool.description.contains("local Node.js runtime"));
+        assert!(!tool.description.contains("sandbox"));
         let required = tool
             .input_schema
             .get("required")
@@ -138,6 +217,35 @@ mod tests {
         assert!(
             required.iter().any(|v| v.as_str() == Some("code")),
             "input_schema must require `code`",
+        );
+    }
+
+    #[test]
+    fn node_proxy_overrides_enable_env_proxy_when_proxy_env_is_present() {
+        let overrides =
+            node_proxy_env_overrides_from(proxy_env(&[("HTTPS_PROXY", "http://127.0.0.1:20499")]));
+
+        assert_eq!(
+            overrides,
+            vec![(NODE_USE_ENV_PROXY, OsString::from("1"))],
+            "uppercase proxy vars are inherited by the child; only Node's env-proxy flag is needed"
+        );
+    }
+
+    #[test]
+    fn node_proxy_overrides_mirror_lowercase_proxy_vars() {
+        let overrides = node_proxy_env_overrides_from(proxy_env(&[
+            ("https_proxy", "http://127.0.0.1:20499"),
+            ("no_proxy", "localhost"),
+        ]));
+
+        assert_eq!(
+            overrides,
+            vec![
+                (NODE_USE_ENV_PROXY, OsString::from("1")),
+                ("HTTPS_PROXY", OsString::from("http://127.0.0.1:20499")),
+                ("NO_PROXY", OsString::from("localhost")),
+            ]
         );
     }
 
@@ -183,6 +291,66 @@ mod tests {
         assert!(
             result.content.contains("intentional fail"),
             "stderr payload must surface the error message; got {}",
+            result.content
+        );
+    }
+
+    // The env lock must stay held across the await so no other env-mutating test
+    // races the process env while the child node run reads it.
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn execute_js_does_not_inherit_parent_secret_env() {
+        if !node_present() {
+            return;
+        }
+        let _env_lock = lock_test_env();
+        let _secret = EnvVarGuard::set("GHOSTY_JS_SECRET_LEAK_TEST", "secret-value");
+        let tmp = tempdir().expect("tempdir");
+        let result = execute_js_execution_tool(
+            &json!({
+                "code": "process.stdout.write(process.env.GHOSTY_JS_SECRET_LEAK_TEST || 'missing')"
+            }),
+            tmp.path(),
+        )
+        .await
+        .expect("execute");
+        assert!(
+            result.success,
+            "node run should succeed: {}",
+            result.content
+        );
+        assert!(
+            result.content.contains("missing"),
+            "sanitized child env must not expose parent secrets; got {}",
+            result.content
+        );
+        assert!(
+            !result.content.contains("secret-value"),
+            "secret value must not appear in js_execution output"
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_js_enables_env_proxy_so_fetch_honors_proxy_vars() {
+        if !node_present() {
+            return;
+        }
+        // The tool defers to an explicit caller choice; only assert the
+        // default-on behavior when the surrounding env hasn't set it.
+        if std::env::var_os("NODE_USE_ENV_PROXY").is_some() {
+            return;
+        }
+        let tmp = tempdir().expect("tempdir");
+        let result = execute_js_execution_tool(
+            &json!({ "code": "process.stdout.write(String(process.env.NODE_USE_ENV_PROXY))" }),
+            tmp.path(),
+        )
+        .await
+        .expect("execute");
+        assert!(
+            result.content.contains("\"stdout\":\"1\""),
+            "#3273: js_execution must default NODE_USE_ENV_PROXY=1 so Node's fetch \
+             routes through HTTP(S)_PROXY; got {}",
             result.content
         );
     }

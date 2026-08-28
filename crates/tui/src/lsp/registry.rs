@@ -1,9 +1,9 @@
 //! Language detection + the fixed dictionary mapping a language to the LSP
 //! server binary that handles it.
 //!
-//! Kept intentionally small: a dozen languages, a hard-coded executable name
-//! per language, an optional list of args. Users can override the defaults
-//! via `[lsp.servers]` in `~/.deepseek/config.toml` (handled by
+//! Built-in dictionary covers common languages. Users can override defaults
+//! via `[lsp.servers]` and register custom language servers for additional
+//! file extensions via `[lsp.custom]` in their config (handled by
 //! [`super::LspConfig`], not this file).
 
 use std::path::Path;
@@ -19,6 +19,7 @@ pub enum Language {
     TypeScript,
     JavaScript,
     Java,
+    Php,
     Vue,
     C,
     Cpp,
@@ -37,6 +38,7 @@ impl Language {
             Language::TypeScript => "typescript",
             Language::JavaScript => "javascript",
             Language::Java => "java",
+            Language::Php => "php",
             Language::Vue => "vue",
             Language::C => "c",
             Language::Cpp => "cpp",
@@ -56,6 +58,7 @@ impl Language {
             Language::TypeScript => "typescript",
             Language::JavaScript => "javascript",
             Language::Java => "java",
+            Language::Php => "php",
             Language::Vue => "vue",
             Language::C => "c",
             Language::Cpp => "cpp",
@@ -80,6 +83,7 @@ pub fn detect_language(path: &Path) -> Language {
         "ts" | "tsx" => Language::TypeScript,
         "js" | "jsx" | "mjs" | "cjs" => Language::JavaScript,
         "java" => Language::Java,
+        "php" => Language::Php,
         "vue" => Language::Vue,
         "c" | "h" => Language::C,
         "cpp" | "cc" | "cxx" | "hpp" | "hxx" | "hh" => Language::Cpp,
@@ -100,6 +104,7 @@ pub fn server_for(lang: Language) -> Option<(&'static str, &'static [&'static st
             Some(("typescript-language-server", &["--stdio"]))
         }
         Language::Java => Some(("jdtls", &[])),
+        Language::Php => Some(("intelephense", &["--stdio"])),
         Language::Vue => Some(("vue-language-server", &["--stdio"])),
         Language::C | Language::Cpp => Some(("clangd", &[])),
         Language::Other => None,
@@ -149,6 +154,13 @@ mod tests {
     }
 
     #[test]
+    fn detects_php_extension() {
+        assert_eq!(detect_language(&PathBuf::from("index.php")), Language::Php);
+        assert_eq!(detect_language(&PathBuf::from("INDEX.PHP")), Language::Php);
+        assert_eq!(detect_language(&PathBuf::from("router.php")), Language::Php);
+    }
+
+    #[test]
     fn detects_vue_extension() {
         assert_eq!(
             detect_language(&PathBuf::from("Component.vue")),
@@ -158,6 +170,21 @@ mod tests {
             detect_language(&PathBuf::from("COMPONENT.VUE")),
             Language::Vue
         );
+    }
+
+    #[test]
+    fn language_ids_for_php_and_vue_match_lsp_values() {
+        assert_eq!(Language::Php.as_key(), "php");
+        assert_eq!(Language::Php.language_id(), "php");
+        assert_eq!(Language::Vue.as_key(), "vue");
+        assert_eq!(Language::Vue.language_id(), "vue");
+    }
+
+    #[test]
+    fn server_for_php_is_intelephense() {
+        let (cmd, args) = server_for(Language::Php).expect("php has a server");
+        assert_eq!(cmd, "intelephense");
+        assert_eq!(args, &["--stdio"]);
     }
 
     #[test]

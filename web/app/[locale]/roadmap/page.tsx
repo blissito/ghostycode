@@ -1,58 +1,56 @@
 import Link from "next/link";
-import { Seal } from "@/components/seal";
 import { getCachedRoadmap, type RoadmapItem } from "@/lib/roadmap-feed";
 import { getEnv } from "@/lib/kv";
+import { buildPageMetadata } from "@/lib/page-meta";
 
 export const revalidate = 1800;
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const isZh = locale === "zh";
-  return {
-    title: isZh ? "路线图 · Ghosty Code" : "Roadmap · Ghosty Code",
+  return buildPageMetadata({
+    path: "/roadmap",
+    locale,
+    title: isZh ? "路线图 · Ghosty" : "Roadmap · Ghosty",
     description: isZh
-      ? "已确认、正在评估和已排除的功能规划。"
-      : "What's confirmed, what's being weighed, what's been ruled out for Ghosty Code.",
-  };
+      ? "Ghosty 已完成、进行中、考虑中和明确不在范围内的工作。"
+      : "Current Ghosty work grouped by shipped, underway, considered, and deliberately out-of-scope directions.",
+  });
 }
 
 const tracksEn = [
   {
     title: "Shipped",
-    cn: "已完成",
-    color: "jade",
     items: [
-      { title: "Typed tool surface", note: "read, write, edit, patch, grep, shell, git, web search — plus sub-agents, RLM, and MCP" },
-      { title: "Sub-agent parallel execution", note: "agent_open / agent_eval / agent_close; up to 10 concurrent sessions with bounded result handles" },
+      { title: "Small searchable toolbox", note: "Every turn starts with read, write, edit, bash, agent, and tool_search. Specialized native, Web, MCP, plugin, memory, task, and verification tools are policy-filtered and searchable; activated schemas stay in a bounded per-conversation toolbox." },
+      { title: "Sub-agent parallel execution", note: "agent; 64 concurrent sessions by default, configurable to 128, with bounded result handles" },
       { title: "RLM batched processing", note: "Persistent sandboxed Python REPL with 1–16 cheap parallel children for long-input analysis" },
-      { title: "Three operating modes", note: "Plan (read-only), Agent (default), YOLO (auto-approved); orthogonal suggest / auto / never approval" },
-      { title: "Per-platform sandbox", note: "seatbelt (macOS), landlock (Linux); Windows containment via restricted tokens (limited)" },
+      { title: "Three operating modes", note: "Plan (read-only authority), Work (execution), and Operate (Fleet/Workflow orchestration) keep one primitive vocabulary; Ask / Auto-Review / Full Access remains an orthogonal approval posture." },
+      { title: "OS command sandbox", note: "Seatbelt on macOS when available; opt-in bubblewrap on Linux when installed. Windows currently reports no OS sandbox." },
       { title: "Durable sessions + tasks", note: "Save, resume, rollback; background task queue with replayable timelines under ~/.ghosty/tasks/" },
       { title: "Bidirectional MCP", note: "Consume tools from external servers; expose as server via `ghosty mcp`; ~/.ghosty/mcp.json" },
       { title: "Skills + unified slash palette", note: "~/.ghosty/skills/ auto-loading; /help, /mode, /status, /config, /trust, /feedback" },
-      { title: "OpenRouter provider", note: "First-class OpenRouter integration with 300+ models across dozens of providers" },
+      { title: "OpenRouter provider", note: "OpenRouter integration with 300+ models across dozens of providers" },
+      { title: "OpenAI-compatible & local runtimes", note: "Generic `openai` route for any OpenAI-compatible gateway, plus vLLM, SGLang, and Ollama against your own localhost endpoints — no key required" },
       { title: "Multi-provider support", note: "Hot-swap between providers (DeepSeek, OpenAI, Anthropic, OpenRouter) per session" },
+      { title: "Local web client", note: "Implemented in the v0.9.1 source candidate: `ghosty web` is a loopback-only browser client over the Runtime API behind a one-time bootstrap session boundary; approvals and user input recover across page reloads (#4423)" },
+      { title: "Anonymous usage counting", note: "On by default with a clear first-run disclosure and a durable opt-out. It posts aggregate session, feature, and error counts and closed enums to the first-party endpoint https://telemetry.ghosty.net/v1/telemetry, a Cloudflare Worker whose full source is in the repo under telemetry-ingest/. Its storage has no IP, country, or geo column — that is structural, not a setting — nothing is logged, and Cloudflare's retention is a fixed three months. Set telemetry_endpoint = \"\" to contact nobody: batches then go to $GHOSTY_HOME/telemetry/dryrun.jsonl and you can read exactly what would have been sent. Never conversations, code, prompts, files, file/repo/branch names, model content, credentials, or a per-turn/per-tool timeline; the full schema is docs/TELEMETRY.md. Turn it off with `ghosty config set telemetry false` or GHOSTY_TELEMETRY=0." },
     ],
   },
   {
     title: "Underway",
-    cn: "进行中",
-    color: "ochre",
     items: [
-      { title: "VS Code extension", note: "Scaffold, local runtime detection, chat webview — first external editor surface (#461–#463)" },
-      { title: "Memory typed store", note: "SQLite + FTS5 backend with graph-structured agent memory and multi-signal recall (#534–#536)" },
-      { title: "Feishu / Lark bot", note: "Chat-platform frontend over the existing runtime API (#757)" },
+      { title: "VS Code extension", note: "The repository ships a Phase 0 local-runtime companion: terminal launch, health checks, read-only thread summaries, and restore-point browsing. Full chat and editor actions are not part of this slice." },
+      { title: "Memory typed store", note: "The native store has shipped: Markdown is the durable source of truth, with a rebuildable SQLite FTS5 index over it. Graph-structured agent memory and multi-signal recall are still ahead (#534–#536)" },
+      { title: "Feishu / Lark bot", note: "First long-connection bridge over the runtime API shipped; richer chat features underway (#757)" },
       { title: "Chinese-market & i18n", note: "Locale-aware UI, platform refinements, region-specific search backends (#755)" },
       { title: "Hugging Face model discovery + Model Lab", note: "Browse, download, and manage models from Hugging Face Hub directly in the TUI" },
-      { title: "ZenMux / OpenAI-compatible providers", note: "Bring any OpenAI-compatible endpoint (vLLM, LiteLLM, Ollama, local) as a first-class provider" },
     ],
   },
   {
     title: "Considered",
-    cn: "考虑中",
-    color: "cobalt",
     items: [
-      { title: "Web UI / share-link mode", note: "Local web interface over serve --http; curated, generated static share links (#471, #481)" },
+      { title: "Workrooms", note: "Durable, addressable agent-work threads over the Runtime API and user surfaces (#3209, docs/WORKROOM_ARCHITECTURE.md)" },
       { title: "Exa web-search backend", note: "Bundled alternative to the existing DDG + Bing path (#431)" },
       { title: "Homebrew core formula", note: "Tap exists; pursuing homebrew-core inclusion" },
       { title: "Native Windows installer", note: "MSI / WinGet; Scoop manifest already ships" },
@@ -61,23 +59,20 @@ const tracksEn = [
   },
   {
     title: "Ruled out",
-    cn: "暂不考虑",
-    color: "ink-mute",
     items: [
-      { title: "Telemetry / phone-home", note: "The agent runs on your machine — what happens there stays there" },
-      { title: "Hosted SaaS dashboard", note: "The terminal IS the dashboard; the website is informational only" },
-      { title: "Required login / accounts", note: "Bring your own API key, that's it" },
+      { title: "Silent or content-level telemetry", note: "Anonymous usage counting is on by default, but the first-run disclosure and every opt-out are mandatory. What stays ruled out: conversations, code, prompts, files, model content, credentials, per-turn or per-tool timelines, collection hidden from the user, and any third-party ad or analytics SDK in the runtime binary. A selected hosted provider still receives the context required for its model turn; loopback routes can keep inference local." },
+      { title: "Mandatory hosted relay for local sessions", note: "The local runtime and bring-your-own-provider routes continue to work without sending sessions through a Ghosty service" },
+      { title: "Required account for the local runtime", note: "Installing and running Ghosty locally requires no account" },
       { title: "Sponsored model promotion", note: "Model picker stays neutral — no paid placement" },
+      { title: "Public share links for local sessions", note: "The retired share-link direction (#471/#481) is not coming back; any future sharing design starts fresh." },
     ],
   },
   {
     title: "Open model platform",
-    cn: "开放模型平台",
-    color: "indigo",
     items: [
       { title: "Community model registry", note: "Discover, share, and rate community fine-tuned models with reproducible recipes" },
       { title: "One-click deploy", note: "Deploy any model to RunPod, Replicate, or your own infra with a single command" },
-      { title: "Model benchmarking dashboard", note: "Transparent, reproducible benchmarks across providers, quantization levels, and hardware" },
+      { title: "Model evaluation dashboard", note: "Transparent, reproducible comparisons across providers, quantization levels, and hardware" },
     ],
   },
 ];
@@ -85,40 +80,36 @@ const tracksEn = [
 const tracksZh = [
   {
     title: "已完成",
-    cn: "Shipped",
-    color: "jade",
     items: [
-      { title: "类型化工具集", note: "文件读写、编辑、补丁、搜索、Shell、Git、子 Agent、RLM、MCP——覆盖日常开发全流程" },
-      { title: "子 Agent 并行执行", note: "agent_open / agent_eval / agent_close；最多 10 个并发会话，通过 var_handle 有界读取结果" },
+      { title: "小型可搜索工具箱", note: "每轮以 read、write、edit、bash、agent 与 tool_search 开始。原生专用工具、Web、MCP、插件、记忆、任务和验证工具按策略过滤并可搜索；激活的 schema 保存在有界的会话工具箱中。" },
+      { title: "子 Agent 并行执行", note: "agent；默认 64 个并发会话，可配置到 128 个，通过 var_handle 有界读取结果" },
       { title: "RLM 批量处理", note: "持久沙箱 Python REPL，支持 1–16 路廉价并行子调用，处理长文本分析" },
-      { title: "三种运行模式", note: "Plan（只读）、Agent（默认）、YOLO（自动批准）；审批模式正交（建议/自动/拒绝）" },
-      { title: "跨平台沙箱", note: "seatbelt（macOS）、landlock（Linux）；Windows 通过受限令牌实现基础隔离（功能有限）" },
+      { title: "三种运行模式", note: "Plan（只读权限）、Work（执行）与 Operate（Fleet / Workflow 编排）使用同一套基础工具名称；Ask、Auto-Review 与 Full Access 审批姿态独立设置。" },
+      { title: "OS 命令沙箱", note: "macOS 在可用时使用 Seatbelt；Linux 在安装后可显式启用 bubblewrap。Windows 当前报告无 OS 沙箱。" },
       { title: "持久化会话 + 后台任务", note: "保存、恢复、回滚；后台任务队列，可回放时间线，位于 ~/.ghosty/tasks/" },
       { title: "双向 MCP 协议", note: "消费外部服务器工具；通过 `ghosty mcp` 暴露为服务器；~/.ghosty/mcp.json" },
       { title: "技能 + 统一命令面板", note: "~/.ghosty/skills/ 自动加载；/help、/mode、/status、/config、/trust、/feedback" },
       { title: "OpenRouter 提供商", note: "原生集成 OpenRouter，支持 300+ 模型，覆盖数十个提供商" },
+      { title: "OpenAI 兼容与本地运行时", note: "通用 `openai` 路由可接入任意 OpenAI 兼容网关；vLLM、SGLang、Ollama 直连本地端点，无需密钥" },
       { title: "多提供商支持", note: "按会话动态切换提供商（DeepSeek、OpenAI、Anthropic、OpenRouter）" },
+      { title: "本地 Web 客户端", note: "v0.9.1 源码候选版已实现：`ghosty web` 是基于 Runtime API 与一次性引导会话边界的回环地址浏览器客户端；审批与用户输入可在页面刷新后恢复（#4423）" },
+      { title: "匿名使用计数", note: "默认开启，首次运行会清楚说明，并提供永久关闭选项。它只会把聚合的会话、功能与错误计数以及封闭枚举 POST 到第一方端点 https://telemetry.ghosty.net/v1/telemetry；完整源码在 telemetry-ingest/。存储中没有 IP、国家或地理位置列，不写日志，Cloudflare 的保留期固定为三个月。设置 telemetry_endpoint = \"\" 可完全不联系服务器，批次只写入 $GHOSTY_HOME/telemetry/dryrun.jsonl。永远不收集对话、代码、prompt、文件、文件/仓库/分支名、模型内容、凭据，也不发送逐轮或逐工具时间线；完整 schema 见 docs/TELEMETRY.md。用 `ghosty config set telemetry false` 或 GHOSTY_TELEMETRY=0 关闭。" },
     ],
   },
   {
     title: "进行中",
-    cn: "Underway",
-    color: "ochre",
     items: [
-      { title: "VS Code 扩展", note: "脚手架、本地运行时检测、聊天 Webview——首个外部编辑器集成（#461–#463）" },
-      { title: "记忆类型化存储", note: "SQLite + FTS5 后端，图结构 Agent 记忆，多信号召回（#534–#536）" },
-      { title: "飞书 / Lark 机器人", note: "基于现有 runtime API 的聊天平台前端（#757）" },
+      { title: "VS Code 扩展", note: "仓库已提供 Phase 0 本地 Runtime 配套扩展：终端启动、健康检查、只读线程摘要和还原点浏览；完整聊天与编辑器操作尚未包含在此版本中。" },
+      { title: "记忆类型化存储", note: "原生存储已发布：以 Markdown 作为持久化事实来源，并在其上建立可重建的 SQLite FTS5 索引。图结构 Agent 记忆与多信号召回仍在规划中（#534–#536）" },
+      { title: "飞书 / Lark 机器人", note: "基于 runtime API 的长连接桥接已发布首版；更丰富的对话能力进行中（#757）" },
       { title: "中国市场与国际化改进", note: "本地化 UI、平台优化、区域搜索引擎（#755）" },
       { title: "Hugging Face 模型发现 + 模型实验室", note: "在 TUI 中直接浏览、下载和管理 Hugging Face Hub 上的模型" },
-      { title: "ZenMux / OpenAI 兼容提供商", note: "将任意 OpenAI 兼容端点（vLLM、LiteLLM、Ollama、本地模型）作为一级提供商接入" },
     ],
   },
   {
     title: "考虑中",
-    cn: "Considered",
-    color: "cobalt",
     items: [
-      { title: "Web 界面 / 分享链接模式", note: "通过 serve --http 提供本地 Web 界面；精选静态分享链接（#471、#481）" },
+      { title: "Workrooms 工作间", note: "基于 Runtime API 与用户界面的持久、可寻址 Agent 工作线程（#3209，docs/WORKROOM_ARCHITECTURE.md）" },
       { title: "Exa 网页搜索后端", note: "内建替代 DDG + Bing 的搜索路由（#431）" },
       { title: "Homebrew 核心仓库", note: "Tap 已有；正在争取进入 homebrew-core" },
       { title: "Windows 原生安装器", note: "MSI / WinGet；Scoop 清单已发布" },
@@ -127,33 +118,26 @@ const tracksZh = [
   },
   {
     title: "暂不考虑",
-    cn: "Ruled out",
-    color: "ink-mute",
     items: [
-      { title: "遥测 / 回传数据", note: "Agent 在你的机器上运行——你的数据不会离开" },
-      { title: "托管 SaaS 面板", note: "终端即面板；网站仅供信息展示" },
-      { title: "强制登录 / 注册", note: "自带 API 密钥即可" },
+      { title: "静默或内容级遥测", note: "匿名使用计数默认开启，但首次运行说明与所有关闭选项都是强制的。仍被排除在外的是：对话、代码、prompt、文件、模型内容、凭据、逐轮或逐工具时间线、对用户隐藏的收集，以及运行时二进制中的任何第三方广告或分析 SDK。选用托管 provider 时仍会发送本轮所需上下文，回环地址路由可让推理保持本地。" },
+      { title: "本地会话强制经过托管中继", note: "本地 Runtime 与自带提供商路由继续工作，无需把会话发送到 Ghosty 服务" },
+      { title: "本地 Runtime 强制注册账户", note: "本地安装和运行 Ghosty 不需要账户" },
       { title: "赞助商模型推广", note: "模型选择器保持中立——无付费推荐位" },
+      { title: "本地会话的公开分享链接", note: "已停用的分享链接方向（#471/#481）不会恢复；未来的分享设计将重新开始。" },
     ],
   },
   {
     title: "开放模型平台",
-    cn: "Open model platform",
-    color: "indigo",
     items: [
       { title: "社区模型注册中心", note: "发现、分享和评价社区微调模型，附带可复现的配方" },
       { title: "一键部署", note: "一条命令将任意模型部署到 RunPod、Replicate 或自有基础设施" },
-      { title: "模型基准测试面板", note: "跨提供商、量化级别和硬件的透明、可复现基准测试" },
+      { title: "模型评测面板", note: "跨提供商、量化级别和硬件的透明、可复现对比" },
     ],
   },
 ];
 
-const colorFor = (c: string) =>
-  c === "jade" ? "border-jade text-jade" :
-  c === "ochre" ? "border-ochre text-ochre" :
-  c === "cobalt" ? "border-cobalt text-cobalt" :
-  c === "indigo" ? "border-indigo text-indigo" :
-  "border-ink-mute text-ink-mute";
+const roadmapText = (text: string) =>
+  text.replace(/^>\s*/, "").replaceAll("**", "").replaceAll("GhostyCode", "Ghosty");
 
 export default async function RoadmapPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -189,154 +173,101 @@ export default async function RoadmapPage({ params }: { params: Promise<{ locale
     /* keep static fallback */
   }
 
+  const copy = isZh
+    ? {
+        eyebrow: "项目路线图",
+        title: "路线图",
+        introduction: "这里将已完成的仓库工作、正在推进的工作、仍在评估的方案和明确不在范围内的方向分开列出。路线图的“已完成”可包含已在源码候选版中实现的工作；安装页与首页另行标明最新已发布包。发布记录和 GitHub issues 会在可用时更新这些分类。",
+        sectionLabel: "当前状态",
+        sectionTitle: "按状态查看工作",
+        browseIssues: "浏览 open issues ↗",
+        count: (value: number) => `${value} 项`,
+        contributeLabel: "参与贡献",
+        contributeTitle: "路线图决策公开进行。",
+        contributeBody: "Bug 和范围明确的功能请求请使用 issues；尚在形成中的想法可以先在 Discussions 讨论；已有具体实现时，欢迎发送带测试或文档的 pull request。来自不同语言、平台和提供商的验证结果都能帮助维护者判断优先级。",
+        links: [
+          { title: "Issues", detail: "报告问题，或提出范围明确的工作。", href: "https://github.com/blissito/ghostycode/issues" },
+          { title: "Discussions", detail: "在开始实现前讨论尚未成熟的想法。", href: "https://github.com/blissito/ghostycode/discussions/new?category=ideas" },
+          { title: "Pull requests", detail: "审查现有改动，或发送一个范围清楚的补丁。", href: "https://github.com/blissito/ghostycode/pulls" },
+        ],
+      }
+    : {
+        eyebrow: "Project roadmap",
+        title: "Roadmap",
+        introduction: "This page separates completed repository work from work in progress, proposals still being evaluated, and directions intentionally kept out of scope. Roadmap Shipped can include work implemented in a source candidate; the install page and homepage separately identify the latest published package. Release records and GitHub issues refresh these categories when available.",
+        sectionLabel: "Current status",
+        sectionTitle: "Work grouped by status",
+        browseIssues: "Browse open issues ↗",
+        count: (value: number) => `${value} ${value === 1 ? "item" : "items"}`,
+        contributeLabel: "Contribute",
+        contributeTitle: "Keep roadmap decisions in the open.",
+        contributeBody: "Use issues for bugs and well-scoped feature requests, Discussions for ideas that need shaping, and pull requests for concrete changes with tests or documentation. Verification across languages, platforms, and providers helps maintainers judge priority.",
+        links: [
+          { title: "Issues", detail: "Report a problem or propose scoped work.", href: "https://github.com/blissito/ghostycode/issues" },
+          { title: "Discussions", detail: "Explore an early idea before implementation.", href: "https://github.com/blissito/ghostycode/discussions/new?category=ideas" },
+          { title: "Pull requests", detail: "Review existing work or send a focused change.", href: "https://github.com/blissito/ghostycode/pulls" },
+        ],
+      };
+
   return (
-    <>
-      {isZh ? (
-        <>
-          <section className="mx-auto max-w-[1400px] px-6 pt-12 pb-8">
-            <div className="flex items-baseline gap-4 mb-3">
-              <Seal char="路" />
-              <div className="eyebrow">Section 04 · 路线</div>
-            </div>
-            <h1 className="font-display tracking-crisp">
-              路线图 <span className="font-cjk text-indigo text-5xl ml-2">Roadmap</span>
-            </h1>
-            <p className="mt-5 max-w-3xl text-ink-soft text-lg leading-[1.9] tracking-wide">
-              已确认的功能、正在权衡的方案、以及已被排除的方向。未列在此页的内容均可在{" "}
-              <Link href="https://github.com/blissito/ghostycode/discussions/new?category=ideas" className="body-link">
-                Discussions
-              </Link>{" "}
-              中讨论。
-            </p>
-          </section>
+    <div className="roadmap-page">
+      <section className="hero">
+        <div className="portal-current" aria-hidden="true" />
+        <div className="portal-container community-welcome-inner">
+          <div className="eyebrow">{copy.eyebrow}</div>
+          <h1>{copy.title}</h1>
+          <p>{copy.introduction}</p>
+        </div>
+      </section>
 
-          <section className="mx-auto max-w-[1400px] px-6 pb-20 grid lg:grid-cols-2 gap-px bg-paper-line">
-            {tracks.map((t) => (
-              <div key={t.title} className="bg-paper p-7">
-                <div className={`hairline-b pb-3 mb-5 flex items-baseline justify-between border-b-2 ${colorFor(t.color)}`}>
-                  <div>
-                    <h2 className="font-display text-3xl">
-                      {t.title} <span className="font-cjk text-2xl ml-2 text-ink-mute">{t.cn}</span>
-                    </h2>
-                  </div>
-                  <div className="font-mono text-xs uppercase tracking-widest tabular text-ink-mute">{t.items.length} 项</div>
-                </div>
-                <ul className="space-y-4">
-                  {t.items.map((it, i) => (
-                    <li key={i} className="flex gap-4">
-                      <span className={`font-display text-xl tabular shrink-0 w-8 ${colorFor(t.color)}`}>{String(i + 1).padStart(2, "0")}</span>
-                      <div>
-                        <div className="font-display text-base">{it.title}</div>
-                        <div className="text-sm text-ink-soft mt-0.5 leading-[1.9] tracking-wide">{it.note}</div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+      <section className="portal-section">
+        <div className="portal-container">
+          <div className="portal-docs-heading">
+            <div>
+              <span>{copy.sectionLabel}</span>
+              <h2>{copy.sectionTitle}</h2>
+            </div>
+            <Link href="https://github.com/blissito/ghostycode/issues">{copy.browseIssues}</Link>
+          </div>
+          {tracks.map((track) => (
+            <section key={track.title} className="portal-section-grid py-10 hairline-t">
+              <div className="portal-section-copy">
+                <span>{copy.count(track.items.length)}</span>
+                <h2>{track.title}</h2>
               </div>
+              <ul className="hairline-t">
+                {track.items.map((item) => (
+                  <li key={`${item.title}-${item.note}`} className="py-4 hairline-b">
+                    <h3 className="font-display text-base">{roadmapText(item.title)}</h3>
+                    <p className={`mt-1 text-sm text-ink-soft ${isZh ? "leading-[1.9] tracking-wide" : "leading-relaxed"}`}>
+                      {roadmapText(item.note)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </section>
+
+      <section className="portal-section portal-section-muted">
+        <div className="portal-container portal-section-grid">
+          <div className="portal-section-copy">
+            <span>{copy.contributeLabel}</span>
+            <h2>{copy.contributeTitle}</h2>
+            <p>{copy.contributeBody}</p>
+          </div>
+          <div className="portal-topic-list">
+            {copy.links.map((link) => (
+              <Link key={link.title} href={link.href}>
+                <strong>{link.title}</strong>
+                <span>{link.detail}</span>
+                <span aria-hidden="true">↗</span>
+              </Link>
             ))}
-          </section>
-
-          <section className="bg-ink text-paper">
-            <div className="mx-auto max-w-[1400px] px-6 py-12 grid lg:grid-cols-12 gap-6 items-center">
-              <div className="lg:col-span-8">
-                <div className="font-cjk text-indigo text-lg mb-2">参与塑造</div>
-                <h2 className="font-display text-paper text-3xl">想影响这份清单？</h2>
-                <p className="mt-3 text-paper-deep/80 leading-[1.9] tracking-wide max-w-2xl">
-                  路线图反映的是维护者的计划——但 PR 和有理有据的讨论会不断调整优先级。
-                  带一个可运行的原型来，"考虑中"就能变成"进行中"。
-                </p>
-              </div>
-              <div className="lg:col-span-4 flex flex-col gap-3">
-                <Link
-                  href="https://github.com/blissito/ghostycode/discussions/new?category=ideas"
-                  className="px-5 py-3 bg-indigo text-paper font-mono text-sm uppercase tracking-wider text-center hover:bg-indigo-deep transition-colors"
-                >
-                  提交想法 →
-                </Link>
-                <Link
-                  href="https://github.com/blissito/ghostycode/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"
-                  className="px-5 py-3 hairline-t hairline-b hairline-l hairline-r border-paper-deep/30 font-mono text-sm uppercase tracking-wider text-center hover:bg-paper hover:text-ink transition-colors"
-                >
-                  Good first issues →
-                </Link>
-              </div>
-            </div>
-          </section>
-        </>
-      ) : (
-        <>
-          <section className="mx-auto max-w-[1400px] px-6 pt-12 pb-8">
-            <div className="flex items-baseline gap-4 mb-3">
-              <Seal char="路" />
-              <div className="eyebrow">Section 04 · 路线</div>
-            </div>
-            <h1 className="font-display tracking-crisp">
-              Roadmap <span className="font-cjk text-indigo text-5xl ml-2">路线图</span>
-            </h1>
-            <p className="mt-5 max-w-3xl text-ink-soft text-lg leading-relaxed">
-              What's confirmed, what's being weighed, what's been ruled out. Anything not on this page
-              is fair game for{" "}
-              <Link href="https://github.com/blissito/ghostycode/discussions/new?category=ideas" className="body-link">
-                discussion
-              </Link>.
-            </p>
-          </section>
-
-          <section className="mx-auto max-w-[1400px] px-6 pb-20 grid lg:grid-cols-2 gap-px bg-paper-line">
-            {tracks.map((t) => (
-              <div key={t.title} className="bg-paper p-7">
-                <div className={`hairline-b pb-3 mb-5 flex items-baseline justify-between border-b-2 ${colorFor(t.color)}`}>
-                  <div>
-                    <h2 className="font-display text-3xl">
-                      {t.title} <span className="font-cjk text-2xl ml-2 text-ink-mute">{t.cn}</span>
-                    </h2>
-                  </div>
-                  <div className="font-mono text-xs uppercase tracking-widest tabular text-ink-mute">{t.items.length} items</div>
-                </div>
-                <ul className="space-y-4">
-                  {t.items.map((it, i) => (
-                    <li key={i} className="flex gap-4">
-                      <span className={`font-display text-xl tabular shrink-0 w-8 ${colorFor(t.color)}`}>{String(i + 1).padStart(2, "0")}</span>
-                      <div>
-                        <div className="font-display text-base">{it.title}</div>
-                        <div className="text-sm text-ink-soft mt-0.5 leading-relaxed">{it.note}</div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </section>
-
-          <section className="bg-ink text-paper">
-            <div className="mx-auto max-w-[1400px] px-6 py-12 grid lg:grid-cols-12 gap-6 items-center">
-              <div className="lg:col-span-8">
-                <div className="font-cjk text-indigo text-lg mb-2">参与塑造</div>
-                <h2 className="font-display text-paper text-3xl">Want to shape this list?</h2>
-                <p className="mt-3 text-paper-deep/80 leading-relaxed max-w-2xl">
-                  The roadmap reflects what the maintainer plans to do — but PRs and well-argued
-                  discussions reorder it constantly. Show up with a working prototype and watch
-                  "Considered" become "Underway".
-                </p>
-              </div>
-              <div className="lg:col-span-4 flex flex-col gap-3">
-                <Link
-                  href="https://github.com/blissito/ghostycode/discussions/new?category=ideas"
-                  className="px-5 py-3 bg-indigo text-paper font-mono text-sm uppercase tracking-wider text-center hover:bg-indigo-deep transition-colors"
-                >
-                  Propose an idea →
-                </Link>
-                <Link
-                  href="https://github.com/blissito/ghostycode/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"
-                  className="px-5 py-3 hairline-t hairline-b hairline-l hairline-r border-paper-deep/30 font-mono text-sm uppercase tracking-wider text-center hover:bg-paper hover:text-ink transition-colors"
-                >
-                  Good first issues →
-                </Link>
-              </div>
-            </div>
-          </section>
-        </>
-      )}
-    </>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }

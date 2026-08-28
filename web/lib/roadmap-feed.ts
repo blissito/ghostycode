@@ -12,6 +12,8 @@
  * Categories that come back empty fall through to the page's static items —
  * the maintainer can adopt label-driven roadmap incrementally.
  */
+import { truncateChars } from "./truncate";
+
 const REPO = process.env.GITHUB_REPO ?? "blissito/ghostycode";
 const KV_KEY = "roadmap:feed";
 const KV_TTL = 60 * 30;
@@ -37,6 +39,8 @@ interface KVNamespace {
 }
 
 async function gh<T>(url: string, ghToken?: string): Promise<T | null> {
+  if (process.env.NEXT_PHASE === "phase-production-build") return null;
+
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "User-Agent": "ghosty-web-roadmap",
@@ -64,9 +68,9 @@ const FALLBACK_SHIPPED: RoadmapItem[] = [
 ];
 
 function withPinnedShipped(items: RoadmapItem[]): RoadmapItem[] {
-  const seen = new Set(items.map((item) => item.title));
-  const pinned = FALLBACK_SHIPPED.filter((item) => !seen.has(item.title));
-  return [...pinned, ...items];
+  // Safety net only: the static fallback entry must never sit ahead of live
+  // releases — use it solely when the live list is empty.
+  return items.length > 0 ? items : FALLBACK_SHIPPED;
 }
 
 function summarizeReleaseBody(body: string | null): string {
@@ -75,9 +79,9 @@ function summarizeReleaseBody(body: string | null): string {
   const lines = body.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const candidate = lines.find((l) => !l.startsWith("#") && !l.startsWith("---") && l.length > 8);
   if (!candidate) return "";
-  // Strip bullets, trailing emoji, links, and cap length
+  // Strip bullets and links, then cap length without splitting a character
   const stripped = candidate.replace(/^[*\-•]\s+/, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").trim();
-  return stripped.length > 140 ? stripped.slice(0, 137) + "…" : stripped;
+  return truncateChars(stripped, 140, 137);
 }
 
 function summarizeIssueBody(body: string | null): string {
@@ -89,7 +93,7 @@ function summarizeIssueBody(body: string | null): string {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
-  return stripped.length > 140 ? stripped.slice(0, 137) + "…" : stripped;
+  return truncateChars(stripped, 140, 137);
 }
 
 async function fetchByLabel(label: string, ghToken?: string, state: "open" | "closed" | "all" = "open"): Promise<RoadmapItem[]> {

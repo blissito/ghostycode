@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::tui::app::App;
+use crate::tui::app::{App, ComposerSubmitChord};
 
 const COMPOSER_ARROW_SCROLL_LINES: usize = 3;
 
@@ -8,6 +8,7 @@ const COMPOSER_ARROW_SCROLL_LINES: usize = 3;
 pub(crate) enum EscapeAction {
     CloseSlashMenu,
     CancelRequest,
+    PauseCommand,
     DiscardQueuedDraft,
     ClearInput,
     Noop,
@@ -16,10 +17,24 @@ pub(crate) enum EscapeAction {
 pub(crate) fn next_escape_action(app: &App, slash_menu_open: bool) -> EscapeAction {
     if slash_menu_open {
         EscapeAction::CloseSlashMenu
-    } else if app.is_loading || matches!(app.runtime_turn_status.as_deref(), Some("in_progress")) {
-        EscapeAction::CancelRequest
-    } else if app.queued_draft.is_some() && app.input.is_empty() {
+    } else if app.queued_draft.is_some() {
         EscapeAction::DiscardQueuedDraft
+    } else if app.paused || app.paused_goal_objective.is_some() {
+        EscapeAction::CancelRequest
+    } else if app.pausable
+        && !app.paused
+        && !app.is_compacting
+        && !app.manual_compaction_queued
+        && (app.is_loading || matches!(app.runtime_turn_status.as_deref(), Some("in_progress")))
+    {
+        EscapeAction::PauseCommand
+    } else if app.is_loading
+        || app.is_compacting
+        || app.manual_compaction_queued
+        || app.goal_continuation_waiting
+        || matches!(app.runtime_turn_status.as_deref(), Some("in_progress"))
+    {
+        EscapeAction::CancelRequest
     } else if !app.input.is_empty() {
         EscapeAction::ClearInput
     } else {
@@ -60,26 +75,28 @@ pub(crate) fn handle_composer_history_arrow(
     // transcript for single-line drafts. Multiline drafts keep editor-like
     // line navigation. If the user holds Up/Down at the first/last line, do
     // not replace their current draft with prompt history unless they are
-    // already navigating history.
+    // already navigating history — scroll the transcript instead. Terminals
+    // that convert the wheel into arrow keys (iTerm2's alternate-screen
+    // setting) reach the composer through this path, so a draft boundary that
+    // merely redraws would strand the user with no way to scroll back (#5223).
     let scroll_transcript = app.composer_arrows_scroll && !app.input.contains('\n');
     let protect_multiline_draft = app.input.contains('\n') && app.history_index.is_none();
 
     match key.code {
         KeyCode::Up => {
-            if scroll_transcript {
+            if scroll_transcript
+                || (protect_multiline_draft && !cursor_has_previous_logical_line(app))
+            {
                 app.scroll_up(COMPOSER_ARROW_SCROLL_LINES);
-            } else if protect_multiline_draft && !cursor_has_previous_logical_line(app) {
-                app.needs_redraw = true;
             } else {
                 app.vim_move_up();
             }
             true
         }
         KeyCode::Down => {
-            if scroll_transcript {
+            if scroll_transcript || (protect_multiline_draft && !cursor_has_next_logical_line(app))
+            {
                 app.scroll_down(COMPOSER_ARROW_SCROLL_LINES);
-            } else if protect_multiline_draft && !cursor_has_next_logical_line(app) {
-                app.needs_redraw = true;
             } else {
                 app.vim_move_down();
             }
@@ -113,6 +130,26 @@ pub(crate) fn is_word_cursor_modifier(modifiers: KeyModifiers) -> bool {
     modifiers.contains(KeyModifiers::CONTROL) || modifiers.contains(KeyModifiers::ALT)
 }
 
+/// On macOS, map `SUPER` (Cmd ⌘) to `CONTROL` when `CONTROL` is not already
+/// set, so that terminal emulators that don't pass Ctrl faithfully still work.
+/// On all other platforms this is a no-op.
+#[cfg(target_os = "macos")]
+pub(crate) fn normalize_macos_modifiers(modifiers: KeyModifiers) -> KeyModifiers {
+    // Strip SUPER and add CONTROL so that exact modifier equality checks
+    // (e.g. `modifiers == KeyModifiers::CONTROL` in Ctrl+G/Ctrl+S stashing) work
+    // correctly after normalization.
+    if modifiers.contains(KeyModifiers::SUPER) {
+        (modifiers - KeyModifiers::SUPER) | KeyModifiers::CONTROL
+    } else {
+        modifiers
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn normalize_macos_modifiers(modifiers: KeyModifiers) -> KeyModifiers {
+    modifiers
+}
+
 pub(crate) fn handle_composer_alt_word_motion_key(app: &mut App, key: KeyEvent) -> bool {
     if !key.modifiers.contains(KeyModifiers::ALT) || key.modifiers.contains(KeyModifiers::CONTROL) {
         return false;
@@ -133,15 +170,45 @@ pub(crate) fn handle_composer_alt_word_motion_key(app: &mut App, key: KeyEvent) 
     }
 }
 
-pub(crate) fn is_composer_newline_key(key: KeyEvent) -> bool {
+pub(crate) fn is_composer_newline_key(key: KeyEvent, multiline_mode: bool) -> bool {
     match key.code {
         KeyCode::Char('j') => key.modifiers.contains(KeyModifiers::CONTROL),
         KeyCode::Enter => {
             key.modifiers.contains(KeyModifiers::ALT)
                 || (key.modifiers.contains(KeyModifiers::SHIFT)
-                    && !key.modifiers.contains(KeyModifiers::CONTROL))
+                    && !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && !multiline_mode)
+                || (key.modifiers == KeyModifiers::NONE && multiline_mode)
         }
         _ => false,
+    }
+}
+
+pub(crate) fn is_forced_submit_key(key: KeyEvent) -> bool {
+    matches!(
+        composer_submit_chord(key, false),
+        Some(ComposerSubmitChord::CtrlEnter)
+    )
+}
+
+pub(crate) fn composer_submit_chord(
+    key: KeyEvent,
+    multiline_mode: bool,
+) -> Option<ComposerSubmitChord> {
+    if !matches!(key.code, KeyCode::Enter) {
+        return None;
+    }
+    if key.modifiers.contains(KeyModifiers::ALT) {
+        return None;
+    }
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        Some(ComposerSubmitChord::CtrlEnter)
+    } else if (key.modifiers == KeyModifiers::NONE && !multiline_mode)
+        || (key.modifiers == KeyModifiers::SHIFT && multiline_mode)
+    {
+        Some(ComposerSubmitChord::Enter)
+    } else {
+        None
     }
 }
 

@@ -1,0 +1,46 @@
+[package]
+name = "ghosty-workflow-js"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Dynamic Workflow runtime: sandboxed rquickjs scripts that dispatch Ghosty subagents"
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait.workspace = true
+jsonschema.workspace = true
+rquickjs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+# rquickjs does not ship pre-generated bindings for Android. Generate them
+# against the NDK sysroot so the advertised Termux/Android release target can
+# compile instead of trying to include a nonexistent bindings file.
+[target.'cfg(target_os = "android")'.dependencies]
+rquickjs = { workspace = true, features = ["bindgen"] }
+
+# rquickjs does not ship pre-generated bindings for FreeBSD. Generate them at
+# build time so the crate compiles there instead of trying to include a
+# nonexistent bindings file.
+[target.'cfg(target_os = "freebsd")'.dependencies]
+rquickjs = { workspace = true, features = ["bindgen"] }
+
+# rquickjs does not ship pre-generated bindings for NetBSD. Generate them at
+# build time so the crate compiles there instead of trying to include a
+# nonexistent bindings file.
+[target.'cfg(target_os = "netbsd")'.dependencies]
+rquickjs = { workspace = true, features = ["bindgen"] }
+
+# rquickjs does not ship pre-generated bindings for OpenHarmony. Generate them
+# against the native SDK sysroot configured by scripts/ohos-env.*.
+[target.'cfg(target_env = "ohos")'.dependencies]
+rquickjs = { workspace = true, features = ["bindgen"] }
+
+[dev-dependencies]
+serde_json.workspace = true

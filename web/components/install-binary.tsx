@@ -1,65 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  detectFromBrowserSignals,
+  type Arch,
+  type UserAgentArchitecture,
+} from "@/lib/install-platform";
+import { SNIPPETS, VERIFY } from "@/lib/install-binary-snippets";
 import { InstallCodeBlock } from "./install-code-block";
-
-type Arch = "macos-arm64" | "macos-x64" | "linux-x64" | "linux-arm64" | "windows-x64";
-
-const SNIPPETS: Record<Arch, string> = {
-  "macos-arm64": `curl -fsSL -o ghosty \\
-  https://github.com/blissito/ghostycode/releases/latest/download/ghosty-macos-arm64
-curl -fsSL -o ghosty-tui \\
-  https://github.com/blissito/ghostycode/releases/latest/download/ghosty-tui-macos-arm64
-chmod +x ghosty ghosty-tui
-xattr -d com.apple.quarantine ghosty ghosty-tui 2>/dev/null || true
-sudo mv ghosty ghosty-tui /usr/local/bin/`,
-  "macos-x64": `curl -fsSL -o ghosty \\
-  https://github.com/blissito/ghostycode/releases/latest/download/ghosty-macos-x64
-curl -fsSL -o ghosty-tui \\
-  https://github.com/blissito/ghostycode/releases/latest/download/ghosty-tui-macos-x64
-chmod +x ghosty ghosty-tui
-xattr -d com.apple.quarantine ghosty ghosty-tui 2>/dev/null || true
-sudo mv ghosty ghosty-tui /usr/local/bin/`,
-  "linux-x64": `curl -fsSL -o ghosty \\
-  https://github.com/blissito/ghostycode/releases/latest/download/ghosty-linux-x64
-curl -fsSL -o ghosty-tui \\
-  https://github.com/blissito/ghostycode/releases/latest/download/ghosty-tui-linux-x64
-chmod +x ghosty ghosty-tui
-sudo mv ghosty ghosty-tui /usr/local/bin/`,
-  "linux-arm64": `curl -fsSL -o ghosty \\
-  https://github.com/blissito/ghostycode/releases/latest/download/ghosty-linux-arm64
-curl -fsSL -o ghosty-tui \\
-  https://github.com/blissito/ghostycode/releases/latest/download/ghosty-tui-linux-arm64
-chmod +x ghosty ghosty-tui
-sudo mv ghosty ghosty-tui /usr/local/bin/`,
-  "windows-x64": `# PowerShell
-$ErrorActionPreference = "Stop"
-$dest = "$Env:USERPROFILE\\bin"
-New-Item -ItemType Directory -Force $dest | Out-Null
-
-Invoke-WebRequest \`
-  -Uri https://github.com/blissito/ghostycode/releases/latest/download/ghosty-windows-x64.exe \`
-  -OutFile "$dest\\ghosty.exe"
-Invoke-WebRequest \`
-  -Uri https://github.com/blissito/ghostycode/releases/latest/download/ghosty-tui-windows-x64.exe \`
-  -OutFile "$dest\\ghosty-tui.exe"
-
-$Env:Path = "$dest;$Env:Path"`,
-};
-
-const VERIFY: Record<Arch, string> = {
-  "macos-arm64": `curl -fsSL -O https://github.com/blissito/ghostycode/releases/latest/download/ghosty-artifacts-sha256.txt
-shasum -a 256 -c ghosty-artifacts-sha256.txt --ignore-missing`,
-  "macos-x64": `curl -fsSL -O https://github.com/blissito/ghostycode/releases/latest/download/ghosty-artifacts-sha256.txt
-shasum -a 256 -c ghosty-artifacts-sha256.txt --ignore-missing`,
-  "linux-x64": `curl -fsSL -O https://github.com/blissito/ghostycode/releases/latest/download/ghosty-artifacts-sha256.txt
-sha256sum -c ghosty-artifacts-sha256.txt --ignore-missing`,
-  "linux-arm64": `curl -fsSL -O https://github.com/blissito/ghostycode/releases/latest/download/ghosty-artifacts-sha256.txt
-sha256sum -c ghosty-artifacts-sha256.txt --ignore-missing`,
-  "windows-x64": `# PowerShell
-Get-FileHash "$Env:USERPROFILE\\bin\\ghosty.exe" -Algorithm SHA256
-Get-FileHash "$Env:USERPROFILE\\bin\\ghosty-tui.exe" -Algorithm SHA256`,
-};
 
 const LABELS: Record<Arch, string> = {
   "macos-arm64": "macOS · Apple Silicon",
@@ -67,17 +15,30 @@ const LABELS: Record<Arch, string> = {
   "linux-x64": "Linux · x64",
   "linux-arm64": "Linux · arm64",
   "windows-x64": "Windows · x64",
+  "windows-arm64": "Windows · arm64",
 };
 
-function detect(): Arch {
+interface NavigatorWithUserAgentData extends Navigator {
+  userAgentData?: {
+    getHighEntropyValues(hints: string[]): Promise<UserAgentArchitecture>;
+  };
+}
+
+async function detect(): Promise<Arch> {
   if (typeof navigator === "undefined") return "macos-arm64";
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("win")) return "windows-x64";
-  if (ua.includes("linux")) {
-    if (ua.includes("aarch64") || ua.includes("arm64")) return "linux-arm64";
-    return "linux-x64";
+  const browserNavigator = navigator as NavigatorWithUserAgentData;
+  let architecture: UserAgentArchitecture | undefined;
+  if (navigator.userAgent.toLowerCase().includes("win")) {
+    try {
+      architecture = await browserNavigator.userAgentData?.getHighEntropyValues([
+        "architecture",
+        "bitness",
+      ]);
+    } catch {
+      // The manual platform buttons and frozen-UA fallback remain available.
+    }
   }
-  return "macos-arm64";
+  return detectFromBrowserSignals(navigator.userAgent, architecture);
 }
 
 interface Props {
@@ -89,7 +50,15 @@ interface Props {
 export function InstallBinary({ copyLabel, copiedLabel, verifyHeading = "Verify checksum" }: Props) {
   const [arch, setArch] = useState<Arch>("macos-arm64");
 
-  useEffect(() => { setArch(detect()); }, []);
+  useEffect(() => {
+    let active = true;
+    void detect().then((detected) => {
+      if (active) setArch(detected);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div>
@@ -97,7 +66,9 @@ export function InstallBinary({ copyLabel, copiedLabel, verifyHeading = "Verify 
         {(Object.keys(SNIPPETS) as Arch[]).map((a, i) => (
           <button
             key={a}
+            type="button"
             onClick={() => setArch(a)}
+            aria-pressed={arch === a}
             className={`px-3 py-1.5 font-mono text-[0.7rem] tracking-wider transition-colors ${
               i > 0 ? "hairline-l" : ""
             } ${arch === a ? "bg-ink text-paper" : "bg-paper hover:bg-paper-deep"}`}

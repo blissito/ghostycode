@@ -1,0 +1,12 @@
+[plugin]
+name = "rust-toolkit"
+description = "Rust development toolkit with cargo check integration"
+version = "0.1.0"
+author = "Ghosty Team"
+
+[skills]
+path = "skills"
+
+[when]
+os = ["windows", "linux", "macos"]
+binaries = ["cargo"]

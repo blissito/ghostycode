@@ -1,15 +1,24 @@
 import Link from "next/link";
 import { Seal } from "@/components/seal";
+import { FaqSearch } from "@/components/faq-search";
+import { buildFaqPageJsonLd } from "@/lib/faq-schema";
+import { FACTS } from "@/lib/facts.generated";
+import { canonicalLocaleForPath } from "@/lib/i18n/content-locales";
+import { serializeJsonLd } from "@/lib/json-ld";
+import { buildPageMetadata } from "@/lib/page-meta";
+import { SITE_URL } from "@/lib/page-meta";
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const isZh = locale === "zh";
-  return {
-    title: isZh ? "常见问题 · Ghosty Code" : "FAQ · Ghosty Code",
+  return buildPageMetadata({
+    path: "/faq",
+    locale,
+    title: isZh ? "常见问题 · Ghosty" : "FAQ · Ghosty",
     description: isZh
-      ? "Ghosty Code 常见问题：安装、配置、提供商、模型、模式、安全与隐私。答案来自实际代码、文档和 GitHub 议题。"
-      : "Ghosty Code frequently asked questions: install, config, providers, models, modes, security, and privacy. Answers sourced from real code, docs, and GitHub issues.",
-  };
+      ? "Ghosty 常见问题：安装、配置、提供商、模型、模式、安全与隐私。答案来自实际代码、文档和 GitHub 议题。"
+      : "Ghosty frequently asked questions: install, config, providers, models, modes, security, and privacy. Answers sourced from real code, docs, and GitHub issues.",
+  });
 }
 
 interface FaqItem {
@@ -20,61 +29,61 @@ interface FaqItem {
 
 const faqEn: FaqItem[] = [
   {
-    q: "What is Ghosty Code?",
+    q: "What is Ghosty?",
     a: (
       <>
-        Ghosty Code is a terminal-native coding agent for open-source and open-weight models. It runs from the <code className="inline">ghosty</code> command, streams reasoning blocks, edits local workspaces with approval gates, and can auto-route each turn to the right model and thinking level. DeepSeek V4 is the first-class model path; OpenRouter is ready. Hugging Face, self-hosted, and other open-model surfaces are on the roadmap.
+        Ghosty is a terminal-native coding agent that works across hosted and local models. It runs from the <code className="inline">ghosty</code> command, streams reasoning blocks, edits local workspaces with approval gates, and can route each turn to a configured model and thinking level. DeepSeek is the bundled default route, while OpenRouter, Anthropic, OpenAI-compatible services, and self-hosted runtimes use the same runtime and tools.
       </>
     ),
     sources: ["README.md", "docs/ARCHITECTURE.md"],
   },
   {
-    q: "How do I install Ghosty Code?",
+    q: "How do I install Ghosty?",
     a: (
       <>
-        <p className="mb-2">Four paths, same result:</p>
+        <p className="mb-2">Published channels differ in timing and platform support:</p>
         <pre className="code-block mb-2">
 {`# npm (recommended — no Rust toolchain needed)
-npm install -g ghostycode
+npm install -g ghosty
 
-# Cargo (needs Rust 1.88+)
+# Cargo (needs Rust 1.88+; installs the ghosty command)
 cargo install ghosty-cli --locked
-cargo install ghosty-tui --locked
 
 # Homebrew (macOS)
-brew tap blissito/deepseek-tui && brew install deepseek-tui
+brew tap blissito/ghostycode && brew install ghosty
 
 # Direct download
 # https://github.com/blissito/ghostycode/releases`}
         </pre>
         <p>
           Run <code className="inline">ghosty</code> to start. First run creates <code className="inline">~/.ghosty/</code> automatically. Legacy <code className="inline">~/.deepseek/</code> is still read as a compatibility fallback.
-          See the <Link href="/install" className="body-link">full install guide</Link> for China mirrors, Docker, and troubleshooting.
+          Android arm64 / Termux is preview support: npm works only when the
+          selected package version has matching Android assets in its GitHub Release.
+          See the <Link href="/en/install" className="body-link">full install guide</Link> for China mirrors, Docker, and troubleshooting.
         </p>
       </>
     ),
-    sources: ["README.md", "#1860", "#1914"],
+    sources: ["README.md", "docs/INSTALL.md", "#1860", "#1914"],
   },
   {
     q: "What's the difference between ghosty and ghosty-tui?",
     a: (
       <>
-        <code className="inline">ghosty</code> is the dispatcher CLI — it manages config, auth, updates, and launches the TUI.
-        <code className="inline">ghosty-tui</code> is the terminal UI binary that runs the agent loop.
-        When you type <code className="inline">ghosty</code>, the dispatcher spawns <code className="inline">ghosty-tui</code> for you.
-        Both are installed together; you rarely need to think about the split.
+        Since v0.9.5 there is one compiled runtime: the <code className="inline">ghosty</code> command contains the terminal UI directly — there is no separate TUI executable to install.
+        Release installers also expose <code className="inline">ghosty-tui</code> as a byte-identical short name, and <code className="inline">ghosty update</code> refreshes any legacy <code className="inline">ghosty-tui</code> command path from the same verified bytes.
+        <code className="inline">ghosty-tui</code> survives as the internal TUI crate compiled into the <code className="inline">ghosty-cli</code> Cargo package, so Cargo users install just <code className="inline">ghosty-cli</code>.
       </>
     ),
-    sources: ["README.md"],
+    sources: ["README.md", "CHANGELOG.md"],
   },
   {
-    q: "Is Ghosty Code the same as DeepSeek TUI? What about the rename?",
+    q: "Is Ghosty the same as DeepSeek TUI? What about the rename?",
     a: (
       <>
-        Yes. Ghosty Code is the new name for what was previously called DeepSeek TUI.
+        Yes. Ghosty is the new name for what was previously called DeepSeek TUI.
         The canonical command is now <code className="inline">ghosty</code>. Legacy <code className="inline">deepseek</code> and <code className="inline">deepseek-tui</code> commands remain as compatibility shims — they still work.
         Config lives at <code className="inline">~/.ghosty/</code>. Legacy <code className="inline">~/.deepseek/</code> config is still read as a compatibility fallback, and <code className="inline">DEEPSEEK_*</code> env vars continue to work.
-        DeepSeek is not deprecated. The rename reflects Ghosty Code's broader mission as the agentic terminal for open models across providers, not a narrowing away from DeepSeek.
+        DeepSeek is not deprecated. The rename reflects a mission idea put in this version: Ghosty as an agentic terminal for open models across providers, not a narrowing away from DeepSeek.
       </>
     ),
     sources: ["docs/REBRAND.md", "README.md"],
@@ -107,14 +116,14 @@ ghosty doctor         # full connectivity check`}
     sources: ["#907", "#1545", "docs/CONFIGURATION.md"],
   },
   {
-    q: "Which providers does Ghosty Code support?",
+    q: "Which providers does Ghosty support?",
     a: (
       <>
-        <p className="mb-2">Ghosty Code ships with these built-in providers:</p>
+        <p className="mb-2">Ghosty ships with {FACTS.providers.length} built-in provider routes:</p>
         <ul className="list-disc pl-5 space-y-1 text-sm text-ink-soft mb-3">
-          <li><strong>DeepSeek</strong> — first-class, native API. Reasoning streaming, cache metrics, thinking effort control.</li>
-          <li><strong>OpenRouter</strong> — unified API for DeepSeek models and more.</li>
-          <li><strong>OpenAI</strong>, <strong>NVIDIA NIM</strong>, <strong>Volcengine Ark</strong>, <strong>Xiaomi MiMo</strong>, <strong>SiliconFlow</strong>, <strong>Novita</strong>, <strong>Fireworks</strong>, <strong>sglang</strong>, <strong>vLLM</strong>, <strong>Ollama</strong></li>
+          <li><strong>DeepSeek</strong> — bundled default with a native API route, reasoning streaming, cache metrics, and thinking effort control.</li>
+          <li><strong>OpenRouter</strong> — unified API for DeepSeek models and other open-model routes.</li>
+          <li><strong>{FACTS.providers.length - 2} more routes</strong> — including OpenAI-compatible, Anthropic, Mistral AI, OpenAI Codex, xAI, Moonshot/Kimi, Z.ai, MiniMax, StepFun, Volcengine Ark, Baidu Qianfan, Model Studio, NVIDIA NIM, Fireworks AI, Together AI, DeepInfra, SiliconFlow, Novita AI, Hugging Face, Arcee AI, AtlasCloud, and the keyless local endpoints SGLang, vLLM, and Ollama. <Link href="/en/models" className="body-link">The full list is generated from the provider registry</Link>.</li>
         </ul>
         <p>
           Set the corresponding env var (e.g. <code className="inline">OPENROUTER_API_KEY</code>) and your provider in <code className="inline">~/.ghosty/config.toml</code>.
@@ -125,7 +134,7 @@ ghosty doctor         # full connectivity check`}
     sources: ["docs/CONFIGURATION.md", "#1978", "#1710"],
   },
   {
-    q: "How do I use OpenRouter with Ghosty Code?",
+    q: "How do I use OpenRouter with Ghosty?",
     a: (
       <>
         <pre className="code-block mb-2">
@@ -136,15 +145,16 @@ export OPENROUTER_API_KEY=sk-or-v1-...
 [providers.openrouter]
 api_key = "sk-or-v1-..."
 
-# 3. Run with an OpenRouter model:
-ghosty --model openrouter/deepseek/deepseek-v4-pro
+# 3. Run with the OpenRouter route:
+ghosty --provider openrouter --model deepseek/deepseek-v4-pro
 
-# Or set it as default in config.toml:
-default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
+# Or make it the default route in config.toml:
+# provider = "openrouter"
+# default_text_model = "deepseek/deepseek-v4-pro"`}
         </pre>
         <p>
           OpenRouter uses the same reasoning/cache parser as the native DeepSeek provider.
-          Model IDs follow the <code className="inline">provider/model-id</code> pattern (e.g. <code className="inline">openrouter/deepseek/deepseek-v4-flash</code>).
+          Model IDs are OpenRouter's own slugs (e.g. <code className="inline">deepseek/deepseek-v4-flash</code>); pick the route with <code className="inline">--provider openrouter</code> or top-level <code className="inline">provider = &quot;openrouter&quot;</code>.
         </p>
       </>
     ),
@@ -156,24 +166,24 @@ default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
       <>
         Yes. Use the <code className="inline">vllm</code>, <code className="inline">sglang</code>, or <code className="inline">ollama</code> providers with your local endpoint.
         For OpenAI-compatible endpoints (llama.cpp server, text-generation-webui, Aphrodite, etc.), you can use the <code className="inline">openai</code> provider with a custom <code className="inline">base_url</code>.
-        Ghosty Code also respects <code className="inline">DEEPSEEK_ALLOW_INSECURE_HTTP=true</code> for local HTTP endpoints.
-        Full Hugging Face TGI/vLLM integration is on the roadmap.
+        Ghosty also respects <code className="inline">DEEPSEEK_ALLOW_INSECURE_HTTP=true</code> for local HTTP endpoints.
+        Hugging Face Inference Providers are also available through the <code className="inline">huggingface</code> provider. Broader Hub discovery, model cards, datasets, and Jobs belong to Model Lab.
       </>
     ),
     sources: ["#574", "#1303", "docs/CONFIGURATION.md"],
   },
   {
-    q: "What are Plan, Agent, and YOLO modes?",
+    q: "What are Plan, Work, and Operate modes?",
     a: (
       <>
         <ul className="list-disc pl-5 space-y-2 text-sm text-ink-soft">
           <li><strong>Plan</strong> — Read-only investigation. Can grep, read files, list directories, fetch URLs. Cannot write or execute shell.</li>
-          <li><strong>Agent</strong> — Default mode. Multi-step tool calling. Shell and side-effect tools require approval based on your approval_mode setting.</li>
-          <li><strong>YOLO</strong> — Auto-approves all operations and enables trust mode. Workspace boundaries lift. Use carefully.</li>
+          <li><strong>Work</strong> — Normal interactive coding. Tool availability and approval prompts follow the active configuration and permission posture.</li>
+          <li><strong>Operate</strong> — Direct tools follow the same permission, sandbox, shell, and safety rules as Work. Fleet workers are preferred for independent, parallel, background, or long-running work, but delegation is not mandatory. Workflow is optional for ordered phases and gates.</li>
         </ul>
         <p className="mt-2">
-          Press <kbd className="font-mono text-xs px-1.5 py-0.5 hairline-t hairline-b hairline-l hairline-r">Tab</kbd> to cycle modes.
-          Approval mode (suggest / auto / never) is orthogonal — you can be in Agent mode with auto-approval, for example.
+          When the composer is idle, press <kbd className="font-mono text-xs px-1.5 py-0.5 hairline-t hairline-b hairline-l hairline-r">Tab</kbd> to cycle modes.
+          Press <kbd className="font-mono text-xs px-1.5 py-0.5 hairline-t hairline-b hairline-l hairline-r">Shift+Tab</kbd> to cycle the independent Ask / Auto-Review / Full Access permission posture; Plan remains read-only.
         </p>
       </>
     ),
@@ -184,13 +194,13 @@ default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
     a: (
       <>
         <p className="mb-2">
-          Use <code className="inline">ghosty --model auto</code> or <code className="inline">/model auto</code> to let Ghosty Code decide how much model power each turn needs.
+          Use <code className="inline">ghosty --model auto</code> or <code className="inline">/model auto</code> to let Ghosty decide how much model power each turn needs.
         </p>
         <p className="mb-2">
           <strong>Fin</strong> is the fast non-thinking path (<code className="inline">deepseek-v4-flash</code> with thinking off) used for routing decisions, summaries, RLM children, context maintenance, and other coordination work. Before the real turn is sent, Fin makes a small routing call to pick the concrete model and thinking level.
         </p>
         <p>
-          Short/simple turns can stay on Flash with thinking off. Coding, debugging, release work, architecture, or security review can move up to Pro and/or higher thinking. Fin is local to Ghosty Code — the upstream API never receives <code className="inline">model: "auto"</code>.
+          Short/simple turns can stay on Flash with thinking off. Coding, debugging, release work, architecture, or security review can move up to Pro and/or higher thinking. Fin is local to Ghosty — the upstream API never receives <code className="inline">model: "auto"</code>.
         </p>
       </>
     ),
@@ -200,32 +210,53 @@ default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
     q: "What does /goal do?",
     a: (
       <>
-        <code className="inline">/goal</code> is a simple goal-setter for the current session.
-        It does not add another app mode; the mode switcher remains Plan, Agent, and YOLO.
+        <code className="inline">/goal</code> sets a goal for the current TUI session.
+        App-server clients can also persist a thread-scoped goal through the
+        <code className="inline">thread/goal/*</code> methods. It does not add another
+        app mode; the mode switcher remains Plan, Work, and Operate, while permission posture is selected independently.
         Track progress in <a href="https://github.com/blissito/ghostycode/issues/891" className="body-link">#891</a>.
       </>
     ),
     sources: ["#891"],
   },
   {
-    q: "Is my code safe? What sandboxing does Ghosty Code use?",
+    q: "Is my code safe? What sandboxing does Ghosty use?",
     a: (
       <>
-        Ghosty Code runs entirely on your machine. No telemetry, no cloud processing of your code.
-        Sandbox backends: <strong>seatbelt</strong> (macOS), <strong>landlock</strong> (Linux), restricted tokens (Windows).
+        The Ghosty runtime, workspace state, and audit log stay on your machine.
+        Anonymous usage counting is on by default with a clear first-run disclosure
+        and a durable opt-out. It posts aggregate session, feature, and error counts
+        and closed enums to the first-party endpoint{" "}
+        <code className="inline">https://telemetry.ghosty.net/v1/telemetry</code>,
+        a Cloudflare Worker whose full source is in the repo under{" "}
+        <code className="inline">telemetry-ingest/</code>. Its storage has no IP,
+        country, or geo column — structurally, not as a setting — nothing is logged,
+        and retention is a fixed three months. Set{" "}
+        <code className="inline">telemetry_endpoint = &quot;&quot;</code> to stay
+        enabled and contact nobody. It never carries conversations, code, prompts,
+        files, file/repo/branch names, model content, credentials, or a per-turn or
+        per-tool timeline (schema:{" "}
+        <code className="inline">docs/TELEMETRY.md</code>;
+        off with <code className="inline">ghosty config set telemetry false</code>
+        or <code className="inline">GHOSTY_TELEMETRY=0</code>). There is no
+        mandatory hosted relay. The hosted
+        provider you select receives the prompt, project context, tool definitions,
+        and tool results required for that turn. Use a loopback local-model route to
+        keep model inference local.
+        OS command sandboxing is platform-specific: Ghosty uses <strong>Seatbelt</strong> on macOS when available. On Linux it uses <strong>bubblewrap</strong> only when <code className="inline">prefer_bwrap = true</code> and <code className="inline">/usr/bin/bwrap</code> is executable; otherwise commands have no Ghosty OS wrapper. Windows currently reports no OS sandbox.
         Workspace boundaries default to <code className="inline">--workspace</code>. <code className="inline">/trust</code> lifts them.
-        Approval mode is configurable per session. All credential/approval/elevation events are written to <code className="inline">~/.ghosty/audit.log</code>.
+        Permission posture is configurable per session.
       </>
     ),
-    sources: ["SECURITY.md", "docs/ARCHITECTURE.md"],
+    sources: ["SECURITY.md", "docs/PROVIDERS.md", "docs/RUNTIME_API.md"],
   },
   {
     q: "How do MCP servers work?",
     a: (
       <>
-        Ghosty Code is a bidirectional MCP client and server. Define servers in <code className="inline">~/.ghosty/mcp.json</code>.
-        Tools appear as <code className="inline">mcp_&lt;server&gt;_&lt;tool&gt;</code>. You can also expose Ghosty Code as an MCP server with <code className="inline">ghosty mcp</code>.
-        See the <Link href="/docs#mcp" className="body-link">docs page</Link> for configuration examples.
+        Ghosty is a bidirectional MCP client and server. Define servers in <code className="inline">~/.ghosty/mcp.json</code>.
+        Tools appear as <code className="inline">mcp_&lt;server&gt;_&lt;tool&gt;</code>. You can also expose Ghosty as an MCP server with <code className="inline">ghosty mcp</code>.
+        See the <Link href="/en/docs/mcp" className="body-link">docs page</Link> for configuration examples.
       </>
     ),
     sources: ["docs/MCP.md"],
@@ -236,7 +267,7 @@ default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
       <>
         No CLA required. Fork, branch with conventional commits (<code className="inline">feat:</code>, <code className="inline">fix:</code>, etc.), run the local checks, open a PR.
         The maintainer reads everything personally. Start with issues labeled <code className="inline">good first issue</code>.
-        See the <Link href="/contribute" className="body-link">contribute page</Link> and <a href="https://github.com/blissito/ghostycode/blob/main/CONTRIBUTING.md" className="body-link">CONTRIBUTING.md</a>.
+        See the <Link href="/en/contribute" className="body-link">contribute page</Link> and <a href="https://github.com/blissito/ghostycode/blob/main/CONTRIBUTING.md" className="body-link">CONTRIBUTING.md</a>.
       </>
     ),
     sources: ["CONTRIBUTING.md"],
@@ -249,7 +280,7 @@ default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
         <pre className="code-block my-2">
 {`# npm mirror
 npm config set registry https://registry.npmmirror.com
-npm install -g ghostycode
+npm install -g ghosty
 
 # Cargo mirror (Tsinghua TUNA)
 # Add to ~/.cargo/config.toml:
@@ -260,17 +291,46 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
         </pre>
         <p>
           Prebuilt binaries are also available from <a href="https://github.com/blissito/ghostycode/releases" className="body-link">GitHub Releases</a>.
-          The Gitee mirror and CNB mirror may also be available.
+          A maintained CNB mirror covers its documented targets; no Gitee mirror is advertised until one exists.
         </p>
       </>
     ),
     sources: ["README.md", "#1914", "docs/CNB_MIRROR.md"],
   },
   {
+    q: "Is ghosty.net the official site? What about mirrors?",
+    a: (
+      <>
+        <p className="mb-2">
+          <strong>ghosty.net</strong> and <strong>www.ghosty.net</strong> are the
+          official Ghosty sites, deployed on Cloudflare. The website source is open
+          and lives under <code className="inline">web/</code> in the{" "}
+          <code className="inline">blissito/ghostycode</code> repository — anyone can
+          self-deploy it as a mirror.
+        </p>
+        <p className="mb-2">
+          All official releases and SHA-256 checksums are distributed exclusively through{" "}
+          <a href="https://github.com/blissito/ghostycode/releases" className="body-link">GitHub Releases</a>.
+          The npm package downloads verified binaries from GitHub Releases.
+        </p>
+        <p className="mb-2">
+          A CNB mirror is maintained for users who cannot reliably reach GitHub
+          (<Link href="/en/install" className="body-link">docs/CNB_MIRROR.md</Link>).
+          Cargo users can use the TUNA mirror for faster downloads in China.
+        </p>
+        <p>
+          Self-deployed website copies, mirror sites, and third-party packages are not
+          controlled by the Ghosty project. Verify download sources and checksums.
+        </p>
+      </>
+    ),
+    sources: ["#2624", "#3421", "docs/CNB_MIRROR.md"],
+  },
+  {
     q: "My API key was rejected or I get auth errors on first run.",
     a: (
       <>
-        <p className="mb-2">Run <code className="inline">ghosty doctor</code> — it checks API key, network, sandbox, and MCP servers. Full report is written to <code className="inline">~/.ghosty/doctor.log</code>.</p>
+        <p className="mb-2">Run <code className="inline">ghosty doctor</code> — it prints a diagnostic report to stdout: config paths, credential-store state (values are never read or printed), provider/local/MCP probes, and release checks.</p>
         <p className="mb-2">Common causes:</p>
         <ul className="list-disc pl-5 space-y-1 text-sm text-ink-soft">
           <li>Stale <code className="inline">DEEPSEEK_API_KEY</code> in shell startup file — open a fresh shell or use <code className="inline">ghosty auth set</code></li>
@@ -282,12 +342,12 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
     sources: ["#907", "#1545"],
   },
   {
-    q: "What is Model Lab? When will Hugging Face integration be available?",
+    q: "What is Model Lab? What Hugging Face pieces are available?",
     a: (
       <>
-        Model Lab is the planned open-model infrastructure layer: Hugging Face Hub API for model discovery, model cards, datasets, safetensors adapters, inference providers, and Jobs.
-        It is NOT fully implemented. Track progress in <a href="https://github.com/blissito/ghostycode/issues/1977" className="body-link">#1977</a>.
-        Currently, you can use Hugging Face models through the OpenRouter provider or self-hosted endpoints.
+        The <code className="inline">huggingface</code> provider is the shipped OpenAI-compatible route for Hugging Face Inference Providers.
+        Model Lab is the planned open-model infrastructure layer for Hub discovery, model cards, datasets, safetensors adapters, and Jobs.
+        Track broader progress in <a href="https://github.com/blissito/ghostycode/issues/1977" className="body-link">#1977</a>.
       </>
     ),
     sources: ["#1977", "docs/MODEL_LAB.md"],
@@ -296,7 +356,7 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
     q: "Why is token consumption so high? / Why is cache hit rate low?",
     a: (
       <>
-        Ghosty Code sends substantial context (system prompt, project instructions, tool definitions) with each turn.
+        Ghosty sends substantial context (system prompt, project instructions, tool definitions) with each turn.
         DeepSeek's prefix cache is used aggressively — the system prompt is layered to maximize cache hits.
         If you see high token usage, check: are you using <code className="inline">deepseek-v4-pro</code> for simple queries better suited to Flash?
         Model auto-routing (Fin) can help pick the right model per turn.
@@ -306,7 +366,7 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
     sources: ["#1177", "#1818", "#743"],
   },
   {
-    q: "How do I update Ghosty Code?",
+    q: "How do I update Ghosty?",
     a: (
       <>
         <pre className="code-block mb-2">
@@ -314,13 +374,13 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
 ghosty update
 
 # npm
-npm install -g ghostycode@latest
+npm install -g ghosty@latest
 
 # Cargo
 cargo install ghosty-cli --locked --force
 
 # Homebrew
-brew update && brew upgrade deepseek-tui`}
+brew update && brew upgrade ghosty`}
         </pre>
         <p>
           If you installed via npm, <code className="inline">ghosty update</code> downloads the latest release binaries.
@@ -334,60 +394,59 @@ brew update && brew upgrade deepseek-tui`}
 
 const faqZh: FaqItem[] = [
   {
-    q: "Ghosty Code 是什么？",
+    q: "Ghosty 是什么？",
     a: (
       <>
-        Ghosty Code 是一个面向开源模型的终端原生编程智能体。通过 <code className="inline">ghosty</code> 命令启动，流式输出推理块，在有审批门槛的情况下编辑本地工作区，并可为每个回合自动选择最合适的模型和推理深度。DeepSeek V4 是一级模型路径；OpenRouter 已就绪。Hugging Face、自托管等开放模型接口已在路线图中。
+        Ghosty 是一个可使用托管与本地模型的终端原生编程智能体。通过 <code className="inline">ghosty</code> 命令启动，流式输出推理块，在有审批门槛的情况下编辑本地工作区，并可为每个回合选择已配置的模型和推理深度。DeepSeek 是内置默认路由；OpenRouter、Anthropic、OpenAI 兼容服务与自托管运行时使用同一套运行时和工具。
       </>
     ),
     sources: ["README.md", "docs/ARCHITECTURE.md"],
   },
   {
-    q: "如何安装 Ghosty Code？",
+    q: "如何安装 Ghosty？",
     a: (
       <>
-        <p className="mb-2">四种方式，殊途同归：</p>
+        <p className="mb-2">已发布渠道的更新时间与平台覆盖各不相同：</p>
         <pre className="code-block mb-2">
 {`# npm（推荐 — 无需 Rust 工具链）
-npm install -g ghostycode
+npm install -g ghosty
 
-# Cargo（需要 Rust 1.88+）
+# Cargo（需要 Rust 1.88+；安装 ghosty 命令）
 cargo install ghosty-cli --locked
-cargo install ghosty-tui --locked
 
 # Homebrew（macOS）
-brew tap blissito/deepseek-tui && brew install deepseek-tui
+brew tap blissito/ghostycode && brew install ghosty
 
 # 直接下载
 # https://github.com/blissito/ghostycode/releases`}
         </pre>
         <p>
           输入 <code className="inline">ghosty</code> 即可启动。首次运行会自动创建 <code className="inline">~/.ghosty/</code>。旧版 <code className="inline">~/.deepseek/</code> 仍会作为兼容回退读取。
+          Android arm64 / Termux 仍是预览支持：只有当所选 npm 包版本对应的 GitHub Release 发布了匹配的 Android 资产时，npm 安装才可用。
           查看 <Link href="/zh/install" className="body-link">完整安装指南</Link> 了解国内镜像、Docker 和故障排除。
         </p>
       </>
     ),
-    sources: ["README.md", "#1860", "#1914"],
+    sources: ["README.md", "docs/INSTALL.md", "#1860", "#1914"],
   },
   {
     q: "ghosty 和 ghosty-tui 有什么区别？",
     a: (
       <>
-        <code className="inline">ghosty</code> 是调度 CLI——管理配置、认证、更新，并启动 TUI。
-        <code className="inline">ghosty-tui</code> 是运行智能体循环的终端 UI 二进制文件。
-        当你输入 <code className="inline">ghosty</code> 时，调度器会自动为你启动 <code className="inline">ghosty-tui</code>。
-        两者同时安装；通常你不需要关心这个区别。
+        自 v0.9.5 起只有一个编译好的运行时：<code className="inline">ghosty</code> 命令直接内置终端 UI——不再有需要单独安装的 TUI 可执行文件。
+        发布安装器同时提供字节完全相同的 <code className="inline">ghosty-tui</code> 短名称，<code className="inline">ghosty update</code> 会用同一份经过校验的字节刷新任何遗留的 <code className="inline">ghosty-tui</code> 命令路径。
+        <code className="inline">ghosty-tui</code> 仅以内部 TUI crate 的形式存在，编译进 <code className="inline">ghosty-cli</code> Cargo 包，因此 Cargo 用户只需安装 <code className="inline">ghosty-cli</code>。
       </>
     ),
-    sources: ["README.md"],
+    sources: ["README.md", "CHANGELOG.md"],
   },
   {
-    q: "Ghosty Code 和 DeepSeek TUI 是什么关系？改名是怎么回事？",
+    q: "Ghosty 和 DeepSeek TUI 是什么关系？改名是怎么回事？",
     a: (
       <>
-        Ghosty Code 是 DeepSeek TUI 的新名称。当前的主命令是 <code className="inline">ghosty</code>。旧的 <code className="inline">deepseek</code> 和 <code className="inline">deepseek-tui</code> 命令作为兼容垫片继续有效。
+        Ghosty 是 DeepSeek TUI 的新名称。当前的主命令是 <code className="inline">ghosty</code>。旧的 <code className="inline">deepseek</code> 和 <code className="inline">deepseek-tui</code> 命令作为兼容垫片继续有效。
         配置存放在 <code className="inline">~/.ghosty/</code>。旧版 <code className="inline">~/.deepseek/</code> 配置仍会作为兼容回退读取，<code className="inline">DEEPSEEK_*</code> 环境变量继续有效。
-        DeepSeek 并未被弃用。改名是为了体现 Ghosty Code 更广泛的使命——成为面向所有提供商的开放模型智能体终端，而非弱化 DeepSeek 的地位。
+        DeepSeek 并未被弃用。改名是为了体现 Ghosty 更广泛的使命——成为面向所有提供商的开放模型智能体终端，而非弱化 DeepSeek 的地位。
       </>
     ),
     sources: ["docs/REBRAND.md", "README.md"],
@@ -420,14 +479,14 @@ ghosty doctor         # 完整连接检查`}
     sources: ["#907", "#1545", "docs/CONFIGURATION.md"],
   },
   {
-    q: "Ghosty Code 支持哪些提供商？",
+    q: "Ghosty 支持哪些提供商？",
     a: (
       <>
-        <p className="mb-2">Ghosty Code 内建以下提供商：</p>
+        <p className="mb-2">Ghosty 内建 {FACTS.providers.length} 条提供商路由：</p>
         <ul className="list-disc pl-5 space-y-1 text-sm text-ink-soft mb-3">
-          <li><strong>DeepSeek</strong> — 一级支持，原生 API。推理流、缓存指标、思考力度控制。</li>
-          <li><strong>OpenRouter</strong> — 统一 API，可访问 DeepSeek 等模型。</li>
-          <li><strong>OpenAI</strong>、<strong>NVIDIA NIM</strong>、<strong>Volcengine Ark</strong>、<strong>Xiaomi MiMo</strong>、<strong>SiliconFlow</strong>、<strong>Novita</strong>、<strong>Fireworks</strong>、<strong>sglang</strong>、<strong>vLLM</strong>、<strong>Ollama</strong></li>
+          <li><strong>DeepSeek</strong> — 内置默认原生 API 路由，支持推理流、缓存指标和思考力度控制。</li>
+          <li><strong>OpenRouter</strong> — 统一 API，可访问 DeepSeek 和其他开放模型路由。</li>
+          <li><strong>另外 {FACTS.providers.length - 2} 条路由</strong>——包括 OpenAI 兼容、Anthropic、Mistral AI、OpenAI Codex、xAI、Moonshot/Kimi、Z.ai、MiniMax、StepFun、Volcengine Ark、百度千帆、Model Studio、NVIDIA NIM、Fireworks、Together AI、DeepInfra、SiliconFlow、Novita、Hugging Face、Arcee AI、AtlasCloud，以及无需密钥的本地端点 SGLang、vLLM 和 Ollama。<Link href="/zh/models" className="body-link">完整列表由提供商注册表生成</Link>。</li>
         </ul>
         <p>
           设置对应的环境变量（如 <code className="inline">OPENROUTER_API_KEY</code>）并在 <code className="inline">~/.ghosty/config.toml</code> 中配置你的提供商。
@@ -449,15 +508,16 @@ export OPENROUTER_API_KEY=sk-or-v1-...
 [providers.openrouter]
 api_key = "sk-or-v1-..."
 
-# 3. 使用 OpenRouter 模型运行：
-ghosty --model openrouter/deepseek/deepseek-v4-pro
+# 3. 使用 OpenRouter 路由运行：
+ghosty --provider openrouter --model deepseek/deepseek-v4-pro
 
-# 或在 config.toml 中设为默认：
-default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
+# 或在 config.toml 中设为默认路由：
+# provider = "openrouter"
+# default_text_model = "deepseek/deepseek-v4-pro"`}
         </pre>
         <p>
           OpenRouter 使用与原生 DeepSeek 提供商相同的推理/缓存解析器。
-          模型 ID 遵循 <code className="inline">provider/model-id</code> 格式（如 <code className="inline">openrouter/deepseek/deepseek-v4-flash</code>）。
+          模型 ID 使用 OpenRouter 自己的 slug（如 <code className="inline">deepseek/deepseek-v4-flash</code>）；通过 <code className="inline">--provider openrouter</code> 或顶层 <code className="inline">provider = &quot;openrouter&quot;</code> 选择路由。
         </p>
       </>
     ),
@@ -469,24 +529,24 @@ default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
       <>
         可以。使用 <code className="inline">vllm</code>、<code className="inline">sglang</code> 或 <code className="inline">ollama</code> 提供商连接本地端点。
         对于 OpenAI 兼容端点（llama.cpp server、text-generation-webui 等），可以使用 <code className="inline">openai</code> 提供商并设置自定义 <code className="inline">base_url</code>。
-        Ghosty Code 也支持 <code className="inline">DEEPSEEK_ALLOW_INSECURE_HTTP=true</code> 用于本地 HTTP 端点。
-        完整的 Hugging Face TGI/vLLM 集成正在路线图中。
+        Ghosty 也支持 <code className="inline">DEEPSEEK_ALLOW_INSECURE_HTTP=true</code> 用于本地 HTTP 端点。
+        Hugging Face Inference Providers 也可以通过 <code className="inline">huggingface</code> provider 使用。更完整的 Hub 发现、模型卡片、数据集和 Jobs 属于 Model Lab。
       </>
     ),
     sources: ["#574", "#1303", "docs/CONFIGURATION.md"],
   },
   {
-    q: "Plan、Agent、YOLO 三种模式有什么区别？",
+    q: "Plan、Work、Operate 三种模式有什么区别？",
     a: (
       <>
         <ul className="list-disc pl-5 space-y-2 text-sm text-ink-soft">
           <li><strong>Plan（计划）</strong> — 只读调查。可以 grep、读文件、列目录、抓取 URL。不能写入或执行 Shell。</li>
-          <li><strong>Agent（代理）</strong> — 默认模式。多步工具调用。Shell 和有副作用的工具根据 approval_mode 设置审批。</li>
-          <li><strong>YOLO（全权）</strong> — 自动批准所有操作并启用信任模式。工作区边界解除。请谨慎使用。</li>
+          <li><strong>Work（执行）</strong> — 常规交互式编码。工具是否可用以及何时请求批准，取决于当前配置和权限姿态。</li>
+          <li><strong>Operate（编排）</strong> — 直接工具遵循与 Work 相同的权限、沙箱、Shell 和安全规则。独立、并行、后台或长时间工作会优先交给 Fleet worker，但不强制委派；只有需要有序阶段和门禁时才需要 Workflow。</li>
         </ul>
         <p className="mt-2">
-          按 <kbd className="font-mono text-xs px-1.5 py-0.5 hairline-t hairline-b hairline-l hairline-r">Tab</kbd> 切换模式。
-          审批模式（建议 / 自动 / 拒绝）是独立的——例如你可以在 Agent 模式下使用自动审批。
+          输入区空闲时，按 <kbd className="font-mono text-xs px-1.5 py-0.5 hairline-t hairline-b hairline-l hairline-r">Tab</kbd> 切换模式。
+          按 <kbd className="font-mono text-xs px-1.5 py-0.5 hairline-t hairline-b hairline-l hairline-r">Shift+Tab</kbd> 循环独立的 Ask / Auto-Review / Full Access 权限姿态；Plan 始终只读。
         </p>
       </>
     ),
@@ -497,13 +557,13 @@ default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
     a: (
       <>
         <p className="mb-2">
-          使用 <code className="inline">ghosty --model auto</code> 或 <code className="inline">/model auto</code> 让 Ghosty Code 为每个回合自动选择最合适的模型和推理深度。
+          使用 <code className="inline">ghosty --model auto</code> 或 <code className="inline">/model auto</code> 让 Ghosty 为每个回合自动选择最合适的模型和推理深度。
         </p>
         <p className="mb-2">
           <strong>Fin</strong> 是快速非推理路径（<code className="inline">deepseek-v4-flash</code>，推理关闭），用于路由决策、摘要、RLM 子任务、上下文维护等协调工作。在真实请求发送前，Fin 会做一个小的路由调用来选择具体的模型和推理级别。
         </p>
         <p>
-          简短简单的请求可以留在 Flash + 推理关闭的状态。编码、调试、发布工作、架构设计或安全审查则会提升到 Pro 和/或更高的推理级别。Fin 是 Ghosty Code 本地逻辑——上游 API 永远不会收到 <code className="inline">model: "auto"</code>。
+          简短简单的请求可以留在 Flash + 推理关闭的状态。编码、调试、发布工作、架构设计或安全审查则会提升到 Pro 和/或更高的推理级别。Fin 是 Ghosty 本地逻辑——上游 API 永远不会收到 <code className="inline">model: "auto"</code>。
         </p>
       </>
     ),
@@ -513,32 +573,42 @@ default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
     q: "什么是 Goal 模式？现在可用吗？",
     a: (
       <>
-        Goal 模式是未来的工作流/标签页方向，用于长时间运行的多步目标——不是当前的 <code className="inline">/goal</code> 命令。
-        当前的 <code className="inline">/goal</code> 是一个简单的目标设置器。完整的 Goal 模式（自主多回合任务执行，支持检查点/恢复）已规划但尚未实现。
-        关注 <a href="https://github.com/blissito/ghostycode/issues/891" className="body-link">#891</a> 的进展。
+        <code className="inline">/goal</code> 为当前 TUI 会话设置目标，支持 <code className="inline">pause</code>、<code className="inline">resume</code>、<code className="inline">complete</code>、<code className="inline">blocked</code> 和 <code className="inline">clear</code> 控制。
+        App-server 客户端也可以通过 <code className="inline">thread/goal/*</code> 方法持久化线程范围的目标，支持 <code className="inline">set</code>、<code className="inline">get</code> 和 <code className="inline">clear</code>。
+        它不会新增一个应用模式；模式切换器仍然是 Plan、Work 和 Operate，权限姿态独立选择。
+        跟踪进展：<a href="https://github.com/blissito/ghostycode/issues/891" className="body-link">#891</a>。
       </>
     ),
     sources: ["#891"],
   },
   {
-    q: "我的代码安全吗？Ghosty Code 使用什么沙箱机制？",
+    q: "我的代码安全吗？Ghosty 使用什么沙箱机制？",
     a: (
       <>
-        Ghosty Code 完全在你的机器上运行。无遥测，不会将你的代码上传到云端处理。
-        沙箱后端：<strong>seatbelt</strong>（macOS）、<strong>landlock</strong>（Linux）、受限令牌（Windows）。
+        Ghosty 运行时、工作区状态与审计日志保留在你的机器上。匿名使用计数默认开启，首次运行会清楚说明，并可随时永久关闭。
+        它只会把聚合的会话、功能与错误计数以及封闭枚举 POST 到第一方端点{" "}
+        <code className="inline">https://telemetry.ghosty.net/v1/telemetry</code>，
+        那是一个 Cloudflare Worker，完整源码就在仓库的 <code className="inline">telemetry-ingest/</code> 目录里。
+        它的存储中没有 IP、国家或任何地理位置列——这是结构上不存在，而不是某个开关——不写任何日志，保留期固定为三个月。
+        若想保持启用但不联系任何服务器，设置 <code className="inline">telemetry_endpoint = &quot;&quot;</code>。
+        它永远不会携带对话、代码、prompt、文件、文件/仓库/分支名、模型内容、凭据，也不发送逐轮或逐工具时间线（schema 见 <code className="inline">docs/TELEMETRY.md</code>；
+        可用 <code className="inline">ghosty config set telemetry false</code> 或
+        <code className="inline">GHOSTY_TELEMETRY=0</code> 关闭）。也不要求经过托管中继。你选择的托管 provider 会收到本轮所需的
+        prompt、项目上下文、工具定义与工具结果。若要让模型推理也保持本地，请使用回环地址上的本地模型路由。
+        OS 命令沙箱因平台而异：macOS 在可用时使用 <strong>Seatbelt</strong>。Linux 仅在 <code className="inline">prefer_bwrap = true</code> 且 <code className="inline">/usr/bin/bwrap</code> 可执行时使用 <strong>bubblewrap</strong>；否则命令没有 Ghosty OS 包装器。Windows 当前报告无 OS 沙箱。
         工作区边界默认为 <code className="inline">--workspace</code>。<code className="inline">/trust</code> 可解除边界。
-        审批模式可按会话配置。所有凭证/审批/提权事件写入 <code className="inline">~/.ghosty/audit.log</code>。
+        权限姿态可按会话配置。
       </>
     ),
-    sources: ["SECURITY.md", "docs/ARCHITECTURE.md"],
+    sources: ["SECURITY.md", "docs/PROVIDERS.md", "docs/RUNTIME_API.md"],
   },
   {
     q: "MCP 服务器如何工作？",
     a: (
       <>
-        Ghosty Code 是双向 MCP 客户端和服务器。在 <code className="inline">~/.ghosty/mcp.json</code> 中定义服务器。
-        工具以 <code className="inline">mcp_&lt;server&gt;_&lt;tool&gt;</code> 形式呈现。你也可以通过 <code className="inline">ghosty mcp</code> 将 Ghosty Code 暴露为 MCP 服务器。
-        查看 <Link href="/zh/docs#mcp" className="body-link">文档页面</Link> 了解配置示例。
+        Ghosty 是双向 MCP 客户端和服务器。在 <code className="inline">~/.ghosty/mcp.json</code> 中定义服务器。
+        工具以 <code className="inline">mcp_&lt;server&gt;_&lt;tool&gt;</code> 形式呈现。你也可以通过 <code className="inline">ghosty mcp</code> 将 Ghosty 暴露为 MCP 服务器。
+        查看 <Link href="/zh/docs/mcp" className="body-link">文档页面</Link> 了解配置示例。
       </>
     ),
     sources: ["docs/MCP.md"],
@@ -562,7 +632,7 @@ default_text_model = "openrouter/deepseek/deepseek-v4-pro"`}
         <pre className="code-block my-2">
 {`# npm 镜像
 npm config set registry https://registry.npmmirror.com
-npm install -g ghostycode
+npm install -g ghosty
 
 # Cargo 镜像（清华 TUNA）
 # 在 ~/.cargo/config.toml 中添加：
@@ -573,17 +643,45 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
         </pre>
         <p>
           也可以从 <a href="https://github.com/blissito/ghostycode/releases" className="body-link">GitHub Releases</a> 直接下载预编译二进制。
-          Gitee 镜像和 CNB 镜像也可能可用。
+          维护中的 CNB 镜像覆盖其文档列出的目标；Gitee 镜像只有实际存在后才会对外展示。
         </p>
       </>
     ),
     sources: ["README.md", "#1914", "docs/CNB_MIRROR.md"],
   },
   {
+    q: "ghosty.net 是官方网站吗？镜像站点呢？",
+    a: (
+      <>
+        <p className="mb-2">
+          <strong>ghosty.net</strong> 和 <strong>www.ghosty.net</strong> 是
+          Ghosty 的官方站点，部署在 Cloudflare 上。网站源码存放于{" "}
+          <code className="inline">blissito/ghostycode</code> 仓库的{" "}
+          <code className="inline">web/</code> 目录下，任何人都可自行部署为镜像。
+        </p>
+        <p className="mb-2">
+          所有正式发布和 SHA-256 校验文件仅通过{" "}
+          <a href="https://github.com/blissito/ghostycode/releases" className="body-link">GitHub Releases</a> 分发。
+          npm 包从 GitHub Releases 下载经校验的二进制。
+        </p>
+        <p className="mb-2">
+          面向无法稳定访问 GitHub 的用户，提供 CNB 镜像（
+          <Link href="/zh/install" className="body-link">docs/CNB_MIRROR.md</Link>）。
+          Cargo 用户可使用 TUNA 镜像在国内加速下载。
+        </p>
+        <p>
+          自行部署的网站副本、镜像站和第三方包不受 Ghosty 项目控制。
+          请验证下载来源和校验和。
+        </p>
+      </>
+    ),
+    sources: ["#2624", "#3421", "docs/CNB_MIRROR.md"],
+  },
+  {
     q: "首次运行时提示 API 密钥被拒绝或认证错误？",
     a: (
       <>
-        <p className="mb-2">运行 <code className="inline">ghosty doctor</code>——它会检查 API 密钥、网络、沙箱和 MCP 服务器。完整报告写入 <code className="inline">~/.ghosty/doctor.log</code>。</p>
+        <p className="mb-2">运行 <code className="inline">ghosty doctor</code>——它会向 stdout 打印诊断报告：配置路径、凭据存储状态（绝不读取或打印具体值）、提供商/本地/MCP 探针以及发布检查。</p>
         <p className="mb-2">常见原因：</p>
         <ul className="list-disc pl-5 space-y-1 text-sm text-ink-soft">
           <li>Shell 启动文件中的 <code className="inline">DEEPSEEK_API_KEY</code> 已过期——打开新 Shell 或使用 <code className="inline">ghosty auth set</code></li>
@@ -595,12 +693,12 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
     sources: ["#907", "#1545"],
   },
   {
-    q: "Model Lab 是什么？Hugging Face 集成什么时候可用？",
+    q: "Model Lab 是什么？Hugging Face 哪些部分可用？",
     a: (
       <>
-        Model Lab 是规划中的开放模型基础设施层：Hugging Face Hub API 用于模型发现、模型卡片、数据集、safetensors 适配器、推理提供商和 Jobs。
-        它尚未完全实现。关注 <a href="https://github.com/blissito/ghostycode/issues/1977" className="body-link">#1977</a> 的进展。
-        目前，你可以通过 OpenRouter 提供商或自托管端点使用 Hugging Face 模型。
+        <code className="inline">huggingface</code> provider 是已经接入的 OpenAI 兼容 Hugging Face Inference Providers 路由。
+        Model Lab 是规划中的开放模型基础设施层：Hub 发现、模型卡片、数据集、safetensors 适配器和 Jobs。
+        更完整的进展见 <a href="https://github.com/blissito/ghostycode/issues/1977" className="body-link">#1977</a>。
       </>
     ),
     sources: ["#1977", "docs/MODEL_LAB.md"],
@@ -609,7 +707,7 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
     q: "为什么 token 消耗这么大？/ 缓存命中率为什么低？",
     a: (
       <>
-        Ghosty Code 每次请求都会发送大量上下文（系统提示、项目说明、工具定义）。
+        Ghosty 每次请求都会发送大量上下文（系统提示、项目说明、工具定义）。
         DeepSeek 的前缀缓存被积极使用——系统提示按最稳定的层级排列以最大化缓存命中。
         如果你发现 token 使用量很高，请检查：是否在简单查询中使用了 <code className="inline">deepseek-v4-pro</code>（更适合用 Flash）？
         模型自动路由（Fin）可以帮助为每个回合选择合适的模型。
@@ -619,7 +717,7 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
     sources: ["#1177", "#1818", "#743"],
   },
   {
-    q: "如何更新 Ghosty Code？",
+    q: "如何更新 Ghosty？",
     a: (
       <>
         <pre className="code-block mb-2">
@@ -627,13 +725,13 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"`}
 ghosty update
 
 # npm
-npm install -g ghostycode@latest
+npm install -g ghosty@latest
 
 # Cargo
 cargo install ghosty-cli --locked --force
 
 # Homebrew
-brew update && brew upgrade deepseek-tui`}
+brew update && brew upgrade ghosty`}
         </pre>
         <p>
           如果通过 npm 安装，<code className="inline">ghosty update</code> 会下载最新发布二进制。
@@ -649,10 +747,20 @@ export default async function FaqPage({ params }: { params: Promise<{ locale: st
   const { locale } = await params;
   const isZh = locale === "zh";
   const items = isZh ? faqZh : faqEn;
+  const canonicalLocale = canonicalLocaleForPath("/faq", locale);
+  const jsonLd = buildFaqPageJsonLd({
+    items,
+    url: `${SITE_URL}/${canonicalLocale}/faq`,
+    inLanguage: canonicalLocale,
+  });
 
   return (
     <>
-      <section className="mx-auto max-w-[1400px] px-6 pt-12 pb-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+      />
+      <section className="site-container section">
         <div className="flex items-baseline gap-4 mb-3">
           <Seal char="问" />
           <div className="eyebrow">{isZh ? "常见问题" : "FAQ"}</div>
@@ -671,35 +779,8 @@ export default async function FaqPage({ params }: { params: Promise<{ locale: st
         </p>
       </section>
 
-      <section className="mx-auto max-w-[1400px] px-6 pb-20">
-        <div className="space-y-0 hairline-t hairline-b">
-          {items.map((item, i) => (
-            <details key={i} className="group hairline-b last:border-b-0">
-              <summary className="px-0 py-5 cursor-pointer flex items-start gap-4 hover:text-indigo transition-colors">
-                <span className="font-mono text-indigo tabular text-sm pt-0.5 shrink-0">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <span className="font-display text-lg leading-snug flex-1">{item.q}</span>
-                <span className="font-mono text-ink-mute text-sm group-open:rotate-45 transition-transform shrink-0">+</span>
-              </summary>
-              <div className="pb-5 pl-10 pr-4">
-                <div className={`text-ink-soft leading-relaxed ${isZh ? "leading-[1.9] tracking-wide" : ""}`}>
-                  {item.a}
-                </div>
-                {item.sources && item.sources.length > 0 && (
-                  <div className="mt-3 flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-[0.66rem] text-ink-mute uppercase tracking-wider">
-                      {isZh ? "来源" : "Sources"}:
-                    </span>
-                    {item.sources.map((s) => (
-                      <span key={s} className="font-mono text-[0.7rem] text-indigo">{s}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </details>
-          ))}
-        </div>
+      <section className="site-container pb-20">
+        <FaqSearch items={items} locale={locale} />
 
         <div className="mt-12 text-center">
           <p className="text-ink-soft text-sm mb-4">

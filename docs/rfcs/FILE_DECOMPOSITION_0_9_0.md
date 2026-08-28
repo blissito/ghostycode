@@ -1,12 +1,22 @@
 # RFC: File Decomposition for v0.9.0
 
+**Status (2026-07-12): still valuable, needs redesign.** The original
+`config.rs` plan was overtaken by events: `config.rs` shrank to ~7.0k lines via
+a different module split (`crates/tui/src/config/`), and the provider-churn
+problem it targeted was mostly solved by the Models.dev catalog + ProviderLake
+(#4184–#4188) rather than by file moves. Meanwhile the render/CLI monoliths
+grew — `ui.rs` 9.4k → 13.6k, `main.rs` 8.0k → 12.1k — so any revival of this
+RFC should re-scope around `ui.rs` and `main.rs`. The migration method
+(§"Migration strategy": git mv + re-exports, no functional changes) remains
+the right approach.
+
 ## Problem
 
 Six files exceed 5,000 lines. The worst offenders accumulate provider-specific
 logic, test code, and UI rendering in single translation units. This makes
 provider additions touch 15+ files and makes code review fragile.
 
-### Current state (lines)
+### Current state (lines, v0.8.6x era — see status note for v0.8.68 numbers)
 
 | File | Lines | Contents |
 |------|-------|----------|

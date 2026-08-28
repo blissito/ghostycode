@@ -1,7 +1,7 @@
-# Opt-in Ghosty Code toolbox workflow.
+# Opt-in GhostyCode toolbox workflow.
 #
 # Usage:
-#   GHOSTY_IMAGE=ghcr.io/hmbown/ghosty:vX.Y.Z \
+#   GHOSTY_IMAGE=ghcr.io/blissito/ghostycode:vX.Y.Z \
 #   GHOSTY_TOOLBOX_IMAGE=ghosty-toolbox:my-project \
 #   GHOSTY_HOME_VOLUME=ghosty-my-project-home \
 #   GHOSTY_WORKSPACE="$PWD" \
@@ -17,7 +17,7 @@ services:
       context: ../..
       dockerfile: docs/examples/Dockerfile.toolbox
       args:
-        GHOSTY_IMAGE: ${GHOSTY_IMAGE:-ghcr.io/hmbown/ghosty:latest}
+        GHOSTY_IMAGE: ${GHOSTY_IMAGE:-ghcr.io/blissito/ghostycode:latest}
         TOOLBOX_PACKAGES: ${TOOLBOX_PACKAGES:-git openssh-client curl build-essential pkg-config python3 python3-pip nodejs npm}
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:?set DEEPSEEK_API_KEY}

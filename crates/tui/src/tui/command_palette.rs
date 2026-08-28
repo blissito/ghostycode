@@ -1,28 +1,36 @@
 //! Command palette modal for quick command/skill insertion.
+//!
+//! Product job (#4276): **find and run one action** — not a dense manual.
+//! Help owns concepts; Config owns settings; Fleet owns worker readiness.
 
+use std::cell::RefCell;
 use std::path::Path;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget, Wrap},
+    widgets::{Block, Borders, Padding, Paragraph, Widget},
 };
 use unicode_width::UnicodeWidthStr;
 
 use crate::commands;
-use crate::localization::Locale;
+use crate::localization::{Locale, MessageId, tr};
 use crate::palette;
 use crate::skills;
 use crate::tools::spec::ApprovalRequirement;
 use crate::tools::spec::ToolCapability;
 use crate::tools::{ToolContext, ToolRegistryBuilder};
-use crate::tui::views::{CommandPaletteAction, ModalKind, ModalView, ViewAction, ViewEvent};
+use crate::tui::menu_style;
+use crate::tui::views::{
+    ActionHint, CommandPaletteAction, ModalKind, ModalView, ViewAction, ViewEvent,
+    centered_modal_area, render_modal_footer, render_modal_surface,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum PaletteSection {
+pub enum PaletteSection {
     Action,
     Command,
     Skill,
@@ -37,58 +45,138 @@ pub struct CommandPaletteEntry {
     pub description: String,
     pub command: String,
     pub action: CommandPaletteAction,
+    show_on_empty_query: bool,
+}
+
+#[cfg(test)]
+impl CommandPaletteEntry {
+    #[must_use]
+    pub fn section(&self) -> PaletteSection {
+        self.section
+    }
 }
 
 pub struct CommandPaletteView {
+    locale: Locale,
     entries: Vec<CommandPaletteEntry>,
     filtered: Vec<usize>,
     query: String,
     selected: usize,
+    /// Entry rows from the most recent render. Keeping the absolute filtered
+    /// index here makes mouse activation use the exact same action as Enter.
+    row_hitboxes: RefCell<Vec<(Rect, usize)>>,
 }
 
 pub fn build_entries(
     locale: Locale,
     skills_dir: &Path,
+    skills_scan_ghosty_only: bool,
     workspace: &Path,
     mcp_config_path: &Path,
     mcp_snapshot: Option<&crate::mcp::McpManagerSnapshot>,
 ) -> Vec<CommandPaletteEntry> {
+    build_entries_with_plugins(
+        locale,
+        skills_dir,
+        skills_scan_ghosty_only,
+        workspace,
+        mcp_config_path,
+        mcp_snapshot,
+        &crate::plugins::PluginRegistry::empty(workspace),
+    )
+}
+
+pub fn build_entries_with_plugins(
+    locale: Locale,
+    skills_dir: &Path,
+    skills_scan_ghosty_only: bool,
+    workspace: &Path,
+    mcp_config_path: &Path,
+    mcp_snapshot: Option<&crate::mcp::McpManagerSnapshot>,
+    plugins: &crate::plugins::PluginRegistry,
+) -> Vec<CommandPaletteEntry> {
     let mut entries = Vec::new();
-
-    for command in commands::COMMANDS {
-        let mut description = command.palette_description_for(locale);
-        if command.requires_argument() {
-            description.push_str("  ");
-            description.push_str(command.usage);
+    commands::user_registry::with_registry_for_workspace(Some(workspace), |user_registry| {
+        let all_user_commands = user_registry.iter().collect::<Vec<_>>();
+        for command in commands::command_infos() {
+            if commands::discovery::user_command_shadows_builtin_canonical(
+                command,
+                &all_user_commands,
+            ) {
+                continue;
+            }
+            let mut description =
+                palette_description_for_unshadowed_aliases(command, locale, &all_user_commands);
+            if command.requires_argument() {
+                description.push_str("  ");
+                description.push_str(command.usage);
+            }
+            let action = if command.palette_runs_directly() {
+                CommandPaletteAction::ExecuteCommand {
+                    command: format!("/{}", command.name),
+                }
+            } else {
+                CommandPaletteAction::InsertText {
+                    text: command.palette_command(),
+                }
+            };
+            entries.push(CommandPaletteEntry {
+                section: PaletteSection::Command,
+                label: format!("/{}", command.name),
+                description,
+                command: command.palette_command(),
+                action,
+                show_on_empty_query: command.show_in_empty_discovery(),
+            });
         }
-        let action = if command_runs_directly(command.name) {
-            CommandPaletteAction::ExecuteCommand {
-                command: format!("/{}", command.name),
-            }
-        } else {
-            CommandPaletteAction::InsertText {
-                text: command.palette_command(),
-            }
-        };
-        entries.push(CommandPaletteEntry {
-            section: PaletteSection::Command,
-            label: format!("/{}", command.name),
-            description,
-            command: command.palette_command(),
-            action,
-        });
-    }
 
-    let skills = skills::discover_for_workspace_and_dir(workspace, skills_dir);
+        for command in user_registry.iter().filter(|command| !command.hidden) {
+            let mut description = command
+                .description
+                .clone()
+                .unwrap_or_else(|| "User-defined command".to_string());
+            if let Some(hint) = command.display_usage() {
+                description.push_str("  ");
+                description.push_str(hint);
+            }
+            let slash_command = format!("/{}", command.name);
+            let action = if command.takes_arguments() {
+                CommandPaletteAction::InsertText {
+                    text: format!("{slash_command} "),
+                }
+            } else {
+                CommandPaletteAction::ExecuteCommand {
+                    command: slash_command.clone(),
+                }
+            };
+            entries.push(CommandPaletteEntry {
+                section: PaletteSection::Command,
+                label: slash_command.clone(),
+                description,
+                command: slash_command,
+                action,
+                show_on_empty_query: true,
+            });
+        }
+    });
+
+    let skills = skills::discover_for_workspace_and_dir_with_mode_and_plugins(
+        workspace,
+        skills_dir,
+        skills::SkillDiscoveryMode::from_ghosty_only(skills_scan_ghosty_only),
+        Some(plugins),
+    )
+    .into_enabled();
     for skill in skills.list() {
         entries.push(CommandPaletteEntry {
             section: PaletteSection::Skill,
-            label: format!("skill:{}", skill.name),
+            label: format!("${}", skill.name),
             description: skill.description.clone(),
-            command: format!("/skill {}", skill.name),
+            command: format!("${}", skill.name),
             action: CommandPaletteAction::ExecuteCommand {
-                command: format!("/skill {}", skill.name),
+                command: format!("${}", skill.name),
             },
+            show_on_empty_query: true,
         });
     }
 
@@ -100,7 +188,6 @@ pub fn build_entries(
         .with_web_tools()
         .with_git_tools()
         .with_user_input_tool()
-        .with_parallel_tool()
         .with_patch_tools()
         .with_note_tool()
         .with_diagnostics_tool()
@@ -156,25 +243,56 @@ pub fn build_entries(
                     title: format!("Tool: {}", tool.name()),
                     content: format_tool_details(tool.name(), tool.description(), &tags),
                 },
+                show_on_empty_query: true,
             })
         })
         .collect::<Vec<_>>();
     tool_entries.sort_by(|a, b| a.label.cmp(&b.label));
     entries.extend(tool_entries);
 
-    entries.extend(build_mcp_entries(mcp_config_path, mcp_snapshot));
+    entries.extend(build_mcp_entries(
+        workspace,
+        mcp_config_path,
+        mcp_snapshot,
+        plugins,
+    ));
 
     entries.sort_by(|a, b| a.label.cmp(&b.label));
     entries.sort_by_key(|entry| entry.section);
     entries
 }
 
+fn palette_description_for_unshadowed_aliases(
+    command: &commands::CommandInfo,
+    locale: Locale,
+    all_user_commands: &[&commands::user_registry::UserCommandMetadata],
+) -> String {
+    let desc = command.description_for(locale);
+    let aliases = commands::discovery::unshadowed_builtin_aliases(command, all_user_commands);
+    if aliases.len() == command.aliases.len() {
+        return command.palette_description_for(locale);
+    }
+    if aliases.is_empty() {
+        desc.to_string()
+    } else {
+        format!("{}  aliases: {}", desc, aliases.join(", "))
+    }
+}
+
 fn build_mcp_entries(
+    workspace: &Path,
     mcp_config_path: &Path,
     mcp_snapshot: Option<&crate::mcp::McpManagerSnapshot>,
+    plugins: &crate::plugins::PluginRegistry,
 ) -> Vec<CommandPaletteEntry> {
     let owned_snapshot = if mcp_snapshot.is_none() {
-        crate::mcp::manager_snapshot_from_config(mcp_config_path, false).ok()
+        crate::mcp::manager_snapshot_from_config_with_workspace_and_plugins(
+            mcp_config_path,
+            workspace,
+            false,
+            plugins,
+        )
+        .ok()
     } else {
         None
     };
@@ -187,6 +305,7 @@ fn build_mcp_entries(
         action: CommandPaletteAction::ExecuteCommand {
             command: "/mcp".to_string(),
         },
+        show_on_empty_query: true,
     }];
 
     let Some(snapshot) = snapshot else {
@@ -222,6 +341,7 @@ fn build_mcp_entries(
                 title: format!("MCP Server: {}", server.name),
                 content: format_mcp_server_details(snapshot, server),
             },
+            show_on_empty_query: true,
         });
 
         for tool in &server.tools {
@@ -245,6 +365,7 @@ fn build_mcp_entries(
                         tool.description.as_deref().unwrap_or("(no description)")
                     ),
                 },
+                show_on_empty_query: true,
             });
             // Add a "use" entry that inserts the tool's model_name into the input
             // so users can quickly reference the tool in their message to the AI.
@@ -263,6 +384,7 @@ fn build_mcp_entries(
                     action: CommandPaletteAction::InsertText {
                         text: tool.model_name.clone(),
                     },
+                    show_on_empty_query: true,
                 });
             }
         }
@@ -283,6 +405,7 @@ fn build_mcp_entries(
                         server.name, resource.name
                     ),
                 },
+                show_on_empty_query: true,
             });
         }
 
@@ -306,6 +429,7 @@ fn build_mcp_entries(
                         server.name, prompt.model_name
                     ),
                 },
+                show_on_empty_query: true,
             });
         }
     }
@@ -352,6 +476,7 @@ fn modal_block() -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(palette::BORDER_COLOR))
+        .style(Style::default().bg(palette::WHALE_BG))
         .padding(Padding::uniform(1))
 }
 
@@ -393,45 +518,6 @@ fn section_rank(section: PaletteSection) -> usize {
         PaletteSection::Tool => 3,
         PaletteSection::Mcp => 4,
     }
-}
-
-fn command_runs_directly(name: &str) -> bool {
-    matches!(
-        name,
-        "help"
-            | "clear"
-            | "exit"
-            | "models"
-            | "queue"
-            | "stash"
-            | "hooks"
-            | "subagents"
-            | "links"
-            | "home"
-            | "save"
-            | "sessions"
-            | "compact"
-            | "export"
-            | "config"
-            | "yolo"
-            | "agent"
-            | "plan"
-            | "trust"
-            | "logout"
-            | "tokens"
-            | "change"
-            | "system"
-            | "context"
-            | "undo"
-            | "retry"
-            | "init"
-            | "settings"
-            | "skills"
-            | "cost"
-            | "jobs"
-            | "mcp"
-            | "task"
-    )
 }
 
 fn format_tool_details(name: &str, description: &str, tags: &[&str]) -> String {
@@ -589,12 +675,19 @@ fn visible_entry_window(
 }
 
 impl CommandPaletteView {
+    #[cfg(test)]
     pub fn new(entries: Vec<CommandPaletteEntry>) -> Self {
+        Self::new_for_locale(Locale::En, entries)
+    }
+
+    pub fn new_for_locale(locale: Locale, entries: Vec<CommandPaletteEntry>) -> Self {
         let mut view = Self {
+            locale,
             entries,
             filtered: Vec::new(),
             query: String::new(),
             selected: 0,
+            row_hitboxes: RefCell::new(Vec::new()),
         };
         view.refilter();
         view
@@ -611,7 +704,12 @@ impl CommandPaletteView {
             .entries
             .iter()
             .enumerate()
-            .filter_map(|(idx, entry)| entry_match_score(entry, &terms).map(|score| (idx, score)))
+            .filter_map(|(idx, entry)| {
+                if terms.is_empty() && !entry.show_on_empty_query {
+                    return None;
+                }
+                entry_match_score(entry, &terms).map(|score| (idx, score))
+            })
             .collect::<Vec<_>>();
 
         filtered.sort_by_key(|(idx, score)| {
@@ -625,7 +723,7 @@ impl CommandPaletteView {
     }
 
     fn scope_hint_lines() -> Line<'static> {
-        let hint = "scope: c:/cmd: , s:/skill: , t:/tool: , m:/mcp:";
+        let hint = "scope: c:cmd · s:skill · t:tool · m:mcp";
         Line::from(Span::styled(
             hint,
             Style::default()
@@ -645,41 +743,13 @@ impl CommandPaletteView {
         Line::from(vec![Span::styled(
             format!("  {title} ({count})  "),
             Style::default()
-                .fg(palette::DEEPSEEK_SKY)
+                .fg(palette::WHALE_INFO)
                 .add_modifier(Modifier::BOLD),
         )])
     }
 
-    fn scope_examples() -> Vec<Line<'static>> {
-        vec![
-            Line::from(Span::styled("Try:", Style::default().fg(palette::TEXT_DIM))),
-            Line::from(Span::styled(
-                "  c:<term>  Command-only   e.g. c:agent",
-                Style::default().fg(palette::TEXT_MUTED),
-            )),
-            Line::from(Span::styled(
-                "  s:<term>  Skill-only     e.g. s:search",
-                Style::default().fg(palette::TEXT_MUTED),
-            )),
-            Line::from(Span::styled(
-                "  t:<term>  Tool-only      e.g. t:git",
-                Style::default().fg(palette::TEXT_MUTED),
-            )),
-            Line::from(Span::styled(
-                "  m:<term>  MCP-only       e.g. m:filesystem",
-                Style::default().fg(palette::TEXT_MUTED),
-            )),
-        ]
-    }
-
     fn move_selection(&mut self, delta: isize) {
-        if self.filtered.is_empty() {
-            self.selected = 0;
-            return;
-        }
-        let len = self.filtered.len() as isize;
-        let next = (self.selected as isize + delta).clamp(0, len - 1) as usize;
-        self.selected = next;
+        self.selected = crate::tui::list_nav::wrap_index(self.selected, self.filtered.len(), delta);
     }
 
     fn selected_entry(&self) -> Option<&CommandPaletteEntry> {
@@ -696,6 +766,32 @@ impl ModalView for CommandPaletteView {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+
+    fn handle_mouse(&mut self, mouse: MouseEvent) -> ViewAction {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => self.move_selection(-1),
+            MouseEventKind::ScrollDown => self.move_selection(1),
+            MouseEventKind::Down(MouseButton::Left) => {
+                let clicked = self.row_hitboxes.borrow().iter().find_map(|(rect, index)| {
+                    rect.contains(ratatui::layout::Position::new(mouse.column, mouse.row))
+                        .then_some(*index)
+                });
+                if let Some(index) = clicked {
+                    if self.selected == index {
+                        if let Some(entry) = self.selected_entry() {
+                            return ViewAction::EmitAndClose(ViewEvent::CommandPaletteSelected {
+                                action: entry.action.clone(),
+                            });
+                        }
+                    } else {
+                        self.selected = index;
+                    }
+                }
+            }
+            _ => {}
+        }
+        ViewAction::None
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> ViewAction {
@@ -760,18 +856,38 @@ impl ModalView for CommandPaletteView {
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
-        let popup_width = 90.min(area.width.saturating_sub(4));
-        let popup_height = 22.min(area.height.saturating_sub(4));
-        let popup_area = Rect {
-            x: (area.width.saturating_sub(popup_width)) / 2,
-            y: (area.height.saturating_sub(popup_height)) / 2,
-            width: popup_width,
-            height: popup_height,
-        };
+        self.row_hitboxes.borrow_mut().clear();
+        let popup_area = centered_modal_area(area, 90, 22, 44, 8);
+        let popup_width = popup_area.width;
 
-        Clear.render(popup_area, buf);
+        render_modal_surface(area, popup_area, buf);
+
+        let title = format!(
+            " {} — {} ",
+            tr(self.locale, MessageId::CommandPaletteTitle),
+            tr(self.locale, MessageId::CommandPaletteSubtitle)
+        );
+        let block = modal_block().title(Line::from(Span::styled(
+            title,
+            Style::default()
+                .fg(palette::WHALE_INFO)
+                .add_modifier(Modifier::BOLD),
+        )));
+        let inner = block.inner(popup_area);
+        block.render(popup_area, buf);
+
+        let content = render_modal_footer(
+            inner,
+            buf,
+            &[
+                ActionHint::new("↑/↓", "move"),
+                ActionHint::new("Enter", "select"),
+                ActionHint::new("Esc", "cancel"),
+            ],
+        );
 
         let mut lines = Vec::new();
+        let mut entry_line_indices = Vec::new();
         let query_label = if self.query.is_empty() {
             "Type to filter".to_string()
         } else {
@@ -782,7 +898,11 @@ impl ModalView for CommandPaletteView {
             Style::default().fg(palette::TEXT_MUTED),
         )));
         let match_count = if self.query.is_empty() {
-            format!("{} entries", self.entries.len())
+            format!(
+                "{} shown / {} entries",
+                self.filtered.len(),
+                self.entries.len()
+            )
         } else {
             format!("{} / {} matches", self.filtered.len(), self.entries.len())
         };
@@ -791,7 +911,6 @@ impl ModalView for CommandPaletteView {
             Style::default().fg(palette::TEXT_DIM).italic(),
         )));
         lines.push(Self::scope_hint_lines());
-        lines.extend(Self::scope_examples());
         lines.push(Line::from(""));
 
         // Rows the bordered popup can show for the list, minus the header that
@@ -799,9 +918,7 @@ impl ModalView for CommandPaletteView {
         // labels and separators, so the scroll window is sized against the real
         // rendered cost rather than a flat entry count (#2590).
         let header_lines = lines.len();
-        let available = (popup_height as usize)
-            .saturating_sub(2) // top + bottom border
-            .saturating_sub(header_lines);
+        let available = (content.height as usize).saturating_sub(header_lines);
         let mut action_count = 0usize;
         let mut command_count = 0usize;
         let mut skill_count = 0usize;
@@ -818,7 +935,7 @@ impl ModalView for CommandPaletteView {
         }
         if self.filtered.is_empty() {
             lines.push(Line::from(Span::styled(
-                "No matches.",
+                "No matches",
                 Style::default().fg(palette::TEXT_MUTED).italic(),
             )));
         } else {
@@ -851,14 +968,13 @@ impl ModalView for CommandPaletteView {
                 }
 
                 let style = if is_selected {
-                    Style::default()
-                        .fg(palette::SELECTION_TEXT)
-                        .bg(palette::SELECTION_BG)
+                    menu_style::selected_row_style()
                 } else {
                     Style::default().fg(palette::TEXT_PRIMARY)
                 };
 
-                let mut line = format!("  {:<label_width$}", entry.label);
+                let pointer = crate::tui::glyphs::selection_marker(is_selected);
+                let mut line = format!("{pointer} {:<label_width$}", entry.label);
                 let desc_capacity = popup_width as usize - (label_width + 4);
                 let desc = if entry.description.width() > desc_capacity {
                     let mut shortened = String::new();
@@ -872,27 +988,25 @@ impl ModalView for CommandPaletteView {
                 } else {
                     entry.description.clone()
                 };
-                if is_selected {
-                    line = format!("> {:<label_width$}", entry.label);
-                }
                 line.push_str("  ");
                 line.push_str(&desc);
+                entry_line_indices.push((lines.len(), absolute));
                 lines.push(Line::from(Span::styled(line, style)));
             }
         }
 
-        let block = modal_block()
-            .title(" Command Palette ")
-            .title_bottom(Line::from(vec![
-                Span::styled(" ↑/↓/j/k move  ", Style::default().fg(palette::TEXT_MUTED)),
-                Span::styled("Enter run/open  ", Style::default().fg(palette::TEXT_MUTED)),
-                Span::styled("Esc close", Style::default().fg(palette::TEXT_MUTED)),
-            ]));
-
-        Paragraph::new(lines)
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .render(popup_area, buf);
+        // The palette's row-budget logic intentionally treats each logical
+        // line as one terminal row. Do not wrap here: wrapping a long query or
+        // label would both hide later entries and make mouse hitboxes lie.
+        Paragraph::new(lines).render(content, buf);
+        *self.row_hitboxes.borrow_mut() = entry_line_indices
+            .into_iter()
+            .filter_map(|(line, index)| {
+                let row = content.y.saturating_add(line as u16);
+                (row < content.bottom())
+                    .then_some((Rect::new(content.x, row, content.width, 1), index))
+            })
+            .collect();
     }
 }
 
@@ -974,6 +1088,7 @@ mod tests {
             action: CommandPaletteAction::InsertText {
                 text: command.to_string(),
             },
+            show_on_empty_query: true,
         }
     }
 
@@ -1108,6 +1223,7 @@ mod tests {
         let entries = build_entries(
             Locale::En,
             configured_dir.as_path(),
+            false,
             workspace.as_path(),
             Path::new("mcp.json"),
             None,
@@ -1118,8 +1234,113 @@ mod tests {
             .map(|entry| entry.label.as_str())
             .collect::<Vec<_>>();
 
-        assert!(skill_labels.contains(&"skill:workspace-skill"));
-        assert!(skill_labels.contains(&"skill:configured-skill"));
+        assert!(skill_labels.contains(&"$workspace-skill"));
+        assert!(skill_labels.contains(&"$configured-skill"));
+    }
+
+    #[test]
+    fn command_palette_skills_respect_ghosty_only_scan() {
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let claude_skill_dir = workspace
+            .join(".claude")
+            .join("skills")
+            .join("claude-skill");
+        std::fs::create_dir_all(&claude_skill_dir).expect("create claude skill dir");
+        std::fs::write(
+            claude_skill_dir.join("SKILL.md"),
+            "---\nname: claude-skill\ndescription: Claude skill\n---\nbody",
+        )
+        .expect("write claude skill");
+        let ghosty_skill_dir = workspace
+            .join(".ghosty")
+            .join("skills")
+            .join("ghosty-skill");
+        std::fs::create_dir_all(&ghosty_skill_dir).expect("create ghosty skill dir");
+        std::fs::write(
+            ghosty_skill_dir.join("SKILL.md"),
+            "---\nname: ghosty-skill\ndescription: GhostyCode skill\n---\nbody",
+        )
+        .expect("write ghosty skill");
+
+        let entries = build_entries(
+            Locale::En,
+            workspace.join(".ghosty").join("skills").as_path(),
+            true,
+            workspace.as_path(),
+            Path::new("mcp.json"),
+            None,
+        );
+        let skill_labels: Vec<&str> = entries
+            .iter()
+            .filter(|entry| entry.section == PaletteSection::Skill)
+            .map(|entry| entry.label.as_str())
+            .collect();
+
+        assert!(skill_labels.contains(&"$ghosty-skill"));
+        assert!(!skill_labels.contains(&"$claude-skill"));
+    }
+
+    #[test]
+    fn command_palette_includes_only_active_reviewed_plugin_skills() {
+        let _env = crate::test_support::lock_test_env();
+        let tmp = TempDir::new().expect("tempdir");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path().join("home"));
+        let workspace = tmp.path().join("workspace");
+        let plugin_root = tmp.path().join("plugins/demo");
+        std::fs::create_dir_all(plugin_root.join("skills/review")).expect("plugin Skill dir");
+        std::fs::write(
+            plugin_root.join("plugin.toml"),
+            "schema_version = 1\n[plugin]\nname = \"demo\"\nversion = \"1.0.0\"\n[skills]\npath = \"skills\"\n",
+        )
+        .expect("plugin manifest");
+        std::fs::write(
+            plugin_root.join("skills/review/SKILL.md"),
+            "---\nname: review\ndescription: reviewed plugin Skill\n---\nbody\n",
+        )
+        .expect("plugin Skill");
+        let config = crate::plugins::discovery::DiscoveryConfig {
+            workspace: workspace.clone(),
+            user_plugins_dir: tmp.path().join("plugins"),
+            workspace_plugins_dir: workspace.join(".ghosty/plugins"),
+            builtin_plugin_dirs: Vec::new(),
+            state_path: tmp.path().join("plugin-state/state.json"),
+        };
+        let mut plugins = crate::plugins::discovery::discover_with_config(&config);
+        let entries_before = build_entries_with_plugins(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            &workspace,
+            Path::new("mcp.json"),
+            None,
+            &plugins,
+        );
+        assert!(
+            !entries_before
+                .iter()
+                .any(|entry| entry.label == "$demo:review")
+        );
+
+        plugins.trust("demo").expect("trust plugin");
+        plugins.enable("demo").expect("enable plugin");
+        let entries_after = build_entries_with_plugins(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            &workspace,
+            Path::new("mcp.json"),
+            None,
+            &plugins,
+        );
+        let skill = entries_after
+            .iter()
+            .find(|entry| entry.label == "$demo:review")
+            .expect("active reviewed plugin Skill should reach the palette");
+        assert!(matches!(
+            &skill.action,
+            CommandPaletteAction::ExecuteCommand { command } if command == "$demo:review"
+        ));
     }
 
     #[test]
@@ -1127,6 +1348,7 @@ mod tests {
         let entries = build_entries(
             Locale::En,
             Path::new("."),
+            false,
             Path::new("."),
             Path::new("mcp.json"),
             None,
@@ -1139,16 +1361,443 @@ mod tests {
 
         assert!(command_labels.contains(&"/config"));
         assert!(command_labels.contains(&"/links"));
-        assert!(!command_labels.contains(&"/voice"));
+        assert!(command_labels.contains(&"/voice"));
         assert!(!command_labels.contains(&"/set"));
         assert!(!command_labels.contains(&"/deepseek"));
     }
 
     #[test]
-    fn command_palette_inserts_model_command_for_argument_entry() {
+    fn command_palette_includes_workspace_user_commands() {
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let commands_dir = workspace.join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).expect("create commands dir");
+        std::fs::write(
+            commands_dir.join("review.md"),
+            "---\ndescription: Review with context\nargument-hint: <path>\n---\nReview $ARGUMENTS",
+        )
+        .expect("write user command");
+
+        let entries = build_entries(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            workspace.as_path(),
+            tmp.path().join("mcp.json").as_path(),
+            None,
+        );
+        let user_entry = entries
+            .iter()
+            .find(|entry| entry.section == PaletteSection::Command && entry.label == "/review")
+            .expect("user command should appear in command palette");
+
+        assert!(user_entry.description.contains("Review with context"));
+        assert!(user_entry.description.contains("<path>"));
+        assert!(matches!(
+            &user_entry.action,
+            CommandPaletteAction::InsertText { text } if text == "/review "
+        ));
+    }
+
+    #[test]
+    fn command_palette_uses_frontmatter_name_usage_and_arguments() {
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let commands_dir = workspace.join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).expect("create commands dir");
+        std::fs::write(
+            commands_dir.join("workflow-file.md"),
+            "---\nname: inspect\ndescription: Inspect a target\nusage: /inspect <path>\narguments: <path>\nargument-hint: <legacy>\n---\nInspect $ARGUMENTS",
+        )
+        .expect("write user command");
+
+        let entries = build_entries(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            workspace.as_path(),
+            tmp.path().join("mcp.json").as_path(),
+            None,
+        );
+        let user_entry = entries
+            .iter()
+            .find(|entry| entry.section == PaletteSection::Command && entry.label == "/inspect")
+            .expect("frontmatter name should be the palette command");
+
+        assert_eq!(user_entry.description, "Inspect a target  /inspect <path>");
+        assert!(matches!(
+            &user_entry.action,
+            CommandPaletteAction::InsertText { text } if text == "/inspect "
+        ));
+        assert!(!entries.iter().any(|entry| {
+            entry.section == PaletteSection::Command && entry.label == "/workflow-file"
+        }));
+    }
+
+    #[test]
+    fn command_palette_excludes_hidden_user_commands() {
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let commands_dir = workspace.join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).expect("create commands dir");
+        std::fs::write(
+            commands_dir.join("secret.md"),
+            "---\ndescription: Internal workflow\nhidden: true\n---\nsecret",
+        )
+        .expect("write hidden user command");
+
+        let entries = build_entries(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            workspace.as_path(),
+            tmp.path().join("mcp.json").as_path(),
+            None,
+        );
+
+        assert!(
+            !entries
+                .iter()
+                .any(|entry| entry.section == PaletteSection::Command && entry.label == "/secret")
+        );
+    }
+
+    #[test]
+    fn hidden_frontmatter_name_override_suppresses_shadowed_builtin() {
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let commands_dir = workspace.join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).expect("create commands dir");
+        std::fs::write(
+            commands_dir.join("private-help.md"),
+            "---\nname: help\nhidden: true\n---\nprivate help",
+        )
+        .expect("write hidden user command");
+
+        let entries = build_entries(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            workspace.as_path(),
+            tmp.path().join("mcp.json").as_path(),
+            None,
+        );
+
+        assert!(!entries.iter().any(|entry| {
+            entry.section == PaletteSection::Command
+                && matches!(entry.label.as_str(), "/help" | "/private-help")
+        }));
+    }
+
+    #[test]
+    fn command_palette_filters_shadowed_builtin_aliases_from_description() {
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let commands_dir = workspace.join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).expect("create commands dir");
+        std::fs::write(
+            commands_dir.join("image-review.md"),
+            "---\ndescription: Review an image\nalias: image\n---\nreview image",
+        )
+        .expect("write user command");
+
+        let entries = build_entries(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            workspace.as_path(),
+            tmp.path().join("mcp.json").as_path(),
+            None,
+        );
+        let attach = entries
+            .iter()
+            .find(|entry| entry.section == PaletteSection::Command && entry.label == "/attach")
+            .expect("built-in canonical command should remain visible");
+
+        assert!(
+            !attach.description.contains("aliases: image")
+                && !attach.description.contains(", image")
+                && !attach.description.contains("image,"),
+            "shadowed /image alias must not be advertised by /attach: {}",
+            attach.description
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.section == PaletteSection::Command
+                    && entry.label == "/image-review"),
+            "user command that owns the /image alias should be visible"
+        );
+    }
+
+    #[test]
+    fn command_palette_visible_canonical_shadow_has_exactly_one_user_row() {
+        // Deep-Dive Q1: a visible user command whose canonical name equals a
+        // built-in must produce exactly one palette row owned by the user
+        // command (its metadata and action), never the built-in row.
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let commands_dir = workspace.join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).expect("create commands dir");
+        std::fs::write(
+            commands_dir.join("my-help.md"),
+            "---\nname: help\ndescription: My private help\nusage: /help <topic>\n---\nhelp $ARGUMENTS",
+        )
+        .expect("write user command");
+
+        let entries = build_entries(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            workspace.as_path(),
+            tmp.path().join("mcp.json").as_path(),
+            None,
+        );
+        let rows = entries
+            .iter()
+            .filter(|entry| entry.section == PaletteSection::Command && entry.label == "/help")
+            .collect::<Vec<_>>();
+
+        assert_eq!(rows.len(), 1, "exactly one /help row must exist");
+        assert!(
+            rows[0].description.contains("My private help"),
+            "row must carry the user command metadata: {}",
+            rows[0].description
+        );
+        assert!(
+            rows[0].description.contains("/help <topic>"),
+            "row must carry the user command usage: {}",
+            rows[0].description
+        );
+        assert!(
+            matches!(&rows[0].action, CommandPaletteAction::InsertText { text } if text == "/help "),
+            "row must carry the user command action"
+        );
+    }
+
+    #[test]
+    fn command_palette_accepted_alias_suppresses_builtin_canonical_row() {
+        // A visible user command whose accepted alias equals a built-in
+        // canonical token must suppress the built-in row in the palette,
+        // matching the shared alias-aware contract.
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let commands_dir = workspace.join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).expect("create commands dir");
+        std::fs::write(
+            commands_dir.join("assistant.md"),
+            "---\ndescription: My assistant\nalias: help\n---\nassistant",
+        )
+        .expect("write user command");
+
+        let entries = build_entries(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            workspace.as_path(),
+            tmp.path().join("mcp.json").as_path(),
+            None,
+        );
+
+        assert!(
+            !entries
+                .iter()
+                .any(|entry| entry.section == PaletteSection::Command && entry.label == "/help"),
+            "built-in canonical row must be suppressed when a user alias claims /help"
+        );
+        assert!(
+            entries.iter().any(
+                |entry| entry.section == PaletteSection::Command && entry.label == "/assistant"
+            ),
+            "the user command must appear under its own canonical name"
+        );
+    }
+
+    #[test]
+    fn command_palette_hidden_canonical_shadow_exposes_no_discovery_row() {
+        // A hidden user command claiming a built-in canonical token must not
+        // surface either row: the hidden command is excluded from output while
+        // still owning the token (AT-008 boundary in the palette).
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let commands_dir = workspace.join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).expect("create commands dir");
+        std::fs::write(
+            commands_dir.join("private-help.md"),
+            "---\nname: help\nhidden: true\n---\nprivate help",
+        )
+        .expect("write hidden user command");
+
+        let entries = build_entries(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            workspace.as_path(),
+            tmp.path().join("mcp.json").as_path(),
+            None,
+        );
+
+        assert!(
+            !entries
+                .iter()
+                .any(|entry| entry.section == PaletteSection::Command && entry.label == "/help"),
+            "neither the hidden user command nor the shadowed built-in may appear"
+        );
+    }
+
+    #[test]
+    fn command_palette_alias_shadow_preserves_canonical_row_without_claimed_alias() {
+        // A user command claiming only one built-in alias must leave the
+        // built-in canonical row visible and remove only the claimed alias
+        // from its description.
+        let tmp = TempDir::new().expect("tempdir");
+        let workspace = tmp.path().join("workspace");
+        let commands_dir = workspace.join(".ghosty").join("commands");
+        std::fs::create_dir_all(&commands_dir).expect("create commands dir");
+        std::fs::write(
+            commands_dir.join("image-review.md"),
+            "---\ndescription: Review an image\nalias: image\n---\nreview image",
+        )
+        .expect("write user command");
+
+        let entries = build_entries(
+            Locale::En,
+            tmp.path().join("skills").as_path(),
+            false,
+            workspace.as_path(),
+            tmp.path().join("mcp.json").as_path(),
+            None,
+        );
+        let attach_rows = entries
+            .iter()
+            .filter(|entry| entry.section == PaletteSection::Command && entry.label == "/attach")
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            attach_rows.len(),
+            1,
+            "built-in canonical row must appear once"
+        );
+        assert!(
+            !attach_rows[0].description.contains("aliases: image")
+                && !attach_rows[0].description.contains(", image")
+                && !attach_rows[0].description.contains("image,"),
+            "claimed /image alias must be absent from /attach description: {}",
+            attach_rows[0].description
+        );
+    }
+
+    #[test]
+    fn command_palette_has_one_entry_for_every_registered_command() {
+        let tmp = TempDir::new().expect("tempdir");
+        let skills_dir = tmp.path().join("skills");
+        let mcp_config_path = tmp.path().join("mcp.json");
+        let entries = build_entries(
+            Locale::En,
+            skills_dir.as_path(),
+            false,
+            tmp.path(),
+            mcp_config_path.as_path(),
+            None,
+        );
+
+        let command_entries = entries
+            .iter()
+            .filter(|entry| entry.section == PaletteSection::Command)
+            .collect::<Vec<_>>();
+        let user_registry = commands::user_registry::registry_for_workspace(Some(tmp.path()));
+        let visible_user_commands = user_registry
+            .iter()
+            .filter(|command| !command.hidden)
+            .count();
+        let shadowed_builtins = commands::command_infos()
+            .iter()
+            .filter(|command| user_registry.get(command.name).is_some())
+            .count();
+        assert_eq!(
+            command_entries.len(),
+            commands::command_infos().len() - shadowed_builtins + visible_user_commands
+        );
+
+        for command in commands::command_infos() {
+            if user_registry.get(command.name).is_some() {
+                continue;
+            }
+            let label = format!("/{}", command.name);
+            let matching = command_entries
+                .iter()
+                .filter(|entry| entry.label == label)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                matching.len(),
+                1,
+                "expected one palette entry for /{}",
+                command.name
+            );
+
+            let entry = matching[0];
+            assert_eq!(entry.command, command.palette_command());
+            assert!(
+                entry
+                    .description
+                    .contains(&*command.description_for(Locale::En)),
+                "/{} palette description should include command help text",
+                command.name
+            );
+            if command.requires_argument() {
+                assert!(
+                    entry.description.contains(command.usage),
+                    "/{} palette description should include usage {:?}",
+                    command.name,
+                    command.usage
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn command_palette_hides_toolbox_commands_until_searched() {
         let entries = build_entries(
             Locale::En,
             Path::new("."),
+            false,
+            Path::new("."),
+            Path::new("mcp.json"),
+            None,
+        );
+        let mut view = CommandPaletteView::new(entries);
+        let root_labels = view
+            .filtered
+            .iter()
+            .map(|idx| view.entries[*idx].label.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(root_labels.contains(&"/provider"));
+        assert!(root_labels.contains(&"/model"));
+        assert!(root_labels.contains(&"/fleet"));
+        assert!(root_labels.contains(&"/config"));
+        assert!(root_labels.contains(&"/statusline"));
+        assert!(!root_labels.contains(&"/rlm"));
+        assert!(!root_labels.contains(&"/modeldb"));
+        assert!(!root_labels.contains(&"/models"));
+        assert!(!root_labels.contains(&"/subagents"));
+
+        view.query = "rlm".to_string();
+        view.refilter();
+        assert!(
+            view.filtered
+                .iter()
+                .any(|idx| view.entries[*idx].label == "/rlm"),
+            "advanced /rlm should still be searchable"
+        );
+    }
+
+    #[test]
+    fn command_palette_runs_model_command_to_open_picker() {
+        let entries = build_entries(
+            Locale::En,
+            Path::new("."),
+            false,
             Path::new("."),
             Path::new("mcp.json"),
             None,
@@ -1161,7 +1810,7 @@ mod tests {
         assert_eq!(model.command, "/model ");
         assert!(matches!(
             &model.action,
-            CommandPaletteAction::InsertText { text } if text == "/model "
+            CommandPaletteAction::ExecuteCommand { command } if command == "/model"
         ));
     }
 
@@ -1170,6 +1819,7 @@ mod tests {
         let entries = build_entries(
             Locale::En,
             Path::new("."),
+            false,
             Path::new("."),
             Path::new("mcp.json"),
             None,
@@ -1186,11 +1836,108 @@ mod tests {
     }
 
     #[test]
+    fn palette_paste_only_names_are_registered_canonical_commands() {
+        let registered: std::collections::HashSet<&str> = commands::command_infos()
+            .iter()
+            .map(|info| info.name)
+            .collect();
+        for name in commands::traits::PALETTE_PASTE_ONLY {
+            assert!(
+                registered.contains(name),
+                "PALETTE_PASTE_ONLY entry `{name}` is not a registered command"
+            );
+        }
+    }
+
+    #[test]
+    fn command_palette_direct_execute_follows_command_metadata() {
+        let tmp = TempDir::new().expect("tempdir");
+        let skills_dir = tmp.path().join("skills");
+        let mcp_config_path = tmp.path().join("mcp.json");
+        let entries = build_entries(
+            Locale::En,
+            skills_dir.as_path(),
+            false,
+            tmp.path(),
+            mcp_config_path.as_path(),
+            None,
+        );
+        let user_registry = commands::user_registry::registry_for_workspace(Some(tmp.path()));
+
+        for command in commands::command_infos() {
+            if user_registry.get(command.name).is_some() {
+                continue;
+            }
+            let label = format!("/{}", command.name);
+            let entry = entries
+                .iter()
+                .find(|entry| entry.section == PaletteSection::Command && entry.label == label)
+                .unwrap_or_else(|| panic!("missing palette entry for {label}"));
+
+            if command.palette_runs_directly() {
+                assert!(
+                    matches!(
+                        &entry.action,
+                        CommandPaletteAction::ExecuteCommand { command: c }
+                            if c == &format!("/{}", command.name)
+                    ),
+                    "/{} should execute directly from the palette (no required arg)",
+                    command.name
+                );
+            } else {
+                assert!(
+                    matches!(
+                        &entry.action,
+                        CommandPaletteAction::InsertText { text }
+                            if text == &command.palette_command()
+                    ),
+                    "/{} should paste for required arguments (usage: {})",
+                    command.name,
+                    command.usage
+                );
+            }
+        }
+
+        // Drift traps from #3911: no-arg rows must not silently paste, and
+        // dead mode-arg names must never reappear as palette allowlist entries.
+        for no_arg in [
+            "cost",
+            "diff",
+            "edit",
+            "purge",
+            "setup",
+            "hotbar",
+            "translate",
+        ] {
+            let label = format!("/{no_arg}");
+            let entry = entries
+                .iter()
+                .find(|entry| entry.section == PaletteSection::Command && entry.label == label)
+                .unwrap_or_else(|| panic!("missing palette entry for {label}"));
+            assert!(
+                matches!(&entry.action, CommandPaletteAction::ExecuteCommand { .. }),
+                "/{no_arg} is no-arg and must run directly"
+            );
+        }
+        for required in ["rename", "attach", "profile", "review"] {
+            let label = format!("/{required}");
+            let entry = entries
+                .iter()
+                .find(|entry| entry.section == PaletteSection::Command && entry.label == label)
+                .unwrap_or_else(|| panic!("missing palette entry for {label}"));
+            assert!(
+                matches!(&entry.action, CommandPaletteAction::InsertText { .. }),
+                "/{required} requires an argument and must paste"
+            );
+        }
+    }
+
+    #[test]
     fn command_palette_includes_mcp_discovery_and_failed_servers() {
         let snapshot = crate::mcp::McpManagerSnapshot {
             config_path: Path::new("mcp.json").to_path_buf(),
             config_exists: true,
-            restart_required: false,
+            reload_required: false,
             servers: vec![
                 crate::mcp::McpServerSnapshot {
                     name: "fs".to_string(),
@@ -1203,6 +1950,7 @@ mod tests {
                     read_timeout: 120,
                     connected: true,
                     error: None,
+                    capability_metadata: crate::mcp::McpServerCapabilityMetadata::LegacyFallback,
                     tools: vec![crate::mcp::McpDiscoveredItem {
                         name: "read".to_string(),
                         model_name: "mcp_fs_read".to_string(),
@@ -1222,6 +1970,7 @@ mod tests {
                     read_timeout: 120,
                     connected: false,
                     error: Some("connect failed".to_string()),
+                    capability_metadata: crate::mcp::McpServerCapabilityMetadata::NotObserved,
                     tools: Vec::new(),
                     resources: Vec::new(),
                     prompts: Vec::new(),
@@ -1231,6 +1980,7 @@ mod tests {
         let entries = build_entries(
             Locale::En,
             Path::new("."),
+            false,
             Path::new("."),
             Path::new("mcp.json"),
             Some(&snapshot),
@@ -1265,7 +2015,7 @@ mod tests {
         let snapshot = crate::mcp::McpManagerSnapshot {
             config_path: Path::new("mcp.json").to_path_buf(),
             config_exists: true,
-            restart_required: false,
+            reload_required: false,
             servers: vec![crate::mcp::McpServerSnapshot {
                 name: "muted".to_string(),
                 enabled: false,
@@ -1277,6 +2027,7 @@ mod tests {
                 read_timeout: 120,
                 connected: false,
                 error: None,
+                capability_metadata: crate::mcp::McpServerCapabilityMetadata::NotObserved,
                 tools: Vec::new(),
                 resources: Vec::new(),
                 prompts: Vec::new(),
@@ -1285,6 +2036,7 @@ mod tests {
         let entries = build_entries(
             Locale::En,
             Path::new("."),
+            false,
             Path::new("."),
             Path::new("mcp.json"),
             Some(&snapshot),
@@ -1311,6 +2063,7 @@ mod tests {
             action: CommandPaletteAction::ExecuteCommand {
                 command: "/config".to_string(),
             },
+            show_on_empty_query: true,
         }];
         let mut view = CommandPaletteView::new(entries);
 
@@ -1321,5 +2074,160 @@ mod tests {
                 action: CommandPaletteAction::ExecuteCommand { .. }
             })
         ));
+    }
+
+    #[test]
+    fn command_palette_mouse_runs_the_same_skill_action_as_enter() {
+        let entries = vec![
+            palette_entry(PaletteSection::Command, "/config", "open config", "/config"),
+            CommandPaletteEntry {
+                section: PaletteSection::Skill,
+                label: "$plugin:review".to_string(),
+                description: "review from an enabled plugin".to_string(),
+                command: "$plugin:review".to_string(),
+                action: CommandPaletteAction::ExecuteCommand {
+                    command: "$plugin:review".to_string(),
+                },
+                show_on_empty_query: true,
+            },
+        ];
+        let mut keyboard = CommandPaletteView::new(entries.clone());
+        keyboard.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::empty()));
+        let keyboard_action =
+            keyboard.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()));
+
+        let mut mouse = CommandPaletteView::new(entries);
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buf = Buffer::empty(area);
+        mouse.render(area, &mut buf);
+        let (rect, _) = mouse
+            .row_hitboxes
+            .borrow()
+            .iter()
+            .find(|(_, index)| *index == 1)
+            .copied()
+            .expect("plugin Skill row should have a mouse hitbox");
+        let click = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x,
+            row: rect.y,
+            modifiers: KeyModifiers::empty(),
+        };
+        assert!(matches!(mouse.handle_mouse(click), ViewAction::None));
+        let mouse_action = mouse.handle_mouse(click);
+
+        for action in [keyboard_action, mouse_action] {
+            assert!(matches!(
+                action,
+                ViewAction::EmitAndClose(ViewEvent::CommandPaletteSelected {
+                    action: CommandPaletteAction::ExecuteCommand { command }
+                }) if command == "$plugin:review"
+            ));
+        }
+    }
+
+    /// The four terminal sizes the v0.8.66 modal blocker (#3732) requires every
+    /// overlay to remain readable and fully operable at.
+    const BLOCKER_SIZES: [(u16, u16); 4] = [(80, 24), (100, 30), (120, 32), (160, 40)];
+
+    fn sample_palette_view() -> CommandPaletteView {
+        let entries = vec![
+            palette_entry(PaletteSection::Command, "/config", "open config", "/config"),
+            palette_entry(PaletteSection::Command, "/model", "choose model", "/model"),
+            palette_entry(PaletteSection::Skill, "$search", "search skill", "$search"),
+            palette_entry(PaletteSection::Tool, "tool:git", "git tool", "git"),
+            palette_entry(PaletteSection::Mcp, "mcp:fs", "filesystem", "mcp_fs_read"),
+        ];
+        CommandPaletteView::new(entries)
+    }
+
+    #[test]
+    fn command_palette_is_usable_and_opaque_at_blocker_sizes() {
+        use crate::tui::views::ViewStack;
+        for (w, h) in BLOCKER_SIZES {
+            let area = Rect::new(0, 0, w, h);
+            let mut buf = Buffer::empty(area);
+            for y in 0..h {
+                for x in 0..w {
+                    buf[(x, y)].set_symbol("X");
+                }
+            }
+            let mut stack = ViewStack::new();
+            stack.push(sample_palette_view());
+            stack.render(area, &mut buf);
+
+            let rows: Vec<String> = (0..h)
+                .map(|y| (0..w).map(|x| buf[(x, y)].symbol().to_string()).collect())
+                .collect();
+            let text = rows.join("\n");
+
+            // Footer keeps every action.
+            assert!(text.contains("move"), "{w}x{h}: missing 'move' hint");
+            assert!(text.contains("select"), "{w}x{h}: missing 'select' hint");
+            assert!(text.contains("cancel"), "{w}x{h}: missing 'cancel' hint");
+
+            // The selected row carries the charter pointer glyph.
+            assert!(
+                text.contains(crate::tui::glyphs::SELECTION),
+                "{w}x{h}: selected row missing charter pointer"
+            );
+
+            // Header stays compact: scope help is a single line, with no
+            // multi-line "Try:" example block crowding out entries.
+            assert!(text.contains("Type to filter"), "{w}x{h}: missing prompt");
+            assert!(
+                !text.contains("Try:"),
+                "{w}x{h}: scope example block should stay collapsed"
+            );
+
+            // Composited frame is fully opaque.
+            assert!(!text.contains('X'), "{w}x{h}: background bleed-through");
+            assert_eq!(
+                buf[(w / 2, h / 2)].bg,
+                palette::WHALE_BG,
+                "{w}x{h}: modal interior must be opaque"
+            );
+
+            // No horizontal overflow.
+            for (y, row) in rows.iter().enumerate() {
+                assert!(
+                    UnicodeWidthStr::width(row.trim_end()) <= w as usize,
+                    "{w}x{h}: row {y} overflows width: {row:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn command_palette_selected_row_uses_shared_selection_style_at_blocker_sizes() {
+        use crate::tui::views::ViewStack;
+        for (w, h) in BLOCKER_SIZES {
+            let area = Rect::new(0, 0, w, h);
+            let mut buf = Buffer::empty(area);
+            let mut stack = ViewStack::new();
+            stack.push(sample_palette_view());
+            stack.render(area, &mut buf);
+
+            // The first entry ("/config") is selected by default; find its row.
+            let selected_y = (0..h)
+                .find(|&y| {
+                    let row: String = (0..w).map(|x| buf[(x, y)].symbol()).collect();
+                    row.contains("/config")
+                })
+                .unwrap_or_else(|| panic!("{w}x{h}: selected entry should render"));
+            let selected_cells = (0..w)
+                .filter(|&x| {
+                    let cell = &buf[(x, selected_y)];
+                    !cell.symbol().trim().is_empty()
+                        && cell.bg == palette::SELECTION_BG
+                        && cell.fg == palette::SELECTION_TEXT
+                })
+                .count();
+            assert!(
+                selected_cells >= "/config".len(),
+                "{w}x{h}: selected row must render with the shared selection style \
+                 (palette::SELECTION_TEXT on palette::SELECTION_BG)"
+            );
+        }
     }
 }

@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { getAgentEnv, listDrafts, validateSession, type AgentDraft } from "@/lib/community-agent";
 import { AdminClient } from "./admin-client";
 
 export const dynamic = "force-dynamic";
+
+// Maintainer-only surface: keep it out of search indexes (robots.ts also
+// disallows /*/admin).
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 const TYPE_LABELS: Record<string, { en: string; zh: string }> = {
   triage: { en: "Issue Triage", zh: "议题分类" },
@@ -10,6 +17,8 @@ const TYPE_LABELS: Record<string, { en: string; zh: string }> = {
   stale: { en: "Stale Nudge", zh: "过期提醒" },
   dupes: { en: "Duplicate", zh: "重复检测" },
   digest: { en: "Weekly Digest", zh: "每周摘要" },
+  linkcheck: { en: "Broken Link", zh: "失效链接" },
+  "semantic-drift": { en: "Content Drift", zh: "内容漂移" },
 };
 
 function LoginForm({ locale, error }: { locale: string; error: boolean }) {

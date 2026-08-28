@@ -1,6 +1,11 @@
-# Tool-Surface Lifecycle Policy (v0.8.53)
+# Historical Tool-Surface Lifecycle Policy (v0.8.53)
 
-**Status:** Design doc / policy. No catalog code lands in this cycle — the code
+> 阅读简体中文版：[zh_hans/TOOL_LIFECYCLE.md](zh_hans/TOOL_LIFECYCLE.md)
+
+**Status:** Historical design record, not current runtime documentation. The
+v0.9.1 canonical action surface and replay-only alias contract are documented in
+[`RUNTIME_SIMPLIFICATION_DESIGN.md`](RUNTIME_SIMPLIFICATION_DESIGN.md) and
+[`TOOL_SURFACE.md`](TOOL_SURFACE.md). No catalog code landed in this old cycle — the code
 work is **deferred**. This document is the umbrella policy for GitHub **#2681**,
 with **#2682** and **#2683** as concrete instances of the planned diet. It
 describes *what will be done* and the invariants any future diet PR must hold.
@@ -10,14 +15,32 @@ describes *what will be done* and the invariants any future diet PR must hold.
   Legacy subagent-name cleanup + guardrail tests in this policy rebase on #2684.
 - PR **#2685** — git-history active + RLM/field errors.
 
-All file:line citations are against the verified tree at
-`/Users/huntermbown/Desktop/whalebro/ghosty` as of v0.8.52/0.8.53.
+**What actually happened, so you can read the rest as history:** the "hidden
+compatibility" plan below was *not* what shipped in full. `exec_wait` and
+`exec_interact` were removed rather than kept dispatchable. The work-progress
+surface is different: `todo_write` is the sole model-visible name, while
+`work_update`, `TodoWrite`, `todo`, `checklist_write`, and `checklist_update`
+stay registered as hidden-compatibility aliases of `TodoWriteTool` so old
+transcripts replay; `checklist_add`, `checklist_list`, `todo_add`,
+`todo_update`, and `todo_list` are not registered and are not callable.
+`tts`/`speech` remain dispatchable. See [`TOOL_SURFACE.md`](TOOL_SURFACE.md)
+for the shipped contract. Read §4 and §8 as a rejected catalog-diet proposal,
+not as a guarantee that every listed alias is gone.
+
+**All file:line citations here were correct at v0.8.52/0.8.53 and are now
+expired.** They have not been rewritten, because renumbering a historical
+record makes it look current. Symbols this document cites that no longer exist
+at all include `ARCEE_FIRST_TURN_NATIVE_TOOLS` and `apply_provider_tool_policy`
+(both removed by `1bfcced43c`, "fix(engine): remove Arcee tool catalog
+exception"), and the planned `HIDDEN_COMPATIBILITY_TOOLS` / `DEPRECATED_ALIASES`
+sets, which were never written. Resolve any symbol here against the tree before
+acting on it.
 
 ---
 
 ## 1. Purpose and the weaker-model problem
 
-Ghosty Code ships a large native tool surface. The first-turn *active* partition
+Ghosty ships a large native tool surface. The first-turn *active* partition
 of that surface is what every model sees before it has run a single
 `tool_search_*` call. Today that active set contains several **near-duplicate
 tools** that map to the *same* implementation under different names:
@@ -28,8 +51,9 @@ tools** that map to the *same* implementation under different names:
   (`registry.rs:527,530`).
 - `tts` and `speech` are both `SpeechTool`
   (`registry.rs:787-792`, both deferred).
-- `todo_write` and `checklist_write` are the *same* `TodoWriteTool`
-  constructed two ways (`crates/tui/src/tools/todo.rs:184-196`).
+- `todo_write` is the single model-visible `TodoWriteTool` surface;
+  `todo_write`, `TodoWrite`, `todo`, `checklist_write`, and
+  `checklist_update` are hidden compat aliases of it.
 
 For a strong model, redundant names are harmless noise. For **weaker / smaller
 models** (the Arcee Trinity lane, `deepseek-v4-flash` child executors, and any
@@ -46,6 +70,59 @@ real cost:
 The lifecycle policy exists to **shrink and discipline the model-visible
 surface** without ever breaking the ability to replay an old transcript that
 referenced a now-retired name.
+
+### Canonical work-tracking surface for v0.9.1
+
+The model-visible progress surface is a single tool: `todo_write` (#4132).
+Agents and Fleet workers use it for concrete To-do / Work progress under the
+active runtime thread or durable task.
+
+`task_*` and the Fleet/Workflow ledger remain the durable lifecycle owners.
+Checklist metadata is the model-visible projection of progress:
+`task_updates.checklist` carries the current items, completion percentage, and
+in-progress item.
+
+**The To-do is the only Work surface.** `update_plan` is conversational
+reasoning — strategy, context, and route notes for complex initiatives. It is
+not a progress surface, must not duplicate To-do items, and plan-only state is
+never rendered as a To-do snapshot.
+
+**No request re-states the list.** The model learns what is on the To-do the way
+it learns anything else: from the result its own `todo_write` call returned,
+which is ordinary persisted history. Nothing is appended to a parent turn-loop
+step or a sub-agent step. The complete list stays visible in the UI, which is a
+different surface from the request.
+
+`crates/tui/src/todo_snapshot.rs` renders the one bounded body — hard-bounded in
+both item count and characters, in-progress item preserved preferentially, any
+elision marked — for the three seams that show a snapshot *once*, because a
+person asked: the `<ghosty:fork_state>` block a newly forked agent is handed,
+`/relay`, and the in-transcript agent card.
+
+Two properties of that renderer are load-bearing:
+
+- **Authority.** The snapshot is read from the `WorkRuntime` graph projection
+  when a runtime owns that list, because `todo_write` stages there and only
+  publishes into the legacy `SharedTodoList` view later. Sessions with no
+  attached runtime read the list directly.
+- **Per-agent isolation.** Every agent reads *its own* list (`#4810`), so a
+  worker sees its own progress and never a parent's or sibling's. The parent's
+  list reaches a forked child only as the immutable `<ghosty:fork_state>`
+  To-do section, resolved at the spawn seam so a same-turn `todo_write` is
+  included.
+
+The renderer bounds and frames the snapshot; it does not vet To-do content. It
+guarantees that item text cannot close the wrapper early, cannot forge the line
+format with control characters, and cannot exceed the item/character bounds —
+not that arbitrary item text is safe to follow as instructions.
+
+The registered hidden compatibility aliases of `todo_write` are `work_update`,
+`TodoWrite`, `todo`, `checklist_write`, and `checklist_update`
+(`ToolRegistryBuilder::with_todo_tool`). They remain dispatchable against the
+same To-do state so old transcripts replay without data loss, but they are not
+advertised to the model catalog (`TodoWriteTool::model_visible` is true only
+for the canonical name). `checklist_add`, `checklist_list`, `todo_add`,
+`todo_update`, and `todo_list` are not registered and are not callable.
 
 ---
 
@@ -73,7 +150,7 @@ caller-facing signal:
   re-learning it. (Example: `exec_wait` is literally `exec_shell_wait`.)
 - **deprecated:** behaves identically *and succeeds*, but the tool result's
   **metadata** carries an appended notice like
-  `"deprecated: use checklist_write instead"`. The notice goes **only in the
+  `"deprecated: use <replacement> instead"`. The notice goes **only in the
   result metadata returned for that call** — never in the cached tool catalog
   prefix (see Section 8). We use this when there is a canonical replacement we
   want the caller (and any human reading the transcript) nudged toward.
@@ -100,6 +177,11 @@ pub(super) const HIDDEN_COMPATIBILITY_TOOLS: &[&str] = &[
     "exec_wait",          // == exec_shell_wait  (ShellWaitTool)
     "exec_interact",      // == exec_shell_interact (ShellInteractTool)
     "tts",                // == speech (SpeechTool)
+    "work_update",        // == todo_write (TodoWriteTool)
+    "TodoWrite",          // == todo_write (TodoWriteTool)
+    "todo",               // == todo_write (TodoWriteTool)
+    "checklist_write",    // == todo_write (TodoWriteTool)
+    "checklist_update",   // == todo_write (TodoWriteTool)
 ];
 
 /// Deprecated aliases: invisible + dispatchable, with a replacement notice
@@ -111,14 +193,8 @@ pub(super) struct DeprecatedAlias {
 }
 
 pub(super) const DEPRECATED_ALIASES: &[DeprecatedAlias] = &[
-    DeprecatedAlias { name: "todo_write",  replacement: "checklist_write",
-                      note: "use checklist_write instead" },
-    DeprecatedAlias { name: "todo_add",    replacement: "checklist_add",
-                      note: "use checklist_add instead" },
-    DeprecatedAlias { name: "todo_update", replacement: "checklist_update",
-                      note: "use checklist_update instead" },
-    DeprecatedAlias { name: "todo_list",   replacement: "checklist_list",
-                      note: "use checklist_list instead" },
+    // Empty in the #4132 work-surface cutover: the legacy names above are
+    // silent hidden-compatibility aliases of todo_write for transcript replay.
 ];
 
 #[inline]
@@ -169,33 +245,46 @@ A per-`ToolSpec` `lifecycle: Lifecycle` field was rejected for three reasons:
 
 ## 4. Deprecation manifest (the #2681 acceptance-criteria table)
 
-This is the authoritative manifest. Columns are the #2681 AC columns. No entry
-is "removed" in 0.8.53; replay is supported for everything listed.
+This was the proposed manifest. Columns are the #2681 AC columns. No entry was
+"removed" in 0.8.53; replay was to be supported for everything listed.
+
+> **Superseded in part.** `exec_wait` and `exec_interact` were removed
+> (`shell_surface_exposes_lowercase_bash_and_hides_legacy_handler` in
+> `crates/tui/src/tools/registry/tests.rs`); they are not callable. The
+> work-progress rows are not uniformly removed. `todo_write` is the canonical
+> model-visible `TodoWriteTool`; `ToolRegistryBuilder::with_todo_tool` also
+> registers hidden replay aliases `work_update`, `TodoWrite`, `todo`,
+> `checklist_write`, and `checklist_update`. `checklist_add`, `checklist_list`,
+> `todo_add`, `todo_update`, and `todo_list` are not registered (engine tests
+> assert they "must not be callable"). The `"must no longer be callable"`
+> assertion in `registry/tests.rs` (`rlm_is_the_only_registered_session_surface`)
+> applies to the old `rlm_*` session names, not to checklist/todo. `tts`
+> remains dispatchable via `with_speech_tools`. The `replay_supported = Yes`
+> column is true for `tts` and for the registered todo/checklist aliases; false
+> for `exec_wait`/`exec_interact` and for the unregistered checklist/todo names.
 
 | Alias | Replacement (canonical) | Lifecycle state | first_deprecated_version | planned_removal_version | replay_supported |
 |---|---|---|---|---|---|
 | `exec_wait` | `exec_shell_wait` | hidden-compatibility | 0.8.53 | TBD (≥ 0.9.x) | Yes |
 | `exec_interact` | `exec_shell_interact` | hidden-compatibility | 0.8.53 | TBD (≥ 0.9.x) | Yes |
 | `tts` | `speech` | hidden-compatibility | 0.8.53 | TBD (≥ 0.9.x) | Yes |
-| `todo_write` | `checklist_write` | deprecated | 0.8.53 | TBD (≥ 0.9.x) | Yes |
-| `todo_add` | `checklist_add` | deprecated | 0.8.53 | TBD (≥ 0.9.x) | Yes |
-| `todo_update` | `checklist_update` | deprecated | 0.8.53 | TBD (≥ 0.9.x) | Yes |
-| `todo_list` | `checklist_list` | deprecated | 0.8.53 | TBD (≥ 0.9.x) | Yes |
+| `checklist_write` | `todo_write` | hidden-compatibility | 0.9.0 | TBD (≥ 0.9.x) | Yes |
+| `checklist_add` | `todo_write` | hidden-compatibility | 0.9.0 | TBD (≥ 0.9.x) | Yes |
+| `checklist_update` | `todo_write` | hidden-compatibility | 0.9.0 | TBD (≥ 0.9.x) | Yes |
+| `checklist_list` | `todo_write` | hidden-compatibility | 0.9.0 | TBD (≥ 0.9.x) | Yes |
+| `todo_write` | `todo_write` | hidden-compatibility | 0.8.53 | TBD (≥ 0.9.x) | Yes |
+| `todo_add` | `todo_write` | hidden-compatibility | 0.8.53 | TBD (≥ 0.9.x) | Yes |
+| `todo_update` | `todo_write` | hidden-compatibility | 0.8.53 | TBD (≥ 0.9.x) | Yes |
+| `todo_list` | `todo_write` | hidden-compatibility | 0.8.53 | TBD (≥ 0.9.x) | Yes |
 
-**Legacy subagent names — already non-visible, no manifest entry needed.**
-`agent_spawn`, `spawn_agent`, `agent_result`, `agent_wait`, `agent_send_input`,
-`send_input`, `agent_assign`, `agent_list`, `agent_cancel`, `resume_agent`, and
-`delegate_to_agent` exist only as `#[allow(dead_code)]` structs in
-`crates/tui/src/tools/subagent/mod.rs` and are **never instantiated** outside
-tests, so they are already not model-visible. Only `agent_open`, `agent_eval`,
-`tool_agent`, and `agent_close` are registered
-(`registry.rs:1017-1029`). The action for these legacy names is **dead-code
-cleanup + a guardrail test** (rebase on PR #2684), not a lifecycle transition.
+The `todo_*` aliases first entered hidden compatibility in v0.8.53. v0.9.0
+changes their canonical replacement to `todo_write`; it does not reset their
+first-deprecated version.
 
-> **Keep the live internal methods.** `send_input`, `cancel`, and `resume` also
-> exist as live `SubAgentManager` methods
-> (`subagent/mod.rs:1605,1495,1521`) used internally by `agent_eval` /
-> `agent_close`. These are *not* the dead-code tool structs and must be kept.
+**Legacy subagent names — removed, no manifest entry needed.**
+The model-visible subagent surface is only `agent`. The old lifecycle names and
+the experimental tool-agent lane were removed rather than kept as hidden
+compatibility tools.
 
 `planned_removal_version` is intentionally `TBD`: a name only moves to **removed**
 once we formally drop replay for transcripts old enough to contain it, which is a
@@ -220,10 +309,10 @@ second catalog snapshot.
 
 The default diet removes `exec_wait` and `exec_interact` from the active head
 (they become hidden-compat; their canonical twins `exec_shell_wait` /
-`exec_shell_interact` stay). `tts` and `todo_*` are *already not* in the active
-set, so they do not change the active budget in this diet. The net effect of
-this specific diet is to remove two duplicate active aliases from whatever
-default active head is current after the surrounding v0.8.53 PR batch.
+`exec_shell_interact` stay). `tts` and the legacy `todo_*` aliases remain out
+of the active set. The canonical `todo_write` tool became eager in v0.9.6 as an
+explicit budget decision so ordinary progress tracking never requires a
+discovery turn.
 
 ### Per mode (Plan / Agent / YOLO)
 
@@ -258,9 +347,9 @@ else or an explicit budget bump in this doc.
 |---|---|---|---|
 | **Shell wait** | `exec_shell_wait` | `exec_wait` → hidden-compat | Same `ShellWaitTool` (`registry.rs:526,529`); router already unifies (`tool_routing.rs:1139`) |
 | **Shell interact** | `exec_shell_interact` | `exec_interact` → hidden-compat | Same `ShellInteractTool` (`registry.rs:527,530`) |
-| **Checklist / todo** | `checklist_write` | `todo_write/add/update/list` → deprecated | Same `TodoWriteTool`, `::new` vs `::checklist` (`todo.rs:184-196`) |
+| **Work progress / checklist / todo** | `todo_write` | registered hidden-compat: `work_update`, `TodoWrite`, `todo`, `checklist_write`, `checklist_update`; not registered: `checklist_add`/`list`, `todo_add`/`update`/`list` | Same `TodoWriteTool`; registered aliases replay old transcripts only |
 | **Speech / tts** | `speech` | `tts` → hidden-compat | Same `SpeechTool` (`registry.rs:787-792`) |
-| **Subagent lifecycle** | `agent_open`, `agent_eval`, `agent_close`, `tool_agent` (gated, §7) | all 11 legacy names → already non-visible dead code | Cleanup + guardrail test, rebase on #2684 |
+| **Subagent lifecycle** | `agent` | old lifecycle names and tool-agent lane removed | Single async launcher. (The "child agents are leaf workers" note here did not ship — see §7.) |
 | **Edit family** | `apply_patch`, `edit_file`, `write_file`, `fim_edit` | none — **all distinct niches** | NOT touched (per #2681 non-goals); doc-only canonical guidance |
 | **Search family** | `grep_files` (content), `file_search` (filename), `project_map` (structure) | none — **distinct niches** | NOT touched; no FTS5/BM25/semantic index exists today |
 
@@ -278,27 +367,27 @@ Python function, **not a tool** — so there is nothing to retire there.
 
 ---
 
-## 7. `tool_agent` decision: canonical but DeepSeek-V4-gated
+## 7. Subagent cutover decision: one visible launcher
 
-`tool_agent` **stays** as a canonical subagent tool
-(`registry.rs:1024`, `ToolAgentTool`). It is the fast, **non-thinking "Fin"
-executor lane**, built on `deepseek-v4-flash` (cf. `DEFAULT_CHILD_MODEL =
-"deepseek-v4-flash"`, `rlm.rs:26`).
+The old lifecycle trio and tool-agent lane are removed, not hidden compatibility
+tools.
 
-**Decision: gate `tool_agent` to DeepSeek-V4 models only.**
+**Decision: expose only `agent`.**
 
-- It is purpose-built around the V4-flash non-thinking executor profile. Exposing
-  it to other providers (e.g. Arcee Trinity, which is already WAF-narrowed to 8
-  read-only tools, `tool_catalog.rs:106-115`) offers no working executor lane and
-  only adds a confusing, mis-targeted option to weaker surfaces.
-- Gating is a **provider/model policy**, consistent with the existing
-  provider-aware first-turn policy (`apply_provider_tool_policy`,
-  `tool_catalog.rs:134-149`): on non-DeepSeek-V4 models, `tool_agent` is excluded
-  from the active set and from tool-search discovery. It remains **registered and
-  dispatchable** so transcripts created under a V4 model replay everywhere.
+- `agent` starts one focused background child and returns the agent id plus
+  transcript handle.
+- Child results arrive as completion events. The parent should keep working
+  instead of polling a lifecycle tool.
+- Child tool catalogs exclude the removed subagent *lifecycle* tools.
+  (**Not as shipped:** this bullet originally continued "so children are leaf
+  workers and cannot recursively summon more agents." That is not what landed.
+  Children receive `agent` and can recurse to the configured depth — see
+  `with_full_agent_surface_options` and `can_spawn_child` in
+  `tools/subagent/mod.rs`, and [`SUBAGENTS.md`](SUBAGENTS.md).)
+- Detailed inspection goes through `handle_read` on the returned transcript
+  handle.
 
-This is not a lifecycle transition — `tool_agent` is canonical. It is a
-*visibility gate* layered on the same machinery as the Arcee narrowing.
+This is a lifecycle simplification, not a provider gate.
 
 ---
 
@@ -324,7 +413,16 @@ byte-stability invariant (`tool_catalog.rs:169-196`) is binding:
 5. **Hidden/deprecated tools are excluded *before* the head is built**, so their
    removal is the only head change — they do not appear in the prefix at all.
 
-### Old-transcript replay guarantee
+### Old-transcript replay guarantee (not adopted)
+
+The blanket guarantee below was proposed, not shipped as written. `exec_wait`
+and `exec_interact` were removed and fail as unknown tools. Work-progress
+replay is narrower: `todo_write` plus the hidden aliases registered by
+`with_todo_tool` (`work_update`, `TodoWrite`, `todo`, `checklist_write`,
+`checklist_update`) still dispatch; `checklist_add`, `checklist_list`,
+`todo_add`, `todo_update`, and `todo_list` do not. `tts` remains
+dispatchable. `apply_patch` is a separate replay-only edit alias; see
+[`TOOL_SURFACE.md`](TOOL_SURFACE.md).
 
 > For every name in the deprecation manifest with `replay_supported = Yes`, the
 > tool stays **registered and dispatchable with identical behavior**. Replaying
@@ -361,10 +459,9 @@ Any diet PR (and the umbrella #2681 work) must add/keep:
    `tool_catalog.rs:169-196` invariant. The golden updates **only** as a
    reviewed, deliberate one-time edit when the diet lands.
 
-5. **Subagent guardrail test (rebase on #2684).** Assert only `agent_open`,
-   `agent_eval`, `tool_agent`, `agent_close` are registered as model-visible
-   subagent tools and that no legacy name from `subagent/mod.rs` is
-   instantiated outside tests.
+5. **Subagent guardrail test.** Assert only `agent` is registered as a
+   model-visible subagent tool and that hidden/legacy names from
+   `subagent/mod.rs` are not advertised.
 
-6. **`tool_agent` gating test.** Assert `tool_agent` is active/discoverable only
-   under DeepSeek-V4 models and excluded (but still registered) elsewhere.
+6. **Leaf-worker test.** Assert subagent tool catalogs exclude `agent` and
+   retired legacy lifecycle names.

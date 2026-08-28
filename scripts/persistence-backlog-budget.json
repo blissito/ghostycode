@@ -1,0 +1,42 @@
+{
+  "_comment": "Frozen paused-consumer workload plus one-way ceilings for the actual persistence request channel. All 128 sends must remain accepted and the final sent version must be the one production PendingState would apply; retained count and bytes may decrease. Latency and macOS RSS ceilings include measurement noise headroom and can be tightened after a bounded implementation.",
+  "_rebaseline_2026_08_08": "v0.9.5 journal compatibility repair: queued snapshots now retain one canonical journal and materialize legacy messages only at the disk boundary. Retained payload fell from the broken candidate's 16924032 bytes to an observed 8527991-8528000 bytes across repeated clean samples. The 8529280-byte ceiling is 40448 bytes (0.48%) above the pre-journal 8488832-byte baseline and includes 1280 bytes (0.015%) of serialization-noise headroom above the largest observed sample; it does not permit duplicate history.",
+  "document_kind": "ghosty.persistence_backlog_budget",
+  "schema_version": 2,
+  "baseline_receipt": "scripts/persistence-backlog-baseline-receipt.json",
+  "fixture": {
+    "fixture_id": "paused-production-channel-session-snapshot-v1",
+    "request_variant": "session_snapshot",
+    "payload_estimator": "retained-saved-session-json-bytes-v1",
+    "paused_consumer": true,
+    "requests_attempted": 128,
+    "content_bytes_per_request": 65536,
+    "single_session_id": true,
+    "expected_applied_version": 127
+  },
+  "baseline_observation": {
+    "accepted_requests": 128,
+    "applied_version": 127,
+    "retained_queued_requests": 128,
+    "estimated_retained_payload_bytes": 8527994,
+    "enqueue_elapsed_ns": 456170,
+    "rss_during_delta_bytes": 9453568,
+    "rss_after_delta_bytes": 12861440,
+    "provenance": {
+      "platform": "macos",
+      "source_sha": "2d4a9cb58c5c22ac361ab221bda1243a0e4349fb",
+      "source_dirty": false,
+      "rustc_version": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "cargo_version": "cargo 1.97.0 (c980f4866 2026-06-30)",
+      "build_profile": "test",
+      "sample_count": 1
+    }
+  },
+  "ceilings": {
+    "retained_queued_requests": 128,
+    "estimated_retained_payload_bytes": 8529280,
+    "enqueue_elapsed_ns": 25000000,
+    "rss_during_delta_bytes": 33554432,
+    "rss_after_delta_bytes": 33554432
+  }
+}

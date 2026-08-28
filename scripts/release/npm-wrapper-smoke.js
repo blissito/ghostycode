@@ -8,13 +8,15 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const packageDir = path.join(repoRoot, "npm", "ghostycode");
+const packageDir = path.join(repoRoot, "npm", "ghosty");
 const prepareAssetsScript = path.join(
   repoRoot,
   "scripts",
   "release",
   "prepare-local-release-assets.js",
 );
+const CLEANUP_MAX_RETRIES = 8;
+const CLEANUP_RETRY_DELAY_MS = 250;
 
 function shellQuote(value) {
   return /\s/.test(value) ? JSON.stringify(value) : value;
@@ -132,25 +134,60 @@ function parsePackJson(stdout) {
   return first.filename;
 }
 
+async function removeSmokeWorkspace(tempRoot, remove = fsp.rm) {
+  await remove(tempRoot, {
+    force: true,
+    recursive: true,
+    // Windows can report ENOTEMPTY briefly while completed binary downloads
+    // are still being released by the filesystem. fs.rm retries ENOTEMPTY
+    // (and the other documented transient removal errors) with linear
+    // backoff; the finite cap still surfaces a persistent cleanup failure.
+    maxRetries: CLEANUP_MAX_RETRIES,
+    retryDelay: CLEANUP_RETRY_DELAY_MS,
+  });
+}
+
 async function main() {
   const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "ghosty-npm-smoke-"));
-  const releaseAssetsDir = path.join(tempRoot, "release-assets");
+  const suppliedAssetsDir = String(
+    process.env.GHOSTY_SMOKE_ASSETS_DIR || "",
+  ).trim();
+  const releaseAssetsDir = suppliedAssetsDir
+    ? path.resolve(suppliedAssetsDir)
+    : path.join(tempRoot, "release-assets");
   const packDir = path.join(tempRoot, "pack");
   const installDir = path.join(tempRoot, "install");
-  let keepTemp = process.env.DEEPSEEK_TUI_KEEP_SMOKE_DIR === "1";
+  let keepTemp =
+    process.env.GHOSTY_KEEP_SMOKE_DIR === "1" ||
+    process.env.DEEPSEEK_TUI_KEEP_SMOKE_DIR === "1";
   let server;
 
   try {
     await fsp.mkdir(packDir, { recursive: true });
     await fsp.mkdir(installDir, { recursive: true });
 
-    await runCommand(process.execPath, [prepareAssetsScript, releaseAssetsDir]);
+    if (suppliedAssetsDir) {
+      const assetDirectoryStat = await fsp.stat(releaseAssetsDir);
+      if (!assetDirectoryStat.isDirectory()) {
+        throw new Error(`GHOSTY_SMOKE_ASSETS_DIR is not a directory: ${releaseAssetsDir}`);
+      }
+      console.log(`Using preassembled release assets from ${releaseAssetsDir}`);
+    } else {
+      const prepareArgs = [prepareAssetsScript, releaseAssetsDir];
+      const cargoTargetDir = String(process.env.CARGO_TARGET_DIR || "").trim();
+      if (cargoTargetDir) {
+        prepareArgs.push(
+          path.join(path.resolve(repoRoot, cargoTargetDir), "release"),
+        );
+      }
+      await runCommand(process.execPath, prepareArgs);
+    }
     const served = await serveDirectory(releaseAssetsDir);
     server = served.server;
 
     const env = {
-      DEEPSEEK_TUI_FORCE_DOWNLOAD: "1",
-      DEEPSEEK_TUI_RELEASE_BASE_URL: served.baseUrl,
+      GHOSTY_FORCE_DOWNLOAD: "1",
+      GHOSTY_RELEASE_BASE_URL: served.baseUrl,
     };
     const pack = await runCommand(
       "npm",
@@ -169,7 +206,7 @@ async function main() {
       cwd: installDir,
       env,
     });
-    await runCommand("npx", ["--no-install", "ghosty-tui", "--help"], {
+    await runCommand("npx", ["--no-install", "ghosty-tui", "--version"], {
       cwd: installDir,
       env,
     });
@@ -185,9 +222,17 @@ async function main() {
       await new Promise((resolve) => server.close(resolve));
     }
     if (!keepTemp) {
-      await fsp.rm(tempRoot, { force: true, recursive: true });
+      await removeSmokeWorkspace(tempRoot);
     }
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  CLEANUP_MAX_RETRIES,
+  CLEANUP_RETRY_DELAY_MS,
+  removeSmokeWorkspace,
+};

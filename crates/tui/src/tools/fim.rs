@@ -1,8 +1,10 @@
 //! FIM (Fill-in-the-Middle) edit tool.
 //!
-//! Reads a file, finds `prefix_anchor` and `suffix_anchor`, calls the
-//! DeepSeek `/beta/completions` FIM endpoint, and writes the generated
-//! middle content back into the file.
+//! Reads a file, finds `prefix_anchor` and `suffix_anchor`, calls the active
+//! route's `/beta/completions` FIM endpoint, and writes the generated middle
+//! content back into the file. The URL is built from the session's own base URL
+//! (`crates/tui/src/client.rs:3484`), so this works on any ChatCompletions
+//! provider — it is not DeepSeek-specific.
 
 use std::fs;
 
@@ -28,7 +30,9 @@ pub struct FimEditResult {
     pub message: String,
 }
 
-/// Tool for performing Fill-in-the-Middle edits via the DeepSeek FIM API.
+/// Tool for performing Fill-in-the-Middle edits via the active route's FIM API.
+/// (`DeepSeekClient` is the historical name of the shared provider client; it is
+/// not a DeepSeek-only type.)
 pub struct FimEditTool {
     pub client: Option<DeepSeekClient>,
     pub model: String,
@@ -65,7 +69,8 @@ impl ToolSpec for FimEditTool {
         "Edit a file using Fill-in-the-Middle (FIM) completion. Provide a file path, \
          prefix_anchor (text that appears before the section to replace), and \
          suffix_anchor (text that appears after the section to replace). The tool \
-         calls DeepSeek's FIM endpoint to generate replacement content."
+         calls the active route's fill-in-the-middle completion endpoint to \
+         generate replacement content."
     }
 
     fn input_schema(&self) -> Value {
@@ -95,7 +100,6 @@ impl ToolSpec for FimEditTool {
 
     fn capabilities(&self) -> Vec<ToolCapability> {
         vec![
-            ToolCapability::ReadOnly,
             ToolCapability::WritesFiles,
             ToolCapability::RequiresApproval,
         ]
@@ -109,7 +113,7 @@ impl ToolSpec for FimEditTool {
         let path = required_str(&input, "path")?;
         let prefix_anchor = required_str(&input, "prefix_anchor")?;
         let suffix_anchor = required_str(&input, "suffix_anchor")?;
-        let max_tokens = optional_u64(&input, "max_tokens", 1024);
+        let max_tokens = optional_u64(&input, "max_tokens", 1024)?;
 
         // 1. Read the file
         let resolved = context.resolve_path(path)?;
@@ -162,7 +166,7 @@ impl ToolSpec for FimEditTool {
         // 7. Build the new content and write it back
         let generated_len = generated_text.len();
         let new_content = format!("{fim_prompt}{generated_text}{fim_suffix}");
-        fs::write(&resolved, &new_content).map_err(|e| {
+        crate::utils::write_atomic_workspace(&resolved, new_content.as_bytes()).map_err(|e| {
             ToolError::execution_failed(format!("Failed to write {}: {}", resolved.display(), e))
         })?;
 
@@ -178,5 +182,20 @@ impl ToolSpec for FimEditTool {
         };
 
         ToolResult::json(&result).map_err(|e| ToolError::execution_failed(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fim_edit_is_write_capable_but_not_read_only() {
+        let tool = FimEditTool::new(None, "fim-model".to_string());
+        let capabilities = tool.capabilities();
+
+        assert!(capabilities.contains(&ToolCapability::WritesFiles));
+        assert!(!capabilities.contains(&ToolCapability::ReadOnly));
+        assert!(!tool.is_read_only());
     }
 }

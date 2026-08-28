@@ -1,19 +1,19 @@
 # syntax=docker/dockerfile:1
 #
-# Opt-in Ghosty Code toolbox image.
+# Opt-in GhostyCode toolbox image.
 #
-# The published ghcr.io/hmbown/ghostycode:latest image intentionally stays
+# The published ghcr.io/blissito/ghostycode:latest image intentionally stays
 # minimal, non-root, and without passwordless sudo. Use this Dockerfile only for
 # workspaces where you deliberately want package installation, custom CA setup,
 # or project-specific build tools inside the container.
 #
 # Example:
 #   docker build -f docs/examples/Dockerfile.toolbox \
-#     --build-arg GHOSTY_IMAGE=ghcr.io/hmbown/ghosty:vX.Y.Z \
+#     --build-arg GHOSTY_IMAGE=ghcr.io/blissito/ghostycode:vX.Y.Z \
 #     --build-arg TOOLBOX_PACKAGES="git openssh-client curl build-essential pkg-config python3 python3-pip nodejs npm" \
 #     -t ghosty-toolbox:my-project .
 
-ARG GHOSTY_IMAGE=ghcr.io/hmbown/ghostycode:latest
+ARG GHOSTY_IMAGE=ghcr.io/blissito/ghostycode:latest
 FROM ${GHOSTY_IMAGE}
 
 USER root

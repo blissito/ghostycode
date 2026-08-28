@@ -12,23 +12,142 @@
 //! `LABEL` and ignore the escape. So emitting OSC 8 is a strict UX upgrade for
 //! supporting terminals and a no-op for the rest.
 //!
-//! ratatui 0.30.1 filters control characters from `Span` content
-//! (via `set_stringn`), so OSC 8 bytes can no longer be embedded directly.
-//! Instead we accumulate link registrations during rendering and inject
-//! OSC 8 sequences into the buffer cells post-render, using
-//! `Cell::set_symbol` (which does not filter) and `CellDiffOption::ForcedWidth`
-//! to keep the diff width aligned with the visible label.
+//! # Architecture (#3029)
+//!
+//! Link targets never enter `Span::content` or a ratatui `Buffer`. Markdown
+//! wrapping produces plain visible spans plus parallel [`LineLink`] metadata.
+//! Transcript surfaces translate those relative columns into absolute
+//! [`LinkRegion`]s for the current viewport. `ColorCompatBackend::draw` then
+//! emits OSC 8 escapes around the corresponding cell runs. This keeps text
+//! layout, selection, and clipboard extraction byte-for-byte identical with
+//! links enabled or disabled, including long links wrapped across rows.
+//! Markdown contributes only normalized HTTP(S) and absolute `file://`
+//! targets, and emission percent-encodes terminal control characters as
+//! defense in depth.
+//!
+//! Opening is terminal-owned: supporting terminals conventionally use
+//! Cmd-click on macOS or Ctrl-click on Linux/Windows. GhostyCode does not
+//! intercept those gestures or launch URLs itself, so mouse selection remains
+//! independent of browser-opening policy.
+//!
+//! The clipboard/selection extraction path still strips any residual codes via
+//! [`strip_into`] / [`strip_ansi_into`] as a defense-in-depth.
 
-use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
-
-use ratatui::buffer::{Buffer, CellDiffOption};
 
 const OSC8_PREFIX: &str = "\x1b]8;;";
 const OSC8_TERMINATOR: &str = "\x1b\\";
+const OSC8_CLOSE: &str = "\x1b]8;;\x1b\\";
 
-/// Process-wide enable flag. `true` by default. Set once at app init from
-/// `[ui] osc8_links` (when present) and read by the renderer.
+/// A contiguous run of cells on one terminal row that share a hyperlink target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkRegion {
+    pub row: u16,
+    pub col_start: u16,
+    pub col_end: u16,
+    pub target: String,
+}
+
+/// Hyperlink metadata for one already-wrapped visible line. Columns are
+/// zero-based display columns relative to that line and `col_end` is
+/// inclusive, matching [`LinkRegion`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineLink {
+    pub col_start: usize,
+    pub col_end: usize,
+    pub target: String,
+}
+
+impl LineLink {
+    #[must_use]
+    pub fn shifted(&self, columns: usize) -> Self {
+        Self {
+            col_start: self.col_start.saturating_add(columns),
+            col_end: self.col_end.saturating_add(columns),
+            target: self.target.clone(),
+        }
+    }
+}
+
+/// Translate per-line relative metadata into absolute terminal regions for a
+/// rendered viewport. Metadata outside `area` is clipped rather than allowed
+/// to hyperlink adjacent chrome (for example the transcript scrollbar).
+#[must_use]
+pub fn link_regions_for_lines(
+    area: ratatui::layout::Rect,
+    links: &[Vec<LineLink>],
+) -> Vec<LinkRegion> {
+    if area.width == 0 || area.height == 0 {
+        return Vec::new();
+    }
+    let width = usize::from(area.width);
+    let mut regions = Vec::new();
+    for (line_index, line_links) in links.iter().take(usize::from(area.height)).enumerate() {
+        let row = area
+            .y
+            .saturating_add(u16::try_from(line_index).unwrap_or(u16::MAX));
+        for link in line_links {
+            if link.col_start >= width || link.col_end < link.col_start {
+                continue;
+            }
+            let start = link.col_start;
+            let end = link.col_end.min(width.saturating_sub(1));
+            regions.push(LinkRegion {
+                row,
+                col_start: area
+                    .x
+                    .saturating_add(u16::try_from(start).unwrap_or(u16::MAX)),
+                col_end: area
+                    .x
+                    .saturating_add(u16::try_from(end).unwrap_or(u16::MAX)),
+                target: link.target.clone(),
+            });
+        }
+    }
+    regions
+}
+
+/// Write an OSC 8 hyperlink open sequence for `target` to `w`.
+pub fn write_osc8_open(w: &mut impl std::io::Write, target: &str) -> std::io::Result<()> {
+    w.write_all(OSC8_PREFIX.as_bytes())?;
+    write_sanitized_target(w, target)?;
+    w.write_all(OSC8_TERMINATOR.as_bytes())
+}
+
+/// Percent-encode terminal control characters before they enter an OSC
+/// parameter. Markdown and restored transcripts are untrusted input: a raw
+/// BEL, ESC/ST, or other control byte could terminate the link and inject an
+/// arbitrary terminal sequence. Printable Unicode and ordinary URL bytes are
+/// preserved byte-for-byte.
+fn write_sanitized_target(w: &mut impl std::io::Write, target: &str) -> std::io::Result<()> {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut encoded = [0u8; 4];
+    for ch in target.chars() {
+        let value = ch.encode_utf8(&mut encoded);
+        if ch.is_control() {
+            for &byte in value.as_bytes() {
+                w.write_all(&[
+                    b'%',
+                    HEX[usize::from(byte >> 4)],
+                    HEX[usize::from(byte & 0x0f)],
+                ])?;
+            }
+        } else {
+            w.write_all(value.as_bytes())?;
+        }
+    }
+    Ok(())
+}
+
+/// Write an OSC 8 hyperlink close sequence to `w`.
+pub fn write_osc8_close(w: &mut impl std::io::Write) -> std::io::Result<()> {
+    w.write_all(OSC8_CLOSE.as_bytes())
+}
+
+/// Process-wide enable flag. Set once at app init from `[tui] osc8_links`
+/// (when present); otherwise defaults to on for macOS/Linux and off for
+/// Windows legacy consoles (see `ui.rs`'s `osc8_default_on`). Read by the
+/// renderer to gate out-of-band OSC 8 emission.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Set the process-wide OSC 8 enable flag. Intended to be called once at
@@ -43,124 +162,76 @@ pub fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
 }
 
+// --- Thread-local link region accumulator (#3029) ---
+
+use std::cell::RefCell;
+
 thread_local! {
-    static LINK_REGISTRY: RefCell<Vec<(String, String)>> = const { RefCell::new(Vec::new()) };
+    /// Link regions collected during the current render frame.
+    /// Populated by transcript widgets from their parallel line metadata;
+    /// consumed and cleared by `ColorCompatBackend::draw()`.
+    pub static FRAME_LINKS: RefCell<Vec<LinkRegion>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Register a link label→URL mapping. Called during widget rendering.
-/// The label is the visible text; the URL is the link target.
-fn register_link(label: String, url: String) {
-    LINK_REGISTRY.with(|r| r.borrow_mut().push((label, url)));
+/// Replace the thread-local frame link buffer with `links`.
+pub fn set_frame_links(links: Vec<LinkRegion>) {
+    FRAME_LINKS.with(|cell| {
+        *cell.borrow_mut() = links;
+    });
 }
 
-/// Take accumulated link registrations and clear for the next frame.
-pub fn take_links() -> Vec<(String, String)> {
-    LINK_REGISTRY.with(|r| r.take())
+/// Append `links` to the thread-local frame link buffer. Used when more than
+/// one widget renders link-bearing content into the same frame (e.g. the main
+/// transcript and the live-transcript overlay): each seam appends rather than
+/// replacing, so all regions reach `ColorCompatBackend::draw`.
+pub fn append_frame_links(links: Vec<LinkRegion>) {
+    FRAME_LINKS.with(|cell| cell.borrow_mut().extend(links));
 }
 
-/// Return the visible label for a link, registering the label→URL mapping
-/// so `apply_links` can inject OSC 8 into the buffer post-render.
-/// When OSC 8 is disabled, returns the label as-is without registering.
-#[must_use]
-pub fn wrap_link_label(target: &str, label: &str) -> String {
-    if enabled() {
-        register_link(label.to_string(), target.to_string());
-    }
-    label.to_string()
-}
-
-/// Legacy wrapper kept for callers that still embed OSC 8 in spans.
-/// When OSC 8 is enabled, now just returns the label (escape codes are
-/// injected post-render). When disabled, returns the label as-is.
-#[must_use]
-pub fn wrap_link(target: &str, label: &str) -> String {
-    wrap_link_label(target, label)
-}
-
-/// Post-render step: scan the buffer for registered link labels and inject
-/// OSC 8 escape sequences directly into cells via `Cell::set_symbol`.
-/// Must be called after all widgets have rendered and before the frame
-/// is sent to the terminal.
-pub fn apply_links(buf: &mut Buffer) {
-    let links = take_links();
-    if links.is_empty() || !enabled() {
+/// Replace the portion of the current frame-link map covered by an opaque
+/// overlay, preserving (and clipping) regions that remain visible around it.
+/// This prevents a transcript URL underneath a modal from making unrelated
+/// popup text clickable when both widgets paint in the same terminal frame.
+pub fn overlay_frame_links(area: ratatui::layout::Rect, links: Vec<LinkRegion>) {
+    if area.width == 0 || area.height == 0 {
+        append_frame_links(links);
         return;
     }
-
-    let area = *buf.area();
-    for y in area.top()..area.bottom() {
-        let mut x = area.left();
-        while x < area.right() {
-            'next_cell: for (label, url) in &links {
-                let label_chars: Vec<char> = label.chars().collect();
-                let label_len = label_chars.len();
-                if label_len == 0 || x + label_len as u16 > area.right() {
-                    continue;
-                }
-
-                // Check if the label matches this buffer position
-                let mut matched = true;
-                for (i, ch) in label_chars.iter().enumerate() {
-                    let cell_symbol = buf[(x + i as u16, y)].symbol();
-                    if cell_symbol != ch.to_string() {
-                        matched = false;
-                        break;
-                    }
-                }
-                if !matched {
-                    continue;
-                }
-
-                // Found a match — inject OSC 8 wrapping
-                // First cell: OSC8_PREFIX + URL + OSC8_TERMINATOR + first char of label
-                let mut first = String::with_capacity(
-                    OSC8_PREFIX.len() + url.len() + OSC8_TERMINATOR.len() + 4,
-                );
-                first.push_str(OSC8_PREFIX);
-                first.push_str(url);
-                first.push_str(OSC8_TERMINATOR);
-                if let Some(&first_ch) = label_chars.first() {
-                    first.push(first_ch);
-                }
-                let first_cell = &mut buf[(x, y)];
-                first_cell.set_symbol(&first);
-                first_cell.set_diff_option(CellDiffOption::ForcedWidth(
-                    std::num::NonZero::new(1).unwrap(),
-                ));
-
-                // Last cell: last char of label + OSC8_PREFIX + OSC8_TERMINATOR (close link)
-                if label_len >= 2 {
-                    let last_x = x + (label_len as u16) - 1;
-                    let mut last =
-                        String::with_capacity(OSC8_PREFIX.len() + OSC8_TERMINATOR.len() + 4);
-                    if let Some(&last_ch) = label_chars.last() {
-                        last.push(last_ch);
-                    }
-                    last.push_str(OSC8_PREFIX);
-                    last.push_str(OSC8_TERMINATOR);
-                    let last_cell = &mut buf[(last_x, y)];
-                    last_cell.set_symbol(&last);
-                    last_cell.set_diff_option(CellDiffOption::ForcedWidth(
-                        std::num::NonZero::new(1).unwrap(),
-                    ));
-                } else {
-                    // Single-char label: first cell already handles it, but also needs closing
-                    let mut first_close = buf[(x, y)].symbol().to_string();
-                    first_close.push_str(OSC8_PREFIX);
-                    first_close.push_str(OSC8_TERMINATOR);
-                    buf[(x, y)].set_symbol(&first_close);
-                    buf[(x, y)].set_diff_option(CellDiffOption::ForcedWidth(
-                        std::num::NonZero::new(1).unwrap(),
-                    ));
-                }
-
-                // Advance past this label
-                x += label_len as u16;
-                continue 'next_cell;
+    let x_start = area.x;
+    let x_end = area.right();
+    let y_start = area.y;
+    let y_end = area.bottom();
+    FRAME_LINKS.with(|cell| {
+        let mut current = cell.borrow_mut();
+        let mut visible = Vec::with_capacity(current.len().saturating_add(links.len()));
+        for region in current.drain(..) {
+            if region.row < y_start
+                || region.row >= y_end
+                || region.col_end < x_start
+                || region.col_start >= x_end
+            {
+                visible.push(region);
+                continue;
             }
-            x += 1;
+            if region.col_start < x_start {
+                let mut left = region.clone();
+                left.col_end = x_start.saturating_sub(1);
+                visible.push(left);
+            }
+            if region.col_end >= x_end {
+                let mut right = region;
+                right.col_start = x_end;
+                visible.push(right);
+            }
         }
-    }
+        visible.extend(links);
+        *current = visible;
+    });
+}
+
+/// Take the thread-local frame links, leaving an empty vec behind.
+pub fn take_frame_links() -> Vec<LinkRegion> {
+    FRAME_LINKS.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
 }
 
 /// Strip every ANSI escape sequence from `s` into `out`, preserving only the
@@ -231,6 +302,8 @@ pub fn strip_ansi_into(s: &str, out: &mut String) {
             i += 1;
         } else {
             // UTF-8 multi-byte sequence: copy the whole code point intact.
+            // Pushing `b as char` would mis-decode it as Latin-1 and mangle
+            // non-ASCII text (CJK, accented Latin, emoji, …).
             let len = utf8_seq_len(b);
             let end = (i + len).min(bytes.len());
             if let Ok(chunk) = std::str::from_utf8(&bytes[i..end]) {
@@ -302,116 +375,244 @@ pub fn strip_into(s: &str, out: &mut String) {
     }
 }
 
-/// Convenience: strip OSC 8 and return a new String.
-#[must_use]
-#[allow(dead_code)]
-pub fn strip(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    strip_into(s, &mut out);
-    out
-}
-
-/// Convenience: strip all ANSI sequences and return a new String.
-#[must_use]
-#[allow(dead_code)]
-pub fn strip_ansi(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    strip_ansi_into(s, &mut out);
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Serialize tests that read or write the `ENABLED` flag so they don't
+    /// race each other under cargo's default parallel test runner.
+    static FLAG_GUARD: Mutex<()> = Mutex::new(());
+
+    fn strip(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        strip_into(s, &mut out);
+        out
+    }
+
+    fn wrapped_link(target: &str, label: &str) -> String {
+        format!("{OSC8_PREFIX}{target}{OSC8_TERMINATOR}{label}{OSC8_CLOSE}")
+    }
 
     #[test]
-    fn wrap_link_shape_is_osc_8_compliant() {
-        let wrapped = wrap_link("https://example.com", "click me");
-        // With ratatui 0.30.1, wrap_link returns just the label (no escape codes).
-        assert_eq!(wrapped, "click me");
+    fn wrapped_link_fixture_is_osc_8_compliant() {
+        let wrapped = wrapped_link("https://example.com", "click me");
+        assert_eq!(
+            wrapped,
+            "\x1b]8;;https://example.com\x1b\\click me\x1b]8;;\x1b\\"
+        );
     }
 
     #[test]
     fn strip_removes_wrapper_keeps_label() {
-        let wrapped = wrap_link("https://example.com", "click me");
+        let wrapped = wrapped_link("https://example.com", "click me");
         assert_eq!(strip(&wrapped), "click me");
     }
 
     #[test]
-    fn strip_preserves_ansi_that_is_not_osc_8() {
-        let text = "\x1b[31mred\x1b[0m";
-        assert_eq!(strip(text), text);
+    fn strip_handles_bel_terminator() {
+        let wrapped = "\x1b]8;;https://example.com\x07click me\x1b]8;;\x07";
+        assert_eq!(strip(wrapped), "click me");
     }
 
     #[test]
-    fn strip_removes_osc_8_inside_ansi_wrapped_text() {
-        let wrapped = wrap_link("https://example.com", "click");
-        let mixed = format!("\x1b[31mred\x1b[0m {wrapped}",);
+    fn strip_passes_through_text_with_no_escapes() {
+        let plain = "no escapes here";
+        assert_eq!(strip(plain), plain);
+    }
+
+    #[test]
+    fn strip_preserves_non_osc_8_escapes() {
+        // Color escape stays in place; only OSC 8 wrappers are removed.
+        let mixed = format!(
+            "\x1b[31mred\x1b[0m {wrapped}",
+            wrapped = wrapped_link("https://example.com", "click")
+        );
         assert_eq!(strip(&mixed), "\x1b[31mred\x1b[0m click");
     }
 
-    #[test]
-    fn strip_does_not_touch_plain_text() {
-        assert_eq!(strip("hello world"), "hello world");
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        strip_ansi_into(s, &mut out);
+        out
     }
 
     #[test]
-    fn strip_empty_is_empty() {
-        assert_eq!(strip(""), "");
-    }
-
-    #[test]
-    fn strip_handles_non_ascii_urls() {
-        let wrapped = wrap_link("https://例子.com", "点击这里");
-        assert_eq!(strip(&wrapped), "点击这里");
+    fn strip_ansi_removes_csi_sgr_and_keeps_text() {
+        let coloured = "526   \x1b[1;32mOPEN\x1b[0m  bug fix";
+        assert_eq!(strip_ansi(coloured), "526   OPEN  bug fix");
     }
 
     #[test]
     fn strip_ansi_removes_osc_8_wrapper() {
-        let wrapped = wrap_link("https://example.com", "click");
+        let wrapped = wrapped_link("https://example.com", "click");
         assert_eq!(strip_ansi(&wrapped), "click");
     }
 
     #[test]
-    fn strip_ansi_removes_color_codes() {
-        assert_eq!(
-            strip_ansi("\x1b[31mred\x1b[0m and \x1b[32mgreen\x1b[0m"),
-            "red and green"
-        );
+    fn strip_ansi_preserves_newlines_tabs_and_cr() {
+        let s = "a\nb\tc\rd";
+        assert_eq!(strip_ansi(s), "a\nb\tc\rd");
     }
 
     #[test]
-    fn strip_ansi_preserves_unicode() {
-        assert_eq!(strip_ansi("普\x1b[31m通\x1b[0m话"), "普通话");
+    fn strip_ansi_drops_lone_control_bytes() {
+        // Bare BEL or other C0 control bytes that aren't \n/\r/\t are dropped
+        // so they can't paint as visible cells.
+        let s = "a\x07b\x01c";
+        assert_eq!(strip_ansi(s), "abc");
+    }
+
+    #[test]
+    fn strip_ansi_preserves_utf8_multibyte_chars() {
+        // CJK, accented Latin, and emoji must survive the strip without being
+        // re-decoded as Latin-1 (which would explode 你 -> ä½ ).
+        let s = "Phase 1: 第一步 README é 🚀";
+        assert_eq!(strip_ansi(s), "Phase 1: 第一步 README é 🚀");
+
+        let coloured = "\x1b[1;32m第一步\x1b[0m done";
+        assert_eq!(strip_ansi(coloured), "第一步 done");
     }
 
     #[test]
     fn strip_preserves_utf8_multibyte_chars() {
-        let wrapped = wrap_link("https://example.com", "点击我");
+        let wrapped = wrapped_link("https://example.com", "点击我");
         assert_eq!(strip(&wrapped), "点击我");
     }
 
     #[test]
-    fn link_registry_accumulates_and_clears() {
-        // Initial state: empty
-        assert!(take_links().is_empty());
+    fn open_sequence_percent_encodes_target_control_injection() {
+        let target = "https://safe.test/a\x07b\x1b]8;;https://evil.test\x1b\\c\x7f\u{009c}";
+        let mut bytes = Vec::new();
+        write_osc8_open(&mut bytes, target).expect("write OSC 8 open");
+        let rendered = String::from_utf8(bytes.clone()).expect("valid UTF-8 output");
 
-        // Register links
-        let _ = wrap_link_label("https://a.com", "link A");
-        let _ = wrap_link_label("https://b.com", "link B");
-
-        let links = take_links();
-        assert_eq!(links.len(), 2);
-        assert_eq!(
-            links[0],
-            ("link A".to_string(), "https://a.com".to_string())
+        assert_eq!(rendered.matches(OSC8_PREFIX).count(), 1, "{rendered:?}");
+        assert_eq!(rendered.matches(OSC8_TERMINATOR).count(), 1, "{rendered:?}");
+        assert_eq!(bytes.iter().filter(|byte| **byte == 0x1b).count(), 2);
+        assert!(!bytes.contains(&0x07), "BEL escaped: {rendered:?}");
+        assert!(!bytes.contains(&0x7f), "DEL escaped: {rendered:?}");
+        assert!(
+            rendered.contains("a%07b%1B]8;;https://evil.test%1B\\c%7F%C2%9C"),
+            "control bytes must be percent-encoded: {rendered:?}"
         );
+    }
+
+    #[test]
+    fn enabled_is_true_by_default_when_untouched() {
+        // Hold the flag guard so we observe the initial state, not a value
+        // mid-flight from `set_enabled_round_trips`. The flag *defaults* to
+        // true at static init and tests in this module are the only writers.
+        let _g = FLAG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(enabled());
+    }
+
+    #[test]
+    fn set_enabled_round_trips() {
+        let _g = FLAG_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        let prior = enabled();
+        set_enabled(false);
+        assert!(!enabled());
+        set_enabled(true);
+        assert!(enabled());
+        set_enabled(prior);
+    }
+
+    #[test]
+    fn line_links_translate_to_absolute_clipped_regions() {
+        let area = ratatui::layout::Rect::new(7, 3, 8, 2);
+        let links = vec![
+            vec![
+                LineLink {
+                    col_start: 2,
+                    col_end: 20,
+                    target: "https://example.test/long".to_string(),
+                },
+                LineLink {
+                    col_start: 8,
+                    col_end: 9,
+                    target: "outside".to_string(),
+                },
+            ],
+            vec![LineLink {
+                col_start: 0,
+                col_end: 1,
+                target: "https://example.test/next".to_string(),
+            }],
+            vec![LineLink {
+                col_start: 0,
+                col_end: 0,
+                target: "below viewport".to_string(),
+            }],
+        ];
+
         assert_eq!(
-            links[1],
-            ("link B".to_string(), "https://b.com".to_string())
+            link_regions_for_lines(area, &links),
+            vec![
+                LinkRegion {
+                    row: 3,
+                    col_start: 9,
+                    col_end: 14,
+                    target: "https://example.test/long".to_string(),
+                },
+                LinkRegion {
+                    row: 4,
+                    col_start: 7,
+                    col_end: 8,
+                    target: "https://example.test/next".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn opaque_overlay_replaces_and_clips_underlying_regions() {
+        set_frame_links(vec![
+            LinkRegion {
+                row: 4,
+                col_start: 0,
+                col_end: 20,
+                target: "under-wide".to_string(),
+            },
+            LinkRegion {
+                row: 5,
+                col_start: 6,
+                col_end: 8,
+                target: "under-covered".to_string(),
+            },
+        ]);
+        overlay_frame_links(
+            ratatui::layout::Rect::new(5, 4, 10, 2),
+            vec![LinkRegion {
+                row: 4,
+                col_start: 7,
+                col_end: 8,
+                target: "modal".to_string(),
+            }],
         );
 
-        // Should be empty after take
-        assert!(take_links().is_empty());
+        assert_eq!(
+            take_frame_links(),
+            vec![
+                LinkRegion {
+                    row: 4,
+                    col_start: 0,
+                    col_end: 4,
+                    target: "under-wide".to_string(),
+                },
+                LinkRegion {
+                    row: 4,
+                    col_start: 15,
+                    col_end: 20,
+                    target: "under-wide".to_string(),
+                },
+                LinkRegion {
+                    row: 4,
+                    col_start: 7,
+                    col_end: 8,
+                    target: "modal".to_string(),
+                },
+            ]
+        );
     }
 }

@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 
 use crate::utils::{flush_and_sync, open_append};
 
-/// Append an audit event to `~/.ghosty/audit.log`.
+/// Append an audit event to `$GHOSTY_HOME/audit.log` (or the default
+/// `~/.ghosty/audit.log` when no explicit GhostyCode home is configured).
 ///
 /// This helper is best-effort by design: callers should not fail critical flows
 /// if audit persistence fails.
@@ -18,12 +19,42 @@ pub fn log_sensitive_event(event: &str, details: Value) {
     }
 }
 
+/// Size at which `audit.log` is rolled to `audit.log.1`.
+///
+/// The log was append-only with no bound at all: a real `~/.ghosty/audit.log`
+/// had reached 2.6 MB and was still growing, with nothing in the product that
+/// would ever shrink it. Unbounded growth in the user's config directory is not
+/// a viable end state, and neither is silently discarding the record — so one
+/// previous generation is kept, which bounds the pair at ~2× this value while
+/// preserving well over a year of ordinary use.
+const AUDIT_LOG_ROTATE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Roll `audit.log` to `audit.log.1` once it passes [`AUDIT_LOG_ROTATE_BYTES`].
+///
+/// Exactly one previous generation is kept; the older `.1` is replaced. Rolling
+/// is a rename, so no record is ever rewritten in place and an event is never
+/// lost to a partially-copied file.
+///
+/// Best-effort by the same rule as the rest of this module: if the roll fails
+/// the event is still appended to the existing file. A too-large audit log is a
+/// far better outcome than a dropped audit record.
+fn rotate_if_oversized(path: &std::path::Path) {
+    let oversized = fs::metadata(path).is_ok_and(|meta| meta.len() >= AUDIT_LOG_ROTATE_BYTES);
+    if !oversized {
+        return;
+    }
+    let mut rolled = path.as_os_str().to_owned();
+    rolled.push(".1");
+    let _ = fs::rename(path, std::path::Path::new(&rolled));
+}
+
 fn append_event(event: &str, details: Value) -> anyhow::Result<()> {
     let path = default_audit_path()?;
     let parent = path.parent().map(|p| p.to_path_buf());
     if let Some(ref parent) = parent {
         fs::create_dir_all(parent)?;
     }
+    rotate_if_oversized(&path);
     // Open for append with a BufWriter for buffered I/O, then flush + fsync
     // after each event so the record is durably on disk.
     let mut writer = open_append(&path)?;
@@ -40,6 +71,74 @@ fn append_event(event: &str, details: Value) -> anyhow::Result<()> {
 }
 
 fn default_audit_path() -> anyhow::Result<PathBuf> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("home directory not found"))?;
-    Ok(home.join(".ghosty").join("audit.log"))
+    Ok(ghosty_config::ghosty_home()?.join("audit.log"))
+}
+
+/// Where audit events are written, for surfaces that point a person at the
+/// full record (for example `/permissions`). `None` when no Ghosty home
+/// resolves; callers show a placeholder rather than guessing a path.
+#[must_use]
+pub fn audit_log_path() -> Option<PathBuf> {
+    default_audit_path().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AUDIT_LOG_ROTATE_BYTES, rotate_if_oversized};
+
+    #[test]
+    fn a_small_log_is_left_alone() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let path = dir.path().join("audit.log");
+        std::fs::write(&path, b"{}\n").expect("write");
+        rotate_if_oversized(&path);
+        assert!(path.exists(), "an ordinary log is never rolled");
+        assert!(!dir.path().join("audit.log.1").exists());
+    }
+
+    #[test]
+    fn an_oversized_log_rolls_to_one_previous_generation() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let path = dir.path().join("audit.log");
+        let rolled = dir.path().join("audit.log.1");
+        std::fs::write(&path, vec![b'x'; AUDIT_LOG_ROTATE_BYTES as usize]).expect("write");
+
+        rotate_if_oversized(&path);
+
+        assert!(
+            !path.exists(),
+            "the live log is rolled aside, not truncated"
+        );
+        assert_eq!(
+            std::fs::metadata(&rolled).expect("rolled log").len(),
+            AUDIT_LOG_ROTATE_BYTES,
+            "the previous generation keeps every byte — rolling is a rename"
+        );
+    }
+
+    #[test]
+    fn rolling_twice_keeps_exactly_one_previous_generation() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let path = dir.path().join("audit.log");
+        let rolled = dir.path().join("audit.log.1");
+
+        std::fs::write(&path, vec![b'a'; AUDIT_LOG_ROTATE_BYTES as usize]).expect("first");
+        rotate_if_oversized(&path);
+        std::fs::write(&path, vec![b'b'; AUDIT_LOG_ROTATE_BYTES as usize]).expect("second");
+        rotate_if_oversized(&path);
+
+        let kept = std::fs::read(&rolled).expect("rolled log");
+        assert_eq!(kept.len(), AUDIT_LOG_ROTATE_BYTES as usize);
+        assert_eq!(kept[0], b'b', "the newer generation replaces the older one");
+        assert!(
+            !dir.path().join("audit.log.2").exists(),
+            "generations must not accumulate — that is the bug being fixed"
+        );
+    }
+
+    #[test]
+    fn a_missing_log_is_not_an_error() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        rotate_if_oversized(&dir.path().join("audit.log"));
+    }
 }

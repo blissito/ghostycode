@@ -1,8 +1,98 @@
 use ghosty_protocol::{
-    EventFrame, ThreadListParams, ThreadRequest, ThreadResumeParams,
+    AppRequest, EventFrame, ThreadGoal, ThreadGoalProgressParams, ThreadGoalSetParams,
+    ThreadGoalStatus, ThreadListParams, ThreadRequest, ThreadResumeParams, ToolOutput,
+    UserInputAnswerEvent, UserInputOptionEvent, UserInputQuestionEvent, UserInputRequestEvent,
     runtime::{RUNTIME_EVENT_ENVELOPE_SCHEMA_VERSION, RuntimeEventEnvelope},
 };
 use serde_json::{Value, json};
+
+#[test]
+fn mcp_tool_output_public_shape_remains_source_compatible() {
+    let output = ToolOutput::Mcp {
+        result: json!({"content": []}),
+    };
+    let ToolOutput::Mcp { result } = output else {
+        panic!("constructed MCP output changed variant")
+    };
+    assert_eq!(result, json!({"content": []}));
+}
+
+#[test]
+fn tool_output_success_accessor_has_function_and_mcp_parity() {
+    let cases = [
+        (
+            ToolOutput::Function {
+                body: Some(json!({"kind": "function-success"})),
+                success: true,
+            },
+            true,
+        ),
+        (
+            ToolOutput::Function {
+                body: Some(json!({"kind": "function-failure"})),
+                success: false,
+            },
+            false,
+        ),
+        (
+            ToolOutput::Mcp {
+                result: json!({"kind": "mcp-success", "isError": false}),
+            },
+            true,
+        ),
+        (
+            ToolOutput::Mcp {
+                result: json!({"kind": "mcp-failure", "isError": true}),
+            },
+            false,
+        ),
+    ];
+
+    assert_eq!(
+        serde_json::to_string(&cases[0].0).expect("serialize successful function output"),
+        r#"{"type":"function","body":{"kind":"function-success"},"success":true}"#,
+        "successful Function output must retain its existing wire shape"
+    );
+    for (output, expected) in cases {
+        assert_eq!(output.success(), expected, "output: {output:?}");
+    }
+}
+
+#[test]
+fn mcp_is_error_round_trips_and_legacy_bytes_remain_successful() {
+    let failed = ToolOutput::Mcp {
+        result: json!({"message": "application failure", "isError": true}),
+    };
+    let encoded = serde_json::to_string(&failed).expect("serialize failed MCP output");
+    assert!(encoded.contains(r#""isError":true"#));
+    let decoded: ToolOutput = serde_json::from_str(&encoded).expect("round-trip MCP output");
+    assert!(!decoded.success());
+
+    let legacy = r#"{"type":"mcp","result":{"message":"legacy success"}}"#;
+    let decoded: ToolOutput = serde_json::from_str(legacy).expect("deserialize legacy MCP output");
+    assert!(decoded.success());
+    assert_eq!(
+        serde_json::to_string(&decoded).expect("re-serialize legacy MCP output"),
+        legacy,
+        "success=true must preserve the legacy MCP wire representation"
+    );
+}
+
+#[test]
+fn mcp_is_error_metadata_fails_closed_when_present_but_not_boolean() {
+    for malformed in [
+        Value::Null,
+        json!("unknown"),
+        json!(1),
+        json!({"unexpected": true}),
+        json!([false]),
+    ] {
+        let output = ToolOutput::Mcp {
+            result: json!({"content": [], "isError": malformed}),
+        };
+        assert!(!output.success(), "malformed output: {output:?}");
+    }
+}
 
 #[test]
 fn thread_resume_params_round_trip() {
@@ -51,6 +141,73 @@ fn event_frame_serialization_contains_expected_tag() {
     };
     let encoded = serde_json::to_string(&frame).expect("serialize frame");
     assert!(encoded.contains("turn_complete"));
+}
+
+#[test]
+fn thread_goal_set_request_round_trip() {
+    let request = ThreadRequest::GoalSet(ThreadGoalSetParams {
+        thread_id: "thread-123".to_string(),
+        objective: "Release 0.8.59".to_string(),
+        token_budget: Some(42_000),
+    });
+
+    let encoded = serde_json::to_string(&request).expect("serialize goal request");
+    assert!(encoded.contains("goal_set"));
+    let decoded: ThreadRequest = serde_json::from_str(&encoded).expect("deserialize request");
+    match decoded {
+        ThreadRequest::GoalSet(params) => {
+            assert_eq!(params.thread_id, "thread-123");
+            assert_eq!(params.objective, "Release 0.8.59");
+            assert_eq!(params.token_budget, Some(42_000));
+        }
+        other => panic!("unexpected request: {other:?}"),
+    }
+}
+
+#[test]
+fn thread_goal_event_serializes_status_and_accounting() {
+    let goal = ThreadGoal {
+        thread_id: "thread-123".to_string(),
+        goal_id: "goal-1".to_string(),
+        objective: "Release 0.8.59".to_string(),
+        status: ThreadGoalStatus::BudgetLimited,
+        token_budget: Some(42_000),
+        tokens_used: 42_001,
+        time_used_seconds: 3600,
+        continuation_count: 7,
+        created_at: 1,
+        updated_at: 2,
+    };
+
+    let frame = EventFrame::ThreadGoalUpdated { goal };
+    let encoded = serde_json::to_value(&frame).expect("serialize goal event");
+    assert_eq!(encoded["event"], "thread_goal_updated");
+    assert_eq!(encoded["goal"]["status"], "budget_limited");
+    assert_eq!(encoded["goal"]["tokens_used"], 42_001);
+    assert_eq!(encoded["goal"]["continuation_count"], 7);
+}
+
+#[test]
+fn thread_goal_progress_request_round_trip() {
+    let request = ThreadRequest::GoalRecordProgress(ThreadGoalProgressParams {
+        thread_id: "thread-123".to_string(),
+        token_delta: 750,
+        time_delta_seconds: 9,
+        record_continuation: true,
+    });
+
+    let encoded = serde_json::to_string(&request).expect("serialize goal progress request");
+    assert!(encoded.contains("goal_record_progress"));
+    let decoded: ThreadRequest = serde_json::from_str(&encoded).expect("deserialize request");
+    match decoded {
+        ThreadRequest::GoalRecordProgress(params) => {
+            assert_eq!(params.thread_id, "thread-123");
+            assert_eq!(params.token_delta, 750);
+            assert_eq!(params.time_delta_seconds, 9);
+            assert!(params.record_continuation);
+        }
+        other => panic!("unexpected request: {other:?}"),
+    }
 }
 
 #[test]
@@ -157,4 +314,116 @@ fn runtime_event_envelope_preserves_unknown_fields() {
     assert_eq!(encoded["thread_id"], "thr_unknown");
     assert!(encoded["turn_id"].is_null());
     assert!(encoded["item_id"].is_null());
+}
+
+#[test]
+fn user_input_request_event_frame_round_trip() {
+    // issue #3102: the new EventFrame::UserInputRequest variant must tag as
+    // "user_input_request" and round-trip the full nested question schema,
+    // including the allow_free_text / multi_select booleans.
+    let frame = EventFrame::UserInputRequest {
+        request: UserInputRequestEvent {
+            call_id: "call-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            request_id: "ui-1".to_string(),
+            questions: vec![UserInputQuestionEvent {
+                header: "Scope".to_string(),
+                id: "scope".to_string(),
+                question: "Which surfaces?".to_string(),
+                options: vec![
+                    UserInputOptionEvent {
+                        label: "TUI".to_string(),
+                        description: "Modal flow".to_string(),
+                    },
+                    UserInputOptionEvent {
+                        label: "All".to_string(),
+                        description: "TUI + headless".to_string(),
+                    },
+                ],
+                allow_free_text: true,
+                multi_select: true,
+            }],
+        },
+    };
+
+    let encoded = serde_json::to_value(&frame).expect("serialize user input frame");
+    assert_eq!(encoded["event"], "user_input_request");
+    assert_eq!(encoded["request"]["call_id"], "call-1");
+    assert_eq!(encoded["request"]["request_id"], "ui-1");
+    assert_eq!(encoded["request"]["questions"][0]["header"], "Scope");
+    assert_eq!(encoded["request"]["questions"][0]["allow_free_text"], true);
+    assert_eq!(encoded["request"]["questions"][0]["multi_select"], true);
+    assert_eq!(
+        encoded["request"]["questions"][0]["options"][0]["label"],
+        "TUI"
+    );
+
+    // Round-trips back through serde.
+    let decoded: EventFrame =
+        serde_json::from_value(encoded).expect("deserialize user input frame");
+    let EventFrame::UserInputRequest { request } = decoded else {
+        panic!("expected user_input_request frame after round-trip");
+    };
+    assert_eq!(request.request_id, "ui-1");
+    assert_eq!(request.questions.len(), 1);
+    assert!(request.questions[0].allow_free_text);
+    assert!(request.questions[0].multi_select);
+}
+
+#[test]
+fn user_input_request_event_defaults_flags_when_omitted() {
+    // Backwards compatibility: omitting allow_free_text/multi_select in the
+    // wire JSON must deserialize both to false (matching the TUI's leniency).
+    let input = json!({
+        "event": "user_input_request",
+        "request": {
+            "call_id": "c",
+            "turn_id": "t",
+            "request_id": "r",
+            "questions": [{
+                "header": "H",
+                "id": "i",
+                "question": "Q?",
+                "options": [
+                    { "label": "A", "description": "a" },
+                    { "label": "B", "description": "b" }
+                ]
+            }]
+        }
+    });
+    let decoded: EventFrame = serde_json::from_value(input).expect("deserialize without flags");
+    let EventFrame::UserInputRequest { request } = decoded else {
+        panic!("expected user_input_request frame");
+    };
+    assert!(!request.questions[0].allow_free_text);
+    assert!(!request.questions[0].multi_select);
+}
+
+#[test]
+fn submit_user_input_app_request_round_trip() {
+    // issue #3102: the headless client→server reply variant must tag as
+    // "submit_user_input" and carry the answer list.
+    let req = AppRequest::SubmitUserInput {
+        request_id: "ui-1".to_string(),
+        answers: vec![UserInputAnswerEvent {
+            id: "scope".to_string(),
+            label: "All".to_string(),
+            value: "All".to_string(),
+        }],
+    };
+    let encoded = serde_json::to_string(&req).expect("serialize submit request");
+    assert!(encoded.contains("submit_user_input"));
+    assert!(encoded.contains("\"request_id\":\"ui-1\""));
+
+    let decoded: AppRequest = serde_json::from_str(&encoded).expect("deserialize submit request");
+    let AppRequest::SubmitUserInput {
+        request_id,
+        answers,
+    } = decoded
+    else {
+        panic!("expected submit_user_input after round-trip");
+    };
+    assert_eq!(request_id, "ui-1");
+    assert_eq!(answers.len(), 1);
+    assert_eq!(answers[0].label, "All");
 }

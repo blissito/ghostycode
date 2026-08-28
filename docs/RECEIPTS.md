@@ -5,7 +5,7 @@ turns. It is a protocol note, not an implemented endpoint.
 
 The goal is to let a local supervisor audit one completed turn without
 screen-scraping the terminal transcript. A receipt should summarize the durable
-runtime records that Ghosty Code already owns: thread metadata, turn status, turn
+runtime records that Ghosty already owns: thread metadata, turn status, turn
 items, event sequence lineage, usage when available, approval decisions, and
 side-effect boundaries.
 
@@ -30,6 +30,35 @@ GET /v1/threads/{thread_id}/turns/{turn_id}/receipt
 
 Both surfaces should share the existing runtime API auth boundary. They should
 only read persisted runtime records and append-only events.
+
+## Review Receipts
+
+`ghosty review --write-receipt` writes a local JSON receipt for the reviewed
+diff under the Ghosty state directory (`review-receipts/`) unless
+`--receipt-path <path>` is provided. This is a pre-push handoff artifact: it
+records what diff was reviewed and what the review reported, without pushing,
+tagging, opening a PR, or claiming to replace maintainer review.
+
+The current receipt includes:
+
+- `diff_fingerprint`: SHA-256 of the reviewed diff.
+- `provider` and `model`: the routed review provider/model.
+- `checks_run`: local checks attached to the receipt when available. Empty
+  means no checks were attached; attached checks must report a passing status.
+- `findings`: structured issue/suggestion counts and issue locations when the
+  review output is structured.
+- `unresolved_risk`: a conservative summary derived from unresolved findings.
+- `review_content_sha256`: SHA-256 of the review text.
+
+The receipt deliberately does not include the raw diff body. Re-run
+`ghosty review --write-receipt` after changing the diff; reviewers should
+compare the `diff_fingerprint` before reusing a receipt in a PR handoff.
+
+`ghosty review --check-receipt` is the local pre-push gate. It does not call
+a model; it compares the current diff fingerprint with a supplied receipt
+(`--receipt-path <path>`) or the latest matching local receipt. The check exits
+nonzero when the diff no longer matches, the receipt schema is unsupported, the
+receipt has unresolved risk, or an attached check did not pass.
 
 ## Current Data Sources
 

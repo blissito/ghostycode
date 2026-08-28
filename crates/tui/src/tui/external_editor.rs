@@ -15,7 +15,7 @@ use std::io::{self, Stdout, Write};
 use std::process::Command;
 
 use crossterm::{
-    event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
+    event::DisableFocusChange,
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -127,19 +127,21 @@ pub(crate) fn spawn_editor_for_input(
     current: &str,
 ) -> io::Result<EditorOutcome> {
     // 1. Suspend.
+    // Focus reporting is about to be disabled. Fail closed to the quiet state
+    // so a stale FocusLost cannot authorize a surprise notification while an
+    // external editor owns the terminal.
+    crate::tui::notifications::set_terminal_focused(true);
     // #443: pop keyboard enhancement flags first so the editor
     // process doesn't inherit a half-configured input mode. Best-
     // effort — matches the shutdown / panic paths in main.rs.
     // Use the Windows-aware helper: the raw crossterm execute!() is a
     // no-op on Windows and would leave the editor process in Kitty mode.
-    super::ui::pop_keyboard_enhancement_flags(terminal.backend_mut());
+    suspend_tui_child_modes(
+        terminal.backend_mut(),
+        use_mouse_capture,
+        use_bracketed_paste,
+    );
     let _ = disable_raw_mode();
-    if use_bracketed_paste {
-        let _ = execute!(terminal.backend_mut(), DisableBracketedPaste);
-    }
-    if use_mouse_capture {
-        let _ = execute!(terminal.backend_mut(), DisableMouseCapture);
-    }
     if use_alt_screen {
         let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
     }
@@ -148,21 +150,51 @@ pub(crate) fn spawn_editor_for_input(
     let result = run_editor_raw(current);
 
     // 3. Resume — best-effort restoration regardless of `result`.
+    let _ = enable_raw_mode();
     if use_alt_screen {
         let _ = execute!(terminal.backend_mut(), EnterAlternateScreen);
     }
-    if use_mouse_capture {
-        let _ = execute!(terminal.backend_mut(), EnableMouseCapture);
-    }
-    if use_bracketed_paste {
-        let _ = execute!(terminal.backend_mut(), EnableBracketedPaste);
-    }
-    let _ = enable_raw_mode();
+    super::ui::recover_terminal_modes(
+        terminal.backend_mut(),
+        use_mouse_capture,
+        use_bracketed_paste,
+    );
+    // Reporting was unavailable during the handoff. Resume focused and wait
+    // for a fresh FocusLost before background-only delivery is eligible.
+    crate::tui::notifications::set_terminal_focused(true);
     // Force a full repaint so a SIGWINCH during the edit doesn't leave the
     // viewport stale.
     let _ = terminal.clear();
 
     result
+}
+
+fn suspend_tui_child_modes<W: Write>(
+    writer: &mut W,
+    use_mouse_capture: bool,
+    use_bracketed_paste: bool,
+) {
+    super::ui::pop_keyboard_enhancement_flags(writer);
+    super::ui::disable_alternate_scroll_mode(writer);
+    let _ = execute!(writer, DisableFocusChange);
+    if use_mouse_capture {
+        disable_mouse_capture_for_child(writer);
+    }
+    if use_bracketed_paste {
+        super::ui::disable_bracketed_paste_mode(writer);
+    }
+    let _ = writer.flush();
+}
+
+fn disable_mouse_capture_for_child<W: Write>(writer: &mut W) {
+    // Crossterm's mouse-capture command takes a WinAPI path on Windows and
+    // does not emit bytes into PTY-style terminals such as mintty. External
+    // editors inherit the PTY state, so send the xterm reset sequences
+    // directly here.
+    const DISABLE_MOUSE_CAPTURE: &[u8] = b"\x1b[?1006l\x1b[?1015l\x1b[?1003l\x1b[?1002l\x1b[?1000l";
+    if let Err(err) = writer.write_all(DISABLE_MOUSE_CAPTURE) {
+        tracing::debug!(?err, "DisableMouseCapture direct reset ignored");
+    }
 }
 
 #[cfg(test)]
@@ -317,6 +349,91 @@ mod tests {
         assert!(
             !std::path::Path::new(&captured).exists(),
             "temp file {captured:?} should be cleaned up after run_editor_raw returns"
+        );
+    }
+
+    #[test]
+    fn suspend_tui_child_modes_disables_every_inherited_mode() {
+        let mut out = Vec::new();
+
+        suspend_tui_child_modes(&mut out, true, true);
+
+        let seq = String::from_utf8_lossy(&out);
+        assert!(
+            seq.contains("\x1b[?1007l"),
+            "external editor suspend must disable alternate-scroll mode: {seq:?}"
+        );
+        assert!(
+            seq.contains("\x1b[?1004l"),
+            "external editor suspend must disable focus events: {seq:?}"
+        );
+        assert!(
+            seq.contains("\x1b[?2004l"),
+            "external editor suspend must disable bracketed paste: {seq:?}"
+        );
+        assert!(
+            seq.contains("\x1b[?1000l"),
+            "external editor suspend must disable mouse capture when active: {seq:?}"
+        );
+    }
+
+    #[test]
+    fn suspend_tui_child_modes_leaves_mouse_capture_alone_when_inactive() {
+        let mut out = Vec::new();
+
+        suspend_tui_child_modes(&mut out, false, true);
+
+        let seq = String::from_utf8_lossy(&out);
+        assert!(
+            !seq.contains("\x1b[?1000l"),
+            "external editor suspend must not emit mouse-capture reset when inactive: {seq:?}"
+        );
+    }
+
+    #[test]
+    fn resume_tui_child_modes_reenables_shared_terminal_modes() {
+        let mut out = Vec::new();
+
+        crate::tui::ui::recover_terminal_modes(&mut out, true, true);
+
+        let seq = String::from_utf8_lossy(&out);
+        assert!(
+            !seq.contains("\x1b[?1007h"),
+            "must not enable alternate-scroll"
+        );
+        assert!(seq.contains("\x1b[?1007l"), "must reset alternate-scroll");
+        assert!(
+            seq.contains("\x1b[?1004h"),
+            "external editor resume must restore focus events: {seq:?}"
+        );
+        assert!(
+            seq.contains("\x1b[?2004h"),
+            "external editor resume must restore bracketed paste: {seq:?}"
+        );
+    }
+
+    #[test]
+    fn resume_tui_child_modes_leaves_alternate_scroll_off_when_mouse_capture_inactive() {
+        let mut out = Vec::new();
+
+        crate::tui::ui::recover_terminal_modes(&mut out, false, true);
+
+        let seq = String::from_utf8_lossy(&out);
+        assert!(
+            !seq.contains("\x1b[?1007h"),
+            "external editor resume must not enable alternate-scroll without mouse capture: {seq:?}"
+        );
+        assert!(
+            seq.contains("\x1b[?1007l"),
+            "external editor resume must reset alternate-scroll without mouse capture: {seq:?}"
+        );
+        assert!(
+            seq.contains("\x1b[?1004h"),
+            "external editor resume must still restore focus events: {seq:?}"
+        );
+        assert!(
+            seq.contains("\x1b[?2004h"),
+            "external editor resume must still restore bracketed paste: {seq:?}"
         );
     }
 }

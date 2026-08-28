@@ -1,5 +1,14 @@
 //! Process-wide retry-state surface (#499).
 //!
+//! Read-side caveat (0.9.4): the renderer this module was written for was
+//! the legacy footer's retry banner, which went with `FooterWidget`. The
+//! *producer* — `client::send_with_retry` — is still live and still records
+//! every retry, and `client`'s own tests read it back through [`snapshot`].
+//! The read surface below therefore carries `#[allow(dead_code)]` rather
+//! than being deleted: removing it would mean changing `start`/`failed`'s
+//! signatures at their live call sites in `client.rs`. Give the banner a
+//! renderer, or delete the producer too — but not half of it.
+//!
 //! The HTTP retry path in `client::send_with_retry` already times its
 //! waits and knows the error category. This module gives the TUI a way
 //! to observe that state — `start`, `succeeded`, and `failed` flip a
@@ -20,6 +29,7 @@ use std::time::{Duration, Instant};
 /// next request will fire — the UI subtracts `Instant::now()` from it
 /// to render a live countdown.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // written by client::send_with_retry; see the read-side caveat above
 pub struct RetryBanner {
     /// 1-indexed retry attempt number (the first retry is attempt 1).
     pub attempt: u32,
@@ -36,12 +46,13 @@ pub enum RetryState {
     #[default]
     Idle,
     /// A request is sleeping before retrying. Show countdown banner.
-    Active(RetryBanner),
+    Active(#[allow(dead_code)] RetryBanner),
     /// All retries exhausted; show failure row until the next turn
     /// starts. `since` records when the row was set so a future polish
     /// pass can age it out automatically; today the engine clears it on
     /// `TurnStarted`.
     Failed {
+        #[allow(dead_code)]
         reason: String,
         #[allow(dead_code)]
         since: Instant,
@@ -53,6 +64,7 @@ impl RetryState {
     /// not active. Saturates at zero — the renderer should treat any
     /// negative remaining as "firing now".
     #[must_use]
+    #[allow(dead_code)] // no renderer since the legacy footer banner went
     pub fn seconds_remaining(&self) -> Option<u64> {
         match self {
             Self::Active(banner) => Some(
@@ -77,15 +89,93 @@ impl RetryState {
 
 /// Lazy-init the cell on first read so callers don't have to initialize
 /// process-wide state at boot.
-fn cell() -> &'static Mutex<RetryState> {
+#[cfg(not(test))]
+fn with_state<R>(f: impl FnOnce(&mut RetryState) -> R) -> R {
     static STATE: OnceLock<Mutex<RetryState>> = OnceLock::new();
-    STATE.get_or_init(|| Mutex::new(RetryState::Idle))
+    let mut state = STATE
+        .get_or_init(|| Mutex::new(RetryState::Idle))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    f(&mut state)
+}
+
+#[cfg(not(test))]
+fn with_rate_limit<R>(f: impl FnOnce(&mut Option<Instant>) -> R) -> R {
+    static STATE: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+    let mut state = STATE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    f(&mut state)
+}
+
+/// Under test, this state is per-thread.
+///
+/// Production has exactly one foreground engine per process, so a global is the
+/// right model there. The test harness does not: retry state is written as a
+/// side effect of *any* client request, by production code that has no test
+/// guard to take, so a real request in one test could publish a banner or a
+/// provider pause into another test's assertions. Scoping by thread removes the
+/// race at its source rather than asking every future test that happens to
+/// perform HTTP to remember a lock.
+#[cfg(test)]
+fn with_state<R>(f: impl FnOnce(&mut RetryState) -> R) -> R {
+    #[allow(clippy::type_complexity)]
+    static STATE: OnceLock<Mutex<std::collections::HashMap<std::thread::ThreadId, RetryState>>> =
+        OnceLock::new();
+    let mut by_thread = STATE
+        .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    f(by_thread
+        .entry(std::thread::current().id())
+        .or_insert(RetryState::Idle))
+}
+
+#[cfg(test)]
+fn with_rate_limit<R>(f: impl FnOnce(&mut Option<Instant>) -> R) -> R {
+    #[allow(clippy::type_complexity)]
+    static STATE: OnceLock<
+        Mutex<std::collections::HashMap<std::thread::ThreadId, Option<Instant>>>,
+    > = OnceLock::new();
+    let mut by_thread = STATE
+        .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    f(by_thread.entry(std::thread::current().id()).or_default())
 }
 
 /// Public read snapshot for renderers.
 #[must_use]
+#[allow(dead_code)] // read by client.rs's retry tests; no production renderer today
 pub fn snapshot() -> RetryState {
-    cell().lock().map(|s| s.clone()).unwrap_or(RetryState::Idle)
+    with_state(|state| state.clone())
+}
+
+/// Extend the provider-wide rate-limit pause window. This is separate from
+/// the footer banner so one successful concurrent request cannot clear another
+/// request's active `Retry-After` window.
+pub fn note_rate_limit(delay: Duration) {
+    let deadline = Instant::now() + delay;
+    with_rate_limit(|current| {
+        if current.is_none_or(|existing| existing < deadline) {
+            *current = Some(deadline);
+        }
+    });
+}
+
+/// Remaining provider-wide rate-limit pause, if any.
+#[must_use]
+pub fn rate_limit_remaining() -> Option<Duration> {
+    let now = Instant::now();
+    with_rate_limit(|current| match *current {
+        Some(deadline) if deadline > now => Some(deadline.duration_since(now)),
+        Some(_) => {
+            *current = None;
+            None
+        }
+        None => None,
+    })
 }
 
 /// Mark an in-flight retry. `attempt` is the number of the *upcoming*
@@ -97,35 +187,34 @@ pub fn start(attempt: u32, delay: Duration, reason: impl Into<String>) {
         deadline: Instant::now() + delay,
         reason: reason.into(),
     };
-    if let Ok(mut s) = cell().lock() {
-        *s = RetryState::Active(banner);
-    }
+    with_state(|state| *state = RetryState::Active(banner));
 }
 
 /// Mark the retry chain as having succeeded. Hides the banner.
 pub fn succeeded() {
-    if let Ok(mut s) = cell().lock() {
-        *s = RetryState::Idle;
-    }
+    with_state(|state| *state = RetryState::Idle);
 }
 
 /// Mark the retry chain as having exhausted retries. The renderer keeps
 /// the failure row until [`clear`] (typically called on `TurnStarted`).
 pub fn failed(reason: impl Into<String>) {
-    if let Ok(mut s) = cell().lock() {
-        *s = RetryState::Failed {
+    with_state(|state| {
+        *state = RetryState::Failed {
             reason: reason.into(),
             since: Instant::now(),
         };
-    }
+    });
 }
 
 /// Reset to idle. Called on `TurnStarted` so the previous turn's
 /// failure row doesn't bleed into the next turn.
 pub fn clear() {
-    if let Ok(mut s) = cell().lock() {
-        *s = RetryState::Idle;
-    }
+    with_state(|state| *state = RetryState::Idle);
+}
+
+#[cfg(test)]
+pub fn clear_rate_limit() {
+    with_rate_limit(|current| *current = None);
 }
 
 /// Test helper: serialize tests that touch the global state so cargo's
@@ -147,6 +236,7 @@ mod tests {
     fn setup() -> std::sync::MutexGuard<'static, ()> {
         let g = test_guard();
         clear();
+        clear_rate_limit();
         g
     }
 
@@ -188,14 +278,27 @@ mod tests {
     fn deadline_in_past_yields_zero_remaining() {
         let _g = setup();
         // Bypass `start` so we can plant a deadline already in the past.
-        if let Ok(mut s) = cell().lock() {
-            *s = RetryState::Active(RetryBanner {
+        with_state(|state| {
+            *state = RetryState::Active(RetryBanner {
                 attempt: 2,
                 deadline: Instant::now() - Duration::from_secs(1),
                 reason: "test".into(),
             });
-        }
+        });
         assert_eq!(snapshot().seconds_remaining(), Some(0));
         clear();
+    }
+
+    #[test]
+    fn rate_limit_deadline_survives_banner_clear() {
+        let _g = setup();
+        note_rate_limit(Duration::from_secs(5));
+        start(1, Duration::from_secs(5), "rate limited");
+        succeeded();
+        assert!(
+            rate_limit_remaining().is_some(),
+            "provider-wide rate limit pause must not be cleared by an unrelated success"
+        );
+        clear_rate_limit();
     }
 }

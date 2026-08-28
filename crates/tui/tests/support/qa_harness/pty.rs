@@ -1,14 +1,14 @@
 //! Pseudo-terminal session wrapping `portable-pty`.
 //!
 //! Spawns a binary in a real PTY, pumps the child's stdout into an in-memory
-//! buffer on a background thread, and exposes write/resize/wait/kill primitives
+//! buffer on a background thread, and exposes write/wait/kill primitives
 //! the test harness composes.
 //!
 //! The reader thread is necessary because `portable-pty`'s reader is blocking
 //! and the test thread must remain free to send input + poll for screen
 //! changes.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -17,13 +17,18 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 pub struct PtySession {
+    /// Held (not read) so the PTY master stays open for the child's lifetime.
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send + Sync>,
     writer: Box<dyn Write + Send>,
     buffer: Arc<Mutex<Vec<u8>>>,
+    /// Every byte the child ever wrote, never drained. `buffer` is consumed by
+    /// the frame parser, which is the wrong shape for assertions about the
+    /// control stream itself — terminal-mode setup/teardown is only visible as
+    /// escape sequences, and a mode that was enabled and then disabled leaves
+    /// no trace on the rendered screen at all.
+    transcript: Arc<Mutex<Vec<u8>>>,
     reader_handle: Option<JoinHandle<()>>,
-    rows: u16,
-    cols: u16,
 }
 
 pub struct PtySessionBuilder<'a> {
@@ -47,11 +52,6 @@ impl<'a> PtySessionBuilder<'a> {
             cols: 120,
             clear_env: false,
         }
-    }
-
-    pub fn arg(mut self, a: impl Into<String>) -> Self {
-        self.args.push(a.into());
-        self
     }
 
     pub fn args<I, S>(mut self, args: I) -> Self
@@ -107,6 +107,9 @@ impl<'a> PtySessionBuilder<'a> {
         }
         if self.clear_env {
             cmd.env_clear();
+            if let Some(path) = std::env::var_os("PATH") {
+                cmd.env("PATH", path);
+            }
         }
         // TERM must be set to something xterm-ish so crossterm enables the
         // capabilities the TUI assumes (256 color, bracketed paste, …).
@@ -124,7 +127,9 @@ impl<'a> PtySessionBuilder<'a> {
         let writer = pair.master.take_writer().context("take writer")?;
 
         let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+        let transcript: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
         let buf_thread = Arc::clone(&buffer);
+        let transcript_thread = Arc::clone(&transcript);
         let reader_handle = thread::Builder::new()
             .name("qa-pty-reader".into())
             .spawn(move || {
@@ -135,6 +140,9 @@ impl<'a> PtySessionBuilder<'a> {
                         Ok(n) => {
                             if let Ok(mut b) = buf_thread.lock() {
                                 b.extend_from_slice(&chunk[..n]);
+                            }
+                            if let Ok(mut t) = transcript_thread.lock() {
+                                t.extend_from_slice(&chunk[..n]);
                             }
                         }
                         Err(_) => break,
@@ -148,9 +156,8 @@ impl<'a> PtySessionBuilder<'a> {
             child,
             writer,
             buffer,
+            transcript,
             reader_handle: Some(reader_handle),
-            rows: self.rows,
-            cols: self.cols,
         })
     }
 }
@@ -160,13 +167,17 @@ impl PtySession {
         PtySessionBuilder::new(program)
     }
 
+    pub fn pid(&self) -> Option<u32> {
+        self.child.process_id()
+    }
+
     pub fn write_bytes(&mut self, bytes: &[u8]) -> Result<()> {
         self.writer.write_all(bytes).context("pty write")?;
         self.writer.flush().context("pty flush")?;
         Ok(())
     }
 
-    pub fn resize(&mut self, rows: u16, cols: u16) -> Result<()> {
+    pub fn resize(&self, rows: u16, cols: u16) -> Result<()> {
         self.master
             .resize(PtySize {
                 rows,
@@ -174,19 +185,21 @@ impl PtySession {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| anyhow!("pty resize failed: {e}"))?;
-        self.rows = rows;
-        self.cols = cols;
-        Ok(())
-    }
-
-    pub fn size(&self) -> (u16, u16) {
-        (self.rows, self.cols)
+            .context("pty resize")
     }
 
     /// Drain any bytes the reader thread has pushed into the buffer. Returns
     /// the bytes read this call. Non-blocking — returns immediately even if
     /// the buffer is empty.
+    /// Every byte the child has written so far, including bytes already fed
+    /// to the frame parser. Non-destructive, so it can be sampled repeatedly.
+    pub fn transcript(&self) -> Vec<u8> {
+        self.transcript
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
     pub fn drain(&mut self) -> Vec<u8> {
         let mut b = self.buffer.lock().unwrap_or_else(|e| e.into_inner());
         std::mem::take(&mut *b)
@@ -215,16 +228,66 @@ impl PtySession {
     }
 
     fn kill_and_join_reader(&mut self, grace: Duration) -> Option<i32> {
+        // Name the teardown for the watchdog: a wedge here used to be the whole
+        // bug, so "teardown: kill child" is the message worth seeing.
+        super::watchdog::progress("teardown: kill child + reap group");
         let _ = self.child.kill();
+        // Killing only the direct child is not enough: the TUI spawns shells,
+        // and a descendant that escaped into its own session keeps the PTY
+        // slave open, so the reader never sees EOF. Reap the whole group.
+        self.kill_process_group();
         let exit = self.wait_until(Instant::now() + grace);
-        if exit.is_some()
-            && let Some(handle) = self.reader_handle.take()
-        {
-            // Don't block on the reader thread forever — it exits on EOF.
-            let _ = handle.join();
+        if let Some(handle) = self.reader_handle.take() {
+            join_reader_bounded(handle);
         }
         exit
     }
+
+    /// SIGKILL the child's process group, best effort.
+    ///
+    /// `portable_pty`'s `Child::kill` signals one pid. A grandchild in its own
+    /// session survives it and holds the inherited slave fd, which is the state
+    /// that made the reader join below unbounded.
+    #[cfg(unix)]
+    fn kill_process_group(&mut self) {
+        let Some(pid) = self.child.process_id() else {
+            return;
+        };
+        let Ok(pid) = i32::try_from(pid) else {
+            return;
+        };
+        // SAFETY: `killpg` on a pid we spawned; a stale pid returns ESRCH
+        // rather than signalling an unrelated group, because the child has not
+        // been reaped yet at this point.
+        unsafe {
+            libc::killpg(pid, libc::SIGKILL);
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn kill_process_group(&mut self) {}
+}
+
+/// Bounded join for the PTY reader thread.
+///
+/// The previous code said "don't block forever" but called `handle.join()`,
+/// which does exactly that when a descendant still holds the PTY slave open —
+/// `read()` never returns EOF. Because libtest has no per-test timeout, that
+/// turned any *failing* PTY test into an infinite hang: the assertion returns
+/// `Err`, `?` drops the harness, and the drop blocks forever. Hand the join to
+/// a helper thread and move on; the reader exits on its own once the pipe
+/// finally closes, and the process exits at the end of the test binary anyway.
+/// Same shape as `READER_JOIN_GRACE` in `tools/shell.rs` (#52).
+fn join_reader_bounded(handle: JoinHandle<()>) {
+    const READER_JOIN_GRACE: Duration = Duration::from_secs(2);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let _ = thread::Builder::new()
+        .name("qa-pty-reader-join".into())
+        .spawn(move || {
+            let _ = handle.join();
+            let _ = done_tx.send(());
+        });
+    let _ = done_rx.recv_timeout(READER_JOIN_GRACE);
 }
 
 impl Drop for PtySession {

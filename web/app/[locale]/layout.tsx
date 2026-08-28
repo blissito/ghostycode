@@ -1,7 +1,45 @@
 import type { Metadata } from "next";
+import { Fraunces, IBM_Plex_Sans, JetBrains_Mono, Noto_Serif_SC } from "next/font/google";
 import { Nav } from "@/components/nav";
 import { Footer } from "@/components/footer";
-import { locales, type Locale } from "@/lib/i18n/config";
+import { localeDirection, locales, type Locale } from "@/lib/i18n/config";
+import { getChrome, getHome } from "@/lib/i18n/dictionaries";
+import { serializeJsonLd } from "@/lib/json-ld";
+import { buildPageMetadata } from "@/lib/page-meta";
+import { buildSiteJsonLd } from "@/lib/site-schema";
+import "../globals.css";
+
+// Fraunces is the newspaper-era display face the community asked to keep —
+// crisp, editorial, a little futuristic. Body stays IBM Plex for instrument feel.
+const display = Fraunces({
+  subsets: ["latin", "vietnamese"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const body = IBM_Plex_Sans({
+  subsets: ["latin", "cyrillic", "vietnamese"],
+  weight: ["400", "500", "600"],
+  variable: "--font-body",
+  display: "swap",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin", "cyrillic"],
+  weight: ["400", "500", "600"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+// Noto Serif SC is heavy; load only what we need for decorative anchors.
+const cjk = Noto_Serif_SC({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-cjk",
+  display: "swap",
+  preload: false,
+});
 
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
@@ -9,30 +47,13 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  const isZh = locale === "zh";
-  return {
-    title: isZh ? "Ghosty Code · DeepSeek V4 智能体运行框架" : "Ghosty Code · DeepSeek V4 Agent Harness",
-    description: isZh
-      ? "DeepSeek V4 的最强智能体运行框架。宪政层级、结构化信任、验证与恢复——让模型持续工作并不断进步的规则、工具和反馈循环。国际开源社区，递归自改进。"
-      : "The most agentic harness for DeepSeek V4. Constitutional hierarchy, structured trust, verification, and recovery — rules, tools, and feedback loops that help the model keep working. An international open source community building a recursive, self-improving harness.",
-    metadataBase: new URL("https://ghosty.net"),
-    openGraph: {
-      title: "Ghosty Code",
-      description: isZh
-        ? "DeepSeek V4 的最强智能体运行框架。宪政层级、结构化信任、验证与恢复。"
-        : "The most agentic harness for DeepSeek V4. Constitutional hierarchy, structured trust, verification, and recovery.",
-      url: "https://ghosty.net",
-      siteName: "Ghosty Code",
-      type: "website",
-    },
-    twitter: { card: "summary_large_image" },
-    alternates: {
-      languages: {
-        en: "/en",
-        zh: "/zh",
-      },
-    },
-  };
+  const home = getHome(locale);
+  return buildPageMetadata({
+    path: "/",
+    locale,
+    title: home.metaTitle,
+    description: home.metaDescription,
+  });
 }
 
 export default async function LocaleLayout({
@@ -43,12 +64,39 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const chrome = getChrome(locale);
+  // RTL locales (e.g. ar) set the document direction from the canonical
+  // registry so the browser handles bidirectional layout from the root.
+  const dir = localeDirection(locale);
+  const siteJsonLd = buildSiteJsonLd(locale);
 
   return (
-    <>
-      <Nav locale={locale as Locale} />
-      <main>{children}</main>
-      <Footer locale={locale as Locale} />
-    </>
+    <html
+      lang={locale}
+      dir={dir}
+      className={`${display.variable} ${body.variable} ${mono.variable} ${cjk.variable}`}
+      suppressHydrationWarning
+    >
+      <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(siteJsonLd) }}
+        />
+        {/* Apply the persisted docs theme before paint so there is no flash.
+            "auto" leaves data-theme unset and defers to prefers-color-scheme. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('cw-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();",
+          }}
+        />
+        <a href="#main-content" className="skip-link">
+          {chrome.skipToContent}
+        </a>
+        <Nav locale={locale as Locale} />
+        <main id="main-content">{children}</main>
+        <Footer locale={locale as Locale} />
+      </body>
+    </html>
   );
 }

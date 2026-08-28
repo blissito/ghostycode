@@ -11,11 +11,15 @@ interface Props {
 export function InstallCodeBlock({ cmd, copyLabel = "Copy", copiedLabel = "Copied ✓" }: Props) {
   const [copied, setCopied] = useState(false);
 
-  const copy = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(cmd);
+  const copy = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(cmd);
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // Clipboard write failed (permissions, non-secure context, or a focused
+      // write race) — never show a false "Copied" confirmation.
     }
   };
 
@@ -24,7 +28,8 @@ export function InstallCodeBlock({ cmd, copyLabel = "Copy", copiedLabel = "Copie
       <button
         onClick={copy}
         aria-label={copied ? copiedLabel : copyLabel}
-        className="absolute top-3 right-3 z-10 px-3 py-1 bg-paper hairline-t hairline-b hairline-l hairline-r font-mono text-[0.7rem] uppercase tracking-wider hover:bg-indigo hover:text-paper transition-colors"
+        data-copied={copied}
+        className="copy-btn absolute top-3 right-3 z-10 px-3 py-1 bg-paper hairline-t hairline-b hairline-l hairline-r font-mono text-[0.7rem] uppercase tracking-wider hover:bg-indigo hover:text-paper transition-colors"
       >
         {copied ? copiedLabel : copyLabel}
       </button>

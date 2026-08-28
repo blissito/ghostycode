@@ -14,11 +14,41 @@
 //! - stashing the reasoning buffer onto `app.last_reasoning` so the
 //!   summary survives compaction
 
+use std::time::Duration;
 use std::time::Instant;
 
 use crate::tui::active_cell::ActiveCell;
 use crate::tui::app::App;
 use crate::tui::history::HistoryCell;
+
+/// Debounce window for active-cell revision bumps while a thinking block is
+/// streaming (#1620). Reasoning deltas arrive far faster than the eye can
+/// follow, and each revision bump invalidates the active cell's wrap cache,
+/// forcing a full re-wrap of the live tail. Coalescing intermediate bumps to
+/// one per window keeps the perceived stream smooth without re-wrapping per
+/// character. ~100ms ≈ 10 intermediate repaints/sec, well below the 120 FPS
+/// frame cap (see `frame_rate_limiter`) yet imperceptible as lag.
+///
+/// Correctness: this only skips *intermediate* repaints. Appended content is
+/// never dropped — it lands in the cell immediately — and finalize always
+/// forces a bump so the final reasoning text is fully rendered.
+const THINKING_REVISION_THROTTLE: Duration = Duration::from_millis(100);
+
+/// Bump the active-cell revision for a streaming thinking mutation, but at
+/// most once per [`THINKING_REVISION_THROTTLE`] window. Returns whether a bump
+/// was actually emitted. Skipped bumps coalesce into the next one (or into the
+/// forced finalize bump), so no content is ever lost — only redundant
+/// intermediate re-wraps are dropped.
+fn bump_thinking_revision_throttled(app: &mut App, now: Instant) -> bool {
+    let due = app
+        .thinking_revision_last_bump_at
+        .is_none_or(|last| now.saturating_duration_since(last) >= THINKING_REVISION_THROTTLE);
+    if due {
+        app.thinking_revision_last_bump_at = Some(now);
+        app.bump_active_cell_revision();
+    }
+    due
+}
 
 /// Ensure an in-flight Thinking entry exists in `active_cell` and return its
 /// entry index. If no thinking entry is currently streaming, push a fresh one.
@@ -42,9 +72,18 @@ pub(super) fn ensure_active_entry(app: &mut App) -> usize {
     entry_idx
 }
 
-/// Append text to a streaming Thinking entry inside `active_cell`. Bumps the
-/// active-cell revision so the renderer re-draws the live tail.
+/// Append text to a streaming Thinking entry inside `active_cell`. The text is
+/// committed to the cell immediately; the active-cell revision bump that
+/// triggers a re-wrap of the live tail is debounced to at most one per
+/// [`THINKING_REVISION_THROTTLE`] window (#1620). Skipped bumps coalesce into
+/// the next append or the forced finalize bump, so no content is ever lost.
 pub(super) fn append(app: &mut App, entry_idx: usize, text: &str) {
+    append_at(app, entry_idx, text, Instant::now());
+}
+
+/// `append` with an injectable clock so the debounce can be tested
+/// deterministically.
+fn append_at(app: &mut App, entry_idx: usize, text: &str, now: Instant) {
     if text.is_empty() {
         return;
     }
@@ -57,12 +96,22 @@ pub(super) fn append(app: &mut App, entry_idx: usize, text: &str) {
         false
     };
     if mutated {
-        app.bump_active_cell_revision();
+        bump_thinking_revision_throttled(app, now);
     }
 }
 
 /// Build the spinner-decorated placeholder shown in the thinking entry
 /// while a translation is in flight (`Thinking… (1.2s |)`).
+fn translation_placeholder_spinner_frame(app: &App, elapsed: f32) -> &'static str {
+    let animated_frame = match (elapsed.mul_add(2.0, 0.0) as usize) % 4 {
+        0 => "|",
+        1 => "/",
+        2 => "-",
+        _ => "\\",
+    };
+    app.motion_policy().spinner_glyph(animated_frame, true)
+}
+
 pub(super) fn translation_placeholder_frame(app: &App) -> String {
     let base = crate::localization::thinking_translation_placeholder(app.ui_locale);
     let elapsed = app
@@ -70,12 +119,7 @@ pub(super) fn translation_placeholder_frame(app: &App) -> String {
         .or(app.turn_started_at)
         .map(|started| started.elapsed().as_secs_f32())
         .unwrap_or_default();
-    let frame = match (elapsed.mul_add(2.0, 0.0) as usize) % 4 {
-        0 => "|",
-        1 => "/",
-        2 => "-",
-        _ => "\\",
-    };
+    let frame = translation_placeholder_spinner_frame(app, elapsed);
     format!("{base} ({elapsed:.1}s {frame})")
 }
 
@@ -179,7 +223,7 @@ pub(super) fn start_block(app: &mut App) -> bool {
     app.reasoning_header = None;
     app.thinking_started_at = Some(Instant::now());
     app.streaming_state.reset();
-    app.streaming_state.start_thinking(0, None);
+    app.streaming_state.start_thinking(0);
     let _ = ensure_active_entry(app);
     finalized_previous
 }
@@ -237,6 +281,126 @@ pub(super) fn finalize_active_entry(app: &mut App, duration: Option<f32>, remain
         *streaming = false;
         *duration_secs = duration;
     }
+    // Red line (#1620): finalize must force a bump so the final reasoning text
+    // is fully rendered even if the last appended chunk was throttled. Reset
+    // the debounce window so the next thinking block's first chunk renders
+    // immediately rather than being coalesced into a stale window.
+    app.thinking_revision_last_bump_at = None;
     app.bump_active_cell_revision();
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::tui::app::{App, TuiOptions};
+    use std::path::PathBuf;
+
+    fn test_app() -> App {
+        let options = TuiOptions {
+            start_in_agent_mode: true,
+            skip_onboarding: false,
+            ..crate::test_support::test_tui_options(PathBuf::from("."))
+        };
+        App::new(options, &Config::default())
+    }
+
+    fn thinking_content(app: &App, entry_idx: usize) -> String {
+        match app
+            .active_cell
+            .as_ref()
+            .and_then(|active| active.entries().get(entry_idx))
+        {
+            Some(HistoryCell::Thinking { content, .. }) => content.clone(),
+            other => panic!("expected a Thinking entry at {entry_idx}, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translation_placeholder_spinner_uses_full_motion_only() {
+        let mut app = test_app();
+        app.low_motion = false;
+        app.fancy_animations = true;
+        assert_eq!(translation_placeholder_spinner_frame(&app, 0.0), "|");
+        assert_eq!(translation_placeholder_spinner_frame(&app, 0.6), "/");
+
+        app.low_motion = true;
+        assert_eq!(translation_placeholder_spinner_frame(&app, 0.0), "⣤");
+        assert_eq!(translation_placeholder_spinner_frame(&app, 0.6), "⣤");
+
+        app.low_motion = false;
+        app.fancy_animations = false;
+        assert_eq!(translation_placeholder_spinner_frame(&app, 0.0), "›");
+        assert_eq!(translation_placeholder_spinner_frame(&app, 0.6), "›");
+    }
+
+    /// #1620: a burst of reasoning chunks inside one throttle window must
+    /// coalesce to a single active-cell revision bump (so the renderer
+    /// re-wraps the live tail ~10x/sec instead of once per character), while
+    /// every byte of content is preserved and finalize forces a final bump.
+    #[test]
+    fn issue_1620_throttles_thinking_bumps_without_losing_content() {
+        let mut app = test_app();
+        let entry = ensure_active_entry(&mut app);
+        // `ensure_active_entry` bumped once on creation; start the measurement
+        // from a clean throttle window so the first append renders immediately.
+        app.thinking_revision_last_bump_at = None;
+        let rev_before = app.active_cell_revision;
+
+        let t0 = Instant::now();
+        let chunks = [
+            "Hel", "lo, ", "this", " is", " a", " lo", "ng", " re", "ason", "ing",
+        ];
+        // All ten chunks land within a single 100ms window (5ms apart).
+        for (i, chunk) in chunks.iter().enumerate() {
+            append_at(
+                &mut app,
+                entry,
+                chunk,
+                t0 + Duration::from_millis(i as u64 * 5),
+            );
+        }
+        assert_eq!(
+            app.active_cell_revision.wrapping_sub(rev_before),
+            1,
+            "rapid chunks within one throttle window must coalesce to one bump"
+        );
+
+        // A chunk after the window expires is allowed to bump again.
+        append_at(
+            &mut app,
+            entry,
+            " stream",
+            t0 + THINKING_REVISION_THROTTLE + Duration::from_millis(10),
+        );
+        assert_eq!(
+            app.active_cell_revision.wrapping_sub(rev_before),
+            2,
+            "a chunk past the throttle window should bump once more"
+        );
+
+        // No content was dropped despite the skipped intermediate bumps.
+        let expected = format!("{} stream", chunks.concat());
+        assert_eq!(thinking_content(&app, entry), expected);
+
+        // Red line: finalize forces exactly one bump and flushes the tail.
+        let rev_pre_final = app.active_cell_revision;
+        let finalized = finalize_active_entry(&mut app, Some(1.5), " [end]");
+        assert!(finalized, "finalize should report it finalized an entry");
+        assert_eq!(
+            app.active_cell_revision,
+            rev_pre_final.wrapping_add(1),
+            "finalize must always force exactly one revision bump"
+        );
+        assert_eq!(
+            thinking_content(&app, entry),
+            format!("{expected} [end]"),
+            "finalize must not drop the trailing reasoning text"
+        );
+        assert!(
+            app.thinking_revision_last_bump_at.is_none(),
+            "finalize should reset the throttle window for the next block"
+        );
+    }
 }

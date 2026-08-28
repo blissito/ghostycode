@@ -12,12 +12,19 @@ Cloudflare Cron Triggers
        ├─ weekly    → digest (Mon 09:00 UTC)
        └─ 6h       → curate (Today's Dispatch — pre-existing)
 
-Drafts stored in Workers KV:
+Drafts stored in Workers KV (keys always derived via `draftStorageKey` in `lib/community-agent.ts`):
   draft:triage:<issue-number>
   draft:pr-review:<pr-number>
   draft:stale:<issue-number>
   draft:dupes:<issue-number>
   draft:digest:<year>-W<week>
+  draft:linkcheck:<slug>-<sha256-16>          (identity: full broken URL)
+  draft:semantic-drift:<slug>-<sha256-16>     (identity: page+claim+evidence+replacement)
+
+Watcher draft IDs are deterministic — readable slug plus a 64-bit SHA-256
+suffix over the finding's full identity, max 80 chars — so unchanged findings
+dedup and changed findings land as new drafts. Semantic-drift model output is
+validated and capped (10 drafts/run) before any KV writes.
 
 Usage logged to:
   usage:<YYYY-MM-DD>

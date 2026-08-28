@@ -43,7 +43,14 @@ pub fn handle_paste_burst_key(app: &mut App, key: &KeyEvent, now: Instant) -> bo
                 && app.paste_burst.newline_should_insert_instead_of_submit(now)
             {
                 app.insert_char('\n');
-                app.paste_burst.extend_window(now);
+                // Deliberately no `extend_window` here. This Enter arrived
+                // with no burst being assembled, so it is only *maybe* a
+                // pasted newline. Re-arming on that guess let each absorbed
+                // Enter buy another 120ms, so a user pressing Enter to send
+                // never submitted — every press just added a newline. The
+                // window now always expires 120ms after the last real
+                // keystroke; newlines genuinely inside a paste are absorbed
+                // by `append_newline_if_active` above, which does re-arm.
                 return true;
             }
         }
@@ -55,18 +62,25 @@ pub fn handle_paste_burst_key(app: &mut App, key: &KeyEvent, now: Instant) -> bo
                 // Paste-burst buffering would lose characters when the IME
                 // commits slower than the burst heuristic's timing window.
                 //
-                // We still call note_plain_char + extend_window so that:
+                // We still call note_plain_char + arm the suppression window
+                // so that:
                 //   1. The burst timing counter advances for non-IME fast
                 //      typing on terminals without bracketed paste support.
                 //   2. The Enter-suppression window stays open during a rapid
                 //      non-ASCII sequence, preventing premature submission.
                 // But the character is inserted directly into the composer
                 // rather than placed into the paste-burst buffer.
+                //
+                // The window is sized by how fast the characters are
+                // arriving: a lone IME candidate commit is ordinary typing
+                // and must not swallow the Enter that follows it, while a
+                // run of characters at paste speed keeps the full window.
+                // See `PasteBurst::arm_window_for_direct_char`.
                 if let Some(pending) = app.paste_burst.flush_before_modified_input() {
                     app.insert_str(&pending);
                 }
-                app.paste_burst.note_plain_char(now);
-                app.paste_burst.extend_window(now);
+                let rapid_chars = app.paste_burst.note_plain_char(now);
+                app.paste_burst.arm_window_for_direct_char(now, rapid_chars);
                 app.insert_char(c);
                 return true;
             }
@@ -145,25 +159,7 @@ mod tests {
 
     fn test_app() -> App {
         let options = TuiOptions {
-            model: "deepseek-v4-pro".to_string(),
-            workspace: PathBuf::from("."),
-            config_path: None,
-            config_profile: None,
-            allow_shell: false,
-            use_alt_screen: true,
-            use_mouse_capture: false,
-            use_bracketed_paste: true,
-            max_subagents: 1,
-            skills_dir: PathBuf::from("."),
-            memory_path: PathBuf::from("memory.md"),
-            notes_path: PathBuf::from("notes.txt"),
-            mcp_config_path: PathBuf::from("mcp.json"),
-            use_memory: false,
-            start_in_agent_mode: false,
-            skip_onboarding: true,
-            yolo: false,
-            resume_session_id: None,
-            initial_input: None,
+            ..crate::test_support::test_tui_options(PathBuf::from("."))
         };
         let mut app = App::new(options, &Config::default());
         app.use_paste_burst_detection = true;
@@ -233,6 +229,120 @@ mod tests {
                 + crate::tui::paste_burst::PasteBurst::recommended_active_flush_delay()
         ));
         assert_eq!(app.input, "abc\n");
+    }
+
+    /// A raw CJK paste can open with a one-character line
+    /// ("好\n…"). That single character never forms a paste-speed *run*, so
+    /// the short window is all that protects the embedded newline — the
+    /// newline arrives within the burst interval, so it must still be
+    /// absorbed rather than submitting "好" on its own (#1302).
+    #[test]
+    fn raw_paste_with_single_char_first_line_still_absorbs_its_newline() {
+        let mut app = test_app();
+        let t0 = Instant::now();
+
+        assert!(handle_paste_burst_key(&mut app, &plain('好'), t0));
+        assert!(
+            handle_paste_burst_key(
+                &mut app,
+                &KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                t0 + Duration::from_millis(1),
+            ),
+            "the newline of a raw paste lands within the burst interval and \
+             must be absorbed, not submitted"
+        );
+        assert_eq!(app.input, "好\n");
+    }
+
+    /// The IME half of the same ambiguity: one committed character followed
+    /// by a human-speed Enter is a send gesture. `handle_paste_burst_key`
+    /// must decline the Enter so it reaches the normal submit path.
+    #[test]
+    fn ime_commit_then_human_enter_falls_through_to_submit() {
+        let mut app = test_app();
+        let t0 = Instant::now();
+
+        assert!(handle_paste_burst_key(&mut app, &plain('好'), t0));
+        assert_eq!(app.input, "好");
+
+        assert!(
+            !handle_paste_burst_key(
+                &mut app,
+                &KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                t0 + Duration::from_millis(30),
+            ),
+            "Enter 30ms after an IME candidate commit is a send, not a \
+             pasted newline"
+        );
+        assert_eq!(app.input, "好", "no stray newline may be inserted");
+    }
+
+    /// A whole IME-typed CJK sentence, one commit at a time at human speed,
+    /// followed by Enter: every character lands verbatim and the Enter still
+    /// reaches the submit path.
+    #[test]
+    fn ime_typed_sentence_then_enter_falls_through_to_submit() {
+        let mut app = test_app();
+        let t0 = Instant::now();
+
+        for (i, ch) in "你好世界".chars().enumerate() {
+            let now = t0 + Duration::from_millis(50 * i as u64);
+            assert!(handle_paste_burst_key(&mut app, &plain(ch), now));
+        }
+        assert_eq!(app.input, "你好世界");
+
+        assert!(
+            !handle_paste_burst_key(
+                &mut app,
+                &KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                t0 + Duration::from_millis(180),
+            ),
+            "Enter after an IME-typed CJK message must submit"
+        );
+        assert_eq!(app.input, "你好世界");
+    }
+
+    /// Absorbing an Enter outside an active burst must not re-arm the
+    /// suppression window. It used to, so each swallowed Enter bought
+    /// another 120ms and a user pressing Enter to send only ever added
+    /// newlines. The first Enter is still absorbed (#1073 trailing-newline
+    /// protection); the next one submits.
+    #[test]
+    fn absorbed_enter_does_not_extend_the_suppression_window() {
+        let mut app = test_app();
+        let t0 = Instant::now();
+
+        // Unbracketed paste of "abc" with no trailing newline.
+        for (i, ch) in "abc".chars().enumerate() {
+            let now = t0 + Duration::from_millis(i as u64);
+            assert!(handle_paste_burst_key(&mut app, &plain(ch), now));
+        }
+        let last_char = t0 + Duration::from_millis(2);
+        assert!(app.flush_paste_burst_if_due(
+            last_char + crate::tui::paste_burst::PasteBurst::recommended_active_flush_delay()
+        ));
+        assert_eq!(app.input, "abc");
+
+        // Still inside the window: this could be the paste's trailing
+        // newline, so it is absorbed.
+        assert!(handle_paste_burst_key(
+            &mut app,
+            &KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            last_char + Duration::from_millis(60),
+        ));
+        assert_eq!(app.input, "abc\n");
+
+        // Past the window measured from the last *keystroke* — the absorbed
+        // Enter bought no extra time, so this one submits.
+        assert!(
+            !handle_paste_burst_key(
+                &mut app,
+                &KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                last_char + Duration::from_millis(121),
+            ),
+            "the second Enter must reach the submit path"
+        );
+        assert_eq!(app.input, "abc\n", "no second newline may be inserted");
     }
 
     #[test]

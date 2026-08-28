@@ -3,6 +3,15 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
+pub mod check;
+pub mod install;
+pub mod launch;
+pub mod tls;
+
+pub use check::{SuppressionReason, UpdateCheckCache, suppression_reason};
+pub use install::{InstallMethod, current_install_method};
+pub use launch::{LaunchOutcome, VersionChange, record_launch};
+
 /// Filename of the SHA-256 checksum manifest included in every release.
 ///
 /// Mirror directories must contain this file alongside platform binaries so
@@ -17,9 +26,8 @@ pub const LATEST_RELEASE_URL: &str =
 pub const RELEASES_URL: &str =
     "https://api.github.com/repos/blissito/ghostycode/releases?per_page=100";
 
-/// Base URL of the Ghosty Code repository on the CNB mirror platform.
-// CNB mirror not configured for Ghosty Code
-pub const CNB_REPO_URL: &str = "https://github.com/blissito/ghostycode";
+/// Base URL of the GhostyCode repository on the CNB mirror platform.
+pub const CNB_REPO_URL: &str = "https://cnb.cool/ghosty.net/ghosty";
 
 /// Environment variable that overrides the base URL for release asset downloads.
 pub const RELEASE_BASE_URL_ENV: &str = "GHOSTY_RELEASE_BASE_URL";
@@ -42,8 +50,52 @@ pub const LEGACY_UPDATE_VERSION_ENV: &str = "DEEPSEEK_VERSION";
 /// User-Agent header sent with release metadata requests.
 pub const UPDATE_USER_AGENT: &str = "ghosty-updater";
 
-const CNB_RELEASE_ASSET_BASE: &str = "https://github.com/blissito/ghostycode/releases/download";
+const CNB_RELEASE_ASSET_BASE: &str = "https://cnb.cool/ghosty.net/ghosty/-/releases/download";
 const RELEASE_METADATA_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Build a reqwest client builder with the TLS roots appropriate for the
+/// current platform.
+///
+/// Android command-line programs such as Termux do not run inside a Java
+/// application and therefore cannot initialize reqwest's Android platform
+/// verifier with a `JavaVM` and `Context`. Use the Mozilla WebPKI roots there
+/// so native CLI/TUI HTTPS works without a JNI host. Other platforms keep
+/// reqwest's platform verifier.
+pub fn platform_http_client_builder() -> reqwest::ClientBuilder {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let builder = reqwest::Client::builder();
+    #[cfg(target_os = "android")]
+    {
+        builder.tls_backend_preconfigured(android_rustls_config())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        builder
+    }
+}
+
+/// Blocking counterpart of [`platform_http_client_builder`].
+pub fn platform_blocking_http_client_builder() -> reqwest::blocking::ClientBuilder {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let builder = reqwest::blocking::Client::builder();
+    #[cfg(target_os = "android")]
+    {
+        builder.tls_backend_preconfigured(android_rustls_config())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        builder
+    }
+}
+
+#[cfg(target_os = "android")]
+fn android_rustls_config() -> rustls::ClientConfig {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth()
+}
 
 /// The release channel to query for updates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,9 +149,27 @@ pub fn resolve_release_query(channel: ReleaseChannel) -> ReleaseQuery {
 }
 
 /// Reads the release base URL from environment variables, falling back to the
-/// CNB mirror if `GHOSTY_USE_CNB_MIRROR` is set. Returns `None` when no
-/// override is configured.
+/// CNB mirror if `GHOSTY_USE_CNB_MIRROR=1`. Returns `None` when no override
+/// is configured.
 pub fn release_base_url_from_env(version: &str) -> Option<String> {
+    if let Some(base_url) = explicit_release_base_url_from_env() {
+        return Some(base_url);
+    }
+    if cnb_mirror_requested_from_env() {
+        return Some(cnb_release_base_url(version));
+    }
+    None
+}
+
+fn cnb_mirror_requested_from_env() -> bool {
+    std::env::var(CNB_MIRROR_ENV).is_ok_and(|value| value == "1")
+}
+
+/// Reads an operator-supplied release base URL, ignoring the CNB mirror flag.
+///
+/// Kept separate from [`release_base_url_from_env`] so callers can tell an
+/// explicit mirror directory apart from "use the CNB mirror for this version".
+pub fn explicit_release_base_url_from_env() -> Option<String> {
     for env_name in [
         RELEASE_BASE_URL_ENV,
         LEGACY_RELEASE_BASE_URL_ENV,
@@ -112,11 +182,24 @@ pub fn release_base_url_from_env(version: &str) -> Option<String> {
             }
         }
     }
-
-    if std::env::var(CNB_MIRROR_ENV).is_ok() {
-        return Some(cnb_release_base_url(version));
-    }
     None
+}
+
+/// True when `GHOSTY_USE_CNB_MIRROR` is the override actually in effect —
+/// it is exactly `1`, and no explicit base URL outranks it.
+pub fn cnb_mirror_override_active() -> bool {
+    explicit_release_base_url_from_env().is_none() && cnb_mirror_requested_from_env()
+}
+
+/// True when the first-party CNB mirror publishes release binaries for this
+/// target.
+///
+/// The CNB tag pipeline (`.cnb.yml`) builds exactly one artifact set — Linux
+/// x64, statically linked against musl. Every other platform is served by
+/// canonical GitHub Releases or by an explicit
+/// [`RELEASE_BASE_URL_ENV`] mirror, so the updater must not offer CNB there.
+pub fn cnb_mirror_supports_target(os: &str, rust_arch: &str) -> bool {
+    os == "linux" && rust_arch == "x86_64"
 }
 
 /// Constructs the CNB mirror asset URL for a given version tag.
@@ -149,12 +232,11 @@ pub fn update_network_fallback_hint() -> String {
     format!(
         "GitHub release downloads may be blocked or slow on this network.\n\
          For mainland China, use one of these fallback paths:\n\
-           1. Source build from the CNB mirror, installing both shipped binaries:\n\
+           1. Source build from the CNB mirror, installing the shipped binary:\n\
               cargo install --git {CNB_REPO_URL} --tag vX.Y.Z ghosty-cli --locked --force\n\
-              cargo install --git {CNB_REPO_URL} --tag vX.Y.Z ghosty-tui --locked --force\n\
            2. Use a binary asset mirror:\n\
               {RELEASE_BASE_URL_ENV}=https://<mirror>/<release-assets>/ {UPDATE_VERSION_ENV}=X.Y.Z ghosty update\n\
-         The mirror directory must contain {CHECKSUM_MANIFEST_ASSET} and the platform binaries."
+         The mirror directory must contain {CHECKSUM_MANIFEST_ASSET} and the ghosty platform binary."
     )
 }
 
@@ -162,7 +244,7 @@ pub fn update_network_fallback_hint() -> String {
 ///
 /// `description` is included in error messages to identify the request purpose.
 pub fn fetch_release_json_blocking(url: &str, description: &str) -> Result<String> {
-    let client = reqwest::blocking::Client::builder()
+    let client = platform_blocking_http_client_builder()
         .user_agent(UPDATE_USER_AGENT)
         .timeout(RELEASE_METADATA_TIMEOUT)
         .build()
@@ -181,7 +263,7 @@ pub fn fetch_release_json_blocking(url: &str, description: &str) -> Result<Strin
 
 /// Async counterpart of [`fetch_release_json_blocking`].
 pub async fn fetch_release_json_async(url: &str, description: &str) -> Result<String> {
-    let client = reqwest::Client::builder()
+    let client = platform_http_client_builder()
         .user_agent(UPDATE_USER_AGENT)
         .timeout(RELEASE_METADATA_TIMEOUT)
         .build()
@@ -348,17 +430,407 @@ fn version_is_beta(version: &semver::Version) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+    use std::sync::{Mutex, MutexGuard};
+
     use super::*;
+
+    static RELEASE_ENV_LOCK: Mutex<()> = Mutex::new(());
+    const RELEASE_ENV_VARS: &[&str] = &[
+        RELEASE_BASE_URL_ENV,
+        LEGACY_RELEASE_BASE_URL_ENV,
+        DEEPSEEK_RELEASE_BASE_URL_ENV,
+        CNB_MIRROR_ENV,
+        UPDATE_VERSION_ENV,
+        LEGACY_UPDATE_VERSION_ENV,
+    ];
+
+    struct ReleaseEnvGuard {
+        previous: Vec<(&'static str, Option<OsString>)>,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl ReleaseEnvGuard {
+        fn clear() -> Self {
+            let lock = RELEASE_ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let previous = RELEASE_ENV_VARS
+                .iter()
+                .map(|&name| (name, std::env::var_os(name)))
+                .collect();
+            for &name in RELEASE_ENV_VARS {
+                // SAFETY: tests that mutate these process-wide vars hold RELEASE_ENV_LOCK.
+                unsafe { std::env::remove_var(name) };
+            }
+            Self {
+                previous,
+                _lock: lock,
+            }
+        }
+    }
+
+    impl Drop for ReleaseEnvGuard {
+        fn drop(&mut self) {
+            for (name, value) in &self.previous {
+                // SAFETY: the guard still holds RELEASE_ENV_LOCK while restoring state.
+                unsafe {
+                    match value {
+                        Some(value) => std::env::set_var(name, value),
+                        None => std::env::remove_var(name),
+                    }
+                }
+            }
+        }
+    }
+
+    fn set_release_env(name: &str, value: &str) {
+        // SAFETY: callers hold a ReleaseEnvGuard, which serializes env mutation.
+        unsafe { std::env::set_var(name, value) };
+    }
+
+    #[test]
+    fn release_channel_from_beta_flag_maps_booleans() {
+        assert_eq!(
+            ReleaseChannel::from_beta_flag(false),
+            ReleaseChannel::Stable
+        );
+        assert_eq!(ReleaseChannel::from_beta_flag(true), ReleaseChannel::Beta);
+    }
+
+    #[test]
+    fn release_channel_label_matches_channel_names() {
+        assert_eq!(ReleaseChannel::Stable.label(), "stable");
+        assert_eq!(ReleaseChannel::Beta.label(), "beta");
+    }
+
+    #[test]
+    fn is_beta_tag_detects_beta_prereleases_case_insensitively() {
+        for tag in [
+            "beta",
+            "BETA",
+            "BeTa",
+            "v1.0.0-beta.1",
+            "v1.0.0-BETA.1",
+            "v2.0.0-beta",
+            "something-beta-something",
+            "beta-1.0",
+        ] {
+            assert!(is_beta_tag(tag), "{tag} should be beta");
+        }
+
+        for tag in [
+            "",
+            "bet",
+            "alpha",
+            "rc",
+            "v1.0.0",
+            "v1.0.0-alpha.1",
+            "v1.0.0-rc.1",
+        ] {
+            assert!(!is_beta_tag(tag), "{tag} should not be beta");
+        }
+    }
+
+    #[test]
+    fn release_base_url_from_env_returns_none_without_overrides() {
+        let _env = ReleaseEnvGuard::clear();
+
+        assert_eq!(release_base_url_from_env("1.0.0"), None);
+    }
+
+    #[test]
+    fn release_base_url_from_env_prefers_primary_override() {
+        let _env = ReleaseEnvGuard::clear();
+        set_release_env(RELEASE_BASE_URL_ENV, "https://primary.example.com");
+        set_release_env(LEGACY_RELEASE_BASE_URL_ENV, "https://legacy.example.com");
+
+        assert_eq!(
+            release_base_url_from_env("1.0.0"),
+            Some("https://primary.example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn release_base_url_from_env_falls_back_to_legacy_overrides() {
+        let _env = ReleaseEnvGuard::clear();
+        set_release_env(LEGACY_RELEASE_BASE_URL_ENV, "https://legacy.example.com");
+        set_release_env(
+            DEEPSEEK_RELEASE_BASE_URL_ENV,
+            "https://deepseek.example.com",
+        );
+
+        assert_eq!(
+            release_base_url_from_env("1.0.0"),
+            Some("https://legacy.example.com".to_string())
+        );
+
+        set_release_env(LEGACY_RELEASE_BASE_URL_ENV, "");
+
+        assert_eq!(
+            release_base_url_from_env("1.0.0"),
+            Some("https://deepseek.example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn release_base_url_from_env_trims_and_ignores_empty_overrides() {
+        let _env = ReleaseEnvGuard::clear();
+        set_release_env(RELEASE_BASE_URL_ENV, "  https://spaced.example.com  \n");
+
+        assert_eq!(
+            release_base_url_from_env("1.0.0"),
+            Some("https://spaced.example.com".to_string())
+        );
+
+        set_release_env(RELEASE_BASE_URL_ENV, "   ");
+        set_release_env(LEGACY_RELEASE_BASE_URL_ENV, "");
+        set_release_env(DEEPSEEK_RELEASE_BASE_URL_ENV, "\n");
+
+        assert_eq!(release_base_url_from_env("1.0.0"), None);
+    }
+
+    #[test]
+    fn release_base_url_from_env_uses_cnb_mirror_last() {
+        let _env = ReleaseEnvGuard::clear();
+        set_release_env(CNB_MIRROR_ENV, "1");
+
+        assert_eq!(
+            release_base_url_from_env("v1.2.3"),
+            Some("https://cnb.cool/ghosty.net/ghosty/-/releases/download/v1.2.3".to_string())
+        );
+
+        set_release_env(RELEASE_BASE_URL_ENV, "https://explicit.example.com");
+
+        assert_eq!(
+            release_base_url_from_env("1.0.0"),
+            Some("https://explicit.example.com".to_string())
+        );
+
+        set_release_env(RELEASE_BASE_URL_ENV, "");
+        set_release_env(CNB_MIRROR_ENV, "0");
+        assert_eq!(
+            release_base_url_from_env("1.0.0"),
+            None,
+            "the Rust updater must match npm and require an exact =1 override"
+        );
+    }
+
+    #[test]
+    fn cnb_mirror_override_is_active_only_without_an_explicit_base_url() {
+        let _env = ReleaseEnvGuard::clear();
+        assert!(!cnb_mirror_override_active());
+
+        set_release_env(CNB_MIRROR_ENV, "1");
+        assert!(cnb_mirror_override_active());
+
+        set_release_env(RELEASE_BASE_URL_ENV, "https://explicit.example.com");
+        assert!(
+            !cnb_mirror_override_active(),
+            "an explicit base URL outranks the CNB flag"
+        );
+
+        set_release_env(RELEASE_BASE_URL_ENV, "");
+        for disabled in ["", "0", "true", "yes", " 1 "] {
+            set_release_env(CNB_MIRROR_ENV, disabled);
+            assert!(
+                !cnb_mirror_override_active(),
+                "only GHOSTY_USE_CNB_MIRROR=1 may force CNB, got {disabled:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn cnb_mirror_publishes_linux_x64_only() {
+        assert!(cnb_mirror_supports_target("linux", "x86_64"));
+
+        for (os, arch) in [
+            ("linux", "aarch64"),
+            ("linux", "riscv64"),
+            ("macos", "x86_64"),
+            ("macos", "aarch64"),
+            ("windows", "x86_64"),
+            ("windows", "aarch64"),
+            ("android", "aarch64"),
+        ] {
+            assert!(
+                !cnb_mirror_supports_target(os, arch),
+                "CNB must not claim {os}/{arch}"
+            );
+        }
+    }
+
+    #[test]
+    fn update_version_from_env_prefers_primary_then_legacy() {
+        {
+            let _env = ReleaseEnvGuard::clear();
+            set_release_env(UPDATE_VERSION_ENV, "  v1.2.3  ");
+
+            assert_eq!(update_version_from_env().as_deref(), Some("1.2.3"));
+        }
+
+        {
+            let _env = ReleaseEnvGuard::clear();
+            set_release_env(LEGACY_UPDATE_VERSION_ENV, "v1.2.4");
+
+            assert_eq!(update_version_from_env().as_deref(), Some("1.2.4"));
+        }
+    }
+
+    #[test]
+    fn update_version_from_env_ignores_missing_or_empty_values() {
+        let _env = ReleaseEnvGuard::clear();
+        assert_eq!(update_version_from_env(), None);
+
+        set_release_env(UPDATE_VERSION_ENV, "   ");
+        set_release_env(LEGACY_UPDATE_VERSION_ENV, "");
+
+        assert_eq!(update_version_from_env(), None);
+    }
+
+    #[test]
+    fn update_network_fallback_hint_mentions_required_mirror_inputs() {
+        let hint = update_network_fallback_hint();
+
+        assert!(hint.contains(CNB_REPO_URL), "hint missing CNB_REPO_URL");
+        assert!(
+            hint.contains(RELEASE_BASE_URL_ENV),
+            "hint missing RELEASE_BASE_URL_ENV"
+        );
+        assert!(
+            hint.contains(UPDATE_VERSION_ENV),
+            "hint missing UPDATE_VERSION_ENV"
+        );
+        assert!(
+            hint.contains(CHECKSUM_MANIFEST_ASSET),
+            "hint missing CHECKSUM_MANIFEST_ASSET"
+        );
+        assert!(
+            hint.contains("ghosty platform binary"),
+            "hint must describe the sole implementation asset"
+        );
+        assert!(
+            !hint.contains("ghosty-tui"),
+            "hint must not request the removed TUI implementation asset"
+        );
+    }
+
+    #[test]
+    fn mirror_asset_url_trims_trailing_base_slashes() {
+        for base_url in [
+            "https://example.com/assets",
+            "https://example.com/assets/",
+            "https://example.com/assets//",
+        ] {
+            assert_eq!(
+                mirror_asset_url(base_url, "file.zip"),
+                "https://example.com/assets/file.zip",
+                "{base_url} should join with a single slash"
+            );
+        }
+        assert_eq!(mirror_asset_url("", "file.zip"), "/file.zip");
+    }
+
+    #[test]
+    fn resolve_release_query_uses_github_without_overrides() {
+        let _env = ReleaseEnvGuard::clear();
+
+        assert_eq!(
+            resolve_release_query(ReleaseChannel::Stable),
+            ReleaseQuery::GitHubLatest {
+                url: LATEST_RELEASE_URL
+            }
+        );
+        assert_eq!(
+            resolve_release_query(ReleaseChannel::Beta),
+            ReleaseQuery::GitHubReleaseList { url: RELEASES_URL }
+        );
+    }
+
+    #[test]
+    fn resolve_release_query_uses_release_base_url_overrides() {
+        let default_version = env!("CARGO_PKG_VERSION").to_string();
+
+        for (env_name, expected_url) in [
+            (RELEASE_BASE_URL_ENV, "https://primary.example.com/mirror"),
+            (
+                LEGACY_RELEASE_BASE_URL_ENV,
+                "https://legacy.example.com/mirror",
+            ),
+            (
+                DEEPSEEK_RELEASE_BASE_URL_ENV,
+                "https://deepseek.example.com/mirror",
+            ),
+        ] {
+            let _env = ReleaseEnvGuard::clear();
+            set_release_env(env_name, expected_url);
+
+            assert_eq!(
+                resolve_release_query(ReleaseChannel::Stable),
+                ReleaseQuery::Mirror {
+                    base_url: expected_url.to_string(),
+                    version: default_version.clone(),
+                },
+                "{env_name} should drive mirror query"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_release_query_uses_cnb_mirror_override() {
+        let _env = ReleaseEnvGuard::clear();
+        let default_version = env!("CARGO_PKG_VERSION").to_string();
+        set_release_env(CNB_MIRROR_ENV, "1");
+
+        assert_eq!(
+            resolve_release_query(ReleaseChannel::Stable),
+            ReleaseQuery::Mirror {
+                base_url: cnb_release_base_url(&default_version),
+                version: default_version,
+            }
+        );
+    }
+
+    #[test]
+    fn resolve_release_query_uses_pinned_release_versions_for_mirrors() {
+        {
+            let _env = ReleaseEnvGuard::clear();
+            set_release_env(RELEASE_BASE_URL_ENV, "https://example.com/mirror");
+            set_release_env(UPDATE_VERSION_ENV, "v1.2.3");
+
+            assert_eq!(
+                resolve_release_query(ReleaseChannel::Stable),
+                ReleaseQuery::Mirror {
+                    base_url: "https://example.com/mirror".to_string(),
+                    version: "1.2.3".to_string(),
+                }
+            );
+        }
+
+        {
+            let _env = ReleaseEnvGuard::clear();
+            set_release_env(RELEASE_BASE_URL_ENV, "https://example.com/mirror");
+            set_release_env(LEGACY_UPDATE_VERSION_ENV, "v1.2.3-legacy");
+
+            assert_eq!(
+                resolve_release_query(ReleaseChannel::Stable),
+                ReleaseQuery::Mirror {
+                    base_url: "https://example.com/mirror".to_string(),
+                    version: "1.2.3-legacy".to_string(),
+                }
+            );
+        }
+    }
 
     #[test]
     fn cnb_release_base_url_includes_tag_directory() {
         assert_eq!(
             cnb_release_base_url("0.8.47"),
-            "https://github.com/blissito/ghostycode/releases/download/v0.8.47"
+            "https://cnb.cool/ghosty.net/ghosty/-/releases/download/v0.8.47"
         );
         assert_eq!(
             cnb_release_base_url("v0.8.47"),
-            "https://github.com/blissito/ghostycode/releases/download/v0.8.47"
+            "https://cnb.cool/ghosty.net/ghosty/-/releases/download/v0.8.47"
         );
     }
 

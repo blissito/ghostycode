@@ -5,16 +5,15 @@
 //! reassembly leaves a trailing comma or unclosed brace; (b) some local
 //! backends emit literal control characters inside JSON string values.
 //!
-//! The repair ladder runs five stages before falling back to an empty object:
+//! The repair ladder runs five stages before reporting unrecoverable input:
 //!
 //!  1. Strict parse — done if it parses.
 //!  2. Strip literal control chars inside string values.
 //!  3. Strip trailing commas before `}` or `]`.
 //!  4. Balance braces/brackets (append closers).
 //!  5. Strip excess closers if delta is negative.
-//!  6. Fallback: empty object `{}`.
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 /// Maximum raw argument length we'll attempt to repair (1 MiB).
 const MAX_ARG_LEN: usize = 1024 * 1024;
@@ -23,12 +22,13 @@ const MAX_ARG_LEN: usize = 1024 * 1024;
 pub enum ArgRepairError {
     #[error("argument exceeded {0} chars; refusing to repair")]
     TooLarge(usize),
+    #[error("argument could not be repaired into valid JSON")]
+    Unrepairable,
 }
 
 /// Repair a raw JSON argument string into a valid `serde_json::Value`.
 ///
 /// Runs the deterministic ladder; on success returns the parsed value.
-/// The final fallback is an empty object `{}` so dispatch always proceeds.
 pub fn repair(raw: &str) -> Result<Value, ArgRepairError> {
     if raw.len() > MAX_ARG_LEN {
         return Err(ArgRepairError::TooLarge(raw.len()));
@@ -57,8 +57,7 @@ pub fn repair(raw: &str) -> Result<Value, ArgRepairError> {
     if let Ok(v) = serde_json::from_str(&s) {
         return Ok(v);
     }
-    // Fallback: empty object
-    Ok(Value::Object(Map::new()))
+    Err(ArgRepairError::Unrepairable)
 }
 
 /// Strip ASCII control characters (0x00–0x1F except \t, \n, \r) that appear
@@ -224,15 +223,16 @@ mod tests {
     }
 
     #[test]
-    fn handles_empty_string() {
-        let v = repair("").unwrap();
-        assert_eq!(v, json!({}));
+    fn rejects_empty_string() {
+        assert!(matches!(repair(""), Err(ArgRepairError::Unrepairable)));
     }
 
     #[test]
-    fn handles_gibberish() {
-        let v = repair("not json at all").unwrap();
-        assert_eq!(v, json!({}));
+    fn rejects_gibberish() {
+        assert!(matches!(
+            repair("not json at all"),
+            Err(ArgRepairError::Unrepairable)
+        ));
     }
 
     #[test]

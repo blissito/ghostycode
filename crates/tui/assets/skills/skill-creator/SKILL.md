@@ -3,6 +3,7 @@ name: skill-creator
 description: Create or improve ghosty skills. Use when the user wants a new skill, wants to update an existing skill, or needs guidance on when a skill should be a skill versus MCP, hooks, tools, or a plugin scaffold.
 metadata:
   short-description: Create DeepSeek skills
+aliases-for: create-skill
 ---
 
 # Skill Creator
@@ -23,9 +24,11 @@ Discovery paths, in precedence order:
 - `<workspace>/.opencode/skills`
 - `<workspace>/.claude/skills`
 - `<workspace>/.cursor/skills`
+- `<workspace>/.ghosty/skills`
 - `~/.agents/skills`
 - `~/.claude/skills`
-- `~/.deepseek/skills`
+- `~/.ghosty/skills`
+- `~/.deepseek/skills` (legacy fallback)
 
 Use skills for model instructions, workflows, and lightweight conventions. Use
 MCP for live external APIs or durable tools. Use hooks for automatic local
@@ -42,7 +45,7 @@ my-skill/
 ```markdown
 ---
 name: my-skill
-description: Use when DeepSeek should follow this specific workflow.
+description: Use when Ghosty should follow this specific workflow.
 ---
 
 # My Skill

@@ -1,28 +1,50 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use ratatui::{buffer::Buffer, layout::Rect};
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::{Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget, Wrap},
+};
+use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::fmt;
+use unicode_width::UnicodeWidthStr;
 
-use crate::config::{ApiProvider, Config};
-use crate::localization::{Locale, MessageId, tr};
+use crate::config::{ApiProvider, ApprovalPolicyControl, Config};
+use crate::features::{FEATURES, Stage};
+use crate::localization::{
+    Locale, MessageId, configured_locale_is_partial_pack, normalize_configured_locale, tr,
+};
 use crate::palette;
 use crate::settings::Settings;
 use crate::tools::UserInputResponse;
-use crate::tools::subagent::{SubAgentAssignment, SubAgentResult, SubAgentStatus, SubAgentType};
+use crate::tools::subagent::{
+    FleetRole, SubAgentAssignment, SubAgentResult, SubAgentStatus, localized_whale_display_names,
+};
 use crate::tui::app::App;
 use crate::tui::approval::{ElevationOption, ReviewDecision};
+use crate::tui::focus_texture::FocusTextureMode;
 use crate::tui::history::{HistoryCell, SubAgentCell, summarize_tool_output};
+use crate::tui::menu_style;
 use crate::tui::widgets::agent_card::AgentLifecycle;
 
+pub mod extensions;
+pub mod fleet_detail;
+pub mod fleet_list;
+pub mod fleet_roster;
+pub mod fleet_setup;
 pub mod mode_picker;
+pub mod route_save_prompt;
+pub mod skills_manager;
 pub mod status_picker;
+pub mod workflows_manager;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
     Approval,
     Elevation,
     UserInput,
-    PlanPrompt,
     CommandPalette,
     Help,
     SubAgents,
@@ -33,12 +55,541 @@ pub enum ModalKind {
     ModelPicker,
     ProviderPicker,
     ModePicker,
+    FleetRoster,
+    FleetSetup,
+    FleetList,
+    FleetDetail,
+    HotbarSetup,
+    SetupWizard,
     FilePicker,
     StatusPicker,
     FeedbackPicker,
     ThemePicker,
     ContextMenu,
-    ShellControl,
+    ContextInspector,
+    SkillsManager,
+    /// Unified, read-only extensions inventory. Mutations delegate to the
+    /// existing Hooks / Plugins / Skills / MCP command controllers.
+    Extensions,
+    /// Native git worktree manager (list / create / switch / compare).
+    WorktreeManager,
+    /// Live workflow **run** dashboard (`/workflows`): active and retained
+    /// runs from the journal, with host-side cancel.
+    WorkflowsManager,
+}
+
+/// Clear and paint a modal popup with an opaque surface.
+///
+/// Older modals often called `Clear` only, which left reset-background blank
+/// cells that could read as translucent on terminals with a non-default app
+/// background. This helper makes the popup area explicit and keeps the small
+/// shadow from inheriting stale transcript glyphs.
+pub(crate) fn render_modal_surface(area: Rect, popup_area: Rect, buf: &mut Buffer) {
+    let shadow_x = popup_area.x.saturating_add(1);
+    let shadow_y = popup_area.y.saturating_add(1);
+    let shadow_right = area.x.saturating_add(area.width);
+    let shadow_bottom = area.y.saturating_add(area.height);
+    let shadow_width = popup_area.width.min(shadow_right.saturating_sub(shadow_x));
+    let shadow_height = popup_area
+        .height
+        .min(shadow_bottom.saturating_sub(shadow_y));
+
+    if shadow_width > 0 && shadow_height > 0 {
+        Block::default()
+            .style(Style::default().bg(palette::SURFACE_ELEVATED))
+            .render(
+                Rect {
+                    x: shadow_x,
+                    y: shadow_y,
+                    width: shadow_width,
+                    height: shadow_height,
+                },
+                buf,
+            );
+    }
+
+    Clear.render(popup_area, buf);
+    Block::default()
+        .style(Style::default().bg(palette::WHALE_BG))
+        .render(popup_area, buf);
+}
+
+/// Paint a full-screen underwater instrument surface and return its body.
+///
+/// Secondary rooms use one title hairline and one bottom action rail instead
+/// of a centered generic card. A one-cell outer margin is retained when the
+/// terminal can afford it; compact panes use every cell.
+pub(crate) fn render_underwater_surface(
+    area: Rect,
+    buf: &mut Buffer,
+    title: impl Into<String>,
+) -> Rect {
+    let margin_x = u16::from(area.width >= 44);
+    let margin_y = u16::from(area.height >= 14);
+    let surface = Rect {
+        x: area.x.saturating_add(margin_x),
+        y: area.y.saturating_add(margin_y),
+        width: area.width.saturating_sub(margin_x.saturating_mul(2)),
+        height: area.height.saturating_sub(margin_y.saturating_mul(2)),
+    };
+    Clear.render(area, buf);
+    Block::default()
+        .style(Style::default().bg(palette::WHALE_BG))
+        .render(area, buf);
+    // Ratatui clips long block titles at the border edge without signalling
+    // that anything is missing. Reserve the corner cells and semantic-ellipsis
+    // the title so compact terminals still read as intentional instruments.
+    let title_width = usize::from(surface.width.saturating_sub(4));
+    let title = crate::tui::ui_text::semantic_truncate(&title.into(), title_width);
+    let block = Block::default()
+        .title(Line::from(Span::styled(
+            format!(" {title} "),
+            Style::default()
+                .fg(palette::WHALE_ACTION)
+                .add_modifier(Modifier::BOLD),
+        )))
+        .borders(Borders::TOP | Borders::BOTTOM)
+        .border_style(Style::default().fg(palette::BORDER_COLOR))
+        .style(Style::default().bg(palette::WHALE_BG))
+        .padding(Padding::new(1, 1, 1, 1));
+    let inner = block.inner(surface);
+    block.render(surface, buf);
+    inner
+}
+
+/// Paint a scrollbar on the exact right edge of the panel it controls and
+/// return the content rect with that rail reserved. Nothing is drawn when all
+/// rows fit, so narrow surfaces do not spend a column on a fictional control.
+pub(crate) fn render_panel_scroll_rail(
+    area: Rect,
+    buf: &mut Buffer,
+    total_rows: usize,
+    offset: usize,
+    visible_rows: usize,
+    focused: bool,
+) -> Rect {
+    if area.width < 2 || area.height == 0 || total_rows <= visible_rows.max(1) {
+        return area;
+    }
+    let rail_x = area.right().saturating_sub(1);
+    let rail_height = usize::from(area.height);
+    let visible = visible_rows.max(1).min(total_rows);
+    let thumb_height = ((rail_height * visible).div_ceil(total_rows)).clamp(1, rail_height);
+    let max_offset = total_rows.saturating_sub(visible);
+    let travel = rail_height.saturating_sub(thumb_height);
+    let thumb_top = travel
+        .saturating_mul(offset.min(max_offset))
+        .checked_div(max_offset)
+        .unwrap_or(0);
+    let thumb_color = if focused {
+        palette::TEXT_MUTED
+    } else {
+        palette::TEXT_DIM
+    };
+    for local_y in 0..area.height {
+        let y = area.y.saturating_add(local_y);
+        let local = usize::from(local_y);
+        let is_thumb = local >= thumb_top && local < thumb_top + thumb_height;
+        buf[(rail_x, y)]
+            .set_symbol(if is_thumb { "█" } else { "│" })
+            .set_style(Style::default().fg(if is_thumb {
+                thumb_color
+            } else {
+                palette::BORDER_COLOR
+            }));
+    }
+    Rect {
+        width: area.width.saturating_sub(1),
+        ..area
+    }
+}
+
+fn render_modal_backdrop(area: Rect, buf: &mut Buffer) {
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            buf[(x, y)]
+                .set_symbol(" ")
+                .set_style(Style::default().bg(palette::WHALE_BG));
+        }
+    }
+}
+
+/// Compute a centered, responsive popup rect for a modal.
+///
+/// The size starts from `preferred_*`, but is clamped so it never exceeds the
+/// frame (leaving a small breathing-room margin when there is space) and never
+/// drops below `min_*` unless the frame itself is smaller. Centering the result
+/// inside `area` replaces the repeated, error-prone
+/// `N.min(area.width.saturating_sub(..))` arithmetic scattered across modals so
+/// every overlay sizes itself the same way at 80x24, 100x30, 120x32, 160x40,
+/// and beyond. See #3732.
+pub(crate) fn centered_modal_area(
+    area: Rect,
+    preferred_width: u16,
+    preferred_height: u16,
+    min_width: u16,
+    min_height: u16,
+) -> Rect {
+    // Keep a 2-cell margin on each axis when the frame can spare it so the
+    // backdrop stays visible around the card; otherwise fill the frame.
+    let avail_width = area.width.saturating_sub(2).max(1);
+    let avail_height = area.height.saturating_sub(2).max(1);
+    let width = preferred_width.clamp(min_width.min(avail_width), avail_width);
+    let height = preferred_height.clamp(min_height.min(avail_height), avail_height);
+    Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    }
+}
+
+/// A single key/label hint shown in a modal's action footer.
+///
+/// Footers built from `ActionHint`s are laid out by [`action_footer_lines`],
+/// which wraps to additional rows instead of letting an action run off the
+/// right edge of the modal — the core overflow bug behind #3732. Use this for
+/// action/navigation hints; truncate only identifiers/paths/hashes elsewhere.
+pub(crate) struct ActionHint {
+    key: Cow<'static, str>,
+    label: Cow<'static, str>,
+}
+
+impl ActionHint {
+    pub(crate) fn new(
+        key: impl Into<Cow<'static, str>>,
+        label: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        Self {
+            key: key.into(),
+            label: label.into(),
+        }
+    }
+
+    /// Display columns this hint occupies: ` key ` (key padded by a space on
+    /// each side) followed by the label.
+    fn width(&self) -> usize {
+        UnicodeWidthStr::width(self.key.as_ref()) + 2 + UnicodeWidthStr::width(self.label.as_ref())
+    }
+
+    fn spans(&self) -> [Span<'static>; 2] {
+        [
+            Span::styled(
+                format!(" {} ", self.key),
+                Style::default()
+                    .fg(palette::WHALE_INFO)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                self.label.clone().into_owned(),
+                Style::default().fg(palette::TEXT_MUTED),
+            ),
+        ]
+    }
+}
+
+/// Lay out action hints into one or more lines that each fit within `width`.
+///
+/// Hints are packed greedily; when the next hint would overflow the current row
+/// the layout starts a new row rather than truncating. No action is ever
+/// dropped or clipped (a single hint wider than `width` is emitted alone, which
+/// only happens at degenerate widths below the modal minimums). This is the
+/// shared replacement for the single-line `title_bottom` footers that silently
+/// pushed actions off-screen.
+pub(crate) fn action_footer_lines(hints: &[ActionHint], width: u16) -> Vec<Line<'static>> {
+    let width = usize::from(width);
+    if hints.is_empty() || width == 0 {
+        return Vec::new();
+    }
+    const GAP: usize = 1;
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut current: Vec<Span<'static>> = Vec::new();
+    let mut current_width = 0usize;
+    for hint in hints {
+        let hint_width = hint.width();
+        let needed = if current.is_empty() {
+            hint_width
+        } else {
+            current_width + GAP + hint_width
+        };
+        if !current.is_empty() && needed > width {
+            lines.push(Line::from(std::mem::take(&mut current)));
+            current_width = 0;
+        }
+        if !current.is_empty() {
+            current.push(Span::raw(" ".repeat(GAP)));
+            current_width += GAP;
+        }
+        current.extend(hint.spans());
+        current_width += hint_width;
+    }
+    if !current.is_empty() {
+        lines.push(Line::from(current));
+    }
+    lines
+}
+
+/// Reserve `lines` worth of rows at the bottom of `inner`, paint them, and
+/// return the content area that remains above. Shared by the action-hint and
+/// free-text modal footers.
+fn place_footer_lines(
+    inner: Rect,
+    buf: &mut Buffer,
+    lines: Vec<Line<'static>>,
+    quiet_gutter: bool,
+) -> Rect {
+    if lines.is_empty() || inner.height == 0 {
+        return inner;
+    }
+    let footer_height = u16::try_from(lines.len())
+        .unwrap_or(u16::MAX)
+        .min(inner.height);
+    // Opted-in overlays keep one quiet row between scrollable body copy and
+    // the action rail. Degenerate heights keep every row for content.
+    let gutter_height = u16::from(quiet_gutter && inner.height >= footer_height.saturating_add(4));
+    let footer_area = Rect {
+        x: inner.x,
+        y: inner.y + inner.height - footer_height,
+        width: inner.width,
+        height: footer_height,
+    };
+    Paragraph::new(lines).render(footer_area, buf);
+    Rect {
+        x: inner.x,
+        y: inner.y,
+        width: inner.width,
+        height: inner
+            .height
+            .saturating_sub(footer_height.saturating_add(gutter_height)),
+    }
+}
+
+/// Render a wrapping action footer anchored to the bottom of `inner` and
+/// return the content area that remains above it.
+///
+/// Modals call this after painting their block so the footer reserves exactly
+/// as many rows as it needs (bounded by the available height) and the body
+/// fills the rest. Centralizing it keeps every modal's action row visible and
+/// reachable at narrow widths.
+pub(crate) fn render_modal_footer(inner: Rect, buf: &mut Buffer, hints: &[ActionHint]) -> Rect {
+    let lines = action_footer_lines(hints, inner.width);
+    place_footer_lines(inner, buf, lines, false)
+}
+
+/// Render a modal action footer with one quiet body-to-footer row when the
+/// caller's responsive layout has explicitly budgeted for it.
+pub(crate) fn render_modal_footer_with_gutter(
+    inner: Rect,
+    buf: &mut Buffer,
+    hints: &[ActionHint],
+) -> Rect {
+    let lines = action_footer_lines(hints, inner.width);
+    place_footer_lines(inner, buf, lines, true)
+}
+
+/// Word-wrap a free-form footer string into styled lines that each fit `width`.
+///
+/// For footers that are pre-composed prose/sentences (e.g. localized config
+/// hints) rather than discrete key/label hints. Wrapping on whitespace keeps
+/// every word visible instead of clipping the tail at the modal edge.
+pub(crate) fn wrapped_footer_lines(text: &str, width: u16, style: Style) -> Vec<Line<'static>> {
+    let width = usize::from(width);
+    if text.trim().is_empty() || width == 0 {
+        return Vec::new();
+    }
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut current = String::new();
+    let mut current_width = 0usize;
+    for word in text.split_whitespace() {
+        let word_width = UnicodeWidthStr::width(word);
+        let needed = if current.is_empty() {
+            word_width
+        } else {
+            current_width + 1 + word_width
+        };
+        if !current.is_empty() && needed > width {
+            lines.push(Line::from(Span::styled(
+                std::mem::take(&mut current),
+                style,
+            )));
+            current_width = 0;
+        }
+        if !current.is_empty() {
+            current.push(' ');
+            current_width += 1;
+        }
+        current.push_str(word);
+        current_width += word_width;
+    }
+    if !current.is_empty() {
+        lines.push(Line::from(Span::styled(current, style)));
+    }
+    lines
+}
+
+/// Render a wrapping free-text footer anchored to the bottom of `inner` and
+/// return the content area above it. The prose counterpart to
+/// [`render_modal_footer`].
+pub(crate) fn render_modal_text_footer(
+    inner: Rect,
+    buf: &mut Buffer,
+    text: &str,
+    style: Style,
+) -> Rect {
+    let lines = wrapped_footer_lines(text, inner.width, style);
+    // Free-text status footers are already separated semantically from their
+    // table body and can carry the last visible receipt themselves. Do not
+    // spend another row here; action-rail layouts can opt into that gutter.
+    place_footer_lines(inner, buf, lines, false)
+}
+
+/// Shared list/detail geometry for modal managers and pickers.
+///
+/// Wide modals get a stable left list and a right detail pane. Narrow modals
+/// stack the list over the detail so neither side becomes unreadably thin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ListDetailLayout {
+    pub(crate) list: Rect,
+    pub(crate) detail: Rect,
+    pub(crate) stacked: bool,
+}
+
+impl ListDetailLayout {
+    #[must_use]
+    pub(crate) fn split(area: Rect, min_detail_width: u16) -> Self {
+        if area.width == 0 || area.height == 0 {
+            return Self {
+                list: area,
+                detail: area,
+                stacked: true,
+            };
+        }
+
+        let gap = 1;
+        let min_list_width = 30.min(area.width);
+        let can_split = area.width >= 96
+            && area
+                .width
+                .saturating_sub(gap)
+                .saturating_sub(min_list_width)
+                >= min_detail_width;
+        if can_split {
+            let max_list_width = area.width.saturating_sub(gap + min_detail_width);
+            let preferred = area.width.saturating_mul(42) / 100;
+            let list_width = preferred.clamp(min_list_width, max_list_width.min(52));
+            let detail_width = area.width.saturating_sub(list_width + gap);
+            return Self {
+                list: Rect {
+                    x: area.x,
+                    y: area.y,
+                    width: list_width,
+                    height: area.height,
+                },
+                detail: Rect {
+                    x: area.x + list_width + gap,
+                    y: area.y,
+                    width: detail_width,
+                    height: area.height,
+                },
+                stacked: false,
+            };
+        }
+
+        let gap = if area.height >= 8 { 1 } else { 0 };
+        let min_detail_height = 4.min(area.height);
+        let max_list_height = area.height.saturating_sub(gap + min_detail_height);
+        let preferred = area.height.saturating_mul(3) / 5;
+        let list_height = preferred.clamp(1, max_list_height.max(1));
+        let detail_height = area.height.saturating_sub(list_height + gap);
+        Self {
+            list: Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: list_height,
+            },
+            detail: Rect {
+                x: area.x,
+                y: area.y + list_height + gap,
+                width: area.width,
+                height: detail_height,
+            },
+            stacked: true,
+        }
+    }
+}
+
+/// Plain empty-state copy for modal list/detail bodies.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EmptyState {
+    title: Cow<'static, str>,
+    body: Cow<'static, str>,
+    primary_action: Option<(Cow<'static, str>, Cow<'static, str>)>,
+    secondary_action: Option<(Cow<'static, str>, Cow<'static, str>)>,
+}
+
+impl EmptyState {
+    pub(crate) fn new(
+        title: impl Into<Cow<'static, str>>,
+        body: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        Self {
+            title: title.into(),
+            body: body.into(),
+            primary_action: None,
+            secondary_action: None,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn primary_action(
+        mut self,
+        key: impl Into<Cow<'static, str>>,
+        label: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        self.primary_action = Some((key.into(), label.into()));
+        self
+    }
+
+    #[must_use]
+    pub(crate) fn secondary_action(
+        mut self,
+        key: impl Into<Cow<'static, str>>,
+        label: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        self.secondary_action = Some((key.into(), label.into()));
+        self
+    }
+
+    pub(crate) fn render(&self, area: Rect, buf: &mut Buffer) {
+        let mut lines = vec![
+            Line::from(Span::styled(
+                self.title.clone().into_owned(),
+                Style::default()
+                    .fg(palette::TEXT_PRIMARY)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                self.body.clone().into_owned(),
+                Style::default().fg(palette::TEXT_MUTED),
+            )),
+        ];
+        if self.primary_action.is_some() || self.secondary_action.is_some() {
+            lines.push(Line::from(""));
+        }
+        for (key, label) in [self.primary_action.as_ref(), self.secondary_action.as_ref()]
+            .into_iter()
+            .flatten()
+        {
+            let hint = ActionHint::new(key.clone(), label.clone());
+            lines.push(Line::from(hint.spans().to_vec()));
+        }
+        Paragraph::new(lines)
+            .style(Style::default().fg(palette::TEXT_PRIMARY))
+            .wrap(Wrap { trim: true })
+            .render(area, buf);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +628,18 @@ pub enum ContextMenuAction {
     },
     /// Show all currently hidden cells.
     ShowAllHidden,
+    /// Execute a slash command associated with a contextual UI row.
+    ExecuteCommand {
+        command: String,
+    },
+    /// Copy a pre-resolved text payload (e.g. a sidebar row's full text)
+    /// to the clipboard.
+    CopyText {
+        text: String,
+    },
+    /// Pin/unpin the host terminal window (normal window ↔ always-on-top
+    /// mini window). Windows only; no-op elsewhere.
+    ToggleWindowPin,
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +660,8 @@ pub enum ViewEvent {
         approval_key: String,
         /// Lossy / arity-aware fingerprint, used to scope *approvals*.
         approval_grouping_key: String,
+        /// Permission rules to append when the decision approves.
+        persistent_rules: Vec<ghosty_config::ToolAskRule>,
     },
     ElevationDecision {
         tool_id: String,
@@ -115,11 +680,22 @@ pub enum ViewEvent {
         value: String,
         persist: bool,
     },
-    PlanPromptSelected {
-        option: usize,
-    },
-    PlanPromptDismissed,
     SubAgentsRefresh,
+    SidebarAgentCancel {
+        agent_id: String,
+    },
+    /// An agent row activation (Work strip, sidebar dossier, `/agents`) or
+    /// Alt+V from Agent Details, Enter/click on any agent row, and Enter in the
+    /// `/agents` register all request the agent's transcript — since v0.9.7's
+    /// "one agent, one destination" inversion that is the in-place focus.
+    OpenAgentTranscript {
+        agent_id: String,
+    },
+    /// Agent Details was popped with Esc/q/Left. The Work surface uses this
+    /// to release only its detail-open owner while retaining selection.
+    AgentDetailsClosed {
+        agent_id: String,
+    },
     /// Emitted by the file picker (`Ctrl+P`) when the user presses Enter on a
     /// candidate. The handler should insert `@<path>` at the composer's cursor
     /// position.
@@ -129,39 +705,152 @@ pub enum ViewEvent {
     SessionSelected {
         session_id: String,
     },
+    SessionRenamed {
+        metadata: Box<crate::session_manager::SessionMetadata>,
+    },
+    /// A session's archive flag was flipped (#2934 / #4397).
+    ///
+    /// Distinct from `SessionRenamed` so the receipt can say what actually
+    /// happened; reusing rename would report "Renamed session …" for an
+    /// archive, which is exactly the kind of small lie that erodes trust in
+    /// every other receipt.
+    SessionArchived {
+        metadata: crate::session_manager::SessionMetadata,
+    },
     SessionDeleted {
         session_id: String,
         title: String,
     },
-    /// Emitted by the `/model` picker on Enter — carries both the chosen
-    /// model id and reasoning effort tier so the UI handler can update App
-    /// state, persist via `Settings`, and forward `Op::SetModel` to the
-    /// running engine. `previous_*` fields let the handler skip work when
-    /// nothing changed and craft a clear status message.
+    /// Emitted by the `/model` picker on Enter or Shift+D. Carries both the
+    /// chosen model id and reasoning effort tier so the UI handler can update
+    /// App state and forward `Op::SetModel` to the running engine.
+    /// `save_as_startup_default` is true only for the explicit Shift+D action;
+    /// ordinary Enter remains a session-local route change. `previous_*`
+    /// fields let the handler skip work when nothing changed and craft a clear
+    /// status message.
     ModelPickerApplied {
         model: String,
         provider: Option<crate::config::ApiProvider>,
+        /// Exact named custom route key when the selected provider enum is
+        /// `Custom`; built-in routes leave this unset.
+        provider_id: Option<String>,
         effort: crate::tui::app::ReasoningEffort,
         previous_model: String,
         previous_effort: crate::tui::app::ReasoningEffort,
+        save_as_startup_default: bool,
+    },
+    /// Emitted by the `/model` picker on Esc so the next open can restore
+    /// the browsing context — view mode and highlighted row (#4109 / #4115).
+    ModelPickerDismissed {
+        /// True when the dismissed view browses beyond configured providers
+        /// (Catalog / Recent / Coding / Cheap / Long context).
+        catalog_view: bool,
+        /// Named view key (`configured`, `catalog`, `recent`, `coding`,
+        /// `cheap`, `long_context`) for reopen restore (#4115).
+        view: String,
+        selected_row_id: Option<String>,
+    },
+    /// Enter on a locked (unauthenticated) model: explain why selection is
+    /// blocked and open the provider auth/setup path when possible.
+    /// Re-resolve readiness + rebuild catalog rows for the open model picker.
+    ModelPickerRefresh,
+    ModelPickerTogglePin {
+        provider: crate::config::ApiProvider,
+        /// Exact named route for `Custom`; built-in providers leave this unset.
+        provider_id: Option<String>,
+        model: String,
+    },
+    ModelPickerMovePin {
+        provider: crate::config::ApiProvider,
+        /// Exact named route for `Custom`; built-in providers leave this unset.
+        provider_id: Option<String>,
+        model: String,
+        delta: isize,
+    },
+    ModelPickerNeedsAuth {
+        provider: crate::config::ApiProvider,
+        model: String,
+        reason: String,
+    },
+    /// Transient status toast from a modal (e.g. locked-model explanation).
+    StatusMessage {
+        message: String,
+    },
+    /// Emitted by the `/provider` picker on Esc so the next open can restore
+    /// the browsing context — view mode and highlighted row.
+    ProviderPickerDismissed {
+        catalog_view: bool,
+        selected_provider_id: Option<String>,
     },
     /// Emitted by the `/provider` picker when the user selects a provider
     /// that already has credentials — the handler should perform the same
     /// switch as `AppAction::SwitchProvider`.
     ProviderPickerApplied {
         provider: crate::config::ApiProvider,
+        provider_id: Option<String>,
     },
     /// Emitted by the `/provider` picker after the user types an API key
-    /// inline for a provider that lacked one. The handler should persist
-    /// the key via `save_api_key_for` and then perform the provider switch.
+    /// inline for a provider that lacked one. The handler validates the key
+    /// live; on success it reopens the guided flow at the model-pick stage
+    /// without persisting yet (#3875).
     ProviderPickerApiKeySubmitted {
         provider: crate::config::ApiProvider,
+        provider_id: Option<String>,
         api_key: String,
+        /// Endpoint chosen in the wizard's billing-route stage, applied to the
+        /// verification config only — nothing is written until confirm (#4526).
+        base_url: Option<String>,
     },
-    /// Emitted by the `/provider` picker when Kimi CLI OAuth credentials can
-    /// be reused for Moonshot/Kimi dispatch.
-    ProviderPickerKimiOAuthEnabled {
+    /// Emitted by the `/provider` guided setup confirm stage after the user
+    /// accepted provider + model. The handler persists the key (and model)
+    /// via the comment-preserving config path, then performs the switch.
+    ProviderPickerSetupConfirmed {
         provider: crate::config::ApiProvider,
+        provider_id: Option<String>,
+        api_key: String,
+        model: String,
+        context_window: Option<u32>,
+        /// Endpoint the key was verified against, persisted to the provider's
+        /// own `base_url` before the key is saved (#4526).
+        base_url: Option<String>,
+    },
+    /// Emitted by the `/provider` picker after the custom provider form is
+    /// completed. The handler persists a named OpenAI-compatible provider
+    /// table and switches to it without storing raw secrets.
+    ProviderPickerCustomProviderSubmitted {
+        provider_id: String,
+        base_url: String,
+        model: Option<String>,
+        api_key_env: Option<String>,
+    },
+    /// Emitted by provider/setup UI when xAI device-code OAuth is requested.
+    ProviderPickerXaiOAuthRequested,
+    /// Emitted only after the picker showed owner, exact path, and the full
+    /// read-only side-effect contract and the user explicitly confirmed it.
+    ProviderPickerExternalConsentConfirmed {
+        provider: crate::config::ApiProvider,
+        consent_provider: ghosty_config::ProviderKind,
+        source: ghosty_config::ExternalCredentialSource,
+        path: std::path::PathBuf,
+    },
+    /// One-step revocation from a provider row that currently has consent.
+    ProviderPickerExternalConsentRevoked {
+        provider: crate::config::ApiProvider,
+    },
+    /// Emitted by the `/provider` picker (the `M` action) to jump straight to
+    /// the `/model` picker pre-filtered to the highlighted provider (#3083).
+    ProviderPickerOpenModels {
+        provider: crate::config::ApiProvider,
+        provider_id: Option<String>,
+    },
+    /// Emitted by `/provider` `T`: probe `/models` and refresh readiness
+    /// without treating a 2xx as model-ready (#5350).
+    ProviderPickerTestConnection {
+        provider: crate::config::ApiProvider,
+        provider_id: Option<String>,
+        /// Restore Catalog vs Configured after the probe. Must not force
+        /// the all-providers catalog if the user was on configured-only.
+        catalog_view: bool,
     },
     /// Emitted by the `/mode` picker when the user chooses a mode.
     ModeSelected {
@@ -175,6 +864,143 @@ pub enum ViewEvent {
         items: Vec<crate::config::StatusItem>,
         final_save: bool,
     },
+    /// Emitted by the `/hotbar` setup wizard when the user saves the draft
+    /// bindings. The host updates live config state; disk persistence is
+    /// handled by the follow-up persistence slice.
+    HotbarSetupSaved {
+        bindings: Vec<ghosty_config::HotbarBindingToml>,
+    },
+    /// Emitted by the constitution-first setup shell when a staged setup-state
+    /// record should be committed atomically to `$GHOSTY_HOME/setup_state.json`.
+    SetupStateCommitRequested {
+        state: ghosty_config::SetupState,
+        message: String,
+    },
+    /// Emitted by the constitution-first setup shell when accepting a guided
+    /// structured user-global constitution. The host commits the constitution
+    /// and matching setup-state record together.
+    SetupConstitutionCommitRequested {
+        constitution: ghosty_config::UserConstitution,
+        state: ghosty_config::SetupState,
+        message: String,
+    },
+    /// Emitted by the setup Constitution card (`A`, provider route ready) to
+    /// ask the user's first configured model to draft the constitution from
+    /// the guided answers plus an optional bounded own-words note. The host
+    /// performs the one-shot call, pushes the sanitized/bounded draft back into the wizard, and opens the
+    /// ratification preview; on any failure it reports why and leaves the
+    /// deterministic guided draft standing. Nothing is persisted by this
+    /// event — saving still goes through the ratify keypress and
+    /// [`SetupConstitutionCommitRequested`](Self::SetupConstitutionCommitRequested).
+    SetupConstitutionModelDraftRequested {
+        draft: crate::tui::setup::GuidedConstitutionDraft,
+        freeform_note: Option<String>,
+        locale: crate::localization::Locale,
+    },
+    /// Emitted by the fleet setup Review step (`m`) to ask the configured
+    /// model to draft the agent profile the wizard describes. The host
+    /// performs the one-shot call, pushes the sanitized/bounded draft back
+    /// into the wizard, and opens the rendered-TOML preview; on failure it
+    /// reports why and the manual authoring flow stands. Nothing is
+    /// persisted by this event.
+    FleetProfileModelDraftRequested {
+        role: String,
+        /// Target model for the worker: a concrete model id, or "inherit".
+        model: String,
+        /// Canonical provider id for a concrete cross-provider route pick, or
+        /// `None` for `inherit` (#4093). Carried so the model-drafted profile
+        /// keeps the picked provider instead of collapsing to an ambiguous,
+        /// provider-scoped profile — the exact bug #4093 fixes.
+        provider: Option<String>,
+        /// Canonical reasoning tier selected by the wizard, or `None` for
+        /// inherit (#4137). Carried with the async draft for the same reason
+        /// as `provider`: the ratified profile must preserve the operator's
+        /// explicit choice, not whatever the model echoed.
+        reasoning_effort: Option<String>,
+        locale: crate::localization::Locale,
+    },
+    /// Emitted by the `/fleet` roster view (`s` / Enter) to edit a member.
+    /// The host routes a selected v2 Fleet to its exact editor and uses the
+    /// legacy profile wizard only when no named Fleet is selected.
+    FleetRosterOpenSetupRequested {
+        /// Exact Fleet member id; roles are not unique and therefore cannot
+        /// identify which row the operator selected.
+        member_id: String,
+    },
+    /// Emitted by the `/fleet` roster `m` shortcut to open the selected
+    /// member's exact Fleet editor directly on its model picker.
+    FleetRosterOpenModelRequested {
+        /// Exact Fleet member id; roles are not unique and therefore cannot
+        /// identify which row the operator selected.
+        member_id: String,
+    },
+    /// Open the live workers tab from the unified Fleet surface.
+    FleetRosterOpenWorkersRequested,
+
+    /// The roster asks the host to open the secondary named-Fleet switcher
+    /// (`/fleet fleets`). Editing stays on setup; this is pick/select only.
+    FleetRosterOpenFleetsRequested,
+
+    /// The Fleet list view asks the host to open a saved Fleet's detail view.
+    FleetListOpenDetailRequested {
+        name: String,
+        scope: crate::fleet::store::FleetScope,
+    },
+    /// A Fleet store mutation happened (select/save/delete/rename/copy).
+    /// The message is the exact receipt; the host refreshes roster state.
+    FleetStoreChanged {
+        message: String,
+    },
+    /// Emitted by the fleet setup Review step after the user previewed a
+    /// model-drafted profile and pressed the explicit ratify key. The host
+    /// renders TOML deterministically from the validated draft and persists it
+    /// atomically in the explicitly selected project or personal scope.
+    FleetProfileDraftCommitRequested {
+        draft: Box<crate::fleet::profile::FleetProfileDraft>,
+        scope: crate::fleet::profile::FleetProfileScope,
+    },
+    /// Emitted by the Fleet setup Model step when the user selects a route that
+    /// has structurally valid external-consent credentials but is not the
+    /// active session provider. The host performs a route-scoped validation
+    /// (minting the read capability only for this exact provider/source/path)
+    /// and records the result in the session health snapshot so the same row
+    /// becomes selectable on the next render. The parent session provider and
+    /// model are never changed.
+    FleetSetupExternalConsentActivationRequested {
+        provider_id: String,
+        model: String,
+    },
+    /// Emitted by the setup Runtime Posture card after the user has previewed
+    /// and confirmed an explicit preset/config diff.
+    SetupRuntimePresetApplyRequested {
+        preset: crate::tui::setup::SetupRuntimePreset,
+        state: ghosty_config::SetupState,
+        message: String,
+    },
+    /// Emitted by the setup Provider/Model readiness card to hand off to the
+    /// existing provider manager instead of duplicating provider auth UI.
+    SetupOpenProviderRequested,
+    /// Emitted by the setup Provider/Model readiness card to hand off to the
+    /// existing provider-qualified model route picker.
+    SetupOpenModelRequested,
+    /// Emitted by the setup Operate/Fleet readiness card to hand off to the
+    /// existing Fleet setup wizard without writing Fleet config itself.
+    SetupOpenFleetRequested,
+    /// Emitted by the setup Hotbar card to hand off to the existing Hotbar
+    /// setup wizard without rewriting bindings itself.
+    SetupOpenHotbarRequested,
+    /// Emitted by the setup Runtime Posture card to hand off to the existing
+    /// work-mode picker.
+    SetupOpenModeRequested,
+    /// Emitted by the setup Runtime Posture card to hand off to the existing
+    /// config view for approval/sandbox/network details.
+    SetupOpenConfigRequested,
+    /// Emitted by the progressive setup guide to start the same account-owned
+    /// web remote-control flow as `/rc`. Setup never duplicates enrollment.
+    SetupOpenRemoteControlRequested,
+    /// Emitted by the `/hotbar` setup wizard when the user chooses "Disable
+    /// Hotbar". The host persists `hotbar = []` and hides the panel.
+    HotbarDisableRequested,
     /// Emitted by the live-transcript overlay while in backtrack preview
     /// mode (#133) when the user steps the highlighted user message with
     /// Left or Right. The handler advances `app.backtrack`, refreshes the
@@ -195,8 +1021,6 @@ pub enum ViewEvent {
     ContextMenuSelected {
         action: ContextMenuAction,
     },
-    ShellControlBackground,
-    ShellControlCancel,
     /// Emitted by the pager (`c` / `y`) to copy its body to the system
     /// clipboard. The host handler writes via `app.clipboard` and surfaces a
     /// status message — modal views cannot reach `app` directly. `label` is
@@ -205,6 +1029,14 @@ pub enum ViewEvent {
         text: String,
         label: String,
     },
+    /// Emitted by the skills manager when the user confirms an install /
+    /// import / update / remove / trust action. The host runs the mutation
+    /// controller and rebuilds the open manager view.
+    SkillMutationRequested {
+        request: crate::skills::mutation::SkillMutationRequest,
+    },
+    /// Toggle owned-only vs compatible audit scan inside the skills manager.
+    SkillsManagerToggleCompatible,
 }
 
 #[derive(Debug, Clone)]
@@ -226,10 +1058,22 @@ pub trait ModalView: std::any::Any {
     fn handle_paste(&mut self, _text: &str) -> bool {
         false
     }
+
     fn handle_mouse(&mut self, _mouse: MouseEvent) -> ViewAction {
         ViewAction::None
     }
     fn render(&self, area: Rect, buf: &mut Buffer);
+    /// The region this modal actually paints within the full frame `area`.
+    ///
+    /// Defaults to the whole frame, which is the legacy full-screen overlay
+    /// behaviour every picker/menu still relies on. Inline modals (the
+    /// approval prompt) override this to return a bottom-anchored band so the
+    /// backdrop only dims their strip and the transcript above stays visible.
+    /// The returned rect MUST match the region the modal renders into, or the
+    /// dim and the painted content will disagree.
+    fn occupied_region(&self, area: Rect) -> Rect {
+        area
+    }
     fn update_subagents(&mut self, _agents: &[SubAgentResult]) -> bool {
         false
     }
@@ -241,16 +1085,41 @@ pub trait ModalView: std::any::Any {
     /// access from outside the trait so it can refresh its snapshot of the
     /// app's transcript state right before render).
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+
+    /// The approval tool id this view decides, when this view is an approval
+    /// card. Enables identity-aware dismissal: a remote decision must close
+    /// its own card, not whichever approval happens to be on top.
+    fn approval_request_id(&self) -> Option<&str> {
+        None
+    }
 }
 
 #[derive(Default)]
 pub struct ViewStack {
     views: Vec<Box<dyn ModalView>>,
+    /// Focus-context texture prototype mode (#4823). `Off` by default, which
+    /// keeps the render output byte-identical to the pre-prototype path.
+    focus_texture: FocusTextureMode,
+    /// Theme snapshot for the texture pass, set alongside the mode each
+    /// frame. `None` (e.g. tests that never opt in) disables the texture.
+    focus_texture_theme: Option<crate::palette::UiTheme>,
 }
 
 impl ViewStack {
     pub fn new() -> Self {
-        Self { views: Vec::new() }
+        Self {
+            views: Vec::new(),
+            focus_texture: FocusTextureMode::Off,
+            focus_texture_theme: None,
+        }
+    }
+
+    /// Set the focus-context texture mode and theme for subsequent renders
+    /// (#4823 prototype). Called once per frame from the UI render path with
+    /// the parsed setting; a plain enum/theme copy, no allocation.
+    pub fn set_focus_texture(&mut self, mode: FocusTextureMode, theme: crate::palette::UiTheme) {
+        self.focus_texture = mode;
+        self.focus_texture_theme = Some(theme);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -259,6 +1128,34 @@ impl ViewStack {
 
     pub fn top_kind(&self) -> Option<ModalKind> {
         self.views.last().map(|view| view.kind())
+    }
+
+    /// Whether the top view is the approval card deciding exactly `gate`.
+    /// Identity-aware: a web-mirror dismissal closes its own card, never an
+    /// unrelated approval that happens to be on top.
+    pub fn top_matches_approval_gate(&self, gate: &str) -> bool {
+        self.views.last().is_some_and(|view| {
+            crate::remote_control::view_is_approval_for_gate(view.as_ref(), gate)
+        })
+    }
+
+    pub fn contains_kind(&self, kind: ModalKind) -> bool {
+        self.views.iter().any(|view| view.kind() == kind)
+    }
+
+    /// Close the named view and any child modal opened above it. This keeps a
+    /// shell-global toggle from stacking a duplicate parent behind its picker.
+    pub fn pop_through_kind(&mut self, kind: ModalKind) -> bool {
+        while let Some(view) = self.pop() {
+            if view.kind() == kind {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn top_occupied_region(&self, area: Rect) -> Option<Rect> {
+        self.views.last().map(|view| view.occupied_region(area))
     }
 
     pub fn push<V: ModalView + 'static>(&mut self, view: V) {
@@ -285,7 +1182,34 @@ impl ViewStack {
     }
 
     pub fn render(&self, area: Rect, buf: &mut Buffer) {
+        // Focus-context texture prototype (#4823): runs over the already
+        // rendered background BEFORE any backdrop or view paint, so the
+        // focused modal is painted afterwards at full strength and the
+        // texture can never overwrite it. `Off` (the default) leaves the
+        // buffer untouched, keeping output byte-identical to the
+        // pre-prototype path.
+        if self.focus_texture != FocusTextureMode::Off
+            && let (Some(focus), Some(theme)) =
+                (self.top_occupied_region(area), self.focus_texture_theme)
+        {
+            crate::tui::focus_texture::apply_focus_texture(
+                area,
+                buf,
+                focus,
+                &theme,
+                self.focus_texture,
+                crate::tui::color_compat::ascii_safe_enabled(),
+            );
+        }
+        // Dim each view's own occupied region rather than the whole frame, so
+        // an inline modal (the approval prompt) leaves the transcript above it
+        // visible instead of blacking out the screen. Full-screen modals keep
+        // the default `occupied_region` of the entire frame, so their backdrop
+        // is unchanged.
         for view in &self.views {
+            let region = view.occupied_region(area);
+            crate::tui::osc8::overlay_frame_links(region, Vec::new());
+            render_modal_backdrop(region, buf);
             view.render(area, buf);
         }
     }
@@ -364,153 +1288,20 @@ impl fmt::Debug for ViewStack {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ShellControlChoice {
-    Background,
-    Cancel,
-}
-
-impl ShellControlChoice {
-    fn event(self) -> ViewEvent {
-        match self {
-            ShellControlChoice::Background => ViewEvent::ShellControlBackground,
-            ShellControlChoice::Cancel => ViewEvent::ShellControlCancel,
-        }
-    }
-}
-
-pub struct ShellControlView {
-    selected: ShellControlChoice,
-}
-
-impl ShellControlView {
-    pub fn new() -> Self {
-        Self {
-            selected: ShellControlChoice::Background,
-        }
-    }
-
-    fn toggle(&mut self) {
-        self.selected = match self.selected {
-            ShellControlChoice::Background => ShellControlChoice::Cancel,
-            ShellControlChoice::Cancel => ShellControlChoice::Background,
-        };
-    }
-}
-
-impl ModalView for ShellControlView {
-    fn kind(&self) -> ModalKind {
-        ModalKind::ShellControl
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-
-    fn handle_key(&mut self, key: KeyEvent) -> ViewAction {
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => ViewAction::Close,
-            KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
-                self.toggle();
-                ViewAction::None
-            }
-            KeyCode::Char('b') | KeyCode::Char('B') => {
-                ViewAction::EmitAndClose(ViewEvent::ShellControlBackground)
-            }
-            KeyCode::Char('c') | KeyCode::Char('C') => {
-                ViewAction::EmitAndClose(ViewEvent::ShellControlCancel)
-            }
-            KeyCode::Enter => ViewAction::EmitAndClose(self.selected.event()),
-            _ => ViewAction::None,
-        }
-    }
-
-    fn render(&self, area: Rect, buf: &mut Buffer) {
-        use ratatui::{
-            style::Style,
-            text::{Line, Span},
-            widgets::{Block, Borders, Clear, Padding, Paragraph, Widget},
-        };
-
-        let popup_width = 62.min(area.width.saturating_sub(4));
-        let popup_height = 11.min(area.height.saturating_sub(2));
-
-        let popup_area = Rect {
-            x: (area.width - popup_width) / 2,
-            y: (area.height - popup_height) / 2,
-            width: popup_width,
-            height: popup_height,
-        };
-
-        Clear.render(popup_area, buf);
-
-        let option_line = |choice: ShellControlChoice, key: &'static str, label: &'static str| {
-            let selected = self.selected == choice;
-            let style = if selected {
-                Style::default()
-                    .fg(palette::SELECTION_TEXT)
-                    .bg(palette::SELECTION_BG)
-            } else {
-                Style::default().fg(palette::TEXT_PRIMARY)
-            };
-            Line::from(vec![
-                Span::styled(if selected { "> " } else { "  " }, style),
-                Span::styled(format!("{key:<3}"), style.bold()),
-                Span::styled(label, style),
-            ])
-        };
-
-        let lines = vec![
-            Line::from(Span::styled(
-                "Foreground shell command is still running.",
-                Style::default().fg(palette::TEXT_PRIMARY),
-            )),
-            Line::from(""),
-            option_line(
-                ShellControlChoice::Background,
-                "B",
-                "Background - detach and keep the command running",
-            ),
-            option_line(
-                ShellControlChoice::Cancel,
-                "C",
-                "Cancel - stop the command and interrupt this turn",
-            ),
-        ];
-
-        let view = Paragraph::new(lines)
-            .block(
-                Block::default()
-                    .title(Line::from(vec![Span::styled(
-                        " Shell command ",
-                        Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
-                    )]))
-                    .title_bottom(Line::from(Span::styled(
-                        " Enter select | Esc close ",
-                        Style::default().fg(palette::TEXT_MUTED),
-                    )))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(palette::BORDER_COLOR))
-                    .style(Style::default().bg(palette::DEEPSEEK_INK))
-                    .padding(Padding::uniform(1)),
-            )
-            .style(Style::default().fg(palette::TEXT_PRIMARY));
-
-        view.render(popup_area, buf);
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConfigScope {
     Session,
     Saved,
 }
 
 impl ConfigScope {
-    fn label(self) -> &'static str {
-        match self {
-            ConfigScope::Session => "SESSION",
-            ConfigScope::Saved => "SAVED",
-        }
+    fn label(self, locale: Locale) -> Cow<'static, str> {
+        tr(
+            locale,
+            match self {
+                ConfigScope::Session => MessageId::ConfigScopeSession,
+                ConfigScope::Saved => MessageId::ConfigScopeSaved,
+            },
+        )
     }
 
     fn persist(self) -> bool {
@@ -527,30 +1318,226 @@ struct ConfigRow {
     scope: ConfigScope,
 }
 
+/// Editor behavior for one Settings entry. This is intentionally independent
+/// from where the value is stored: category/scope describe ownership, while
+/// kind determines the interaction and validation surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SettingKind {
+    Boolean,
+    Choice,
+    Integer,
+    Text,
+    Action,
+    ReadOnly,
+}
+
+#[derive(Debug, Clone)]
+struct SettingMeta {
+    kind: SettingKind,
+    category: ConfigSection,
+    choices: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone)]
+struct SettingsRegistry {
+    provider: ApiProvider,
+    base_url: String,
+    model: String,
+    auto_model: bool,
+}
+
+impl SettingsRegistry {
+    fn new(view: &ConfigView) -> Self {
+        Self {
+            provider: view.api_provider,
+            base_url: view.route_base_url.clone(),
+            model: view.route_model.clone(),
+            auto_model: view.auto_model,
+        }
+    }
+
+    fn reasoning_effort_choices(&self) -> Vec<String> {
+        let mut values = vec!["default".to_string()];
+        for effort in crate::tui::model_picker::picker_efforts_for_route(
+            self.provider,
+            &self.base_url,
+            &self.model,
+            self.auto_model,
+        ) {
+            let label = if self.provider == ApiProvider::OpenaiCodex {
+                effort.display_label_for_provider(self.provider)
+            } else {
+                effort.as_setting()
+            };
+            if !values.iter().any(|value| value == label) {
+                values.push(label.to_string());
+            }
+        }
+        values
+    }
+
+    fn meta(&self, row: &ConfigRow) -> SettingMeta {
+        let choices = if row.key == "reasoning_effort" {
+            Some(self.reasoning_effort_choices())
+        } else {
+            config_choice_values(&row.key, self.provider)
+        };
+        let kind = if !row.editable {
+            SettingKind::ReadOnly
+        } else if matches!(
+            row.key.as_str(),
+            "provider"
+                | "model"
+                | "provider_templates"
+                | "mcp_open"
+                | "mcp_reconnect"
+                | "mcp_diagnose"
+                | "plugins_open"
+        ) {
+            SettingKind::Action
+        } else if config_boolean_key(&row.key) {
+            SettingKind::Boolean
+        } else if choices.is_some() {
+            SettingKind::Choice
+        } else if config_integer_key(&row.key) {
+            SettingKind::Integer
+        } else {
+            SettingKind::Text
+        };
+        SettingMeta {
+            kind,
+            category: row.section,
+            choices,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConfigSection {
     Provider,
     Model,
     Permissions,
+    Network,
     Display,
     Composer,
     Sidebar,
     History,
     Mcp,
+    Fleet,
+    /// Workflow orchestration (`/workflow`). Kept out of Fleet: a Fleet is
+    /// *who*, a Workflow is *what order* the work follows over it.
+    Workflow,
+    /// Session-scoped drivers such as `/goal`.
+    Session,
+    /// Explicitly legacy compatibility settings that are not a live choice —
+    /// e.g. the DeepSeek-only `default_model` fallback (#4751).
+    Legacy,
+    Experimental,
+}
+
+/// App-style settings tabs (v0.9.1 redesign). Groups fine-grained sections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfigTab {
+    General,
+    Models,
+    Permissions,
+    Display,
+    Advanced,
+}
+
+impl ConfigTab {
+    const ALL: [ConfigTab; 5] = [
+        ConfigTab::General,
+        ConfigTab::Models,
+        ConfigTab::Permissions,
+        ConfigTab::Display,
+        ConfigTab::Advanced,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            ConfigTab::General => "General",
+            ConfigTab::Models => "Models",
+            ConfigTab::Permissions => "Permissions",
+            ConfigTab::Display => "Display",
+            ConfigTab::Advanced => "Advanced",
+        }
+    }
+
+    fn contains(self, section: ConfigSection) -> bool {
+        match self {
+            ConfigTab::General => matches!(
+                section,
+                ConfigSection::Provider
+                    | ConfigSection::Network
+                    | ConfigSection::Composer
+                    | ConfigSection::Sidebar
+                    | ConfigSection::History
+            ),
+            ConfigTab::Models => matches!(section, ConfigSection::Model),
+            ConfigTab::Permissions => matches!(section, ConfigSection::Permissions),
+            ConfigTab::Display => matches!(section, ConfigSection::Display),
+            ConfigTab::Advanced => matches!(
+                section,
+                ConfigSection::Mcp
+                    | ConfigSection::Fleet
+                    | ConfigSection::Workflow
+                    | ConfigSection::Session
+                    | ConfigSection::Legacy
+                    | ConfigSection::Experimental
+            ),
+        }
+    }
+
+    fn for_section(section: ConfigSection) -> Self {
+        Self::ALL
+            .into_iter()
+            .find(|tab| tab.contains(section))
+            .unwrap_or(Self::General)
+    }
+
+    fn next(self) -> Self {
+        match self {
+            ConfigTab::General => ConfigTab::Models,
+            ConfigTab::Models => ConfigTab::Permissions,
+            ConfigTab::Permissions => ConfigTab::Display,
+            ConfigTab::Display => ConfigTab::Advanced,
+            ConfigTab::Advanced => ConfigTab::General,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            ConfigTab::General => ConfigTab::Advanced,
+            ConfigTab::Models => ConfigTab::General,
+            ConfigTab::Permissions => ConfigTab::Models,
+            ConfigTab::Display => ConfigTab::Permissions,
+            ConfigTab::Advanced => ConfigTab::Display,
+        }
+    }
 }
 
 impl ConfigSection {
-    fn label(self) -> &'static str {
-        match self {
-            ConfigSection::Provider => "Provider",
-            ConfigSection::Model => "Model",
-            ConfigSection::Permissions => "Permissions",
-            ConfigSection::Display => "Display",
-            ConfigSection::Composer => "Composer",
-            ConfigSection::Sidebar => "Sidebar",
-            ConfigSection::History => "History",
-            ConfigSection::Mcp => "MCP",
-        }
+    fn label(self, locale: Locale) -> Cow<'static, str> {
+        tr(
+            locale,
+            match self {
+                ConfigSection::Provider => MessageId::ConfigSectionProvider,
+                ConfigSection::Model => MessageId::ConfigSectionModel,
+                ConfigSection::Permissions => MessageId::ConfigSectionPermissions,
+                ConfigSection::Network => MessageId::ConfigSectionNetwork,
+                ConfigSection::Display => MessageId::ConfigSectionDisplay,
+                ConfigSection::Composer => MessageId::ConfigSectionComposer,
+                ConfigSection::Sidebar => MessageId::ConfigSectionSidebar,
+                ConfigSection::History => MessageId::ConfigSectionHistory,
+                ConfigSection::Mcp => MessageId::ConfigSectionMcp,
+                ConfigSection::Fleet => MessageId::ConfigSectionFleet,
+                ConfigSection::Workflow => MessageId::ConfigSectionWorkflow,
+                ConfigSection::Session => MessageId::ConfigSectionSession,
+                ConfigSection::Legacy => MessageId::ConfigSectionLegacy,
+                ConfigSection::Experimental => MessageId::ConfigSectionExperimental,
+            },
+        )
     }
 }
 
@@ -568,6 +1555,8 @@ struct ConfigEdit {
     cursor: usize,
     select_all: bool,
     scope: ConfigScope,
+    choices: Option<Vec<String>>,
+    selected_choice: usize,
 }
 
 pub struct ConfigView {
@@ -579,8 +1568,22 @@ pub struct ConfigView {
     status: Option<String>,
     locale: Locale,
     effective_cost_currency: String,
+    effective_low_motion: bool,
+    effective_fancy_animations: bool,
     last_visible_rows: Cell<usize>,
+    /// Selection-anchored scroll actually used by the last render; keeps the
+    /// panel scroll rail truthful when the stored scroll predates a resize.
+    last_render_scroll: Cell<usize>,
     last_row_hitboxes: RefCell<Vec<(u16, usize)>>,
+    last_choice_hitboxes: RefCell<Vec<(u16, usize)>>,
+    last_tab_hitboxes: RefCell<Vec<(u16, u16, u16, ConfigTab)>>,
+    last_mouse_selected: Option<usize>,
+    api_provider: ApiProvider,
+    route_base_url: String,
+    route_model: String,
+    auto_model: bool,
+    /// Category tab for the app-style settings shell (v0.9.1).
+    active_tab: ConfigTab,
 }
 
 const CONFIG_MIN_KEY_COLUMN_WIDTH: usize = 19;
@@ -592,58 +1595,187 @@ const CONFIG_COLUMN_GAPS_WIDTH: usize = 2;
 
 impl ConfigView {
     pub fn new_for_app(app: &App) -> Self {
-        let settings = Settings::load().unwrap_or_else(|_| Settings::default());
-        let rows = vec![
+        let settings = Settings::load_persisted().unwrap_or_else(|_| Settings::default());
+        let config = Config::load(app.config_path.clone(), app.config_profile.as_deref())
+            .unwrap_or_default();
+        let permission_control = config.approval_policy_control(
+            app.config_path.as_deref(),
+            app.config_profile.as_deref(),
+            &app.workspace,
+        );
+        let saved_permission_row = match permission_control {
+            ApprovalPolicyControl::Unset => ConfigRow {
+                section: ConfigSection::Permissions,
+                key: "permission_posture".to_string(),
+                value: settings
+                    .permission_posture
+                    .as_deref()
+                    .unwrap_or("ask")
+                    .to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ApprovalPolicyControl::RootConfig => ConfigRow {
+                section: ConfigSection::Permissions,
+                key: "approval_policy".to_string(),
+                value: config
+                    .approval_policy
+                    .as_deref()
+                    .unwrap_or("ask")
+                    .to_string(),
+                editable: permission_control.editable_root(),
+                scope: ConfigScope::Saved,
+            },
+            source => ConfigRow {
+                section: ConfigSection::Permissions,
+                key: "managed_approval_policy".to_string(),
+                value: format!(
+                    "{} · {}",
+                    app.approval_mode.permission_chip_label(),
+                    source.label()
+                ),
+                editable: false,
+                scope: ConfigScope::Saved,
+            },
+        };
+        let approval_session_editable = matches!(permission_control, ApprovalPolicyControl::Unset);
+        let shell_control = config.allow_shell_control(
+            app.config_path.as_deref(),
+            app.config_profile.as_deref(),
+            &app.workspace,
+        );
+        let shell_row = if shell_control.editable_root() {
+            ConfigRow {
+                section: ConfigSection::Permissions,
+                key: "allow_shell".to_string(),
+                value: app.allow_shell.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            }
+        } else {
+            ConfigRow {
+                section: ConfigSection::Permissions,
+                key: "managed_allow_shell".to_string(),
+                value: format!("{} · {}", app.allow_shell, shell_control.label()),
+                editable: false,
+                scope: ConfigScope::Saved,
+            }
+        };
+        let (active_route_provider, _) = app.effective_route_display();
+        let (active_provider_identity, active_route_model) = app.effective_route_identity_display();
+        let routing_model = if app.auto_model {
+            app.last_effective_model
+                .as_deref()
+                .unwrap_or(app.model.as_str())
+        } else {
+            app.model.as_str()
+        };
+        let fast_model =
+            crate::model_routing::provider_router_candidates(active_route_provider, routing_model)
+                .cheap
+                .unwrap_or_else(|| {
+                    if app.auto_model && app.last_effective_model.is_none() {
+                        "available after Auto selects a route".to_string()
+                    } else {
+                        "no known fast sibling".to_string()
+                    }
+                });
+        let mut rows = vec![
             ConfigRow {
                 section: ConfigSection::Provider,
                 key: "provider".to_string(),
-                value: app.api_provider.as_str().to_string(),
+                value: active_provider_identity.clone(),
                 editable: true,
                 scope: ConfigScope::Session,
             },
             ConfigRow {
                 section: ConfigSection::Provider,
-                key: config_base_url_row_key(app.api_provider).to_string(),
-                value: config_base_url_row_value(app),
+                key: "provider_templates".to_string(),
+                value: ghosty_config::ProviderSetupTemplate::settings_value(),
                 editable: true,
                 scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Provider,
+                key: config_base_url_row_key(active_route_provider).to_string(),
+                value: config_base_url_row_value(app),
+                // An endpoint is a route receipt, not a loose global knob.
+                // `/provider` owns changing the credential, model, and endpoint
+                // together; this row must not pretend that editing a live
+                // receipt can mutate an already-running client.
+                editable: false,
+                scope: ConfigScope::Session,
+            },
+            ConfigRow {
+                section: ConfigSection::Provider,
+                key: "context_window".to_string(),
+                value: config
+                    .context_window_for_provider_config(active_route_provider)
+                    .map_or_else(|| "(not set)".to_string(), |tokens| tokens.to_string()),
+                editable: false,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Provider,
+                key: "effective_context_window".to_string(),
+                value: format!(
+                    "{} tokens · {}",
+                    crate::route_budget::route_context_window_tokens(
+                        app.api_provider,
+                        app.effective_model_for_budget(),
+                        app.active_route_limits,
+                    ),
+                    app.active_context_window_source.display_label()
+                ),
+                editable: false,
+                scope: ConfigScope::Session,
             },
             ConfigRow {
                 section: ConfigSection::Model,
                 key: "model".to_string(),
-                value: app.model.clone(),
+                // `·` keeps the row unambiguous when a provider display name
+                // itself contains `/` (e.g. `Zhipu AI / Z.ai`).
+                value: format!("{active_provider_identity} · {active_route_model}"),
                 editable: true,
                 scope: ConfigScope::Session,
             },
             ConfigRow {
                 section: ConfigSection::Model,
-                key: "default_model".to_string(),
-                value: settings
-                    .default_model
-                    .as_deref()
-                    .unwrap_or("(default)")
-                    .to_string(),
-                editable: true,
-                scope: ConfigScope::Saved,
+                key: "fast_model".to_string(),
+                value: fast_model,
+                editable: false,
+                scope: ConfigScope::Session,
             },
+            // DeepSeek-only legacy fallback: hide on non-DeepSeek providers so
+            // it is not misread as an active setting (#4717). Keep the field
+            // and routing behavior; surface the row only for DeepSeek routes
+            // (or when an explicit value is set and the operator needs to see it).
+            // Built below after provider check so non-DeepSeek menus stay clean.
             ConfigRow {
                 section: ConfigSection::Model,
                 key: "reasoning_effort".to_string(),
-                value: settings
-                    .reasoning_effort
-                    .as_deref()
-                    .unwrap_or("(config/default)")
-                    .to_string(),
+                value: settings.reasoning_effort.as_deref().map_or_else(
+                    || tr(app.ui_locale, MessageId::ConfigDefaultReasoning).to_string(),
+                    |value| {
+                        crate::tui::app::ReasoningEffort::from_setting_for_provider(
+                            value,
+                            app.api_provider,
+                        )
+                        .as_setting_for_provider(app.api_provider)
+                        .to_string()
+                    },
+                ),
                 editable: true,
                 scope: ConfigScope::Saved,
             },
             ConfigRow {
                 section: ConfigSection::Permissions,
                 key: "approval_mode".to_string(),
-                value: app.approval_mode.label().to_string(),
-                editable: true,
+                value: app.approval_mode.permission_chip_label().to_string(),
+                editable: approval_session_editable,
                 scope: ConfigScope::Session,
             },
+            saved_permission_row,
             ConfigRow {
                 section: ConfigSection::Permissions,
                 key: "default_mode".to_string(),
@@ -651,12 +1783,20 @@ impl ConfigView {
                 editable: true,
                 scope: ConfigScope::Saved,
             },
+            shell_row,
             ConfigRow {
-                section: ConfigSection::Permissions,
-                key: "allow_shell".to_string(),
-                value: app.allow_shell.to_string(),
+                section: ConfigSection::Network,
+                key: "telemetry".to_string(),
+                value: crate::telemetry_notice::saved_preference_enabled(&config).to_string(),
                 editable: true,
                 scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Network,
+                key: "stream_chunk_timeout_secs".to_string(),
+                value: app.stream_chunk_timeout_secs.to_string(),
+                editable: true,
+                scope: ConfigScope::Session,
             },
             ConfigRow {
                 section: ConfigSection::Display,
@@ -675,10 +1815,23 @@ impl ConfigView {
             ConfigRow {
                 section: ConfigSection::Display,
                 key: "background_color".to_string(),
-                value: settings
-                    .background_color
-                    .clone()
-                    .unwrap_or_else(|| "(default)".to_string()),
+                value: settings.background_color.clone().unwrap_or_else(|| {
+                    tr(app.ui_locale, MessageId::ConfigDefaultValue).to_string()
+                }),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
+                key: "ocean_treatment".to_string(),
+                value: settings.ocean_treatment.clone(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
+                key: "focus_texture".to_string(),
+                value: settings.focus_texture.clone(),
                 editable: true,
                 scope: ConfigScope::Saved,
             },
@@ -705,6 +1858,13 @@ impl ConfigView {
             },
             ConfigRow {
                 section: ConfigSection::Display,
+                key: "launch_screen".to_string(),
+                value: settings.launch_screen.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
                 key: "show_thinking".to_string(),
                 value: settings.show_thinking.to_string(),
                 editable: true,
@@ -712,8 +1872,50 @@ impl ConfigView {
             },
             ConfigRow {
                 section: ConfigSection::Display,
+                key: "thinking_default_expanded".to_string(),
+                value: settings.thinking_default_expanded.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
+                key: "thinking_preview_lines".to_string(),
+                value: settings.thinking_preview_lines.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
+                key: "thinking_highlight".to_string(),
+                value: settings.thinking_highlight.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
+                key: "help_expand_groups".to_string(),
+                value: settings.help_expand_groups.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
+                key: "pin_last_prompt".to_string(),
+                value: settings.pin_last_prompt.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
                 key: "show_tool_details".to_string(),
                 value: settings.show_tool_details.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Display,
+                key: "inline_diffs".to_string(),
+                value: settings.inline_diffs.clone(),
                 editable: true,
                 scope: ConfigScope::Saved,
             },
@@ -746,6 +1948,13 @@ impl ConfigView {
                 scope: ConfigScope::Saved,
             },
             ConfigRow {
+                section: ConfigSection::Display,
+                key: "tool_collapse".to_string(),
+                value: settings.tool_collapse_mode.clone(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
                 section: ConfigSection::Composer,
                 key: "composer_density".to_string(),
                 value: settings.composer_density.clone(),
@@ -756,6 +1965,13 @@ impl ConfigView {
                 section: ConfigSection::Composer,
                 key: "composer_border".to_string(),
                 value: settings.composer_border.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Composer,
+                key: "composer_multiline_mode".to_string(),
+                value: settings.composer_multiline_mode.to_string(),
                 editable: true,
                 scope: ConfigScope::Saved,
             },
@@ -802,16 +2018,37 @@ impl ConfigView {
                 scope: ConfigScope::Saved,
             },
             ConfigRow {
-                section: ConfigSection::Sidebar,
-                key: "sidebar_width".to_string(),
-                value: settings.sidebar_width_percent.to_string(),
+                section: ConfigSection::Composer,
+                key: "workspace_follow_symlinks".to_string(),
+                value: settings.workspace_follow_symlinks.to_string(),
                 editable: true,
                 scope: ConfigScope::Saved,
             },
             ConfigRow {
                 section: ConfigSection::Sidebar,
-                key: "sidebar_focus".to_string(),
-                value: settings.sidebar_focus.clone(),
+                key: "work_surface_placement".to_string(),
+                value: settings.work_surface_placement.clone(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Sidebar,
+                key: "work_surface_top_height".to_string(),
+                value: settings.work_surface_top_height.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Sidebar,
+                key: "work_surface_side_width".to_string(),
+                value: settings.work_surface_side_width.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Sidebar,
+                key: "rail_panel".to_string(),
+                value: settings.rail_panel.clone(),
                 editable: true,
                 scope: ConfigScope::Saved,
             },
@@ -819,6 +2056,22 @@ impl ConfigView {
                 section: ConfigSection::Sidebar,
                 key: "context_panel".to_string(),
                 value: settings.context_panel.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            ConfigRow {
+                section: ConfigSection::Sidebar,
+                key: "sessions_rail".to_string(),
+                value: settings.sessions_rail.to_string(),
+                editable: true,
+                scope: ConfigScope::Saved,
+            },
+            // Read at startup by `main`, not held on `App`, so the row reflects
+            // the persisted value rather than a live field (#2934).
+            ConfigRow {
+                section: ConfigSection::Sidebar,
+                key: "session_auto_resume".to_string(),
+                value: settings.session_auto_resume.to_string(),
                 editable: true,
                 scope: ConfigScope::Saved,
             },
@@ -838,6 +2091,18 @@ impl ConfigView {
             },
             ConfigRow {
                 section: ConfigSection::History,
+                key: "effective_auto_compact".to_string(),
+                value: format!(
+                    "{} · {:.0}% · {} tokens",
+                    if app.auto_compact { "on" } else { "off" },
+                    app.auto_compact_threshold_percent,
+                    app.compact_threshold
+                ),
+                editable: false,
+                scope: ConfigScope::Session,
+            },
+            ConfigRow {
+                section: ConfigSection::History,
                 key: "max_history".to_string(),
                 value: settings.max_input_history.to_string(),
                 editable: true,
@@ -845,10 +2110,31 @@ impl ConfigView {
             },
             ConfigRow {
                 section: ConfigSection::Mcp,
-                key: "prefer_external_pdftotext".to_string(),
-                value: settings.prefer_external_pdftotext.to_string(),
+                key: "mcp_open".to_string(),
+                value: "/mcp".to_string(),
                 editable: true,
-                scope: ConfigScope::Saved,
+                scope: ConfigScope::Session,
+            },
+            ConfigRow {
+                section: ConfigSection::Mcp,
+                key: "mcp_reconnect".to_string(),
+                value: "/mcp reload".to_string(),
+                editable: true,
+                scope: ConfigScope::Session,
+            },
+            ConfigRow {
+                section: ConfigSection::Mcp,
+                key: "mcp_diagnose".to_string(),
+                value: "/mcp validate".to_string(),
+                editable: true,
+                scope: ConfigScope::Session,
+            },
+            ConfigRow {
+                section: ConfigSection::Mcp,
+                key: "plugins_open".to_string(),
+                value: "/plugin".to_string(),
+                editable: true,
+                scope: ConfigScope::Session,
             },
             ConfigRow {
                 section: ConfigSection::Mcp,
@@ -857,7 +2143,101 @@ impl ConfigView {
                 editable: true,
                 scope: ConfigScope::Saved,
             },
+            ConfigRow {
+                section: ConfigSection::Fleet,
+                key: "fleet.exec.max_spawn_depth".to_string(),
+                value: config
+                    .fleet
+                    .as_ref()
+                    .map(|fleet| fleet.exec.max_spawn_depth)
+                    .unwrap_or_else(|| ghosty_config::FleetExecConfig::default().max_spawn_depth)
+                    .to_string(),
+                editable: false,
+                scope: ConfigScope::Saved,
+            },
         ];
+        // #4717: only show the DeepSeek-only fallback model row when the active
+        // provider is a DeepSeek route (or an explicit value is set, so operators
+        // can still see/clear a leftover). Non-DeepSeek providers use
+        // provider-scoped models; the legacy row is inert there.
+        let show_deepseek_fallback = matches!(
+            app.api_provider,
+            ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic
+        ) || settings.default_model.is_some();
+        if show_deepseek_fallback {
+            // #4751: an inert DeepSeek-only compatibility field is not a model
+            // choice and never a Fleet choice — exact-Fleet users switch
+            // Fleets, not fallback models. Keep the persisted `default_model`
+            // key (the runtime still reads it) but present it in the explicitly
+            // Legacy section at the end, not among live Model settings.
+            rows.push(ConfigRow {
+                section: ConfigSection::Legacy,
+                key: "default_model".to_string(),
+                value: settings
+                    .default_model
+                    .as_deref()
+                    .unwrap_or(&*tr(app.ui_locale, MessageId::ConfigDefaultValue))
+                    .to_string(),
+                editable: false,
+                scope: ConfigScope::Saved,
+            });
+        }
+        let external_status_rows = [ApiProvider::OpenaiCodex, ApiProvider::Xai]
+            .into_iter()
+            .filter_map(|provider| {
+                config
+                    .external_credential_consent_status(provider)
+                    .map(|status| {
+                        let state = if status.route_state == "active" {
+                            tr(app.ui_locale, MessageId::CtxInspActive)
+                        } else {
+                            tr(app.ui_locale, MessageId::ProviderExternalDormant)
+                        };
+                        let scope = tr(app.ui_locale, MessageId::ProviderExternalDetailScope)
+                            .replace("{access}", status.access.as_str())
+                            .replace("{provider}", &status.provider)
+                            .replace("{source}", status.source.as_str())
+                            .replace("{version}", &status.consent_version.to_string())
+                            .replace("{state}", &state);
+                        let owner_path = tr(app.ui_locale, MessageId::ProviderExternalOwnerPath)
+                            .replace("{owner}", status.owner)
+                            .replace("{path}", &ghosty_config::quote_os_path(&status.path));
+                        let pinned_warning = status.ambient_path_changed.then(|| {
+                            tr(app.ui_locale, MessageId::ProviderExternalPinnedPathWarning)
+                                .replace("{owner}", status.owner)
+                                .replace("{path}", &ghosty_config::quote_os_path(&status.path))
+                        });
+                        let semantics = match status.access {
+                            ghosty_config::ExternalCredentialAccess::Disabled => {
+                                tr(app.ui_locale, MessageId::ProviderExternalDisabledDetail)
+                            }
+                            ghosty_config::ExternalCredentialAccess::ReadOnly => {
+                                tr(app.ui_locale, MessageId::ProviderExternalReadOnlySemantics)
+                            }
+                            ghosty_config::ExternalCredentialAccess::Managed => {
+                                tr(app.ui_locale, MessageId::ProviderExternalManagedDetail)
+                            }
+                        };
+                        let semantics_revoke =
+                            tr(app.ui_locale, MessageId::ProviderExternalSemanticsRevoke)
+                                .replace("{semantics}", &semantics)
+                                .replace("{revoke}", &status.revoke_command);
+                        ConfigRow {
+                            section: ConfigSection::Provider,
+                            key: format!("external_credentials.{}", provider.as_str()),
+                            value: match pinned_warning {
+                                Some(warning) => format!(
+                                    "{scope} · {owner_path} · {warning} · {semantics_revoke}"
+                                ),
+                                None => format!("{scope} · {owner_path} · {semantics_revoke}"),
+                            },
+                            editable: false,
+                            scope: ConfigScope::Saved,
+                        }
+                    })
+            });
+        rows.splice(2..2, external_status_rows);
+        rows.extend(experimental_config_rows(&config));
 
         Self {
             rows,
@@ -868,13 +2248,44 @@ impl ConfigView {
             status: None,
             locale: app.ui_locale,
             effective_cost_currency: cost_currency_config_value(app),
+            effective_low_motion: app.low_motion,
+            effective_fancy_animations: app.fancy_animations,
             last_visible_rows: Cell::new(0),
+            last_render_scroll: Cell::new(0),
             last_row_hitboxes: RefCell::new(Vec::new()),
+            last_choice_hitboxes: RefCell::new(Vec::new()),
+            last_tab_hitboxes: RefCell::new(Vec::new()),
+            last_mouse_selected: None,
+            api_provider: app.api_provider,
+            route_base_url: app.active_route_base_url.clone(),
+            route_model: app.model.clone(),
+            auto_model: app.auto_model,
+            active_tab: ConfigTab::General,
         }
     }
 
-    fn tr(&self, id: MessageId) -> &'static str {
+    fn tr(&self, id: MessageId) -> Cow<'static, str> {
         tr(self.locale, id)
+    }
+
+    /// Keep the user's place when the host rebuilds this view after applying
+    /// a setting to the live app.
+    pub(crate) fn focus_key(&mut self, key: &str) {
+        if let Some(index) = self.rows.iter().position(|row| row.key == key) {
+            self.active_tab = ConfigTab::for_section(self.rows[index].section);
+            self.selected = index;
+            self.adjust_scroll(self.visible_rows_cached());
+        }
+    }
+
+    /// Snapshot the active search so live config updates can rebuild the
+    /// modal without making the user's filtered result set jump away.
+    pub(crate) fn filter_query(&self) -> &str {
+        &self.filter
+    }
+
+    pub(crate) fn restore_filter(&mut self, filter: String) {
+        self.update_filter(|current| *current = filter);
     }
 
     fn visible_rows_cached(&self) -> usize {
@@ -888,33 +2299,54 @@ impl ConfigView {
             return true;
         }
 
-        let section = row.section.label().to_lowercase();
+        let meta = SettingsRegistry::new(self).meta(row);
+        let section = meta.category.label(self.locale).to_lowercase();
+        let section_en = meta.category.label(Locale::En).to_lowercase();
+        let label = config_label_for_key_for_locale(self.locale, &row.key).to_lowercase();
         let key = row.key.to_lowercase();
+        let raw_value = row.value.to_lowercase();
         let value = self.row_display_value(row).to_lowercase();
-        let scope = row.scope.label().to_lowercase();
+        let scope = row.scope.label(self.locale).to_lowercase();
+        let scope_en = row.scope.label(Locale::En).to_lowercase();
+        let hint = config_hint_for_key(self.locale, &row.key).to_lowercase();
 
         filter.split_whitespace().all(|term| {
             section.contains(term)
+                || section_en.contains(term)
+                || label.contains(term)
                 || key.contains(term)
+                || raw_value.contains(term)
                 || value.contains(term)
                 || scope.contains(term)
+                || scope_en.contains(term)
+                || hint.contains(term)
         })
     }
 
     fn matching_row_indices(&self) -> Vec<usize> {
+        let filtering = !self.filter.is_empty();
         self.rows
             .iter()
             .enumerate()
-            .filter_map(|(idx, row)| self.row_matches_filter(row).then_some(idx))
+            .filter_map(|(idx, row)| {
+                (self.row_matches_filter(row)
+                    && (filtering || self.active_tab.contains(row.section)))
+                .then_some(idx)
+            })
             .collect()
     }
 
     fn visible_items(&self) -> Vec<ConfigListItem> {
         let mut items = Vec::new();
         let mut current_section = None;
+        let filtering = !self.filter.is_empty();
 
         for (idx, row) in self.rows.iter().enumerate() {
             if !self.row_matches_filter(row) {
+                continue;
+            }
+            // Category tabs filter sections unless the user is searching.
+            if !filtering && !self.active_tab.contains(row.section) {
                 continue;
             }
 
@@ -928,10 +2360,64 @@ impl ConfigView {
         items
     }
 
+    fn select_first_visible_row(&mut self) {
+        if let Some(idx) = self
+            .visible_items()
+            .into_iter()
+            .find_map(|item| match item {
+                ConfigListItem::Row(i) => Some(i),
+                ConfigListItem::Section(_) => None,
+            })
+        {
+            self.selected = idx;
+            self.scroll = 0;
+        }
+    }
+
+    fn setting_description(key: &str) -> &'static str {
+        match key {
+            "provider" => {
+                "Active model provider for this session. Enter opens the provider picker."
+            }
+            "provider_templates" => {
+                "Beginner templates for OpenCode Zen/Go, SenseNova, and unpublished Agnes. Enter opens the list."
+            }
+            "model" => "Model id for the active provider. Enter opens the model picker.",
+            "base_url" | "provider_url" => {
+                "Current route endpoint. Change provider setup through /provider so credential, model, and endpoint stay together."
+            }
+            "approval_mode" => {
+                "Session approval posture (ask / auto). Separate from filesystem sandbox."
+            }
+            "permission_posture" | "approval_policy" => {
+                "Saved permission posture. Independent of filesystem sandbox (fs:* chrome)."
+            }
+            "allow_shell" => "Whether shell tools may run. Separate from approval posture.",
+            "sandbox_mode" => "Filesystem sandbox: none / workspace-write / read-only.",
+            "theme" => "Named UI theme. Scope: saved settings.",
+            "low_motion" => "Reduce motion: freezes pulses, keeps static highlights.",
+            "calm_mode" => "Quieter chrome and denser transcript.",
+            "ocean_treatment" => "Underwater field treatment (ombre / flat / terminal).",
+            "locale" => "UI language. Scope: saved settings.",
+            "reasoning_effort" => "Default reasoning effort for capable models.",
+            "default_mode" => "Startup mode (agent / plan / operate).",
+            "mcp_open" => {
+                "Open the MCP manager. Connect, reconnect, re-auth, or diagnose from there."
+            }
+            "mcp_reconnect" => "Reconnect configured MCP servers (/mcp reload).",
+            "mcp_diagnose" => "Diagnose MCP servers (/mcp validate).",
+            "plugins_open" => "Open plugins. Trust, enable, or diagnose invalid manifests.",
+            _ => "Enter change · R reset · Esc close. Scope shown on the row badge.",
+        }
+    }
+
     fn key_column_width(&self) -> usize {
         self.rows
             .iter()
-            .map(|row| row.key.chars().count())
+            .map(|row| {
+                let label = config_label_for_key_for_locale(self.locale, &row.key);
+                UnicodeWidthStr::width(label.as_str())
+            })
             .max()
             .unwrap_or(CONFIG_MIN_KEY_COLUMN_WIDTH)
             .max(CONFIG_MIN_KEY_COLUMN_WIDTH)
@@ -1029,23 +2515,150 @@ impl ConfigView {
             .iter()
             .position(|idx| *idx == self.selected)
             .unwrap_or(0);
-        let max = matches.len().saturating_sub(1);
-        let next = if delta.is_negative() {
-            current.saturating_sub(delta.unsigned_abs())
-        } else {
-            (current + delta as usize).min(max)
-        };
+        let next = crate::tui::list_nav::wrap_index(current, matches.len(), delta);
 
         self.selected = matches[next];
         let visible_rows = self.visible_rows_cached();
         self.adjust_scroll(visible_rows);
     }
 
-    fn handle_editing_key(&mut self, key: KeyEvent) -> ViewAction {
+    fn toggle_selected_boolean(&self) -> Option<ViewAction> {
+        let row = self.rows.get(self.selected_row_index()?)?;
+        if SettingsRegistry::new(self).meta(row).kind != SettingKind::Boolean {
+            return None;
+        }
+        let value = if canonical_config_choice(&row.key, &row.value) == "true" {
+            "false"
+        } else {
+            "true"
+        };
+        Some(ViewAction::Emit(ViewEvent::ConfigUpdated {
+            key: row.key.clone(),
+            value: value.to_string(),
+            persist: row.scope.persist(),
+        }))
+    }
+
+    fn open_selected_catalog_picker(&self) -> Option<ViewAction> {
+        let row = self.rows.get(self.selected_row_index()?)?;
+        let command = match row.key.as_str() {
+            "provider" if row.editable => "/provider",
+            "provider_templates" if row.editable => "/provider templates",
+            "model" if row.editable => "/model",
+            "mcp_open" if row.editable => "/mcp",
+            "mcp_reconnect" if row.editable => "/mcp reload",
+            "mcp_diagnose" if row.editable => "/mcp validate",
+            "plugins_open" if row.editable => "/plugin",
+            _ => return None,
+        };
+        Some(ViewAction::Emit(ViewEvent::CommandPaletteSelected {
+            action: CommandPaletteAction::ExecuteCommand {
+                command: command.to_string(),
+            },
+        }))
+    }
+
+    fn move_choice(&mut self, delta: isize) {
+        let Some(edit) = self.editing.as_mut() else {
+            return;
+        };
+        let Some(choices) = edit.choices.as_ref() else {
+            return;
+        };
+        let max = choices.len().saturating_sub(1);
+        edit.selected_choice = if delta.is_negative() {
+            edit.selected_choice.saturating_sub(delta.unsigned_abs())
+        } else {
+            (edit.selected_choice + delta as usize).min(max)
+        };
+    }
+
+    fn handle_choice_key(&mut self, key: KeyEvent) -> ViewAction {
         match key.code {
             KeyCode::Esc => {
                 self.editing = None;
-                self.status = Some("Edit cancelled".to_string());
+                self.status = Some(self.tr(MessageId::ConfigEditCancelled).to_string());
+                ViewAction::None
+            }
+            KeyCode::Enter => {
+                let Some(edit) = self.editing.take() else {
+                    return ViewAction::None;
+                };
+                let Some(value) = edit
+                    .choices
+                    .as_ref()
+                    .and_then(|choices| choices.get(edit.selected_choice))
+                    .cloned()
+                else {
+                    return ViewAction::None;
+                };
+                ViewAction::Emit(ViewEvent::ConfigUpdated {
+                    key: edit.key,
+                    value,
+                    persist: edit.scope.persist(),
+                })
+            }
+            KeyCode::Up | KeyCode::Left | KeyCode::Char('k') => {
+                self.move_choice(-1);
+                ViewAction::None
+            }
+            KeyCode::Down | KeyCode::Right | KeyCode::Char('j') => {
+                self.move_choice(1);
+                ViewAction::None
+            }
+            KeyCode::PageUp => {
+                self.move_choice(-5);
+                ViewAction::None
+            }
+            KeyCode::PageDown => {
+                self.move_choice(5);
+                ViewAction::None
+            }
+            KeyCode::Home => {
+                if let Some(edit) = self.editing.as_mut() {
+                    edit.selected_choice = 0;
+                }
+                ViewAction::None
+            }
+            KeyCode::End => {
+                if let Some(edit) = self.editing.as_mut()
+                    && let Some(choices) = edit.choices.as_ref()
+                {
+                    edit.selected_choice = choices.len().saturating_sub(1);
+                }
+                ViewAction::None
+            }
+            KeyCode::Char(digit @ '1'..='9') => {
+                if let Some(edit) = self.editing.as_mut()
+                    && let Some(choices) = edit.choices.as_ref()
+                {
+                    let index = digit as usize - '1' as usize;
+                    if index < choices.len() {
+                        edit.selected_choice = index;
+                    }
+                }
+                ViewAction::None
+            }
+            KeyCode::Char(' ') => {
+                self.move_choice(1);
+                ViewAction::None
+            }
+            _ => ViewAction::None,
+        }
+    }
+
+    fn handle_editing_key(&mut self, key: KeyEvent) -> ViewAction {
+        if self
+            .editing
+            .as_ref()
+            .is_some_and(|edit| edit.choices.is_some())
+        {
+            return self.handle_choice_key(key);
+        }
+        match key.code {
+            KeyCode::Esc => {
+                self.editing = None;
+                self.status = Some(self.tr(MessageId::ConfigEditCancelled).to_string());
                 ViewAction::None
             }
             KeyCode::Enter => {
@@ -1163,14 +2776,27 @@ impl ConfigView {
         };
         let key = row.key.clone();
         let original_value = row.value.clone();
-        let initial_value = if (key == "default_model" && original_value == "(default)")
-            || (key == "reasoning_effort" && original_value == "(config/default)")
-        {
-            String::new()
-        } else {
-            original_value.clone()
+        let initial_value = match config_default_placeholder_message(&key) {
+            Some(message_id)
+                if original_value == tr(self.locale, message_id)
+                    || original_value == tr(Locale::En, message_id) =>
+            {
+                String::new()
+            }
+            _ => original_value.clone(),
         };
 
+        let meta = SettingsRegistry::new(self).meta(row);
+        let choices = meta.choices;
+        let selected_choice = choices
+            .as_ref()
+            .and_then(|choices| {
+                let current = canonical_config_choice(&key, &initial_value);
+                choices
+                    .iter()
+                    .position(|choice| canonical_config_choice(&key, choice) == current)
+            })
+            .unwrap_or(0);
         let buffer: Vec<char> = initial_value.chars().collect();
         self.editing = Some(ConfigEdit {
             key,
@@ -1179,6 +2805,8 @@ impl ConfigView {
             buffer,
             select_all: true,
             scope: row.scope,
+            choices,
+            selected_choice,
         });
         self.status = None;
     }
@@ -1197,11 +2825,94 @@ impl ConfigView {
             let effective_cost_currency =
                 crate::pricing::CostCurrency::from_setting(&self.effective_cost_currency);
             if saved_cost_currency != effective_cost_currency {
-                return format!("{} (effective {})", row.value, self.effective_cost_currency);
+                return format!(
+                    "{}{}",
+                    row.value,
+                    self.tr(MessageId::ConfigRowEffective)
+                        .replace("{currency}", &self.effective_cost_currency)
+                );
             }
         }
 
+        let runtime_value = match row.key.as_str() {
+            "low_motion" => Some(self.effective_low_motion),
+            "fancy_animations" => Some(self.effective_fancy_animations),
+            _ => None,
+        };
+        if let Some(runtime_value) = runtime_value
+            && row.value.parse::<bool>().ok() != Some(runtime_value)
+        {
+            let saved = config_choice_label(
+                self.locale,
+                &row.key,
+                &canonical_config_choice(&row.key, &row.value),
+            );
+            let effective = config_choice_label(self.locale, &row.key, &runtime_value.to_string());
+            return format!(
+                "{}{}",
+                saved,
+                self.tr(MessageId::ConfigRowEffective)
+                    .replace("{currency}", &effective)
+            );
+        }
+
+        // Preserve the exact saved currency alias in the table (for example
+        // `rmb`) while the chooser highlights its canonical `cny` option.
+        if row.key == "cost_currency" {
+            return row.value.clone();
+        }
+
+        if SettingsRegistry::new(self).meta(row).choices.is_some() {
+            if config_default_placeholder_message(&row.key).is_some_and(|message_id| {
+                row.value == tr(self.locale, message_id) || row.value == tr(Locale::En, message_id)
+            }) {
+                return "Provider default".to_string();
+            }
+            let canonical = canonical_config_choice(&row.key, &row.value);
+            return config_choice_label(self.locale, &row.key, &canonical);
+        }
+
         row.value.clone()
+    }
+
+    fn selected_row_hint(&self) -> Option<String> {
+        let row_idx = self.selected_row_index()?;
+        let row = self.rows.get(row_idx)?;
+        let meta = SettingsRegistry::new(self).meta(row);
+        let label = config_label_for_key_for_locale(self.locale, &row.key);
+        let hint = config_hint_for_key(self.locale, &row.key);
+        let action_id = if row.key == "provider" {
+            MessageId::ConfigActionOpenProvider
+        } else if row.key == "provider_templates" {
+            MessageId::ConfigActionOpenProviderTemplates
+        } else if row.key == "model" {
+            MessageId::ConfigActionOpenModel
+        } else if row.key == "mcp_open" {
+            MessageId::ConfigActionOpenMcp
+        } else if row.key == "mcp_reconnect" {
+            MessageId::ConfigActionMcpReconnect
+        } else if row.key == "mcp_diagnose" {
+            MessageId::ConfigActionMcpDiagnose
+        } else if row.key == "plugins_open" {
+            MessageId::ConfigActionOpenPlugins
+        } else if meta.kind == SettingKind::Boolean {
+            MessageId::ConfigActionToggle
+        } else if meta.kind == SettingKind::Choice {
+            MessageId::ConfigActionChoose
+        } else if matches!(meta.kind, SettingKind::Integer | SettingKind::Text) {
+            MessageId::ConfigActionEdit
+        } else {
+            MessageId::ConfigActionReadOnly
+        };
+        let action = self.tr(action_id);
+        if !hint.is_empty() {
+            return Some(format!("{label}: {hint} · {action}"));
+        }
+        if row.editable {
+            Some(format!("{label}: {action} ({})", row.key))
+        } else {
+            Some(format!("{label}: read-only status ({})", row.key))
+        }
     }
 }
 
@@ -1214,12 +2925,7 @@ fn config_base_url_row_key(provider: ApiProvider) -> &'static str {
 }
 
 fn config_base_url_row_value(app: &App) -> String {
-    Config::load(app.config_path.clone(), app.config_profile.as_deref())
-        .map(|mut config| {
-            config.provider = Some(app.api_provider.as_str().to_string());
-            config.deepseek_base_url()
-        })
-        .unwrap_or_else(|_| "(unavailable)".to_string())
+    app.active_route_base_url.clone()
 }
 
 fn cost_currency_config_value(app: &App) -> String {
@@ -1230,41 +2936,554 @@ fn cost_currency_config_value(app: &App) -> String {
     .to_string()
 }
 
-fn config_hint_for_key(key: &str) -> &'static str {
+fn experimental_config_rows(config: &Config) -> Vec<ConfigRow> {
+    let features = config.features();
+    let configured = config.features.as_ref().map(|table| &table.entries);
+    let mut rows = Vec::new();
+
+    for spec in FEATURES
+        .iter()
+        .filter(|spec| matches!(spec.stage, Stage::Experimental | Stage::Beta))
+    {
+        let effective = features.enabled(spec.id);
+        let configured_value = configured
+            .and_then(|entries| entries.get(spec.key))
+            .copied();
+        rows.push(ConfigRow {
+            section: ConfigSection::Experimental,
+            key: format!("features.{}", spec.key),
+            value: experimental_feature_value(
+                effective,
+                spec.default_enabled,
+                configured_value.is_some(),
+            ),
+            editable: false,
+            scope: ConfigScope::Saved,
+        });
+    }
+
+    rows.push(ConfigRow {
+        section: ConfigSection::Session,
+        key: "goal_command".to_string(),
+        value:
+            "/goal sets session objectives with optional token budgets; state shows in Work context"
+                .to_string(),
+        editable: false,
+        scope: ConfigScope::Saved,
+    });
+    rows.push(ConfigRow {
+        // Workflow orchestration is its own section, not a Fleet concern.
+        section: ConfigSection::Workflow,
+        key: "workflow".to_string(),
+        value:
+            "/workflow runs scripted fan-out/fan-in operations with run cards and cancel support"
+                .to_string(),
+        editable: false,
+        scope: ConfigScope::Saved,
+    });
+
+    rows
+}
+
+fn experimental_feature_value(effective: bool, default_enabled: bool, configured: bool) -> String {
+    let state = if effective { "enabled" } else { "disabled" };
+    let default_state = if default_enabled {
+        "enabled"
+    } else {
+        "disabled"
+    };
+    if configured {
+        format!("{state} (configured; default {default_state})")
+    } else {
+        format!("{state} (default {default_state})")
+    }
+}
+
+fn config_label_message(key: &str) -> Option<MessageId> {
+    Some(match key {
+        "provider" => MessageId::ConfigLabelProvider,
+        "provider_templates" => MessageId::ConfigLabelProviderTemplates,
+        "base_url" => MessageId::ConfigLabelBaseUrlDeepseek,
+        "provider_url" => MessageId::ConfigLabelProviderUrl,
+        "model" => MessageId::ConfigLabelModel,
+        "fast_model" => MessageId::ConfigLabelFastModel,
+        "default_model" => MessageId::ConfigLabelDefaultModel,
+        "reasoning_effort" => MessageId::ConfigLabelReasoningEffort,
+        "approval_mode" => MessageId::ConfigLabelApprovalMode,
+        "permission_posture" => MessageId::ConfigLabelPermissionPosture,
+        "approval_policy" => MessageId::ConfigLabelApprovalPolicy,
+        "managed_approval_policy" => MessageId::ConfigLabelManagedApprovalPolicy,
+        "default_mode" => MessageId::ConfigLabelDefaultMode,
+        "allow_shell" => MessageId::ConfigLabelAllowShell,
+        "managed_allow_shell" => MessageId::ConfigLabelManagedAllowShell,
+        "telemetry" => MessageId::ConfigLabelTelemetry,
+        "stream_chunk_timeout_secs" => MessageId::ConfigLabelStreamTimeout,
+        "theme" => MessageId::ConfigLabelTheme,
+        "locale" => MessageId::ConfigLabelLocale,
+        "background_color" => MessageId::ConfigLabelBackground,
+        "ocean_treatment" => MessageId::ConfigLabelOceanTreatment,
+        "work_surface_placement" => MessageId::ConfigLabelWorkSurfacePlacement,
+        "work_surface_top_height" => MessageId::ConfigLabelTopHeight,
+        "work_surface_side_width" => MessageId::ConfigLabelSideWidth,
+        "calm_mode" => MessageId::ConfigLabelCalmMode,
+        "low_motion" => MessageId::ConfigLabelLowMotion,
+        "fancy_animations" => MessageId::ConfigLabelFancyAnimations,
+        "launch_screen" => MessageId::ConfigLabelLaunchScreen,
+        "show_thinking" => MessageId::ConfigLabelShowThinking,
+        "thinking_highlight" => MessageId::ConfigLabelThinkingHighlight,
+        "show_tool_details" => MessageId::ConfigLabelShowToolDetails,
+        "inline_diffs" => MessageId::ConfigLabelInlineDiffs,
+        "status_indicator" => MessageId::ConfigLabelStatusIndicator,
+        "synchronized_output" => MessageId::ConfigLabelSynchronizedOutput,
+        "cost_currency" => MessageId::ConfigLabelCostCurrency,
+        "transcript_spacing" => MessageId::ConfigLabelTranscriptSpacing,
+        "tool_collapse" => MessageId::ConfigLabelToolCollapse,
+        "composer_density" => MessageId::ConfigLabelComposerDensity,
+        "composer_border" => MessageId::ConfigLabelComposerBorder,
+        "composer_multiline_mode" => MessageId::ConfigLabelComposerMultilineMode,
+        "composer_vim_mode" => MessageId::ConfigLabelComposerVimMode,
+        "bracketed_paste" => MessageId::ConfigLabelBracketedPaste,
+        "paste_burst_detection" => MessageId::ConfigLabelPasteBurstDetection,
+        "mention_menu_limit" => MessageId::ConfigLabelMentionMenuLimit,
+        "mention_menu_behavior" => MessageId::ConfigLabelMentionMenuBehavior,
+        "mention_walk_depth" => MessageId::ConfigLabelMentionWalkDepth,
+        "workspace_follow_symlinks" => MessageId::ConfigLabelWorkspaceFollowSymlinks,
+        "context_panel" => MessageId::ConfigLabelContextPanel,
+        "sessions_rail" => MessageId::ConfigLabelSessionsRail,
+        "session_auto_resume" => MessageId::ConfigLabelSessionAutoResume,
+        "auto_compact" => MessageId::ConfigLabelAutoCompact,
+        "auto_compact_threshold_percent" => MessageId::ConfigLabelAutoCompactThreshold,
+        "max_history" => MessageId::ConfigLabelMaxHistory,
+        "mcp_open" => MessageId::ConfigLabelMcpOpen,
+        "mcp_reconnect" => MessageId::ConfigLabelMcpReconnect,
+        "mcp_diagnose" => MessageId::ConfigLabelMcpDiagnose,
+        "plugins_open" => MessageId::ConfigLabelPluginsOpen,
+        "mcp_config_path" => MessageId::ConfigLabelMcpConfigPath,
+        "fleet.exec.max_spawn_depth" => MessageId::ConfigLabelFleetSpawnDepth,
+        "goal_command" => MessageId::ConfigLabelGoalCommand,
+        "workflow" => MessageId::ConfigLabelWorkflow,
+        _ => return None,
+    })
+}
+
+fn config_label_for_key_for_locale(locale: Locale, key: &str) -> String {
+    if let Some(message) = config_label_message(key) {
+        return tr(locale, message).to_string();
+    }
+    let humanized = humanize_config_key(key.strip_prefix("features.").unwrap_or(key));
+    if key.starts_with("features.") {
+        tr(locale, MessageId::ConfigLabelFeaturePrefix).replace("{name}", &humanized)
+    } else {
+        humanized
+    }
+}
+
+#[cfg(test)]
+fn config_label_for_key(key: &str) -> String {
+    config_label_for_key_for_locale(Locale::En, key)
+}
+
+fn humanize_config_key(key: &str) -> String {
+    key.split(['.', '_', '-'])
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            let Some(first) = chars.next() else {
+                return String::new();
+            };
+            let mut word = first.to_uppercase().collect::<String>();
+            word.push_str(chars.as_str());
+            word
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn config_hint_for_key(locale: Locale, key: &str) -> Cow<'static, str> {
+    if key == "telemetry" {
+        return tr(locale, MessageId::ConfigHintTelemetry);
+    }
+    if key == "provider_url" {
+        return tr(locale, MessageId::ConfigHintProviderUrl);
+    }
+    if key == "provider_templates" {
+        return tr(locale, MessageId::ConfigHintProviderTemplates);
+    }
+    Cow::Borrowed(config_literal_hint_for_key(key))
+}
+
+fn config_literal_hint_for_key(key: &str) -> &'static str {
     match key {
-        "model" => "deepseek-v4-pro | deepseek-v4-flash | deepseek-*",
-        "provider" => "deepseek | openrouter | xiaomi-mimo | fireworks | siliconflow | ...",
-        "approval_mode" => "auto | suggest | never",
-        "allow_shell" => "true enables shell in Agent mode with approvals on the next turn",
+        "model" => "live route model for this session; Enter opens /model",
+        "fast_model" => {
+            "used by Auto routing and agent model_strength=faster when this provider has a known sibling"
+        }
+        "provider" => {
+            "live route provider for this session; Enter opens /provider (credential, model, and endpoint switch together)"
+        }
+        "approval_mode" => "this session only: Ask | Auto-Review | Full Access",
+        "permission_posture" => "default for new sessions: Ask | Auto-Review | Full Access",
+        "approval_policy" => {
+            "new sessions: Ask | Auto-Review | Full Access; choosing Full Access releases the raw config override"
+        }
+        "managed_approval_policy" => {
+            "a project, profile, environment, managed config, or organization requirement controls this value"
+        }
+        "managed_allow_shell" => {
+            "a project, profile, environment, or managed config controls shell access"
+        }
+        "allow_shell" => "on exposes shell tools in Agent mode; permission rules still apply",
+        "telemetry" => "anonymous usage counts only; never conversations or code",
+        "composer_multiline_mode" => {
+            "off: Enter sends, Shift+Enter adds a line; on: Enter adds a line, Shift+Enter sends"
+        }
         "auto_compact"
-        | "calm_mode"
-        | "low_motion"
-        | "show_thinking"
+        | "launch_screen"
         | "show_tool_details"
         | "composer_border"
         | "paste_burst_detection" => "on/off, true/false, yes/no, 1/0",
         "composer_density" | "transcript_spacing" => "compact | comfortable | spacious",
-        "theme" => "system | dark | light | grayscale",
-        "locale" => "auto | en | ja | zh-Hans | pt-BR",
+        "inline_diffs" => "full | summary | off; exact change remains in Alt/Option+V details",
+        "tool_collapse" => "compact | expanded | calm",
+        // Derived from the shipped theme/locale registries so these hints
+        // cannot go stale as new entries land (they previously advertised
+        // 4 of 12 themes and 4 of 8 locales).
+        "theme" => {
+            static THEME_HINT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+            THEME_HINT.get_or_init(|| {
+                crate::palette::SELECTABLE_THEMES
+                    .iter()
+                    .map(|id| id.name())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            })
+        }
+        "locale" => {
+            static LOCALE_HINT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+            LOCALE_HINT.get_or_init(|| crate::localization::configured_locale_values(" | "))
+        }
         "background_color" => "#RRGGBB | default",
-        "base_url" => "global DeepSeek/root fallback; e.g. https://api.deepseek.com/beta",
-        "provider_url" => {
-            "current provider endpoint; Xiaomi: token-plan | pay-as-you-go | custom URL"
+        "work_surface_placement" => {
+            "top | left | right | off · side rails require Ocean mode and at least 72 columns"
+        }
+        "rail_panel" => "tasks | agents | context | pinned · which panel the rail shows",
+        "work_surface_top_height" => "5..=16 rows · also adjustable by dragging the divider",
+        "work_surface_side_width" => "26..=80 columns · also adjustable by dragging the divider",
+        "base_url" => {
+            "read-only route receipt for the live endpoint · change provider, credential, and endpoint together with /provider"
+        }
+        // #5134: the filter matches hint text, so the words a confused user
+        // actually types — "context length", "context size", "max context",
+        // "1m" — have to appear here or these rows stay unfindable.
+        "context_window" => {
+            "max context length / context size limit in tokens · set `[providers.<name>] context_window` in config.toml, e.g. 1048576 for a 1M route; (not set) resolves it automatically"
+        }
+        "effective_context_window" => {
+            "resolved max context length / window size limit in tokens and where the value came from; drives compaction, pressure, and preflight budgets"
         }
         "cost_currency" => "usd | cny",
-        "default_mode" => "agent | plan | yolo",
-        "sidebar_width" => "10..=50",
-        "sidebar_focus" => "auto | work | tasks | agents | context | hidden",
+        "calm_mode" => "quietens transcript chrome and tool detail; independent of live motion",
+        "low_motion" => "on overrides live-state motion; model output is unchanged",
+        "fancy_animations" => "on animates truthful tool, status, and ocean live state",
+        "ocean_treatment" => "ombre | flat (appearance; independent of motion)",
+        "show_thinking" => "show or hide model reasoning in chat; task lists stay concise",
+        "thinking_default_expanded" => {
+            "expand model reasoning by default; Space still toggles each block"
+        }
+        "thinking_preview_lines" => {
+            "collapsed completed-thought preview rows (default 2; 0=header-only; 10=older dump)"
+        }
+        "help_expand_groups" => {
+            "start Help/shortcuts with every group expanded; default folds the long tail"
+        }
+        "pin_last_prompt" => {
+            "pin the last user prompt at the top of the transcript when it scrolls off"
+        }
+        "thinking_highlight" => {
+            "fill the model reasoning background; the dashed rail remains visible when off"
+        }
+        "synchronized_output" => "auto | on | off; terminal redraw pacing, not model speed",
+        "default_mode" => "act (agent) | plan | operate",
         "max_history" => "integer (0 allowed)",
-        "auto_compact_threshold_percent" => "10..=100",
-        "default_model" => "deepseek-v4-pro | deepseek-v4-flash | deepseek-* | none/default",
-        "reasoning_effort" => "auto | off | low | medium | high | max | default",
+        "auto_compact_threshold_percent" => {
+            "10..=100 · compaction threshold: percent of the usable context length at which auto-compaction fires"
+        }
+        "default_model" => {
+            "DeepSeek-only legacy fallback; other providers use their provider-scoped model above"
+        }
+        "reasoning_effort" => {
+            "Per-model thinking ladder from the active route. default clears the saved value and uses that model's official default. Always-thinking models omit off."
+        }
+        "mcp_open" => "open the MCP manager · Connect / Reconnect / Re-auth / Diagnose",
+        "mcp_reconnect" => "reconnect MCP · /mcp reload",
+        "mcp_diagnose" => "diagnose MCP · /mcp validate",
+        "plugins_open" => "open plugins · trust, enable, or diagnose",
         "mcp_config_path" => "path to mcp.json",
+        "fleet.exec.max_spawn_depth" => {
+            "0 blocks child agents; 3 default (same axis as sub-agents); capped at 8"
+        }
+        "features.subagents" => {
+            "read-only feature flag state; /fleet setup is the user-facing path"
+        }
+        "features.web_search" => "read-only feature flag state for web search tools",
+        "features.apply_patch" => "read-only feature flag state for patch editing tools",
+        "features.mcp" => "read-only feature flag state for MCP tools",
+        "features.exec_policy" => "read-only feature flag state for execution policy tools",
+        "features.vision_model" => "beta feature flag for vision/model image support",
+        "goal_command" => "/goal sets objectives, budgets, and Work-context status",
+        "workflow" => "/workflow runs scripted operations with fan-out/fan-in run cards",
         _ => "",
     }
 }
 
-fn render_config_editor_value_line(edit: &ConfigEdit) -> ratatui::text::Line<'static> {
+fn config_default_placeholder_message(key: &str) -> Option<MessageId> {
+    match key {
+        "default_model" | "background_color" => Some(MessageId::ConfigDefaultValue),
+        "reasoning_effort" => Some(MessageId::ConfigDefaultReasoning),
+        _ => None,
+    }
+}
+
+fn config_boolean_key(key: &str) -> bool {
+    matches!(
+        key,
+        "allow_shell"
+            | "telemetry"
+            | "calm_mode"
+            | "low_motion"
+            | "fancy_animations"
+            | "launch_screen"
+            | "show_thinking"
+            | "thinking_default_expanded"
+            | "thinking_highlight"
+            | "help_expand_groups"
+            | "pin_last_prompt"
+            | "show_tool_details"
+            | "composer_border"
+            | "composer_multiline_mode"
+            | "bracketed_paste"
+            | "paste_burst_detection"
+            | "workspace_follow_symlinks"
+            | "context_panel"
+            | "sessions_rail"
+            | "session_auto_resume"
+            | "auto_compact"
+    )
+}
+
+fn config_integer_key(key: &str) -> bool {
+    matches!(
+        key,
+        "stream_chunk_timeout_secs"
+            | "work_surface_top_height"
+            | "work_surface_side_width"
+            | "mention_menu_limit"
+            | "mention_walk_depth"
+            | "thinking_preview_lines"
+            | "auto_compact_threshold_percent"
+            | "max_history"
+            | "fleet.exec.max_spawn_depth"
+    )
+}
+
+fn config_choice_values(key: &str, provider: ApiProvider) -> Option<Vec<String>> {
+    let values = match key {
+        key if config_boolean_key(key) => vec!["false", "true"],
+        "approval_mode" => vec!["ask", "auto-review", "full-access"],
+        "permission_posture" => vec!["ask", "auto-review", "full-access"],
+        "approval_policy" => vec!["use-tui-default", "ask", "auto-review", "full-access"],
+        "default_mode" => vec!["agent", "plan", "operate"],
+        "reasoning_effort" if provider == ApiProvider::OpenaiCodex => {
+            vec!["default", "low", "medium", "high", "xhigh"]
+        }
+        "reasoning_effort" if provider == ApiProvider::Xai => {
+            vec!["default", "auto", "low", "medium", "high", "xhigh"]
+        }
+        "reasoning_effort" => {
+            vec!["default", "auto", "off", "low", "medium", "high", "max"]
+        }
+        "ocean_treatment" => vec!["ombre", "flat"],
+        "focus_texture" => vec!["off", "scrim", "grain"],
+        "work_surface_placement" => vec!["top", "left", "right", "off"],
+        "rail_panel" => vec!["tasks", "agents", "context", "pinned"],
+        "status_indicator" => vec!["cw", "whale", "dots", "off"],
+        "synchronized_output" => vec!["auto", "on", "off"],
+        "cost_currency" => vec!["usd", "cny"],
+        "transcript_spacing" | "composer_density" => {
+            vec!["compact", "comfortable", "spacious"]
+        }
+        "tool_collapse" => vec!["compact", "expanded", "calm"],
+        "inline_diffs" => vec!["full", "summary", "off"],
+        "composer_vim_mode" => vec!["normal", "vim"],
+        "mention_menu_behavior" => vec!["fuzzy", "browser"],
+        "theme" => {
+            return Some(
+                crate::palette::SELECTABLE_THEMES
+                    .iter()
+                    .map(|id| id.name().to_string())
+                    .collect(),
+            );
+        }
+        "locale" => {
+            let mut values = vec!["auto".to_string()];
+            values.extend(
+                Locale::shipped()
+                    .iter()
+                    .map(|locale| locale.tag().to_string()),
+            );
+            return Some(values);
+        }
+        _ => return None,
+    };
+    Some(values.into_iter().map(str::to_string).collect())
+}
+
+fn canonical_config_choice(key: &str, value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase().replace([' ', '_'], "-");
+    match key {
+        key if config_boolean_key(key) => match normalized.as_str() {
+            "true" | "on" | "yes" | "1" | "enabled" => "true".to_string(),
+            _ => "false".to_string(),
+        },
+        "approval_mode" | "permission_posture" | "approval_policy" => match normalized.as_str() {
+            "ask" | "suggest" | "on-request" | "untrusted" => "ask".to_string(),
+            "auto" | "auto-review" => "auto-review".to_string(),
+            "full" | "full-access" | "bypass" | "yolo" => "full-access".to_string(),
+            "never" | "deny" => "never".to_string(),
+            _ => normalized,
+        },
+        "reasoning_effort" => {
+            if matches!(normalized.as_str(), "" | "(default)" | "config-default") {
+                "default".to_string()
+            } else if normalized == "max" && value.trim().eq_ignore_ascii_case("xhigh") {
+                "xhigh".to_string()
+            } else {
+                normalized
+            }
+        }
+        "cost_currency" => match normalized.as_str() {
+            "rmb" | "yuan" | "cny" => "cny".to_string(),
+            _ => "usd".to_string(),
+        },
+        "default_mode" => match normalized.as_str() {
+            "plan" => "plan".to_string(),
+            "operate" | "operation" | "ops" => "operate".to_string(),
+            _ => "agent".to_string(),
+        },
+        "locale" => normalize_configured_locale(value)
+            .unwrap_or(value)
+            .to_string(),
+        _ => normalized,
+    }
+}
+
+fn config_choice_label(locale: Locale, key: &str, value: &str) -> String {
+    let label = match (key, value) {
+        ("telemetry", "true") => tr(locale, MessageId::ConfigValueTelemetryOn).to_string(),
+        ("telemetry", "false") => tr(locale, MessageId::ConfigValueTelemetryOff).to_string(),
+        (key, "true") if config_boolean_key(key) => "On".to_string(),
+        (key, "false") if config_boolean_key(key) => "Off".to_string(),
+        ("approval_mode" | "permission_posture" | "approval_policy", "ask") => "Ask".to_string(),
+        ("approval_mode" | "permission_posture" | "approval_policy", "auto-review") => {
+            "Auto-Review".to_string()
+        }
+        ("approval_policy", "use-tui-default") => "Use TUI permission default".to_string(),
+        ("approval_mode" | "permission_posture" | "approval_policy", "full-access") => {
+            "Full Access".to_string()
+        }
+        ("approval_mode" | "approval_policy", "never") => "Never".to_string(),
+        ("default_mode", "agent") => "Act".to_string(),
+        ("default_mode", "plan") => "Plan (read only)".to_string(),
+        ("default_mode", "operate") => "Operate".to_string(),
+        ("work_surface_placement", "top") => "Top".to_string(),
+        ("work_surface_placement", "left") => "Left sidebar".to_string(),
+        ("work_surface_placement", "right") => "Right sidebar".to_string(),
+        ("work_surface_placement", "off") => "Off".to_string(),
+        ("rail_panel", "tasks") => "Tasks".to_string(),
+        ("rail_panel", "agents") => "Agents".to_string(),
+        ("rail_panel", "context") => "Context".to_string(),
+        ("rail_panel", "pinned") => "Pinned".to_string(),
+        ("reasoning_effort", "default") => "Provider default".to_string(),
+        ("status_indicator", "cw") => "Ghosty mark".to_string(),
+        ("status_indicator", "whale") => "Animated whale".to_string(),
+        ("status_indicator", "dots") => "Animated dots".to_string(),
+        ("status_indicator", "off") => "Off".to_string(),
+        ("inline_diffs", "full") => "Full diff".to_string(),
+        ("inline_diffs", "summary") => "Summary".to_string(),
+        ("inline_diffs", "off") => "Off".to_string(),
+        _ => value.to_string(),
+    };
+
+    if key == "locale" && configured_locale_is_partial_pack(value) {
+        format!(
+            "{label} ({})",
+            tr(locale, MessageId::ConfigLocalePartialBadge)
+        )
+    } else {
+        label
+    }
+}
+
+fn config_choice_detail(locale: Locale, key: &str, value: &str) -> Cow<'static, str> {
+    if key == "locale" && configured_locale_is_partial_pack(value) {
+        return tr(locale, MessageId::ConfigLocalePartialDetail);
+    }
+
+    Cow::Borrowed(match (key, value) {
+        ("approval_mode" | "permission_posture" | "approval_policy", "ask") => {
+            "Ask before tools that can make consequential changes."
+        }
+        ("approval_mode" | "permission_posture" | "approval_policy", "auto-review") => {
+            "Review tool risk automatically and ask when a decision needs you."
+        }
+        ("approval_policy", "use-tui-default") => {
+            "Remove the root config override and use the saved TUI permission choice."
+        }
+        ("approval_mode" | "permission_posture" | "approval_policy", "full-access") => {
+            "Run tools without approval prompts; workspace rules still apply."
+        }
+        ("approval_mode" | "approval_policy", "never") => {
+            "Block every tool that requires approval."
+        }
+        ("default_mode", "agent") => "Start ready to collaborate and use tools.",
+        ("default_mode", "plan") => "Start in a read-only planning workspace.",
+        ("default_mode", "operate") => {
+            "Start as a coordinator that delegates work to bounded workers."
+        }
+        ("work_surface_placement", "top") => "Show Tasks, To-do, and Workers above the transcript.",
+        ("work_surface_placement", "left") => {
+            "Show Tasks, To-do, and Workers in a left sidebar when the terminal is wide enough."
+        }
+        ("work_surface_placement", "right") => {
+            "Show Tasks, To-do, and Workers in a right sidebar when the terminal is wide enough."
+        }
+        ("work_surface_placement", "off") => "Hide the rail entirely.",
+        ("rail_panel", "tasks") => "Rail shows the live Tasks / To-do / Workers list.",
+        ("rail_panel", "agents") => "Rail shows sub-agents and fan-out state.",
+        ("rail_panel", "context") => "Rail shows workspace, token, and cost context.",
+        ("rail_panel", "pinned") => "Rail shows the pinned goal and checklist summary.",
+        ("low_motion", "true") => "Stops live-state movement without changing model output.",
+        ("low_motion", "false") => "Allows motion selected by the other appearance settings.",
+        ("fancy_animations", "true") => "Animates truthful tool, status, and ocean live state.",
+        ("fancy_animations", "false") => "Keeps live-state markers and the ocean treatment static.",
+        ("show_thinking", "true") => "Show model reasoning blocks in the transcript.",
+        ("show_thinking", "false") => {
+            "Keep model reasoning hidden; answers and tools remain visible."
+        }
+        ("thinking_highlight", "true") => "Fill the model reasoning background.",
+        ("thinking_highlight", "false") => {
+            "Keep the dashed reasoning rail and italic text without a filled background."
+        }
+        ("ocean_treatment", "ombre") => "Use one continuous ocean color field.",
+        ("ocean_treatment", "flat") => "Use a single flat background color.",
+        _ => "",
+    })
+}
+
+fn render_config_editor_value_line(
+    edit: &ConfigEdit,
+    locale: Locale,
+) -> ratatui::text::Line<'static> {
     use ratatui::{
         style::Style,
         text::{Line, Span},
@@ -1272,13 +3491,13 @@ fn render_config_editor_value_line(edit: &ConfigEdit) -> ratatui::text::Line<'st
 
     let mut spans = Vec::new();
     spans.push(Span::styled(
-        "New: ",
+        tr(locale, MessageId::ConfigEditNewLabel),
         Style::default().fg(palette::TEXT_MUTED),
     ));
 
     let cursor_style = Style::default()
-        .fg(palette::DEEPSEEK_INK)
-        .bg(palette::DEEPSEEK_SKY)
+        .fg(palette::WHALE_BG)
+        .bg(palette::WHALE_INFO)
         .bold();
     let selected_style = Style::default()
         .fg(palette::SELECTION_TEXT)
@@ -1333,6 +3552,20 @@ impl ModalView for ConfigView {
                 }
             }
             KeyCode::Char('q') if self.filter.is_empty() => ViewAction::Close,
+            KeyCode::Tab
+                if !key.modifiers.contains(KeyModifiers::SHIFT) && self.filter.is_empty() =>
+            {
+                self.active_tab = self.active_tab.next();
+                self.select_first_visible_row();
+                ViewAction::None
+            }
+            KeyCode::BackTab | KeyCode::Tab
+                if key.modifiers.contains(KeyModifiers::SHIFT) && self.filter.is_empty() =>
+            {
+                self.active_tab = self.active_tab.prev();
+                self.select_first_visible_row();
+                ViewAction::None
+            }
             KeyCode::Up => {
                 self.move_selection(-1);
                 ViewAction::None
@@ -1387,6 +3620,9 @@ impl ModalView for ConfigView {
                     .and_then(|idx| self.rows.get(idx))
                     .is_some_and(|row| row.editable)
                 {
+                    if let Some(action) = self.open_selected_catalog_picker() {
+                        return action;
+                    }
                     self.start_edit();
                 }
                 ViewAction::None
@@ -1397,9 +3633,22 @@ impl ModalView for ConfigView {
                     .and_then(|idx| self.rows.get(idx))
                     .is_some_and(|row| row.editable)
                 {
+                    if let Some(action) = self.open_selected_catalog_picker() {
+                        return action;
+                    }
+                    if let Some(action) = self.toggle_selected_boolean() {
+                        return action;
+                    }
                     self.start_edit();
                 }
                 ViewAction::None
+            }
+            KeyCode::Char(' ') if self.filter.is_empty() => {
+                if let Some(action) = self.toggle_selected_boolean() {
+                    action
+                } else {
+                    ViewAction::None
+                }
             }
             KeyCode::Char(ch)
                 if !key.modifiers.contains(KeyModifiers::CONTROL) && !ch.is_control() =>
@@ -1412,10 +3661,62 @@ impl ModalView for ConfigView {
     }
 
     fn handle_mouse(&mut self, mouse: MouseEvent) -> ViewAction {
+        if self
+            .editing
+            .as_ref()
+            .is_some_and(|edit| edit.choices.is_some())
+        {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => self.move_choice(-1),
+                MouseEventKind::ScrollDown => self.move_choice(1),
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(choice) = self
+                        .last_choice_hitboxes
+                        .borrow()
+                        .iter()
+                        .find_map(|(y, choice)| (*y == mouse.row).then_some(*choice))
+                        && let Some(edit) = self.editing.as_mut()
+                    {
+                        edit.selected_choice = choice;
+                    }
+                }
+                _ => {}
+            }
+            return ViewAction::None;
+        }
         if self.editing.is_some() {
             return ViewAction::None;
         }
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.move_selection(-3);
+                self.last_mouse_selected = None;
+                return ViewAction::None;
+            }
+            MouseEventKind::ScrollDown => {
+                self.move_selection(3);
+                self.last_mouse_selected = None;
+                return ViewAction::None;
+            }
+            _ => {}
+        }
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return ViewAction::None;
+        }
+
+        let clicked_tab = self
+            .last_tab_hitboxes
+            .borrow()
+            .iter()
+            .find_map(|(x0, x1, y, tab)| {
+                (*y == mouse.row && mouse.column >= *x0 && mouse.column < *x1).then_some(*tab)
+            });
+        if let Some(tab) = clicked_tab {
+            if self.active_tab != tab {
+                self.active_tab = tab;
+                self.select_first_visible_row();
+            }
+            self.last_mouse_selected = None;
             return ViewAction::None;
         }
 
@@ -1425,9 +3726,20 @@ impl ModalView for ConfigView {
             .iter()
             .find_map(|(y, row_idx)| (*y == mouse.row).then_some(*row_idx));
         if let Some(row_idx) = selected {
+            let activate = self.last_mouse_selected == Some(row_idx) && self.selected == row_idx;
             self.selected = row_idx;
             self.status = None;
             self.adjust_scroll(self.visible_rows_cached());
+            self.last_mouse_selected = Some(row_idx);
+            if activate && self.rows.get(row_idx).is_some_and(|row| row.editable) {
+                if let Some(action) = self.open_selected_catalog_picker() {
+                    return action;
+                }
+                if let Some(action) = self.toggle_selected_boolean() {
+                    return action;
+                }
+                self.start_edit();
+            }
         }
         ViewAction::None
     }
@@ -1436,121 +3748,290 @@ impl ModalView for ConfigView {
         use ratatui::{
             style::Style,
             text::{Line, Span},
-            widgets::{Block, Borders, Clear, Padding, Paragraph, Widget},
+            widgets::{Paragraph, Widget},
         };
 
-        let popup_width = 84.min(area.width.saturating_sub(4));
-        let popup_height = 22.min(area.height.saturating_sub(4));
-
-        let popup_area = Rect {
-            x: (area.width - popup_width) / 2,
-            y: (area.height - popup_height) / 2,
-            width: popup_width,
-            height: popup_height,
-        };
-
-        Clear.render(popup_area, buf);
-
-        let base_block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(palette::BORDER_COLOR))
-            .style(Style::default().bg(palette::DEEPSEEK_INK))
-            .padding(Padding::uniform(1));
-
-        let inner = base_block.inner(popup_area);
+        let inner =
+            render_underwater_surface(area, buf, self.tr(MessageId::ConfigModalTitle).to_string());
         let (lines, footer) = if let Some(edit) = self.editing.as_ref() {
+            *self.last_choice_hitboxes.borrow_mut() = Vec::new();
+            *self.last_tab_hitboxes.borrow_mut() = Vec::new();
+            let footer_text = if edit.choices.is_some() {
+                if inner.width < 56 || inner.height <= 8 {
+                    " ↑/↓ choose · Enter apply · Esc ".to_string()
+                } else {
+                    " ↑/↓ choose · Enter apply · Esc cancel · 1-9 jump ".to_string()
+                }
+            } else {
+                self.tr(MessageId::ConfigEditFooter).to_string()
+            };
+            let reserved_footer_lines =
+                wrapped_footer_lines(&footer_text, inner.width, Style::default()).len();
+            // Spacer rows are secondary chrome: give them up before the
+            // editable value line falls below the wrapped footer on compact
+            // terminals (#40x12).
+            let spacious = usize::from(inner.height).saturating_sub(reserved_footer_lines) >= 8;
             let mut lines: Vec<Line> = Vec::new();
+            let edit_label = config_label_for_key_for_locale(self.locale, &edit.key);
+            let edit_title = if edit_label == edit.key {
+                format!("{}{}", self.tr(MessageId::ConfigEditTitlePrefix), edit.key)
+            } else {
+                format!(
+                    "{}{} [{}]",
+                    self.tr(MessageId::ConfigEditTitlePrefix),
+                    edit_label,
+                    edit.key
+                )
+            };
             lines.push(Line::from(vec![Span::styled(
-                format!("Edit {}", edit.key),
-                Style::default().fg(palette::DEEPSEEK_SKY).bold(),
+                edit_title,
+                Style::default().fg(palette::WHALE_INFO).bold(),
             )]));
-            lines.push(Line::from(""));
+            if spacious {
+                lines.push(Line::from(""));
+            }
             lines.push(Line::from(vec![
-                Span::styled("Scope: ", Style::default().fg(palette::TEXT_MUTED)),
-                Span::raw(edit.scope.label()),
+                Span::styled(
+                    self.tr(MessageId::ConfigEditScopeLabel),
+                    Style::default().fg(palette::TEXT_MUTED),
+                ),
+                Span::raw(edit.scope.label(self.locale)),
             ]));
             lines.push(Line::from(vec![
-                Span::styled("Current: ", Style::default().fg(palette::TEXT_MUTED)),
+                Span::styled(
+                    self.tr(MessageId::ConfigEditCurrentLabel),
+                    Style::default().fg(palette::TEXT_MUTED),
+                ),
                 Span::raw(truncate_view_text(&edit.original_value, 60)),
             ]));
-            lines.push(Line::from(""));
-            lines.push(render_config_editor_value_line(edit));
-            lines.push(Line::from(""));
-            let hint = config_hint_for_key(&edit.key);
-            if !hint.is_empty() {
-                lines.push(Line::from(vec![
-                    Span::styled("Hint: ", Style::default().fg(palette::TEXT_MUTED)),
-                    Span::raw(hint),
-                ]));
+            if spacious {
+                lines.push(Line::from(""));
             }
-            (
-                lines,
-                " Enter=apply, Esc=cancel, Ctrl+U=clear, Ctrl+A=all, \u{2190}/\u{2192}=move "
-                    .to_string(),
-            )
-        } else {
-            let content_height = usize::from(inner.height);
-            let header_lines = 5usize;
-            let bottom_lines = 1usize;
-            let visible_rows = content_height
-                .saturating_sub(header_lines + bottom_lines)
-                .max(1);
-            self.last_visible_rows.set(visible_rows);
+            if let Some(choices) = edit.choices.as_ref() {
+                lines.push(Line::from(Span::styled(
+                    "Choose:",
+                    Style::default().fg(palette::TEXT_MUTED),
+                )));
 
+                // Large catalogs (providers and themes) remain bounded by the
+                // terminal. Keep the active option centered and mouse-hitbox
+                // only the slice that is actually visible.
+                let selected_detail = choices
+                    .get(edit.selected_choice)
+                    .map(|choice| config_choice_detail(self.locale, &edit.key, choice))
+                    .unwrap_or_default();
+                let available_rows =
+                    usize::from(inner.height).saturating_sub(reserved_footer_lines + lines.len());
+                // At the minimum supported height, the choices themselves are
+                // the primary object. Shed the explanatory detail before any
+                // option; larger surfaces keep one row for that detail.
+                let detail_rows = usize::from(!selected_detail.is_empty() && available_rows > 3);
+                let option_budget = available_rows.saturating_sub(detail_rows).max(1);
+                let visible_options = option_budget.min(choices.len());
+                let max_start = choices.len().saturating_sub(visible_options);
+                let start = edit
+                    .selected_choice
+                    .saturating_sub(visible_options / 2)
+                    .min(max_start);
+                let end = (start + visible_options).min(choices.len());
+                let mut hitboxes = Vec::new();
+
+                for (choice_idx, choice) in choices.iter().enumerate().take(end).skip(start) {
+                    let selected = choice_idx == edit.selected_choice;
+                    let marker = crate::tui::glyphs::selection_marker(selected);
+                    let label = config_choice_label(self.locale, &edit.key, choice);
+                    let line_y = inner.y.saturating_add(lines.len() as u16);
+                    hitboxes.push((line_y, choice_idx));
+                    let mut line = Line::from(format!(
+                        "  {marker} {:>2}. {}",
+                        choice_idx + 1,
+                        truncate_view_text(&label, usize::from(inner.width).saturating_sub(8))
+                    ));
+                    line.style = if selected {
+                        menu_style::selected_row_style()
+                    } else {
+                        Style::default().fg(palette::TEXT_PRIMARY)
+                    };
+                    lines.push(line);
+                }
+                *self.last_choice_hitboxes.borrow_mut() = hitboxes;
+
+                if !selected_detail.is_empty()
+                    && lines.len() + reserved_footer_lines < usize::from(inner.height)
+                {
+                    lines.push(Line::from(Span::styled(
+                        crate::tui::ui_text::semantic_truncate(
+                            selected_detail.as_ref(),
+                            usize::from(inner.width),
+                        ),
+                        Style::default().fg(palette::TEXT_MUTED),
+                    )));
+                }
+            } else {
+                lines.push(render_config_editor_value_line(edit, self.locale));
+                if spacious {
+                    lines.push(Line::from(""));
+                }
+                let hint = config_hint_for_key(self.locale, &edit.key);
+                if !hint.is_empty() {
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            self.tr(MessageId::ConfigEditHintLabel),
+                            Style::default().fg(palette::TEXT_MUTED),
+                        ),
+                        Span::raw(hint),
+                    ]));
+                }
+            }
+            (lines, footer_text)
+        } else {
+            *self.last_choice_hitboxes.borrow_mut() = Vec::new();
+            let content_height = usize::from(inner.height);
             let items = self.visible_items();
             let match_count = self.matching_row_indices().len();
-            let start = self.scroll.min(items.len());
-            let end = (start + visible_rows).min(items.len());
-            let scrollable = items.len() > visible_rows;
+
+            // Reserve the action footer by its actual wrapped height: the
+            // prose hints wrap to two or three rows at compact widths, and
+            // every wrapped row must come out of the table budget or the
+            // settings rows silently fall off the bottom of the body.
+            let footer_height = |id: MessageId| -> usize {
+                wrapped_footer_lines(&self.tr(id), inner.width, Style::default()).len()
+            };
+            let footer_lines = if !self.filter.is_empty() {
+                footer_height(MessageId::ConfigFooterFiltered)
+            } else {
+                footer_height(MessageId::ConfigFooterScrollable)
+                    .max(footer_height(MessageId::ConfigFooterDefault))
+            }
+            .max(1);
+
+            // Full chrome spends five header rows (in-body title, search,
+            // blank, column captions, separator) plus a status row under the
+            // table. That secondary material collapses before the settings
+            // rows do: compact keeps one search/count line — the surface
+            // hairline already owns the title — and cedes the rest to the
+            // rows the room exists to edit.
+            const FULL_HEADER_LINES: usize = 4;
+            const FULL_BOTTOM_LINES: usize = 1;
+            let full_rows =
+                content_height.saturating_sub(FULL_HEADER_LINES + FULL_BOTTOM_LINES + footer_lines);
+            let compact = full_rows < 4;
+            let header_lines = if compact { 2 } else { FULL_HEADER_LINES };
+            let bottom_lines = if compact {
+                usize::from(self.status.is_some())
+            } else {
+                FULL_BOTTOM_LINES
+            };
+            let description_lines = if compact { 0 } else { 4 };
+            let list_line_budget = content_height
+                .saturating_sub(header_lines + bottom_lines + description_lines + footer_lines)
+                .max(1);
+            self.last_visible_rows.set(list_line_budget);
+
+            // The stored scroll can predate this frame's geometry (a resize
+            // shrinks the window before any key recomputes it), so anchor the
+            // visible window to the selection here: the row being manipulated
+            // is always rendered.
+            let item_line_cost = |item: &ConfigListItem| match item {
+                ConfigListItem::Section(_) => 2usize,
+                ConfigListItem::Row(_) => 1usize,
+            };
+            let visible_end = |start: usize| {
+                let mut used = 0usize;
+                let mut end = start;
+                while end < items.len() {
+                    let cost = item_line_cost(&items[end]);
+                    if end > start && used.saturating_add(cost) > list_line_budget {
+                        break;
+                    }
+                    used = used.saturating_add(cost);
+                    end += 1;
+                }
+                end
+            };
+            let mut start = self.scroll.min(items.len().saturating_sub(1));
+            if let Some(selected_pos) = self.selected_display_position(&items) {
+                start = start.min(selected_pos);
+                while selected_pos >= visible_end(start) && start < selected_pos {
+                    start += 1;
+                }
+            }
+            let end = visible_end(start);
+            let scrollable = start > 0 || end < items.len();
             let search_value = if self.filter.is_empty() {
                 self.tr(MessageId::ConfigSearchPlaceholder).to_string()
             } else {
                 self.filter.clone()
             };
 
-            let (key_column_width, value_column_width, scope_column_width) =
-                self.table_column_widths(usize::from(inner.width));
-            let mut lines: Vec<Line> = vec![
-                Line::from(vec![Span::styled(
-                    self.tr(MessageId::ConfigTitle),
-                    Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
-                )]),
-                Line::from(vec![
-                    Span::styled("  Search: ", Style::default().fg(palette::TEXT_MUTED)),
-                    Span::raw(search_value),
-                    Span::styled(
-                        format!("  ({match_count}/{})", self.rows.len()),
-                        Style::default().fg(palette::TEXT_MUTED),
-                    ),
-                ]),
-                Line::from(""),
-                Line::from(format!(
-                    "  {:<key_width$} {:<value_width$} {:<scope_width$}",
-                    "Key",
-                    "Value",
-                    "Scope",
-                    key_width = key_column_width,
-                    value_width = value_column_width,
-                    scope_width = scope_column_width
-                )),
-                Line::from(format!(
-                    "  {}",
-                    "-".repeat(
-                        key_column_width
-                            + value_column_width
-                            + scope_column_width
-                            + CONFIG_COLUMN_GAPS_WIDTH
-                    )
-                )),
-            ];
+            let table_width = usize::from(inner.width).saturating_sub(usize::from(scrollable));
+            let (key_column_width, value_column_width, _scope_column_width) =
+                self.table_column_widths(table_width);
+            let search_line = Line::from(vec![
+                Span::styled("  Search: ", Style::default().fg(palette::TEXT_MUTED)),
+                Span::raw(search_value),
+                Span::styled(
+                    format!("  ({match_count}/{})", self.rows.len()),
+                    Style::default().fg(palette::TEXT_MUTED),
+                ),
+            ]);
+            // Category tabs — app-style shell, not ASCII table headers.
+            let mut tab_spans = Vec::new();
+            let tab_y = inner.y.saturating_add(u16::from(!compact));
+            let mut tab_x = inner.x;
+            let mut tab_hitboxes = Vec::new();
+            for (i, tab) in ConfigTab::ALL.iter().enumerate() {
+                if i > 0 {
+                    tab_spans.push(Span::styled("  ", Style::default()));
+                    tab_x = tab_x.saturating_add(2);
+                }
+                let label = format!(" {} ", tab.label());
+                let width = UnicodeWidthStr::width(label.as_str()) as u16;
+                tab_hitboxes.push((tab_x, tab_x.saturating_add(width), tab_y, *tab));
+                let active = *tab == self.active_tab;
+                tab_spans.push(Span::styled(
+                    label,
+                    if active {
+                        Style::default()
+                            .fg(palette::SELECTION_TEXT)
+                            .bg(palette::WHALE_ACTION)
+                            .add_modifier(ratatui::style::Modifier::BOLD)
+                    } else {
+                        Style::default().fg(palette::TEXT_MUTED)
+                    },
+                ));
+                tab_x = tab_x.saturating_add(width);
+            }
+            *self.last_tab_hitboxes.borrow_mut() = tab_hitboxes;
+            let tab_line = Line::from(tab_spans);
+            let mut lines: Vec<Line> = if compact {
+                vec![tab_line, search_line]
+            } else {
+                vec![
+                    Line::from(vec![
+                        Span::styled(
+                            self.tr(MessageId::ConfigTitle),
+                            Style::default().fg(palette::WHALE_ACTION).bold(),
+                        ),
+                        Span::styled(
+                            "  Tab/Shift+Tab categories",
+                            Style::default().fg(palette::TEXT_HINT),
+                        ),
+                    ]),
+                    tab_line,
+                    search_line,
+                    Line::from(""),
+                ]
+            };
             let mut row_hitboxes = Vec::new();
 
-            for item in items.iter().skip(start).take(visible_rows) {
+            for item in &items[start..end] {
                 match item {
                     ConfigListItem::Section(section) => {
+                        lines.push(Line::from(""));
                         lines.push(Line::from(Span::styled(
-                            format!("  {}", section.label()),
-                            Style::default().fg(palette::DEEPSEEK_SKY).bold(),
+                            format!("  {}", section.label(self.locale)),
+                            Style::default().fg(palette::TEXT_HINT).bold(),
                         )));
                     }
                     ConfigListItem::Row(idx) => {
@@ -1561,30 +4042,61 @@ impl ModalView for ConfigView {
                         row_hitboxes.push((line_y, *idx));
                         let selected = *idx == self.selected;
                         let style = if selected {
-                            Style::default()
-                                .fg(ratatui::style::Color::White)
-                                .bg(palette::DEEPSEEK_BLUE)
-                                .add_modifier(ratatui::style::Modifier::BOLD)
+                            menu_style::selected_row_style()
                         } else {
                             Style::default().fg(palette::TEXT_PRIMARY)
                         };
-                        let key = truncate_view_text(&row.key, key_column_width);
+                        let label = config_label_for_key_for_locale(self.locale, &row.key);
+                        let key = fit_config_column(&label, key_column_width);
                         let value =
-                            truncate_view_text(&self.row_display_value(row), value_column_width);
-                        let scope = truncate_view_text(row.scope.label(), scope_column_width);
-                        let mut line = Line::from(format!(
-                            "  {:<key_width$} {:<value_width$} {:<scope_width$}",
-                            key,
-                            value,
-                            scope,
-                            key_width = key_column_width,
-                            value_width = value_column_width,
-                            scope_width = scope_column_width
-                        ));
-                        line.style = style;
+                            fit_config_column(&self.row_display_value(row), value_column_width);
+                        // Quiet saved / session badges (not a full scope column shout).
+                        let scope_badge = match row.scope {
+                            ConfigScope::Saved => "saved",
+                            ConfigScope::Session => "session",
+                        };
+                        let rail = if selected { "▌" } else { " " };
+                        let mut line = Line::from(vec![
+                            Span::styled(
+                                rail,
+                                Style::default().fg(if selected {
+                                    palette::WHALE_ACTION
+                                } else {
+                                    palette::TEXT_DIM
+                                }),
+                            ),
+                            Span::styled(format!("{key}  {value}  "), style),
+                            Span::styled(
+                                scope_badge,
+                                Style::default()
+                                    .fg(palette::TEXT_HINT)
+                                    .add_modifier(ratatui::style::Modifier::DIM),
+                            ),
+                        ]);
+                        if selected {
+                            line.style = menu_style::selected_row_bg_style();
+                        }
                         lines.push(line);
                     }
                 }
+            }
+
+            // Description pane for the selected setting.
+            if !compact && let Some(row) = self.rows.get(self.selected) {
+                lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled(
+                    "────────────────────────────────────────",
+                    Style::default().fg(palette::TEXT_DIM),
+                )));
+                let desc = Self::setting_description(&row.key);
+                lines.push(Line::from(Span::styled(
+                    format!("  {desc}"),
+                    Style::default().fg(palette::TEXT_MUTED),
+                )));
+                lines.push(Line::from(Span::styled(
+                    "  Enter change · R reset · Esc close",
+                    Style::default().fg(palette::TEXT_HINT),
+                )));
             }
             *self.last_row_hitboxes.borrow_mut() = row_hitboxes;
 
@@ -1604,28 +4116,37 @@ impl ModalView for ConfigView {
                 )));
             }
 
-            let bottom_text = if let Some(status) = self.status.as_ref() {
-                status.clone()
-            } else if !self.filter.is_empty() {
-                format!(
-                    "{}: {match_count}",
-                    self.tr(MessageId::ConfigFilteredSettings)
-                )
-            } else if scrollable && !items.is_empty() {
-                format!(
-                    "{} {}-{} / {}",
-                    self.tr(MessageId::ConfigShowing),
-                    self.scroll.saturating_add(1),
-                    end,
-                    items.len()
-                )
-            } else {
-                String::new()
-            };
-            lines.push(Line::from(Span::styled(
-                bottom_text,
-                Style::default().fg(palette::TEXT_MUTED),
-            )));
+            if bottom_lines > 0 {
+                let selected_hint = self.selected_row_hint();
+                let bottom_text = if let Some(status) = self.status.as_ref() {
+                    status.clone()
+                } else if !self.filter.is_empty() {
+                    format!(
+                        "{}: {match_count}",
+                        self.tr(MessageId::ConfigFilteredSettings)
+                    )
+                } else if scrollable && !items.is_empty() {
+                    let showing = format!(
+                        "{} {}-{} / {}",
+                        self.tr(MessageId::ConfigShowing),
+                        start.saturating_add(1),
+                        end,
+                        items.len()
+                    );
+                    if let Some(hint) = selected_hint {
+                        format!("{showing} | {hint}")
+                    } else {
+                        showing
+                    }
+                } else {
+                    selected_hint.unwrap_or_default()
+                };
+                lines.push(Line::from(Span::styled(
+                    crate::tui::ui_text::semantic_truncate(&bottom_text, usize::from(inner.width)),
+                    Style::default().fg(palette::TEXT_MUTED),
+                )));
+            }
+            self.last_render_scroll.set(start);
 
             let footer = if !self.filter.is_empty() {
                 self.tr(MessageId::ConfigFooterFiltered)
@@ -1637,26 +4158,30 @@ impl ModalView for ConfigView {
             (lines, footer.to_string())
         };
 
-        let block = Block::default()
-            .title(Line::from(vec![Span::styled(
-                self.tr(MessageId::ConfigModalTitle),
-                Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
-            )]))
-            .title_bottom(Line::from(Span::styled(
-                footer,
-                Style::default().fg(palette::TEXT_MUTED),
-            )))
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(palette::BORDER_COLOR))
-            .style(Style::default().bg(palette::DEEPSEEK_INK))
-            .padding(Padding::uniform(1));
-
-        let inner = block.inner(popup_area);
-        block.render(popup_area, buf);
+        // Footer wraps inside the body so its hints can never run off the modal
+        // edge (#3732); the table renders into the area above it.
+        let content = render_modal_text_footer(
+            inner,
+            buf,
+            &footer,
+            Style::default().fg(palette::TEXT_MUTED),
+        );
+        let content = if self.editing.is_none() {
+            render_panel_scroll_rail(
+                content,
+                buf,
+                self.visible_items().len(),
+                self.last_render_scroll.get(),
+                self.last_visible_rows.get().max(1),
+                true,
+            )
+        } else {
+            content
+        };
         Paragraph::new(lines)
             .style(Style::default().fg(palette::TEXT_PRIMARY))
             .scroll((0, 0))
-            .render(inner, buf);
+            .render(content, buf);
     }
 }
 
@@ -1667,6 +4192,27 @@ pub use help::HelpView;
 pub struct SubAgentsView {
     agents: Vec<SubAgentResult>,
     scroll: usize,
+    /// Index into the render-ordered agent list (`ordered` on `grouped`).
+    /// Enter/click open the selected agent's transcript — the same primary
+    /// destination every other agent surface resolves to (v0.9.7).
+    selected: usize,
+    /// Rendered agent blocks from the last frame: `(first_line, line_count,
+    /// agent_id)` in render order. Interior-mutable because `render` takes
+    /// `&self`; consumed by click resolution and selection scroll-follow.
+    row_lines: std::cell::RefCell<Vec<(usize, usize, String)>>,
+    /// Body area of the last render, for mapping click rows onto lines.
+    body_area: std::cell::Cell<Rect>,
+    /// Effective (clamped) scroll of the last render.
+    last_render_scroll: std::cell::Cell<usize>,
+    /// Visible body height of the last render.
+    last_visible_lines: std::cell::Cell<usize>,
+    /// Motion policy at open: the Whale Teams working wake animates only
+    /// under `MotionMode::Full` (Reduced/Still hold the poster frame).
+    motion: crate::tui::motion::mode::MotionMode,
+    /// UI locale for the whale state words.
+    locale: Locale,
+    /// Wall clock anchor for the working-wake frame.
+    opened_at: std::time::Instant,
 }
 
 /// Build the agent rows shown by `/subagents`.
@@ -1680,6 +4226,7 @@ pub(crate) fn subagent_view_agents(
     manager_agents: &[SubAgentResult],
 ) -> Vec<SubAgentResult> {
     let mut agents = manager_agents.to_vec();
+    let manager_agent_count = agents.len();
     let mut seen: std::collections::HashSet<String> =
         agents.iter().map(|agent| agent.agent_id.clone()).collect();
 
@@ -1687,7 +4234,7 @@ pub(crate) fn subagent_view_agents(
         if seen.insert(agent_id.clone()) {
             agents.push(live_subagent_result(
                 agent_id,
-                SubAgentType::General,
+                FleetRole::Worker,
                 SubAgentStatus::Running,
                 progress,
                 Some("live"),
@@ -1701,8 +4248,7 @@ pub(crate) fn subagent_view_agents(
             HistoryCell::SubAgent(SubAgentCell::Delegate(card))
                 if seen.insert(card.agent_id.clone()) =>
             {
-                let agent_type =
-                    SubAgentType::from_str(&card.agent_type).unwrap_or(SubAgentType::General);
+                let agent_type = FleetRole::from_str(&card.agent_type).unwrap_or(FleetRole::Worker);
                 agents.push(live_subagent_result(
                     &card.agent_id,
                     agent_type,
@@ -1722,7 +4268,7 @@ pub(crate) fn subagent_view_agents(
                         );
                         agents.push(live_subagent_result(
                             &worker.agent_id,
-                            SubAgentType::General,
+                            FleetRole::Worker,
                             lifecycle_to_subagent_status(worker.status),
                             &objective,
                             Some(card.kind.as_str()),
@@ -1735,6 +4281,27 @@ pub(crate) fn subagent_view_agents(
         }
     }
 
+    let mut display_names = localized_whale_display_names(
+        agents[..manager_agent_count]
+            .iter()
+            .map(|agent| (agent.agent_id.as_str(), agent.nickname.as_deref())),
+        app.ui_locale.tag(),
+    );
+    for agent in &mut agents[..manager_agent_count] {
+        // The row headline reads `nickname`, so the dispatch name lands there
+        // when the agent has one; the generated whale names the rest (#5287).
+        let display_name = crate::tui::sidebar::dispatched_agent_name(agent)
+            .map(str::to_string)
+            .or_else(|| display_names.remove(&agent.agent_id));
+        agent.nickname = display_name;
+    }
+    for agent in &mut agents[manager_agent_count..] {
+        // Progress and transcript rows can arrive before ListSubAgents. Keep
+        // their stable Agent-N placeholder until the manager snapshot supplies
+        // the locale-neutral identity needed for generated whale display.
+        agent.nickname = app.agent_label_map.get(&agent.agent_id).cloned();
+    }
+
     agents
 }
 
@@ -1744,12 +4311,15 @@ fn lifecycle_to_subagent_status(status: AgentLifecycle) -> SubAgentStatus {
         AgentLifecycle::Completed => SubAgentStatus::Completed,
         AgentLifecycle::Failed => SubAgentStatus::Failed("failed in transcript".to_string()),
         AgentLifecycle::Cancelled => SubAgentStatus::Cancelled,
+        AgentLifecycle::Interrupted => {
+            SubAgentStatus::Interrupted("interrupted in transcript".to_string())
+        }
     }
 }
 
 fn live_subagent_result(
     agent_id: &str,
-    agent_type: SubAgentType,
+    agent_type: FleetRole,
     status: SubAgentStatus,
     objective: &str,
     role: Option<&str>,
@@ -1760,6 +4330,8 @@ fn live_subagent_result(
         agent_id: agent_id.to_string(),
         context_mode: "fresh".to_string(),
         fork_context: false,
+        workspace: None,
+        git_branch: None,
         agent_type,
         assignment: SubAgentAssignment {
             objective: summarize_tool_output(objective),
@@ -1768,16 +4340,110 @@ fn live_subagent_result(
         model: String::new(),
         nickname,
         status,
+        worker_status: None,
+        runtime_permissions: None,
+        parent_run_id: None,
+        spawn_depth: 0,
+        child_route: None,
         result: None,
         steps_taken: 0,
+        checkpoint: None,
+        needs_input: None,
         duration_ms: 0,
+        started_at: None,
         from_prior_session: false,
     }
 }
 
 impl SubAgentsView {
     pub fn new(agents: Vec<SubAgentResult>) -> Self {
-        Self { agents, scroll: 0 }
+        Self {
+            agents,
+            scroll: 0,
+            selected: 0,
+            row_lines: std::cell::RefCell::new(Vec::new()),
+            body_area: std::cell::Cell::new(Rect::default()),
+            last_render_scroll: std::cell::Cell::new(0),
+            last_visible_lines: std::cell::Cell::new(0),
+            motion: crate::tui::motion::mode::MotionMode::Still,
+            locale: Locale::En,
+            opened_at: std::time::Instant::now(),
+        }
+    }
+
+    /// Open with the app's motion policy and locale so the whale rows follow
+    /// the user's reduced-motion setting and language.
+    pub fn for_app(app: &App, agents: Vec<SubAgentResult>) -> Self {
+        let mut view = Self::new(agents);
+        view.motion = app.motion_policy().mode();
+        view.locale = app.ui_locale;
+        view
+    }
+
+    /// Working-wake frame for this render: 0 unless motion is Full.
+    fn whale_frame(&self) -> usize {
+        let now_ms = u64::try_from(self.opened_at.elapsed().as_millis()).unwrap_or(0);
+        crate::tui::whales::working_frame(now_ms, self.motion)
+    }
+
+    /// The five status groups in render order, each sorted the way the view
+    /// paints them. Selection, Enter, and click resolution all consume this
+    /// so the highlighted row and the opened agent can never diverge.
+    fn grouped(agents: &[SubAgentResult]) -> [Vec<&SubAgentResult>; 5] {
+        let mut running = Vec::new();
+        let mut completed = Vec::new();
+        let mut interrupted = Vec::new();
+        let mut failed = Vec::new();
+        let mut cancelled = Vec::new();
+
+        for agent in agents {
+            match agent.status {
+                SubAgentStatus::Running => running.push(agent),
+                SubAgentStatus::Completed => completed.push(agent),
+                SubAgentStatus::Interrupted(_) => interrupted.push(agent),
+                SubAgentStatus::Failed(_) => failed.push(agent),
+                SubAgentStatus::Cancelled => cancelled.push(agent),
+                SubAgentStatus::BudgetExhausted => failed.push(agent),
+            }
+        }
+        for group in [
+            &mut running,
+            &mut completed,
+            &mut interrupted,
+            &mut failed,
+            &mut cancelled,
+        ] {
+            group.sort_by(|a, b| {
+                agent_type_order(&a.agent_type)
+                    .cmp(&agent_type_order(&b.agent_type))
+                    .then_with(|| a.agent_id.cmp(&b.agent_id))
+            });
+        }
+        [running, completed, interrupted, failed, cancelled]
+    }
+
+    fn ordered_agent_ids(&self) -> Vec<String> {
+        Self::grouped(&self.agents)
+            .iter()
+            .flatten()
+            .map(|agent| agent.agent_id.clone())
+            .collect()
+    }
+
+    /// Keep the selected agent's block inside the visible body, using the
+    /// last render's layout (stale by at most one frame).
+    fn follow_selection(&mut self) {
+        let row_lines = self.row_lines.borrow();
+        let Some((first, count, _)) = row_lines.get(self.selected) else {
+            return;
+        };
+        let visible = self.last_visible_lines.get().max(1);
+        let end = first + count;
+        if *first < self.scroll {
+            self.scroll = *first;
+        } else if end > self.scroll + visible {
+            self.scroll = end.saturating_sub(visible);
+        }
     }
 }
 
@@ -1795,16 +4461,84 @@ impl ModalView for SubAgentsView {
 
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => ViewAction::Close,
-            KeyCode::Enter | KeyCode::Char('r') | KeyCode::Char('R') => {
+            // Enter opens the selected agent's transcript — the same primary
+            // destination the Work strip and sidebar resolve to (v0.9.7). On
+            // an empty register Enter keeps its old refresh meaning.
+            KeyCode::Enter => match self.ordered_agent_ids().get(self.selected).cloned() {
+                Some(agent_id) => ViewAction::Emit(ViewEvent::OpenAgentTranscript { agent_id }),
+                None => ViewAction::Emit(ViewEvent::SubAgentsRefresh),
+            },
+            KeyCode::Char('r') | KeyCode::Char('R') => {
                 ViewAction::Emit(ViewEvent::SubAgentsRefresh)
             }
+            // Manage: stop the selected worker. Terminal workers ignore the
+            // key; the cancel receipt names what happened either way.
+            KeyCode::Char('x') | KeyCode::Char('X') => {
+                match self.ordered_agent_ids().get(self.selected).cloned() {
+                    Some(agent_id) => ViewAction::Emit(ViewEvent::SidebarAgentCancel { agent_id }),
+                    None => ViewAction::None,
+                }
+            }
+            KeyCode::Char('f') | KeyCode::Char('F') => {
+                ViewAction::Emit(ViewEvent::CommandPaletteSelected {
+                    action: CommandPaletteAction::ExecuteCommand {
+                        command: "/fleet".to_string(),
+                    },
+                })
+            }
             KeyCode::Up | KeyCode::Char('k') => {
-                self.scroll = self.scroll.saturating_sub(1);
+                self.selected = self.selected.saturating_sub(1);
+                self.follow_selection();
                 ViewAction::None
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                self.scroll = self.scroll.saturating_add(1);
+                self.selected = self
+                    .selected
+                    .saturating_add(1)
+                    .min(self.agents.len().saturating_sub(1));
+                self.follow_selection();
                 ViewAction::None
+            }
+            _ => ViewAction::None,
+        }
+    }
+
+    fn handle_mouse(&mut self, mouse: MouseEvent) -> ViewAction {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.scroll = self.scroll.saturating_sub(3);
+                ViewAction::None
+            }
+            MouseEventKind::ScrollDown => {
+                // Clamped to the real maximum at render time.
+                self.scroll = self.scroll.saturating_add(3);
+                ViewAction::None
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                let area = self.body_area.get();
+                if mouse.column < area.x
+                    || mouse.column >= area.x.saturating_add(area.width)
+                    || mouse.row < area.y
+                    || mouse.row >= area.y.saturating_add(area.height)
+                {
+                    return ViewAction::None;
+                }
+                let line = usize::from(mouse.row - area.y) + self.last_render_scroll.get();
+                let hit = self
+                    .row_lines
+                    .borrow()
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (first, count, _))| line >= *first && line < first + count)
+                    .map(|(index, (_, _, agent_id))| (index, agent_id.clone()));
+                match hit {
+                    Some((index, agent_id)) => {
+                        self.selected = index;
+                        // Click opens the same door Enter does.
+                        ViewAction::Emit(ViewEvent::OpenAgentTranscript { agent_id })
+                    }
+                    None => ViewAction::None,
+                }
             }
             _ => ViewAction::None,
         }
@@ -1812,65 +4546,54 @@ impl ModalView for SubAgentsView {
 
     fn update_subagents(&mut self, agents: &[SubAgentResult]) -> bool {
         self.agents = agents.to_vec();
-        self.scroll = self.scroll.min(self.agents.len().saturating_sub(1));
+        let last = self.agents.len().saturating_sub(1);
+        self.scroll = self.scroll.min(last);
+        self.selected = self.selected.min(last);
         true
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
-        use ratatui::{
-            style::Style,
-            text::{Line, Span},
-            widgets::{Block, Borders, Clear, Padding, Paragraph, Widget},
-        };
-
-        let popup_width = 78.min(area.width.saturating_sub(4));
-        let popup_height = 20.min(area.height.saturating_sub(4));
-
-        let popup_area = Rect {
-            x: (area.width - popup_width) / 2,
-            y: (area.height - popup_height) / 2,
-            width: popup_width,
-            height: popup_height,
-        };
-
-        Clear.render(popup_area, buf);
+        Clear.render(area, buf);
+        Block::default()
+            .style(Style::default().bg(palette::WHALE_BG))
+            .render(area, buf);
 
         let mut lines: Vec<Line> = Vec::new();
-        let content_width = popup_width.saturating_sub(4) as usize;
+        let mut row_lines: Vec<(usize, usize, String)> = Vec::new();
+        let content_width = area.width.saturating_sub(4) as usize;
 
         if self.agents.is_empty() {
             lines.push(Line::from(Span::styled(
-                "No agents running.",
+                "No Fleet workers running.",
                 Style::default().fg(palette::TEXT_MUTED),
             )));
+            lines.push(Line::from(Span::styled(
+                "Configure roles and launch posture with /fleet.",
+                Style::default().fg(palette::TEXT_DIM),
+            )));
         } else {
-            let mut running = Vec::new();
-            let mut completed = Vec::new();
-            let mut interrupted = Vec::new();
-            let mut failed = Vec::new();
-            let mut cancelled = Vec::new();
-
-            for agent in &self.agents {
-                match agent.status {
-                    SubAgentStatus::Running => running.push(agent),
-                    SubAgentStatus::Completed => completed.push(agent),
-                    SubAgentStatus::Interrupted(_) => interrupted.push(agent),
-                    SubAgentStatus::Failed(_) => failed.push(agent),
-                    SubAgentStatus::Cancelled => cancelled.push(agent),
-                }
-            }
+            let [running, completed, interrupted, failed, cancelled] = Self::grouped(&self.agents);
+            let selected_id = self
+                .ordered_agent_ids()
+                .get(self.selected)
+                .cloned()
+                .unwrap_or_default();
 
             let status_summary = [
                 ("Running", running.len(), palette::STATUS_WARNING),
                 ("Completed", completed.len(), palette::STATUS_SUCCESS),
                 ("Interrupted", interrupted.len(), palette::STATUS_WARNING),
-                ("Failed", failed.len(), palette::DEEPSEEK_RED),
+                ("Failed", failed.len(), palette::WHALE_ERROR),
                 ("Cancelled", cancelled.len(), palette::TEXT_MUTED),
             ];
 
             lines.push(Line::from(Span::styled(
-                "Sub-agents",
-                Style::default().fg(palette::DEEPSEEK_SKY).bold(),
+                "Fleet workers",
+                Style::default().fg(palette::WHALE_INFO).bold(),
+            )));
+            lines.push(Line::from(Span::styled(
+                "Sub-agent roles are Fleet worker roles.",
+                Style::default().fg(palette::TEXT_DIM),
             )));
 
             let mut summary_parts = Vec::new();
@@ -1894,104 +4617,111 @@ impl ModalView for SubAgentsView {
                 Style::default().fg(palette::TEXT_DIM),
             )));
 
-            running.sort_by(|a, b| {
-                let order = agent_type_order(&a.agent_type).cmp(&agent_type_order(&b.agent_type));
-                order.then_with(|| a.agent_id.cmp(&b.agent_id))
-            });
-            completed.sort_by(|a, b| {
-                let order = agent_type_order(&a.agent_type).cmp(&agent_type_order(&b.agent_type));
-                order.then_with(|| a.agent_id.cmp(&b.agent_id))
-            });
-            interrupted.sort_by(|a, b| {
-                let order = agent_type_order(&a.agent_type).cmp(&agent_type_order(&b.agent_type));
-                order.then_with(|| a.agent_id.cmp(&b.agent_id))
-            });
-            failed.sort_by(|a, b| {
-                let order = agent_type_order(&a.agent_type).cmp(&agent_type_order(&b.agent_type));
-                order.then_with(|| a.agent_id.cmp(&b.agent_id))
-            });
-            cancelled.sort_by(|a, b| {
-                let order = agent_type_order(&a.agent_type).cmp(&agent_type_order(&b.agent_type));
-                order.then_with(|| a.agent_id.cmp(&b.agent_id))
-            });
-
-            append_subagent_group(
-                &mut lines,
-                "Running",
-                palette::STATUS_WARNING.into(),
-                &running,
-                content_width,
-            );
-            append_subagent_group(
-                &mut lines,
-                "Completed",
-                palette::STATUS_SUCCESS.into(),
-                &completed,
-                content_width,
-            );
-            append_subagent_group(
-                &mut lines,
-                "Interrupted",
-                palette::STATUS_WARNING.into(),
-                &interrupted,
-                content_width,
-            );
-            append_subagent_group(
-                &mut lines,
-                "Failed",
-                palette::DEEPSEEK_RED.into(),
-                &failed,
-                content_width,
-            );
-            append_subagent_group(
-                &mut lines,
-                "Cancelled",
-                palette::TEXT_MUTED.into(),
-                &cancelled,
-                content_width,
-            );
+            for (title, style, group) in [
+                (
+                    "Running",
+                    ratatui::style::Style::from(palette::STATUS_WARNING),
+                    &running,
+                ),
+                ("Completed", palette::STATUS_SUCCESS.into(), &completed),
+                ("Interrupted", palette::STATUS_WARNING.into(), &interrupted),
+                ("Failed", palette::WHALE_ERROR.into(), &failed),
+                ("Cancelled", palette::TEXT_MUTED.into(), &cancelled),
+            ] {
+                append_subagent_group(
+                    &mut lines,
+                    &mut row_lines,
+                    title,
+                    style,
+                    group,
+                    content_width,
+                    &selected_id,
+                    WhaleRowContext {
+                        locale: self.locale,
+                        frame: self.whale_frame(),
+                    },
+                );
+            }
         }
 
+        let content = render_modal_footer(
+            area,
+            buf,
+            &[
+                ActionHint::new("Esc", "close"),
+                ActionHint::new("↑/↓", "select"),
+                ActionHint::new("Enter", "focus"),
+                ActionHint::new("X", "stop"),
+                ActionHint::new("R", "refresh"),
+                ActionHint::new("F", "roster/setup"),
+            ],
+        );
+        let shell = ratatui::layout::Layout::default()
+            .direction(ratatui::layout::Direction::Vertical)
+            .constraints([
+                ratatui::layout::Constraint::Length(3),
+                ratatui::layout::Constraint::Min(1),
+            ])
+            .split(content);
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled(
+                    "─ fleet ",
+                    Style::default().fg(palette::WHALE_ACTION).bold(),
+                ),
+                Span::styled(
+                    "──────────────────────── ",
+                    Style::default().fg(palette::BORDER_COLOR),
+                ),
+                Span::styled("roster  setup  ", Style::default().fg(palette::TEXT_MUTED)),
+                Span::styled("workers", Style::default().fg(palette::WHALE_INFO).bold()),
+                Span::styled(
+                    " ─────────────────",
+                    Style::default().fg(palette::BORDER_COLOR),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  live worker status · role · objective · model · elapsed",
+                Style::default().fg(palette::TEXT_MUTED),
+            )),
+        ])
+        .render(shell[0], buf);
+
         let total_lines = lines.len();
-        let visible_lines = (popup_height as usize).saturating_sub(3);
+        let visible_lines = usize::from(shell[1].height).max(1);
         let max_scroll = total_lines.saturating_sub(visible_lines);
         let scroll = self.scroll.min(max_scroll);
 
-        let scroll_indicator = if total_lines > visible_lines {
-            format!(" [{}/{} ↑↓] ", scroll + 1, max_scroll + 1)
-        } else {
-            String::new()
-        };
+        // Cache the layout for Enter/click resolution and scroll-follow.
+        self.row_lines.replace(row_lines);
+        self.body_area.set(shell[1]);
+        self.last_render_scroll.set(scroll);
+        self.last_visible_lines.set(visible_lines);
 
-        let view = Paragraph::new(lines)
-            .block(
-                Block::default()
-                    .title(Line::from(vec![Span::styled(
-                        " Sub-agents ",
-                        Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
-                    )]))
-                    .title_bottom(Line::from(vec![
-                        Span::styled(" Esc to close ", Style::default().fg(palette::TEXT_MUTED)),
-                        Span::styled(" R to refresh ", Style::default().fg(palette::TEXT_MUTED)),
-                        Span::styled(scroll_indicator, Style::default().fg(palette::DEEPSEEK_SKY)),
-                    ]))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(palette::BORDER_COLOR))
-                    .style(Style::default().bg(palette::DEEPSEEK_INK))
-                    .padding(Padding::uniform(1)),
-            )
-            .scroll((scroll as u16, 0));
-
-        view.render(popup_area, buf);
+        Paragraph::new(lines)
+            .scroll((scroll as u16, 0))
+            .render(shell[1], buf);
     }
 }
 
+/// Locale and working-wake frame for the whale badge on each worker row.
+#[derive(Debug, Clone, Copy)]
+struct WhaleRowContext {
+    locale: Locale,
+    frame: usize,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn append_subagent_group(
     lines: &mut Vec<ratatui::text::Line<'static>>,
+    row_lines: &mut Vec<(usize, usize, String)>,
     title: &str,
     section_style: ratatui::style::Style,
     agents: &[&SubAgentResult],
     content_width: usize,
+    selected_id: &str,
+    whale: WhaleRowContext,
 ) {
     use ratatui::{
         style::Style,
@@ -2007,6 +4737,8 @@ fn append_subagent_group(
     )));
 
     for agent in agents {
+        let block_start = lines.len();
+        let is_selected = agent.agent_id == selected_id;
         let id = truncate_view_text(&agent.agent_id, 11);
         let display_name = agent
             .nickname
@@ -2016,9 +4748,34 @@ fn append_subagent_group(
         let kind = format_agent_type(&agent.agent_type);
         let (status, status_style, status_detail) = format_agent_status(&agent.status);
 
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(display_name, Style::default().fg(palette::TEXT_PRIMARY)),
+        let name_style = if is_selected {
+            Style::default().fg(palette::WHALE_ACTION).bold()
+        } else {
+            Style::default().fg(palette::TEXT_PRIMARY)
+        };
+        // Whale Teams: species badge from the worker's Fleet role (or its
+        // advisory role hint), then the six-state word derived from the
+        // child's real status — never from elapsed time.
+        let species = agent
+            .assignment
+            .role
+            .as_deref()
+            .map(crate::tui::whales::WhaleSpecies::for_role_id)
+            .filter(|species| *species != crate::tui::whales::WhaleSpecies::Plain)
+            .unwrap_or_else(|| crate::tui::whales::WhaleSpecies::for_fleet_role(&agent.agent_type));
+        let whale_state = crate::tui::whales::WhaleState::for_subagent(agent);
+        let mut row = vec![
+            // The selection cursor: Enter (or a click) opens this agent's
+            // transcript, matching every other agent surface.
+            Span::styled(
+                if is_selected { "\u{25B8} " } else { "  " },
+                Style::default().fg(palette::WHALE_ACTION),
+            ),
+        ];
+        row.extend(crate::tui::whales::badge(species, &palette::UI_THEME));
+        row.push(Span::raw(" "));
+        row.extend([
+            Span::styled(display_name, name_style),
             Span::raw(" "),
             Span::styled(format!("{id:<11}"), Style::default().fg(palette::TEXT_DIM)),
             Span::styled(
@@ -2037,14 +4794,28 @@ fn append_subagent_group(
                 format!("{:>6}ms", agent.duration_ms),
                 Style::default().fg(palette::TEXT_DIM),
             ),
-        ]));
+        ]);
+        lines.push(Line::from(row));
+
+        // The whale's own state word, paired with its glyph cue, so the row
+        // says "Waiting for you" / "Blocked" in the user's language next to
+        // the raw runtime status above. No caption text beyond that.
+        let mut whale_line = vec![Span::raw("    ")];
+        whale_line.extend(crate::tui::whales::badge_with_state_frame(
+            species,
+            Some(whale_state),
+            whale.frame,
+            &palette::UI_THEME,
+            whale.locale,
+        ));
+        lines.push(Line::from(whale_line));
 
         if let Some(detail) = status_detail {
             let max_len = content_width.saturating_sub(10);
             let detail = truncate_view_text(detail, max_len);
             lines.push(Line::from(vec![
                 Span::styled("    reason: ", Style::default().fg(palette::TEXT_MUTED)),
-                Span::styled(detail, Style::default().fg(palette::DEEPSEEK_RED)),
+                Span::styled(detail, Style::default().fg(palette::WHALE_ERROR)),
             ]));
         }
 
@@ -2053,7 +4824,41 @@ fn append_subagent_group(
             let role = truncate_view_text(role, max_len);
             lines.push(Line::from(vec![
                 Span::styled("    role: ", Style::default().fg(palette::TEXT_MUTED)),
-                Span::styled(role, Style::default().fg(palette::DEEPSEEK_SKY)),
+                Span::styled(role, Style::default().fg(palette::WHALE_INFO)),
+            ]));
+        }
+
+        if let Some(permissions) = agent.runtime_permissions.as_ref() {
+            let posture = format!(
+                "network={} · shell={} · write={}",
+                if permissions.network { "on" } else { "off" },
+                permissions.shell,
+                if permissions.write { "on" } else { "off" },
+            );
+            let max_len = content_width.saturating_sub(18);
+            let posture = truncate_view_text(&posture, max_len);
+            lines.push(Line::from(vec![
+                Span::styled("    posture: ", Style::default().fg(palette::TEXT_MUTED)),
+                Span::styled(posture, Style::default().fg(palette::WHALE_INFO)),
+            ]));
+        }
+
+        if let Some(branch) = agent.git_branch.as_deref() {
+            let workspace = agent
+                .workspace
+                .as_deref()
+                .and_then(|path| path.file_name())
+                .and_then(|name| name.to_str())
+                .filter(|name| !name.is_empty());
+            let mut branch_detail = format!("branch {branch}");
+            if let Some(workspace) = workspace {
+                branch_detail.push_str(&format!(" @ {workspace}"));
+            }
+            let max_len = content_width.saturating_sub(14);
+            let branch_detail = truncate_view_text(&branch_detail, max_len);
+            lines.push(Line::from(vec![
+                Span::styled("    git: ", Style::default().fg(palette::TEXT_MUTED)),
+                Span::styled(branch_detail, Style::default().fg(palette::WHALE_INFO)),
             ]));
         }
 
@@ -2072,25 +4877,31 @@ fn append_subagent_group(
                 Span::styled(preview, Style::default().fg(palette::TEXT_DIM)),
             ]));
         }
+
+        row_lines.push((
+            block_start,
+            lines.len() - block_start,
+            agent.agent_id.clone(),
+        ));
     }
 
     lines.push(Line::from(""));
 }
 
-fn agent_type_order(agent_type: &SubAgentType) -> u8 {
+fn agent_type_order(agent_type: &FleetRole) -> u8 {
     match agent_type {
-        SubAgentType::General => 0,
-        SubAgentType::Explore => 1,
-        SubAgentType::Plan => 2,
-        SubAgentType::Implementer => 3,
-        SubAgentType::Verifier => 4,
-        SubAgentType::Review => 5,
-        SubAgentType::ToolAgent => 6,
-        SubAgentType::Custom => 7,
+        FleetRole::Worker => 0,
+        FleetRole::Scout => 1,
+        FleetRole::Planner => 2,
+        FleetRole::Builder => 3,
+        FleetRole::Verifier => 4,
+        FleetRole::Reviewer => 5,
+        FleetRole::Consultant => 6,
+        FleetRole::Custom => 7,
     }
 }
 
-fn format_agent_type(agent_type: &SubAgentType) -> &'static str {
+fn format_agent_type(agent_type: &FleetRole) -> &'static str {
     // Source of truth lives on the enum so any new role lands in both
     // the user-visible label and the sort order via the as_str() helper.
     agent_type.as_str()
@@ -2102,10 +4913,10 @@ fn format_agent_status(
     use ratatui::style::Style;
 
     match status {
-        SubAgentStatus::Running => ("running", Style::default().fg(palette::DEEPSEEK_SKY), None),
+        SubAgentStatus::Running => ("running", Style::default().fg(palette::WHALE_INFO), None),
         SubAgentStatus::Completed => (
             "completed",
-            Style::default().fg(palette::DEEPSEEK_BLUE),
+            Style::default().fg(palette::STATUS_SUCCESS),
             None,
         ),
         SubAgentStatus::Interrupted(reason) => (
@@ -2114,9 +4925,14 @@ fn format_agent_status(
             Some(reason.as_str()),
         ),
         SubAgentStatus::Cancelled => ("cancelled", Style::default().fg(palette::TEXT_MUTED), None),
+        SubAgentStatus::BudgetExhausted => (
+            "budget_exhausted",
+            Style::default().fg(palette::STATUS_WARNING),
+            None,
+        ),
         SubAgentStatus::Failed(reason) => (
             "failed",
-            Style::default().fg(palette::DEEPSEEK_RED),
+            Style::default().fg(palette::WHALE_ERROR),
             Some(reason.as_str()),
         ),
     }
@@ -2132,35 +4948,386 @@ fn truncate_view_text(text: &str, max_chars: usize) -> String {
     }
 }
 
+fn fit_config_column(text: &str, width: usize) -> String {
+    let mut fitted = crate::tui::ui_text::truncate_line_to_width(text, width);
+    let padding = width.saturating_sub(crate::tui::ui_text::text_display_width(&fitted));
+    fitted.push_str(&" ".repeat(padding));
+    fitted
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        ConfigListItem, ConfigSection, ConfigView, ModalKind, ModalView, ShellControlView,
-        ViewAction, ViewEvent, ViewStack, subagent_view_agents, truncate_view_text,
+        ActionHint, ConfigListItem, ConfigScope, ConfigSection, ConfigTab, ConfigView, EmptyState,
+        FocusTextureMode, HelpView, ListDetailLayout, ModalKind, ModalView, SettingKind,
+        SettingsRegistry, ViewAction, ViewEvent, ViewStack, action_footer_lines,
+        canonical_config_choice, centered_modal_area, config_choice_detail, config_choice_label,
+        config_choice_values, config_label_for_key, config_label_for_key_for_locale,
+        render_modal_footer_with_gutter, render_underwater_surface, subagent_view_agents,
+        truncate_view_text,
     };
     use crate::config::Config;
-    use crate::localization::Locale;
+    use crate::localization::{Locale, MessageId, tr};
+    use crate::palette;
     use crate::settings::Settings;
-    use crate::tools::subagent::{
-        SubAgentAssignment, SubAgentResult, SubAgentStatus, SubAgentType,
-    };
+    use crate::tools::subagent::{FleetRole, SubAgentAssignment, SubAgentResult, SubAgentStatus};
     use crate::tui::app::{App, TuiOptions};
     use crate::tui::history::{HistoryCell, SubAgentCell};
+    use crate::tui::views::{CommandPaletteAction, SubAgentsView};
     use crate::tui::widgets::agent_card::{AgentLifecycle, FanoutCard};
     use crossterm::event::{
         KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     };
-    use ratatui::{buffer::Buffer, layout::Rect};
-    use std::ffi::OsString;
+    use ratatui::{
+        buffer::Buffer,
+        layout::Rect,
+        style::{Color, Style},
+    };
+    use std::borrow::Cow;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::MutexGuard;
     use tempfile::TempDir;
+    use unicode_width::UnicodeWidthStr;
+
+    /// Terminal sizes the v0.8.66 modal blocker (#3732) requires every overlay
+    /// to remain readable and fully operable at.
+    const BLOCKER_SIZES: [(u16, u16); 4] = [(80, 24), (100, 30), (120, 32), (160, 40)];
+
+    /// Render a modal through the `ViewStack` (so the shared opaque backdrop is
+    /// painted exactly as in production) over a sentinel-filled buffer, then
+    /// assert: every `required_label` is visible, no sentinel `X` survives
+    /// anywhere (fully opaque), the center cell carries the modal ink, and no
+    /// row overflows the frame width.
+    fn assert_modal_usable_and_opaque<V: ModalView + 'static>(
+        make: impl Fn() -> V,
+        required_labels: &[&str],
+    ) {
+        for (w, h) in BLOCKER_SIZES {
+            let area = Rect::new(0, 0, w, h);
+            let mut buf = Buffer::empty(area);
+            let sentinel_style = Style::default().fg(Color::Magenta).bg(Color::Green);
+            for y in 0..h {
+                for x in 0..w {
+                    buf[(x, y)].set_symbol("X").set_style(sentinel_style);
+                }
+            }
+            let mut stack = ViewStack::new();
+            stack.push(make());
+            stack.render(area, &mut buf);
+
+            let rows: Vec<String> = (0..h)
+                .map(|y| {
+                    (0..w)
+                        .map(|x| buf[(x, y)].symbol().to_string())
+                        .collect::<String>()
+                })
+                .collect();
+            let text = rows.join("\n");
+
+            for label in required_labels {
+                assert!(text.contains(label), "{w}x{h}: missing '{label}'");
+            }
+            let unpainted = (0..h).find_map(|y| {
+                (0..w).find_map(|x| {
+                    let cell = &buf[(x, y)];
+                    (cell.symbol() == "X" && cell.fg == Color::Magenta && cell.bg == Color::Green)
+                        .then_some((x, y))
+                })
+            });
+            assert!(
+                unpainted.is_none(),
+                "{w}x{h}: background bleed-through at {unpainted:?}"
+            );
+            assert_eq!(
+                buf[(w / 2, h / 2)].bg,
+                palette::WHALE_BG,
+                "{w}x{h}: modal interior must be opaque"
+            );
+            for (y, row) in rows.iter().enumerate() {
+                assert!(
+                    UnicodeWidthStr::width(row.trim_end()) <= w as usize,
+                    "{w}x{h}: row {y} overflows width: {row:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn config_modal_is_usable_and_opaque_at_blocker_sizes() {
+        let _lock = crate::test_support::lock_test_env();
+        // "Search" is the hardcoded English search-row label; asserting it (plus
+        // the opacity/overflow checks) proves the modal renders fully and its
+        // footer wraps inside bounds rather than clipping.
+        assert_modal_usable_and_opaque(|| create_config_view(Locale::En), &["Search"]);
+    }
+
+    #[test]
+    fn subagents_modal_is_usable_and_opaque_at_blocker_sizes() {
+        assert_modal_usable_and_opaque(
+            || SubAgentsView::new(Vec::new()),
+            &["close", "refresh", "setup"],
+        );
+    }
+
+    /// Focus-texture prototype (#4823): with a mode forced on, a real
+    /// full-screen modal must render exactly as before — the texture pass
+    /// no-ops because the focus region covers (nearly) the whole frame.
+    /// The default `Off` case is pinned by the existing
+    /// `*_modal_is_usable_and_opaque_at_blocker_sizes` tests above: they run
+    /// unmodified because `ViewStack::new()` defaults to `Off`, which leaves
+    /// the buffer byte-identical to the pre-prototype render.
+    #[test]
+    fn focus_texture_modes_keep_fullscreen_modal_usable_and_opaque() {
+        let _lock = crate::test_support::lock_test_env();
+        let theme = crate::palette::ThemeId::Whale.ui_theme();
+        for mode in [FocusTextureMode::Scrim, FocusTextureMode::Grain] {
+            for (w, h) in BLOCKER_SIZES {
+                let area = Rect::new(0, 0, w, h);
+                let mut buf = Buffer::empty(area);
+                let sentinel_style = Style::default().fg(Color::Magenta).bg(Color::Green);
+                for y in 0..h {
+                    for x in 0..w {
+                        buf[(x, y)].set_symbol("X").set_style(sentinel_style);
+                    }
+                }
+                let mut stack = ViewStack::new();
+                stack.push(create_config_view(Locale::En));
+                stack.set_focus_texture(mode, theme);
+                stack.render(area, &mut buf);
+
+                let rows: Vec<String> = (0..h)
+                    .map(|y| {
+                        (0..w)
+                            .map(|x| buf[(x, y)].symbol().to_string())
+                            .collect::<String>()
+                    })
+                    .collect();
+                let text = rows.join("\n");
+
+                assert!(
+                    text.contains("Search"),
+                    "{mode:?} {w}x{h}: missing 'Search'"
+                );
+                let unpainted = (0..h).find_map(|y| {
+                    (0..w).find_map(|x| {
+                        let cell = &buf[(x, y)];
+                        (cell.symbol() == "X"
+                            && cell.fg == Color::Magenta
+                            && cell.bg == Color::Green)
+                            .then_some((x, y))
+                    })
+                });
+                assert!(
+                    unpainted.is_none(),
+                    "{mode:?} {w}x{h}: background bleed-through at {unpainted:?}"
+                );
+                assert_eq!(
+                    buf[(w / 2, h / 2)].bg,
+                    palette::WHALE_BG,
+                    "{mode:?} {w}x{h}: modal interior must be opaque"
+                );
+            }
+        }
+    }
+
+    /// The texture actually engages outside an *inline* modal's band: the
+    /// approval prompt only occupies a bottom strip, so the sentinel field
+    /// above it goes through the scrim/grain pass. The modal is painted
+    /// after the texture, so its band stays fully opaque and its labels
+    /// survive at every blocker size.
+    #[test]
+    fn focus_texture_modes_keep_inline_modal_usable() {
+        let theme = crate::palette::ThemeId::Whale.ui_theme();
+        for mode in [FocusTextureMode::Scrim, FocusTextureMode::Grain] {
+            for (w, h) in BLOCKER_SIZES {
+                let area = Rect::new(0, 0, w, h);
+                let mut buf = Buffer::empty(area);
+                let sentinel_style = Style::default().fg(Color::Magenta).bg(Color::Green);
+                for y in 0..h {
+                    for x in 0..w {
+                        buf[(x, y)].set_symbol("X").set_style(sentinel_style);
+                    }
+                }
+                let request = crate::tui::approval::ApprovalRequest::new(
+                    "test-id",
+                    "read_file",
+                    "Read a file from disk",
+                    &serde_json::json!({"path": "src/main.rs"}),
+                    "tool:read_file",
+                );
+                let mut stack = ViewStack::new();
+                stack.push(crate::tui::approval::ApprovalView::new(request));
+                stack.set_focus_texture(mode, theme);
+                let focus = stack
+                    .top_occupied_region(area)
+                    .expect("approval view on the stack");
+                stack.render(area, &mut buf);
+
+                let rows: Vec<String> = (0..h)
+                    .map(|y| {
+                        (0..w)
+                            .map(|x| buf[(x, y)].symbol().to_string())
+                            .collect::<String>()
+                    })
+                    .collect();
+                let text = rows.join("\n");
+
+                assert!(
+                    text.contains("Do you want to proceed?") && text.contains("read_file"),
+                    "{mode:?} {w}x{h}: approval prompt must survive the texture"
+                );
+                // Zero sentinel bleed INSIDE the focused band: the backdrop
+                // and the modal own every cell there. Outside the band the
+                // texture intentionally leaves the sentinel glyphs in place
+                // (Scrim only re-colors; Grain never overwrites text).
+                let mut whale_bg_cells = 0_u32;
+                for y in focus.top()..focus.bottom() {
+                    for x in focus.left()..focus.right() {
+                        let cell = &buf[(x, y)];
+                        assert!(
+                            !(cell.symbol() == "X"
+                                && cell.fg == Color::Magenta
+                                && cell.bg == Color::Green),
+                            "{mode:?} {w}x{h}: sentinel bleed inside focus at ({x},{y})"
+                        );
+                        if cell.bg == palette::WHALE_BG {
+                            whale_bg_cells += 1;
+                        }
+                    }
+                }
+                // The band keeps the opaque modal ink. (Not every cell: the
+                // selected option row carries its own highlight background.)
+                assert!(
+                    whale_bg_cells > 0,
+                    "{mode:?} {w}x{h}: modal band lost its opaque WHALE_BG surface"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn centered_modal_area_clamps_and_centers() {
+        // Roomy frame: preferred size honoured, centered.
+        let area = Rect::new(0, 0, 160, 40);
+        let rect = centered_modal_area(area, 80, 20, 40, 10);
+        assert_eq!((rect.width, rect.height), (80, 20));
+        assert_eq!(rect.x, (160 - 80) / 2);
+        assert_eq!(rect.y, (40 - 20) / 2);
+
+        // Tiny frame: never exceeds the frame even below the requested minimum.
+        let tiny = Rect::new(0, 0, 30, 8);
+        let rect = centered_modal_area(tiny, 80, 20, 40, 10);
+        assert!(rect.width <= tiny.width, "width must fit frame");
+        assert!(rect.height <= tiny.height, "height must fit frame");
+        assert!(rect.x + rect.width <= tiny.width);
+        assert!(rect.y + rect.height <= tiny.height);
+    }
+
+    #[test]
+    fn action_footer_wraps_instead_of_overflowing() {
+        let hints = [
+            ActionHint::new("↑↓", "move"),
+            ActionHint::new("a-z", "jump"),
+            ActionHint::new("Enter", "apply"),
+            ActionHint::new("R", "edit key"),
+            ActionHint::new("M", "models"),
+            ActionHint::new("Esc", "cancel"),
+        ];
+
+        // Wide enough for a single row.
+        let wide = action_footer_lines(&hints, 120);
+        assert_eq!(wide.len(), 1);
+        assert!(wide[0].width() <= 120);
+
+        // Narrow forces wrapping but never truncates: every action survives and
+        // no produced line exceeds the available width.
+        let narrow = action_footer_lines(&hints, 28);
+        assert!(narrow.len() >= 2, "narrow footer should wrap to >1 row");
+        for line in &narrow {
+            assert!(
+                line.width() <= 28,
+                "wrapped footer row overflows: {} cols",
+                line.width()
+            );
+        }
+        let joined: String = narrow
+            .iter()
+            .flat_map(|l| l.spans.iter())
+            .map(|s| s.content.as_ref())
+            .collect();
+        for label in ["move", "jump", "apply", "edit key", "models", "cancel"] {
+            assert!(joined.contains(label), "footer dropped action: {label}");
+        }
+    }
+
+    #[test]
+    fn render_modal_footer_reserves_rows_and_returns_body() {
+        let inner = Rect::new(2, 2, 40, 10);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 44, 14));
+        let hints = [
+            ActionHint::new("Enter", "save"),
+            ActionHint::new("Esc", "cancel"),
+        ];
+        let body = render_modal_footer_with_gutter(inner, &mut buf, &hints);
+        // Normal-height overlays reserve a single quiet gutter above the
+        // one-row footer, so body prose never runs into the action rail.
+        assert_eq!(body.y, inner.y);
+        assert_eq!(body.height, inner.height - 2);
+        assert_eq!(body.y + body.height, inner.y + inner.height - 2);
+        let gutter_y = inner.y + inner.height - 2;
+        assert!(
+            (inner.x..inner.right()).all(|x| buf[(x, gutter_y)].symbol().trim().is_empty()),
+            "modal footer gutter should stay visually quiet"
+        );
+    }
+
+    #[test]
+    fn list_detail_layout_splits_wide_and_stacks_narrow() {
+        let wide = ListDetailLayout::split(Rect::new(0, 0, 120, 24), 34);
+        assert!(!wide.stacked);
+        assert!(wide.list.width >= 30);
+        assert!(wide.detail.width >= 34);
+        assert_eq!(wide.list.height, 24);
+        assert_eq!(wide.detail.height, 24);
+        assert!(wide.list.right() < wide.detail.left());
+
+        let narrow = ListDetailLayout::split(Rect::new(0, 0, 80, 20), 34);
+        assert!(narrow.stacked);
+        assert_eq!(narrow.list.width, 80);
+        assert_eq!(narrow.detail.width, 80);
+        assert!(narrow.list.bottom() <= narrow.detail.top());
+        assert!(narrow.list.height > 0);
+    }
+
+    #[test]
+    fn empty_state_renders_copy_and_actions() {
+        let area = Rect::new(0, 0, 48, 8);
+        let mut buf = Buffer::empty(area);
+        EmptyState::new("Nothing here", "Use search or switch categories.")
+            .primary_action("/", "filter")
+            .secondary_action("Esc", "cancel")
+            .render(area, &mut buf);
+
+        let text = (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        for expected in ["Nothing here", "Use search", "filter", "cancel"] {
+            assert!(
+                text.contains(expected),
+                "empty state missing {expected:?}: {text:?}"
+            );
+        }
+    }
 
     struct ConfigSettingsEnvGuard {
+        _config_path: crate::test_support::EnvVarGuard,
         _tmp: TempDir,
-        previous_config_path: Option<OsString>,
-        _lock: MutexGuard<'static, ()>,
+        _lock: crate::test_support::TestEnvLock,
     }
 
     impl ConfigSettingsEnvGuard {
@@ -2175,50 +5342,29 @@ mod tests {
             std::fs::create_dir_all(config_path.parent().expect("config parent"))
                 .expect("config dir");
             std::fs::write(&settings_path, settings_toml).expect("settings file");
-            let previous_config_path = std::env::var_os("DEEPSEEK_CONFIG_PATH");
-            unsafe {
-                std::env::set_var("DEEPSEEK_CONFIG_PATH", &config_path);
-            }
+            let config_path_guard =
+                crate::test_support::EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
             Self {
+                _config_path: config_path_guard,
                 _tmp: tmp,
-                previous_config_path,
                 _lock: lock,
             }
         }
     }
 
-    impl Drop for ConfigSettingsEnvGuard {
-        fn drop(&mut self) {
-            unsafe {
-                match self.previous_config_path.take() {
-                    Some(previous) => std::env::set_var("DEEPSEEK_CONFIG_PATH", previous),
-                    None => std::env::remove_var("DEEPSEEK_CONFIG_PATH"),
-                }
-            }
-        }
-    }
-
     fn create_test_app() -> App {
+        static NEXT_CONFIG_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let config_id = NEXT_CONFIG_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let isolated_config_path = std::env::temp_dir().join(format!(
+            "ghosty-config-view-test-{}-{config_id}.toml",
+            std::process::id()
+        ));
         let options = TuiOptions {
-            model: "deepseek-v4-pro".to_string(),
-            workspace: PathBuf::from("."),
-            config_path: None,
-            config_profile: None,
-            allow_shell: false,
-            use_alt_screen: true,
-            use_mouse_capture: false,
-            use_bracketed_paste: true,
-            max_subagents: 1,
-            skills_dir: PathBuf::from("."),
-            memory_path: PathBuf::from("memory.md"),
-            notes_path: PathBuf::from("notes.txt"),
-            mcp_config_path: PathBuf::from("mcp.json"),
-            use_memory: false,
-            start_in_agent_mode: false,
-            skip_onboarding: true,
-            yolo: false,
-            resume_session_id: None,
-            initial_input: None,
+            // ConfigView consults the app's persisted config. Point generic
+            // tests at a unique absent file so developer or concurrent test
+            // settings cannot silently change which controls are editable.
+            config_path: Some(isolated_config_path),
+            ..crate::test_support::test_tui_options(PathBuf::from("."))
         };
         let mut app = App::new(options, &Config::default());
         app.api_provider = crate::config::ApiProvider::Deepseek;
@@ -2258,7 +5404,9 @@ mod tests {
             agent_id: id.to_string(),
             context_mode: "fresh".to_string(),
             fork_context: false,
-            agent_type: SubAgentType::Explore,
+            workspace: None,
+            git_branch: None,
+            agent_type: FleetRole::Scout,
             assignment: SubAgentAssignment {
                 objective: "read the docs".to_string(),
                 role: None,
@@ -2266,9 +5414,17 @@ mod tests {
             model: "deepseek-v4-flash".to_string(),
             nickname: None,
             status,
+            worker_status: None,
+            runtime_permissions: None,
+            parent_run_id: None,
+            spawn_depth: 0,
+            child_route: None,
             result: None,
             steps_taken: 1,
+            checkpoint: None,
+            needs_input: None,
             duration_ms: 10,
+            started_at: None,
             from_prior_session: false,
         }
     }
@@ -2276,6 +5432,7 @@ mod tests {
     #[test]
     fn subagent_view_agents_includes_progress_only_running_agent() {
         let mut app = create_test_app();
+        app.ensure_agent_label("agent_live");
         app.agent_progress
             .insert("agent_live".to_string(), "reading code".to_string());
 
@@ -2286,12 +5443,57 @@ mod tests {
         assert!(matches!(agents[0].status, SubAgentStatus::Running));
         assert_eq!(agents[0].assignment.role.as_deref(), Some("live"));
         assert!(agents[0].assignment.objective.contains("reading code"));
+        assert_eq!(agents[0].nickname.as_deref(), Some("Agent 1"));
+    }
+
+    #[test]
+    fn subagent_view_replaces_progress_placeholder_after_manager_snapshot() {
+        let mut app = create_test_app();
+        app.ui_locale = Locale::En;
+        app.ensure_agent_label("agent_live");
+        app.agent_progress
+            .insert("agent_live".to_string(), "reading code".to_string());
+
+        let progress_only = subagent_view_agents(&app, &[]);
+        assert_eq!(progress_only[0].nickname.as_deref(), Some("Agent 1"));
+
+        let mut manager = manager_agent("agent_live", SubAgentStatus::Running);
+        manager.nickname = Some(crate::tools::subagent::whale_name_for_id_in_locale(
+            "agent_live",
+            "ja",
+        ));
+        let manager_backed = subagent_view_agents(&app, &[manager]);
+        assert_eq!(
+            manager_backed[0].nickname.as_deref(),
+            Some(crate::tools::subagent::whale_name_for_id_in_locale("agent_live", "en").as_str())
+        );
+    }
+
+    #[test]
+    fn subagent_view_headlines_the_dispatch_name_over_the_whale() {
+        // #5287: `/subagents` spells the identity column from `nickname`, so a
+        // named dispatch lands there and only an unnamed one gets a whale.
+        let mut app = create_test_app();
+        app.ui_locale = Locale::En;
+        let mut named = manager_agent("agent_named_lane", SubAgentStatus::Running);
+        named.name = "branch-triage".to_string();
+        let plain = manager_agent("agent_plain_lane", SubAgentStatus::Running);
+
+        let agents = subagent_view_agents(&app, &[named, plain]);
+        assert_eq!(agents[0].nickname.as_deref(), Some("branch-triage"));
+        assert_eq!(
+            agents[1].nickname.as_deref(),
+            Some(
+                crate::tools::subagent::whale_name_for_id_in_locale("agent_plain_lane", "en")
+                    .as_str()
+            )
+        );
     }
 
     #[test]
     fn subagent_view_agents_includes_live_fanout_workers_when_cache_is_empty() {
         let mut app = create_test_app();
-        let mut card = FanoutCard::new("rlm", app.ui_locale).with_workers(["chunk_1", "chunk_2"]);
+        let mut card = FanoutCard::new("rlm").with_workers(["chunk_1", "chunk_2"]);
         card.upsert_worker("chunk_1", AgentLifecycle::Completed);
         card.upsert_worker("chunk_2", AgentLifecycle::Running);
         app.add_message(HistoryCell::SubAgent(SubAgentCell::Fanout(card)));
@@ -2317,18 +5519,168 @@ mod tests {
         let agents = subagent_view_agents(&app, &manager);
 
         assert_eq!(agents.len(), 1);
-        assert_eq!(agents[0].agent_type, SubAgentType::Explore);
+        assert_eq!(agents[0].agent_type, FleetRole::Scout);
         assert_eq!(agents[0].assignment.objective, "read the docs");
     }
 
-    fn visible_section_labels(view: &ConfigView) -> Vec<&'static str> {
+    #[test]
+    fn fleet_worker_status_view_can_jump_to_fleet_setup() {
+        let mut view = SubAgentsView::new(Vec::new());
+
+        let action = view.handle_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE));
+
+        match action {
+            ViewAction::Emit(ViewEvent::CommandPaletteSelected {
+                action: CommandPaletteAction::ExecuteCommand { command },
+            }) => assert_eq!(command, "/fleet"),
+            other => panic!("expected /fleet jump action, got {other:?}"),
+        }
+    }
+
+    /// One agent, one destination (v0.9.7): Enter on a `/agents` row opens
+    /// the selected agent's transcript — the same destination the Work strip
+    /// and sidebar resolve to. Selection follows render order (running before
+    /// completed), and an empty register keeps Enter's refresh meaning.
+    #[test]
+    fn subagents_enter_opens_the_selected_agents_transcript() {
+        let mut view = SubAgentsView::new(vec![
+            manager_agent("agent_done", SubAgentStatus::Completed),
+            manager_agent("agent_live", SubAgentStatus::Running),
+        ]);
+
+        // Render order groups running first, so the initial selection is the
+        // running agent even though the completed one was pushed first.
+        match view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)) {
+            ViewAction::Emit(ViewEvent::OpenAgentTranscript { agent_id }) => {
+                assert_eq!(agent_id, "agent_live");
+            }
+            other => panic!("expected transcript open, got {other:?}"),
+        }
+
+        let _ = view.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        match view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)) {
+            ViewAction::Emit(ViewEvent::OpenAgentTranscript { agent_id }) => {
+                assert_eq!(agent_id, "agent_done");
+            }
+            other => panic!("expected transcript open, got {other:?}"),
+        }
+
+        let mut empty = SubAgentsView::new(Vec::new());
+        assert!(matches!(
+            empty.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            ViewAction::Emit(ViewEvent::SubAgentsRefresh)
+        ));
+    }
+
+    /// Whale Teams rows: every worker carries its species badge and a state
+    /// word derived from the real status (running → Working, completed →
+    /// Resting, failed → Blocked, interrupted → Waiting for you), and the
+    /// working wake holds the poster frame outside Full motion.
+    #[test]
+    fn subagents_rows_carry_species_badges_and_truthful_state_words() {
+        let mut interrupted = manager_agent("agent_wait", SubAgentStatus::Interrupted("q".into()));
+        interrupted.agent_type = FleetRole::Builder;
+        let mut failed = manager_agent("agent_fail", SubAgentStatus::Failed("boom".into()));
+        failed.agent_type = FleetRole::Reviewer;
+        let view = SubAgentsView::new(vec![
+            manager_agent("agent_done", SubAgentStatus::Completed),
+            manager_agent("agent_live", SubAgentStatus::Running),
+            interrupted,
+            failed,
+        ]);
+        assert_eq!(view.whale_frame(), 0, "Still motion holds the poster frame");
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        view.render(area, &mut buf);
+        let text = buffer_text(&buf, area);
+        // Scout (manager_agent default role) → beak badge; Builder → Patch
+        // bracket; Reviewer → Lantern lens.
+        assert!(text.contains("◂▰ agent_live"), "{text}");
+        assert!(text.contains("◂▰ · Working"), "{text}");
+        assert!(text.contains("◂▰ Resting"), "{text}");
+        assert!(text.contains("▰] ◆ Waiting for you"), "{text}");
+        assert!(text.contains("◇▰ ▌ Blocked"), "{text}");
+        assert!(
+            !text.contains("Scout · research"),
+            "no caption labels: {text}"
+        );
+        assert!(
+            !text.contains("Lantern · review"),
+            "no caption labels: {text}"
+        );
+    }
+
+    /// A click on a rendered `/agents` row opens the clicked agent's
+    /// transcript and moves the selection cursor onto it.
+    #[test]
+    fn subagents_click_opens_the_clicked_agents_transcript() {
+        let mut view = SubAgentsView::new(vec![
+            manager_agent("agent_done", SubAgentStatus::Completed),
+            manager_agent("agent_live", SubAgentStatus::Running),
+        ]);
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buf = Buffer::empty(area);
+        view.render(area, &mut buf);
+
+        // Resolve the completed agent's on-screen row from the recorded
+        // layout, exactly as a click does in reverse.
+        let (first_line, _, agent_id) = view
+            .row_lines
+            .borrow()
+            .iter()
+            .find(|(_, _, id)| id == "agent_done")
+            .cloned()
+            .expect("completed agent block recorded");
+        assert_eq!(agent_id, "agent_done");
+        let body = view.body_area.get();
+        let scroll = view.last_render_scroll.get();
+        let click_row = body.y + u16::try_from(first_line - scroll).expect("visible row");
+
+        let action = view.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: body.x + 2,
+            row: click_row,
+            modifiers: KeyModifiers::NONE,
+        });
+        match action {
+            ViewAction::Emit(ViewEvent::OpenAgentTranscript { agent_id }) => {
+                assert_eq!(agent_id, "agent_done");
+            }
+            other => panic!("expected transcript open, got {other:?}"),
+        }
+        assert_eq!(view.ordered_agent_ids()[view.selected], "agent_done");
+
+        // The selection cursor is visible after a re-render.
+        let mut buf = Buffer::empty(area);
+        view.render(area, &mut buf);
+        let text = (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            text.contains('\u{25B8}'),
+            "selection cursor missing:\n{text}"
+        );
+    }
+
+    fn visible_section_labels(view: &ConfigView) -> Vec<Cow<'static, str>> {
         view.visible_items()
             .into_iter()
             .filter_map(|item| match item {
-                ConfigListItem::Section(section) => Some(section.label()),
+                ConfigListItem::Section(section) => Some(section.label(view.locale)),
                 ConfigListItem::Row(_) => None,
             })
             .collect()
+    }
+
+    fn create_config_view(locale: Locale) -> ConfigView {
+        let mut app = create_test_app();
+        app.ui_locale = locale;
+        ConfigView::new_for_app(&app)
     }
 
     fn visible_row_keys(view: &ConfigView) -> Vec<&str> {
@@ -2352,21 +5704,25 @@ mod tests {
     }
 
     #[test]
+    fn underwater_surface_ellipsizes_narrow_titles() {
+        let area = Rect::new(0, 0, 24, 8);
+        let mut buf = Buffer::empty(area);
+        render_underwater_surface(area, &mut buf, "Help — Concepts, commands, and keybindings");
+        let top = (0..area.width)
+            .map(|x| buf[(x, 0)].symbol())
+            .collect::<String>();
+        assert!(
+            top.contains('…'),
+            "narrow title should signal truncation: {top}"
+        );
+    }
+
+    #[test]
     fn config_view_groups_rows_by_expected_sections() {
-        let app = create_test_app();
-        let view = ConfigView::new_for_app(&app);
+        let view = create_config_view(Locale::En);
         assert_eq!(
             visible_section_labels(&view),
-            vec![
-                ConfigSection::Provider.label(),
-                ConfigSection::Model.label(),
-                ConfigSection::Permissions.label(),
-                ConfigSection::Display.label(),
-                ConfigSection::Composer.label(),
-                ConfigSection::Sidebar.label(),
-                ConfigSection::History.label(),
-                ConfigSection::Mcp.label(),
-            ]
+            vec!["Provider", "Network", "Composer", "Sidebar", "History"]
         );
     }
 
@@ -2380,44 +5736,670 @@ mod tests {
             .map(|row| row.key.as_str())
             .collect::<Vec<_>>();
         assert!(keys.contains(&"provider"));
+        assert!(keys.contains(&"provider_templates"));
         assert!(keys.contains(&"model"));
         assert!(keys.contains(&"reasoning_effort"));
         assert!(keys.contains(&"base_url"));
+        assert!(keys.contains(&"external_credentials.openai-codex"));
+        assert!(keys.contains(&"external_credentials.xai"));
         assert!(keys.contains(&"approval_mode"));
+        assert!(keys.contains(&"permission_posture"));
         assert!(keys.contains(&"allow_shell"));
+        assert!(keys.contains(&"stream_chunk_timeout_secs"));
         assert!(keys.contains(&"theme"));
         assert!(keys.contains(&"locale"));
         assert!(keys.contains(&"background_color"));
         assert!(keys.contains(&"fancy_animations"));
+        assert!(keys.contains(&"thinking_default_expanded"));
         assert!(keys.contains(&"status_indicator"));
         assert!(keys.contains(&"synchronized_output"));
         assert!(keys.contains(&"auto_compact"));
+        assert!(keys.contains(&"tool_collapse"));
         assert!(keys.contains(&"composer_border"));
+        assert!(keys.contains(&"composer_multiline_mode"));
         assert!(keys.contains(&"composer_vim_mode"));
         assert!(keys.contains(&"bracketed_paste"));
         assert!(keys.contains(&"context_panel"));
         assert!(keys.contains(&"cost_currency"));
-        assert!(keys.contains(&"prefer_external_pdftotext"));
+        assert!(keys.contains(&"mcp_open"));
+        assert!(keys.contains(&"mcp_reconnect"));
+        assert!(keys.contains(&"mcp_diagnose"));
+        assert!(keys.contains(&"plugins_open"));
         assert!(keys.contains(&"mcp_config_path"));
-        assert!(view.rows.iter().all(|row| row.editable));
+        assert!(keys.contains(&"fleet.exec.max_spawn_depth"));
+        assert!(keys.contains(&"features.vision_model"));
+        assert!(keys.contains(&"goal_command"));
+        assert!(keys.contains(&"workflow"));
+        assert!(!keys.contains(&"features.subagents"));
+        assert!(!keys.contains(&"features.web_search"));
+        assert!(!keys.contains(&"features.apply_patch"));
+        assert!(!keys.contains(&"features.mcp"));
+        assert!(!keys.contains(&"features.exec_policy"));
+        assert!(!keys.contains(&"whaleflow"));
+        // Diagnostic-only model rows, managed permission rows, and live route
+        // receipts are not editable; everything else outside
+        // Experimental/Fleet should be.
+        const DIAGNOSTIC_ONLY: &[&str] = &[
+            "fast_model",
+            "default_model",
+            "context_window",
+            "effective_context_window",
+            "effective_auto_compact",
+            "external_credentials.openai-codex",
+            "external_credentials.xai",
+            "base_url",
+            "provider_url",
+        ];
+        assert!(
+            view.rows
+                .iter()
+                .filter(|row| {
+                    !matches!(
+                        row.section,
+                        super::ConfigSection::Experimental
+                            | super::ConfigSection::Fleet
+                            | super::ConfigSection::Workflow
+                            | super::ConfigSection::Session
+                            | super::ConfigSection::Legacy
+                    ) && !DIAGNOSTIC_ONLY.contains(&row.key.as_str())
+                        && !row.key.starts_with("managed_")
+                })
+                .all(|row| row.editable)
+        );
+        assert!(
+            view.rows
+                .iter()
+                .filter(|row| {
+                    matches!(
+                        row.section,
+                        super::ConfigSection::Experimental
+                            | super::ConfigSection::Fleet
+                            | super::ConfigSection::Workflow
+                            | super::ConfigSection::Session
+                            | super::ConfigSection::Legacy
+                    )
+                })
+                .all(|row| !row.editable)
+        );
+        // Route endpoint rows are provider-specific: DeepSeek routes expose
+        // `base_url`, every other provider exposes `provider_url`. Whichever
+        // exists must be a read-only route receipt.
+        const ROUTE_RECEIPT_KEYS: &[&str] = &["base_url", "provider_url"];
+        for key in DIAGNOSTIC_ONLY
+            .iter()
+            .filter(|key| !ROUTE_RECEIPT_KEYS.contains(key))
+        {
+            assert!(
+                view.rows.iter().any(|row| row.key == *key && !row.editable),
+                "{key} must remain diagnostic-only"
+            );
+        }
+        let receipt_rows: Vec<_> = view
+            .rows
+            .iter()
+            .filter(|row| ROUTE_RECEIPT_KEYS.contains(&row.key.as_str()))
+            .collect();
+        assert_eq!(
+            receipt_rows.len(),
+            1,
+            "exactly one endpoint receipt row must exist for the active route"
+        );
+        assert!(
+            !receipt_rows[0].editable,
+            "endpoint receipt rows must be read-only"
+        );
     }
 
     #[test]
-    fn config_view_base_url_reflects_app_config_path() {
+    fn config_view_surfaces_structural_external_consent_without_io() {
+        let _env = crate::test_support::lock_test_env();
+        let temp = tempfile::tempdir().expect("config view fixture");
+        let config_path = temp.path().join("config.toml");
+        let auth_path = temp.path().join("codex-auth.json");
+        fs::write(&auth_path, "external-secret-must-not-be-read").expect("auth trap");
+        fs::write(
+            &config_path,
+            format!(
+                r#"provider = "openai-codex"
+[providers.openai_codex]
+auth_mode = "oauth"
+[providers.openai_codex.external_credentials]
+access = "read_only"
+provider = "openai-codex"
+source = "codex_cli"
+path = {:?}
+consent_version = 1
+"#,
+                auth_path.display().to_string()
+            ),
+        )
+        .expect("config fixture");
+        let ambient_path = temp.path().join("new-ambient-codex-auth.json");
+        let _path = crate::test_support::EnvVarGuard::set("OPENAI_CODEX_AUTH_FILE", &ambient_path);
+        let mut app = create_test_app();
+        app.config_path = Some(config_path);
+        crate::external_credentials::reset_side_effect_trap();
+        let view = ConfigView::new_for_app(&app);
+        let row = view
+            .rows
+            .iter()
+            .find(|row| row.key == "external_credentials.openai-codex")
+            .expect("structural consent row");
+        assert!(row.value.contains("access=read_only"), "{}", row.value);
+        assert!(row.value.contains("source=codex_cli"), "{}", row.value);
+        assert!(row.value.contains("version=1"), "{}", row.value);
+        assert!(row.value.contains("active"), "{}", row.value);
+        assert!(row.value.contains("remains pinned"), "{}", row.value);
+        assert!(
+            row.value
+                .contains(&ghosty_config::quote_os_path(&auth_path)),
+            "{}",
+            row.value
+        );
+        assert!(
+            !row.value.contains(&ambient_path.display().to_string()),
+            "{}",
+            row.value
+        );
+        assert!(
+            row.value
+                .contains("external-revoke --provider openai-codex")
+        );
+        assert_eq!(
+            crate::external_credentials::complete_side_effect_trap_counts(),
+            (0, 0, 0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn config_view_permission_row_tracks_the_controlling_saved_source() {
+        let explicit_dir = TempDir::new().expect("explicit config tempdir");
+        let explicit_path = explicit_dir.path().join("config.toml");
+        fs::write(&explicit_path, "approval_policy = \"auto\"\n").expect("explicit config");
+        let mut app = create_test_app();
+        app.config_path = Some(explicit_path);
+
+        let mut explicit = ConfigView::new_for_app(&app);
+        let row = explicit
+            .rows
+            .iter()
+            .find(|row| row.key == "approval_policy")
+            .expect("explicit approval policy row");
+        assert_eq!(row.value, "auto");
+        assert!(row.editable);
+        assert_eq!(row.scope, ConfigScope::Saved);
+        assert!(
+            explicit
+                .rows
+                .iter()
+                .all(|row| row.key != "permission_posture")
+        );
+        explicit.focus_key("approval_policy");
+        explicit.start_edit();
+        let choices = explicit
+            .editing
+            .as_ref()
+            .and_then(|edit| edit.choices.as_ref())
+            .expect("approval posture choices");
+        assert_eq!(
+            choices,
+            &vec![
+                "use-tui-default".to_string(),
+                "ask".to_string(),
+                "auto-review".to_string(),
+                "full-access".to_string(),
+            ]
+        );
+        let area = Rect::new(0, 0, 110, 30);
+        let mut buf = Buffer::empty(area);
+        explicit.render(area, &mut buf);
+        let dump = buffer_text(&buf, area);
+        assert!(
+            dump.contains("4. Full Access"),
+            "root permission chooser must expose the product posture:\n{dump}"
+        );
+        assert!(
+            !dump.contains("4. Never"),
+            "root permission chooser leaked the raw fail-closed policy token:\n{dump}"
+        );
+        let use_tui_default = explicit
+            .editing
+            .as_ref()
+            .and_then(|edit| edit.choices.as_ref())
+            .and_then(|choices| {
+                choices
+                    .iter()
+                    .position(|choice| choice == "use-tui-default")
+            })
+            .expect("TUI default choice");
+        explicit
+            .editing
+            .as_mut()
+            .expect("choice editor")
+            .selected_choice = use_tui_default;
+        match explicit.handle_choice_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)) {
+            ViewAction::Emit(ViewEvent::ConfigUpdated {
+                key,
+                value,
+                persist,
+            }) => {
+                assert_eq!(key, "approval_policy");
+                assert_eq!(value, "use-tui-default");
+                assert!(persist);
+            }
+            other => panic!("expected saved ConfigUpdated event, got {other:?}"),
+        }
+
+        let managed_dir = TempDir::new().expect("managed config tempdir");
+        let requirements_path = managed_dir.path().join("requirements.toml");
+        fs::write(
+            &requirements_path,
+            "allowed_approval_policies = [\"never\"]\n",
+        )
+        .expect("requirements config");
+        let config_path = managed_dir.path().join("config.toml");
+        let requirements_value =
+            toml::Value::String(requirements_path.to_string_lossy().into_owned()).to_string();
+        fs::write(
+            &config_path,
+            format!("approval_policy = \"never\"\nrequirements_path = {requirements_value}\n"),
+        )
+        .expect("managed config");
+        app.config_path = Some(config_path);
+
+        let managed = ConfigView::new_for_app(&app);
+        let row = managed
+            .rows
+            .iter()
+            .find(|row| row.key == "managed_approval_policy")
+            .expect("managed approval policy row");
+        assert!(!row.editable);
+        assert_eq!(row.scope, ConfigScope::Saved);
+        assert!(
+            managed
+                .rows
+                .iter()
+                .all(|row| row.key != "permission_posture" && row.key != "approval_policy")
+        );
+    }
+
+    #[test]
+    fn config_view_provider_uses_full_picker_and_preserves_custom_provider_id() {
+        let dir = TempDir::new().expect("custom provider tempdir");
+        let config_path = dir.path().join("config.toml");
+        fs::write(
+            &config_path,
+            r#"
+provider = "acme_ai"
+
+[providers.acme_ai]
+kind = "openai-compatible"
+base_url = "https://api.example.invalid/v1"
+model = "acme-model"
+api_key_env = "ACME_API_KEY"
+"#,
+        )
+        .expect("custom provider config");
+        let mut app = create_test_app();
+        app.config_path = Some(config_path);
+        app.set_provider_identity(crate::config::ApiProvider::Custom, "acme_ai");
+        let mut view = ConfigView::new_for_app(&app);
+        view.selected = view
+            .rows
+            .iter()
+            .position(|row| row.key == "provider")
+            .expect("provider row");
+
+        let row = &view.rows[view.selected];
+        assert_eq!(row.value, "acme_ai");
+        assert_eq!(
+            row.scope,
+            ConfigScope::Session,
+            "the provider row shows the live route identity, not saved config"
+        );
+        assert!(
+            config_choice_values("provider", app.api_provider).is_none(),
+            "provider must not be truncated to the generic enum chooser"
+        );
+
+        match view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)) {
+            ViewAction::Emit(ViewEvent::CommandPaletteSelected {
+                action: CommandPaletteAction::ExecuteCommand { command },
+            }) => assert_eq!(command, "/provider"),
+            other => panic!("expected full provider picker command, got {other:?}"),
+        }
+        assert!(view.editing.is_none());
+    }
+
+    #[test]
+    fn config_view_active_model_uses_picker_and_fallback_is_diagnostic_only() {
+        let app = create_test_app();
+        let mut view = ConfigView::new_for_app(&app);
+        view.focus_key("model");
+
+        match view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)) {
+            ViewAction::Emit(ViewEvent::CommandPaletteSelected {
+                action: CommandPaletteAction::ExecuteCommand { command },
+            }) => assert_eq!(command, "/model"),
+            other => panic!("expected full model picker, got {other:?}"),
+        }
+        assert!(view.editing.is_none());
+
+        for key in ["fast_model", "default_model"] {
+            let row = view
+                .rows
+                .iter()
+                .find(|row| row.key == key)
+                .unwrap_or_else(|| panic!("{key} row"));
+            assert!(!row.editable, "{key} must be diagnostic-only");
+        }
+    }
+
+    #[test]
+    fn config_view_explains_zai_fast_sibling() {
+        let _guard = ConfigSettingsEnvGuard::new("");
+        let mut app = create_test_app();
+        app.api_provider = crate::config::ApiProvider::Zai;
+        app.model = crate::config::ZAI_GLM_5_2_MODEL.to_string();
+
+        let view = ConfigView::new_for_app(&app);
+        let active = view
+            .rows
+            .iter()
+            .find(|row| row.key == "model")
+            .expect("active model row");
+        let fast = view
+            .rows
+            .iter()
+            .find(|row| row.key == "fast_model")
+            .expect("fast model row");
+
+        assert_eq!(active.value, "Zhipu AI / Z.ai · GLM-5.2");
+        assert_eq!(fast.value, "GLM-5-Turbo");
+        // #4717: DeepSeek-only fallback must not appear on non-DeepSeek providers.
+        assert!(
+            view.rows.iter().all(|row| row.key != "default_model"),
+            "default_model row must be hidden for zai when unset"
+        );
+    }
+
+    #[test]
+    fn config_view_live_route_never_shows_stale_saved_provider() {
+        // The reported defect: the saved config still said `provider =
+        // "deepseek"` while the session was actually routed to Z.ai / GLM-5.3,
+        // and Settings presented the stale saved value as the "Active
+        // provider". Route rows must show the live route identity; saved
+        // config is a startup/default fact, never the active receipt.
         let temp_root = std::env::temp_dir().join(format!(
-            "deepseek-tui-base-url-view-test-{}",
+            "ghosty-stale-saved-provider-view-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
         let config_path = temp_root.join("config.toml");
         fs::write(
             &config_path,
-            "base_url = \"https://ui-config-view.local/v1\"\n",
+            "provider = \"deepseek\"\nbase_url = \"https://api.deepseek.com/v1\"\n",
         )
         .unwrap();
 
         let mut app = create_test_app();
         app.config_path = Some(config_path.clone());
+        // Live session route, exactly as a /provider switch would leave it.
+        app.api_provider = crate::config::ApiProvider::Zai;
+        app.model = "GLM-5.3".to_string();
+        app.active_route_base_url = crate::config::DEFAULT_ZAI_BASE_URL.to_string();
+
+        let view = ConfigView::new_for_app(&app);
+
+        let provider_row = view
+            .rows
+            .iter()
+            .find(|row| row.key == "provider")
+            .expect("provider row");
+        assert!(
+            provider_row.value.contains("Z.ai"),
+            "provider row must show the live route identity: {}",
+            provider_row.value
+        );
+        assert!(
+            !provider_row.value.to_lowercase().contains("deepseek"),
+            "stale saved provider must not appear as the active route: {}",
+            provider_row.value
+        );
+        assert_eq!(provider_row.scope, ConfigScope::Session);
+
+        let model_row = view
+            .rows
+            .iter()
+            .find(|row| row.key == "model")
+            .expect("model row");
+        assert_eq!(model_row.value, "Zhipu AI / Z.ai · GLM-5.3");
+
+        let url_row = view
+            .rows
+            .iter()
+            .find(|row| row.key == "provider_url")
+            .expect("endpoint row for the live Z.ai route");
+        assert_eq!(url_row.value, crate::config::DEFAULT_ZAI_BASE_URL);
+        assert!(!view.rows.iter().any(|row| row.key == "base_url"));
+    }
+
+    #[test]
+    fn config_view_hides_deepseek_fallback_on_non_deepseek_providers() {
+        let _guard = ConfigSettingsEnvGuard::new("");
+        let mut app = create_test_app();
+        for provider in [
+            crate::config::ApiProvider::Zai,
+            crate::config::ApiProvider::Xai,
+            crate::config::ApiProvider::Openrouter,
+            crate::config::ApiProvider::Ollama,
+        ] {
+            app.api_provider = provider;
+            let view = ConfigView::new_for_app(&app);
+            assert!(
+                view.rows.iter().all(|row| row.key != "default_model"),
+                "default_model must stay hidden for {:?}",
+                provider
+            );
+        }
+
+        // DeepSeek providers still show the diagnostic row.
+        app.api_provider = crate::config::ApiProvider::Deepseek;
+        let view = ConfigView::new_for_app(&app);
+        assert!(
+            view.rows
+                .iter()
+                .any(|row| row.key == "default_model" && !row.editable),
+            "DeepSeek must keep the fallback diagnostic row"
+        );
+    }
+
+    #[test]
+    fn config_view_marks_saved_deepseek_fallback_as_legacy_off_route() {
+        let _guard = ConfigSettingsEnvGuard::new("default_model = \"deepseek-v4-pro\"\n");
+        let mut app = create_test_app();
+        app.api_provider = crate::config::ApiProvider::Zai;
+
+        let view = ConfigView::new_for_app(&app);
+        let row = view
+            .rows
+            .iter()
+            .find(|row| row.key == "default_model")
+            .expect("saved legacy fallback should remain visible for cleanup");
+        assert!(!row.editable, "legacy fallback must remain diagnostic-only");
+        assert_eq!(
+            config_label_for_key(&row.key),
+            "Legacy fallback model (DeepSeek routes only)"
+        );
+        // #4751: never a Fleet (or live Model) choice.
+        assert_eq!(row.section, super::ConfigSection::Legacy);
+    }
+
+    /// #4751: Fleet settings hold Fleet/member concerns only. The
+    /// legacy DeepSeek fallback is Legacy, `/goal` is Session, and Workflow
+    /// orchestration is Workflow — every persisted key is unchanged.
+    #[test]
+    fn config_view_settings_rows_land_in_truthful_sections() {
+        let _guard = ConfigSettingsEnvGuard::new("default_model = \"deepseek-v4-pro\"\n");
+        let mut app = create_test_app();
+        app.api_provider = crate::config::ApiProvider::Zai;
+        let view = ConfigView::new_for_app(&app);
+
+        let section_of = |key: &str| {
+            view.rows
+                .iter()
+                .find(|row| row.key == key)
+                .unwrap_or_else(|| panic!("{key} row"))
+                .section
+        };
+        assert_eq!(section_of("default_model"), super::ConfigSection::Legacy);
+        assert_eq!(section_of("goal_command"), super::ConfigSection::Session);
+        assert_eq!(section_of("workflow"), super::ConfigSection::Workflow);
+
+        // Relabelling is presentation only: the persisted key, the persisted
+        // value, the Saved scope, and the read-only posture all round-trip
+        // unchanged, so existing config files keep loading identically.
+        let legacy = view
+            .rows
+            .iter()
+            .find(|row| row.section == super::ConfigSection::Legacy)
+            .expect("legacy row");
+        assert_eq!(legacy.key, "default_model");
+        assert_eq!(legacy.value, "deepseek-v4-pro");
+        assert_eq!(legacy.scope, ConfigScope::Saved);
+        assert!(!legacy.editable);
+
+        // Fleet keeps Fleet/member concerns only.
+        let fleet_keys: Vec<&str> = view
+            .rows
+            .iter()
+            .filter(|row| row.section == super::ConfigSection::Fleet)
+            .map(|row| row.key.as_str())
+            .collect();
+        assert!(
+            fleet_keys.iter().all(|key| key.starts_with("fleet.")),
+            "non-Fleet concerns leaked into Fleet settings: {fleet_keys:?}"
+        );
+        assert!(
+            !fleet_keys.contains(&"default_model"),
+            "the legacy fallback must not be presented as a Fleet choice"
+        );
+
+        // Workflow keeps its own name and its `/workflow` wording.
+        let workflow = view
+            .rows
+            .iter()
+            .find(|row| row.section == super::ConfigSection::Workflow)
+            .expect("workflow row");
+        assert_eq!(workflow.key, "workflow");
+        assert!(workflow.value.starts_with("/workflow "), "{workflow:?}");
+        assert_eq!(config_label_for_key("workflow"), "Workflow");
+    }
+
+    #[test]
+    fn config_view_experimental_features_show_effective_state_and_overrides() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "ghosty-experimental-config-view-test-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&temp_root).unwrap();
+        let config_path = temp_root.join("config.toml");
+        fs::write(
+            &config_path,
+            r#"
+[features]
+web_search = false
+vision_model = true
+"#,
+        )
+        .unwrap();
+
+        let mut app = create_test_app();
+        app.config_path = Some(config_path);
+        let view = ConfigView::new_for_app(&app);
+
+        let web_search = view
+            .rows
+            .iter()
+            .find(|row| row.key == "features.web_search");
+        assert!(web_search.is_none());
+
+        let vision = view
+            .rows
+            .iter()
+            .find(|row| row.key == "features.vision_model")
+            .expect("vision feature row");
+        assert_eq!(vision.value, "enabled (configured; default disabled)");
+        assert!(!vision.editable);
+
+        let subagents = view.rows.iter().find(|row| row.key == "features.subagents");
+        assert!(subagents.is_none());
+    }
+
+    #[test]
+    fn config_view_shows_fleet_max_spawn_depth_from_config() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "ghosty-fleet-config-view-test-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&temp_root).unwrap();
+        let config_path = temp_root.join("config.toml");
+        fs::write(
+            &config_path,
+            r#"
+[fleet.exec]
+max_spawn_depth = 2
+"#,
+        )
+        .unwrap();
+
+        let mut app = create_test_app();
+        app.config_path = Some(config_path);
+        let view = ConfigView::new_for_app(&app);
+
+        let row = view
+            .rows
+            .iter()
+            .find(|row| row.key == "fleet.exec.max_spawn_depth")
+            .expect("fleet spawn depth row");
+        assert_eq!(row.value, "2");
+        assert!(!row.editable);
+    }
+
+    #[test]
+    fn config_view_experimental_section_is_searchable() {
+        let mut view = create_config_view(Locale::En);
+
+        view.update_filter(|filter| filter.push_str("experimental"));
+        assert_eq!(visible_section_labels(&view), vec!["Experimental"]);
+        assert_eq!(visible_row_keys(&view), vec!["features.vision_model"]);
+
+        view.clear_filter();
+        type_filter(&mut view, "feature vision");
+        assert_eq!(visible_section_labels(&view), vec!["Experimental"]);
+        assert_eq!(visible_row_keys(&view), vec!["features.vision_model"]);
+
+        view.clear_filter();
+        type_filter(&mut view, "goal");
+        assert_eq!(visible_section_labels(&view), vec!["Session"]);
+        assert_eq!(visible_row_keys(&view), vec!["goal_command"]);
+
+        // The `workflow` row keeps its key and its name; #4751 only moved it
+        // out of Fleet into its own Workflow section.
+        view.clear_filter();
+        type_filter(&mut view, "workflow");
+        assert_eq!(visible_section_labels(&view), vec!["Workflow"]);
+        assert_eq!(visible_row_keys(&view), vec!["workflow"]);
+
+        view.clear_filter();
+        type_filter(&mut view, "whaleflow");
+        assert!(visible_row_keys(&view).is_empty());
+    }
+
+    #[test]
+    fn config_view_base_url_reflects_active_route_receipt() {
+        let mut app = create_test_app();
+        app.active_route_base_url = "https://ui-config-view.local/v1".to_string();
         let view = ConfigView::new_for_app(&app);
 
         let row = view
@@ -2425,7 +6407,16 @@ mod tests {
             .iter()
             .find(|row| row.key == "base_url")
             .expect("base_url row missing");
+        assert_eq!(
+            config_label_for_key(&row.key),
+            "Provider API URL (DeepSeek route)"
+        );
+        // The endpoint row is a read-only receipt for the live route; it must
+        // not re-read config files, which may describe a different saved
+        // route than the one the session is actually using.
         assert_eq!(row.value, "https://ui-config-view.local/v1");
+        assert!(!row.editable);
+        assert_eq!(row.scope, ConfigScope::Session);
     }
 
     #[test]
@@ -2450,16 +6441,33 @@ base_url = "https://api.xiaomimimo.com/v1"
 
         let mut app = create_test_app();
         app.api_provider = crate::config::ApiProvider::XiaomiMimo;
+        app.active_route_base_url = crate::config::DEFAULT_XIAOMI_MIMO_BASE_URL.to_string();
+        app.ui_locale = Locale::Es419;
         app.config_path = Some(config_path.clone());
-        let view = ConfigView::new_for_app(&app);
+        let mut view = ConfigView::new_for_app(&app);
 
         let row = view
             .rows
             .iter()
             .find(|row| row.key == "provider_url")
             .expect("provider_url row missing");
+        // The endpoint row reflects the live route identity (the default when
+        // nothing overrides it), not a config-file re-read, and is a receipt.
         assert_eq!(row.value, crate::config::DEFAULT_XIAOMI_MIMO_BASE_URL);
+        assert!(!row.editable);
         assert!(!view.rows.iter().any(|row| row.key == "base_url"));
+
+        view.focus_key("provider_url");
+        let hint = view
+            .selected_row_hint()
+            .expect("provider URL row should expose its localized guidance");
+        let es_hint = tr(Locale::Es419, MessageId::ConfigHintProviderUrl);
+        assert!(hint.contains(es_hint.as_ref()), "{hint}");
+        assert!(hint.contains("pago por uso"), "{hint}");
+        assert!(
+            !hint.contains(tr(Locale::En, MessageId::ConfigHintProviderUrl).as_ref()),
+            "the Spanish settings view must not leak the English guidance: {hint}"
+        );
     }
 
     #[test]
@@ -2477,7 +6485,7 @@ base_url = "https://api.xiaomimimo.com/v1"
             .expect("cost_currency row");
 
         assert_eq!(row.value, "usd");
-        assert_eq!(view.row_display_value(row), "usd (effective cny)");
+        assert_eq!(view.row_display_value(row), "usd (实际 cny)");
         assert_eq!(Settings::load().expect("settings").cost_currency, "usd");
     }
 
@@ -2531,9 +6539,107 @@ base_url = "https://api.xiaomimimo.com/v1"
     }
 
     #[test]
-    fn config_view_filter_matches_group_and_rows() {
+    fn config_view_exposes_effective_auto_compaction_policy() {
+        let mut app = create_test_app();
+        app.auto_compact = true;
+        app.auto_compact_threshold_percent = 65.0;
+        app.compact_threshold = 123_456;
+
+        let view = ConfigView::new_for_app(&app);
+        let row = view
+            .rows
+            .iter()
+            .find(|row| row.key == "effective_auto_compact")
+            .expect("effective auto-compaction row");
+
+        assert_eq!(row.value, "on · 65% · 123456 tokens");
+        assert!(!row.editable);
+        assert_eq!(row.scope, ConfigScope::Session);
+    }
+
+    #[test]
+    fn config_view_exposes_configured_and_effective_context_window() {
+        let temp = tempfile::tempdir().expect("config fixture");
+        let config_path = temp.path().join("config.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+provider = "moonshot"
+[providers.moonshot]
+model = "kimi-k3"
+context_window = 262144
+"#,
+        )
+        .expect("config");
+        let mut app = create_test_app();
+        app.config_path = Some(config_path);
+        app.api_provider = crate::config::ApiProvider::Moonshot;
+        app.model = "kimi-k3".to_string();
+        app.active_route_limits = Some(ghosty_config::route::RouteLimits {
+            context_tokens: Some(262_144),
+            ..Default::default()
+        });
+        app.active_context_window_source = crate::route_runtime::ContextWindowSource::Configured;
+
+        let view = ConfigView::new_for_app(&app);
+        let configured = view
+            .rows
+            .iter()
+            .find(|row| row.key == "context_window")
+            .expect("configured context row");
+        let effective = view
+            .rows
+            .iter()
+            .find(|row| row.key == "effective_context_window")
+            .expect("effective context row");
+
+        assert_eq!(configured.value, "262144");
+        assert_eq!(effective.value, "262144 tokens · configured");
+    }
+
+    #[test]
+    fn config_view_displays_saved_codex_reasoning_effort_label() {
+        let _guard = ConfigSettingsEnvGuard::new("reasoning_effort = \"max\"\n");
+        let mut app = create_test_app();
+        app.api_provider = crate::config::ApiProvider::OpenaiCodex;
+
+        let view = ConfigView::new_for_app(&app);
+        let row = view
+            .rows
+            .iter()
+            .find(|row| row.key == "reasoning_effort")
+            .expect("reasoning_effort row");
+
+        assert_eq!(row.value, "xhigh");
+    }
+
+    #[test]
+    fn config_view_editing_localized_default_placeholders_starts_blank() {
+        let _guard = ConfigSettingsEnvGuard::new("locale = \"zh-Hans\"\n");
         let app = create_test_app();
         let mut view = ConfigView::new_for_app(&app);
+
+        for (key, message_id) in [
+            ("reasoning_effort", MessageId::ConfigDefaultReasoning),
+            ("background_color", MessageId::ConfigDefaultValue),
+        ] {
+            view.focus_key(key);
+            view.start_edit();
+
+            let edit = view.editing.as_ref().expect("editing should start");
+            assert_eq!(edit.original_value, tr(Locale::ZhHans, message_id));
+            assert!(
+                edit.buffer.is_empty(),
+                "localized default placeholder should not become edit text for {key}"
+            );
+
+            view.editing = None;
+        }
+    }
+
+    #[test]
+    fn config_view_filter_matches_group_and_rows() {
+        let mut view = create_config_view(Locale::En);
 
         type_filter(&mut view, "side");
 
@@ -2541,9 +6647,39 @@ base_url = "https://api.xiaomimimo.com/v1"
         assert_eq!(visible_section_labels(&view), vec!["Sidebar"]);
         assert_eq!(
             visible_row_keys(&view),
-            vec!["sidebar_width", "sidebar_focus", "context_panel"]
+            vec![
+                "work_surface_placement",
+                "work_surface_top_height",
+                "work_surface_side_width",
+                "rail_panel",
+                "context_panel",
+                "sessions_rail",
+                "session_auto_resume",
+            ]
         );
-        assert_eq!(view.rows[view.selected].key, "sidebar_width");
+        assert_eq!(view.rows[view.selected].key, "work_surface_placement");
+    }
+
+    #[test]
+    fn localized_config_view_filter_matches_english_section_and_scope_labels() {
+        let mut view = create_config_view(Locale::PtBr);
+
+        type_filter(&mut view, "sidebar saved");
+
+        assert_eq!(view.filter, "sidebar saved");
+        assert_eq!(visible_section_labels(&view), vec!["Barra lateral"]);
+        assert_eq!(
+            visible_row_keys(&view),
+            vec![
+                "work_surface_placement",
+                "work_surface_top_height",
+                "work_surface_side_width",
+                "rail_panel",
+                "context_panel",
+                "sessions_rail",
+                "session_auto_resume",
+            ]
+        );
     }
 
     #[test]
@@ -2552,12 +6688,102 @@ base_url = "https://api.xiaomimimo.com/v1"
         let mut view = ConfigView::new_for_app(&app);
 
         type_filter(&mut view, "thinking");
-        assert_eq!(visible_row_keys(&view), vec!["show_thinking"]);
+        assert_eq!(
+            visible_row_keys(&view),
+            vec![
+                // `reasoning_effort` joined this filter when the thinking
+                // ladder gave it a config row.
+                "reasoning_effort",
+                "show_thinking",
+                "thinking_default_expanded",
+                "thinking_preview_lines",
+                "thinking_highlight"
+            ]
+        );
 
         view.clear_filter();
         view.rows[0].value = "CAFÉ".to_string();
         type_filter(&mut view, "café");
         assert_eq!(visible_row_keys(&view), vec!["provider"]);
+    }
+
+    #[test]
+    fn config_view_filter_matches_friendly_labels_and_hints() {
+        let mut view = create_config_view(Locale::En);
+
+        type_filter(&mut view, "shell access");
+        assert_eq!(visible_row_keys(&view), vec!["allow_shell"]);
+
+        view.clear_filter();
+        type_filter(&mut view, "reasoning level");
+        assert_eq!(visible_row_keys(&view), vec!["reasoning_effort"]);
+
+        view.clear_filter();
+        type_filter(&mut view, "fan-out/fan-in");
+        assert_eq!(visible_row_keys(&view), vec!["workflow"]);
+    }
+
+    /// #5134 filed an issue to ask how to raise the context window, because
+    /// the rows that answer it are keyed `context_window` and only findable by
+    /// someone who already knows that name. The filter has to answer the words
+    /// a user actually types.
+    #[test]
+    fn config_view_filter_finds_context_window_by_user_vocabulary() {
+        let mut view = create_config_view(Locale::En);
+
+        for phrase in ["context length", "context size", "max context length"] {
+            view.clear_filter();
+            type_filter(&mut view, phrase);
+            let keys = visible_row_keys(&view);
+            assert!(
+                keys.contains(&"context_window"),
+                "`{phrase}` must surface the context_window row: {keys:?}"
+            );
+            assert!(
+                keys.contains(&"effective_context_window"),
+                "`{phrase}` must surface the resolved window row: {keys:?}"
+            );
+        }
+
+        // The adjacent knob the same user reaches for next.
+        view.clear_filter();
+        type_filter(&mut view, "compaction threshold");
+        let keys = visible_row_keys(&view);
+        assert!(
+            keys.contains(&"auto_compact_threshold_percent"),
+            "`compaction threshold` must surface the auto-compaction trigger: {keys:?}"
+        );
+    }
+
+    #[test]
+    fn config_view_renders_friendly_setting_labels() {
+        let mut view = create_config_view(Locale::En);
+        assert_ne!(
+            config_label_for_key("show_thinking"),
+            config_label_for_key("thinking_highlight"),
+            "reasoning visibility and background controls need distinct labels"
+        );
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+
+        view.render(area, &mut buf);
+
+        let dump = buffer_text(&buf, area);
+        assert!(
+            dump.contains("Active provider"),
+            "missing provider label:\n{dump}"
+        );
+        assert!(dump.contains("General"), "missing settings tabs:\n{dump}");
+
+        view.active_tab = ConfigTab::Permissions;
+        view.select_first_visible_row();
+        let mut permission_buf = Buffer::empty(area);
+        view.render(area, &mut permission_buf);
+        let permission_dump = buffer_text(&permission_buf, area);
+        assert!(
+            permission_dump.contains("Shell access"),
+            "missing shell label:\n{permission_dump}"
+        );
     }
 
     #[test]
@@ -2571,10 +6797,7 @@ base_url = "https://api.xiaomimimo.com/v1"
         view.render(area, &mut buf);
 
         let dump = buffer_text(&buf, area);
-        assert!(
-            dump.contains("Configuração") || dump.contains("Configura"),
-            "missing localized config title:\n{dump}"
-        );
+        assert!(dump.contains("Provedor"), "missing localized rows:\n{dump}");
         assert!(
             !dump.contains("MISSING"),
             "missing-key marker leaked:\n{dump}"
@@ -2582,9 +6805,49 @@ base_url = "https://api.xiaomimimo.com/v1"
     }
 
     #[test]
+    fn config_view_selected_row_uses_muted_selection_highlight() {
+        let mut view = create_config_view(Locale::En);
+        view.selected = view
+            .rows
+            .iter()
+            .position(|row| row.key == "theme")
+            .expect("theme row");
+        view.active_tab = ConfigTab::Display;
+        view.adjust_scroll(8);
+        let area = Rect::new(0, 0, 100, 24);
+        let mut buf = Buffer::empty(area);
+
+        view.render(area, &mut buf);
+
+        let y = view
+            .last_row_hitboxes
+            .borrow()
+            .iter()
+            .find_map(|(y, idx)| (*idx == view.selected).then_some(*y))
+            .expect("selected config row should have a hitbox");
+        let highlighted_cells = (area.x..area.x.saturating_add(area.width))
+            .filter(|&x| {
+                let cell = &buf[(x, y)];
+                !cell.symbol().trim().is_empty()
+                    && cell.bg == palette::SELECTION_BG
+                    && cell.fg == palette::SELECTION_TEXT
+            })
+            .count();
+
+        assert!(
+            highlighted_cells >= 4,
+            "selected config row should render readable selection text"
+        );
+        assert!(
+            !(area.x..area.x.saturating_add(area.width))
+                .any(|x| buf[(x, y)].bg == palette::WHALE_ACTION),
+            "selected config row should not use the bright accent background"
+        );
+    }
+
+    #[test]
     fn config_view_keeps_scope_column_aligned_for_long_keys() {
-        let app = create_test_app();
-        let mut view = ConfigView::new_for_app(&app);
+        let mut view = create_config_view(Locale::ZhHans);
         type_filter(&mut view, "composer");
         let area = Rect::new(0, 0, 100, 24);
         let mut buf = Buffer::empty(area);
@@ -2593,22 +6856,29 @@ base_url = "https://api.xiaomimimo.com/v1"
 
         let dump = buffer_text(&buf, area);
         assert!(
-            dump.contains("paste_burst_detection"),
-            "long config keys should stay readable:\n{dump}"
+            dump.contains("粘 贴 检 测"),
+            "localized config labels should stay readable:\n{dump}"
         );
-        let scope_columns = dump
-            .lines()
-            .filter_map(|line| line.find("SAVED").or_else(|| line.find("SESSION")))
+        let scope_columns = (area.y..area.y.saturating_add(area.height))
+            .filter(|y| {
+                let line = buffer_row_text(&buf, area, *y);
+                line.contains("comfortable") || line.contains("normal") || line.contains("fuzzy")
+            })
+            .filter_map(|y| {
+                let line = buffer_row_text(&buf, area, y);
+                line.find("saved")
+                    .map(|byte| crate::tui::ui_text::text_display_width(&line[..byte]))
+            })
             .collect::<Vec<_>>();
         assert!(
-            scope_columns.len() >= 3,
+            scope_columns.len() >= 2,
             "expected composer config rows with scopes:\n{dump}"
         );
         assert!(
             scope_columns
                 .iter()
                 .all(|column| *column == scope_columns[0]),
-            "scope column should stay aligned even for long keys:\n{dump}"
+            "scope column should stay aligned even for long keys ({scope_columns:?}):\n{dump}"
         );
     }
 
@@ -2665,12 +6935,11 @@ base_url = "https://api.xiaomimimo.com/v1"
     fn config_view_enter_and_ctrl_u_emit_config_updated() {
         let app = create_test_app();
         let mut view = ConfigView::new_for_app(&app);
-
-        // Navigate to the "model" row (index 2, after provider and base_url)
-        for _ in 0..2 {
-            view.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-        }
-        assert_eq!(view.rows[view.selected].key, "model");
+        view.selected = view
+            .rows
+            .iter()
+            .position(|row| row.key == "stream_chunk_timeout_secs")
+            .expect("stream timeout row");
 
         let start = view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(matches!(start, ViewAction::None));
@@ -2684,7 +6953,7 @@ base_url = "https://api.xiaomimimo.com/v1"
             .expect("editing should remain active after Ctrl+U");
         assert!(cleared.buffer.is_empty());
 
-        for ch in "deepseek-v4-flash".chars() {
+        for ch in "55".chars() {
             let action = view.handle_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
             assert!(matches!(action, ViewAction::None));
         }
@@ -2696,8 +6965,8 @@ base_url = "https://api.xiaomimimo.com/v1"
                 value,
                 persist,
             }) => {
-                assert_eq!(key, "model");
-                assert_eq!(value, "deepseek-v4-flash");
+                assert_eq!(key, "stream_chunk_timeout_secs");
+                assert_eq!(value, "55");
                 assert!(!persist);
             }
             other => panic!("expected config update emit, got {other:?}"),
@@ -2706,9 +6975,294 @@ base_url = "https://api.xiaomimimo.com/v1"
     }
 
     #[test]
+    fn config_view_boolean_rows_toggle_without_text_editing() {
+        let app = create_test_app();
+        let mut view = ConfigView::new_for_app(&app);
+        view.focus_key("low_motion");
+        let expected =
+            if canonical_config_choice("low_motion", &view.rows[view.selected].value) == "true" {
+                "false"
+            } else {
+                "true"
+            };
+
+        let action = view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        match action {
+            ViewAction::Emit(ViewEvent::ConfigUpdated {
+                key,
+                value,
+                persist,
+            }) => {
+                assert_eq!(key, "low_motion");
+                assert_eq!(value, expected);
+                assert!(persist);
+            }
+            other => panic!("expected direct boolean update, got {other:?}"),
+        }
+        assert!(view.editing.is_none());
+    }
+
+    #[test]
+    fn config_view_enum_rows_use_a_bounded_choice_list() {
+        let app = create_test_app();
+        let mut view = ConfigView::new_for_app(&app);
+        view.focus_key("default_mode");
+
+        let start = view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(matches!(start, ViewAction::None));
+        let edit = view.editing.as_ref().expect("choice editor");
+        assert_eq!(
+            edit.choices.as_deref(),
+            Some(
+                &[
+                    "agent".to_string(),
+                    "plan".to_string(),
+                    "operate".to_string(),
+                ][..]
+            )
+        );
+        assert!(
+            edit.choices
+                .as_ref()
+                .expect("startup choices")
+                .iter()
+                .all(|choice| choice != "yolo")
+        );
+
+        let _ = view.handle_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+        let apply = view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        match apply {
+            ViewAction::Emit(ViewEvent::ConfigUpdated {
+                key,
+                value,
+                persist,
+            }) => {
+                assert_eq!(key, "default_mode");
+                assert_eq!(value, "operate");
+                assert!(persist);
+            }
+            other => panic!("expected startup choice update, got {other:?}"),
+        }
+
+        assert_eq!(
+            canonical_config_choice("default_mode", "Operate"),
+            "operate"
+        );
+        assert_eq!(
+            config_choice_label(Locale::En, "default_mode", "operate"),
+            "Operate"
+        );
+        assert!(!config_choice_detail(Locale::En, "default_mode", "operate").is_empty());
+    }
+
+    #[test]
+    fn locale_choices_cover_shipped_registry_and_mark_partial_packs() {
+        let choices = config_choice_values("locale", crate::config::ApiProvider::Deepseek)
+            .expect("locale choices");
+        let expected = std::iter::once("auto".to_string())
+            .chain(
+                Locale::shipped()
+                    .iter()
+                    .map(|locale| locale.tag().to_string()),
+            )
+            .collect::<Vec<_>>();
+        assert_eq!(
+            choices, expected,
+            "native locale choices must match Locale::shipped()"
+        );
+
+        let partial_badge = tr(Locale::En, MessageId::ConfigLocalePartialBadge);
+        let partial_detail = tr(Locale::En, MessageId::ConfigLocalePartialDetail);
+        for locale in Locale::shipped() {
+            let canonical = canonical_config_choice("locale", locale.tag());
+            assert_eq!(canonical, locale.tag());
+
+            let label = config_choice_label(Locale::En, "locale", &canonical);
+            assert_eq!(
+                label.contains(partial_badge.as_ref()),
+                locale.is_partial_pack(),
+                "{} partial-pack badge drifted",
+                locale.tag()
+            );
+
+            let detail = config_choice_detail(Locale::En, "locale", &canonical);
+            assert_eq!(
+                !detail.is_empty(),
+                locale.is_partial_pack(),
+                "{} partial-pack detail drifted",
+                locale.tag()
+            );
+            if locale.is_partial_pack() {
+                assert_eq!(detail, partial_detail);
+            }
+        }
+    }
+
+    #[test]
+    fn locale_choice_editor_submits_newly_admitted_locales() {
+        for tag in ["ko", "vi", "zh-Hant"] {
+            let mut view = create_config_view(Locale::En);
+            view.focus_key("locale");
+            view.start_edit();
+            let edit = view.editing.as_mut().expect("locale choice editor");
+            edit.selected_choice = edit
+                .choices
+                .as_ref()
+                .and_then(|choices| choices.iter().position(|choice| choice == tag))
+                .unwrap_or_else(|| panic!("locale choices must include {tag}"));
+
+            match view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)) {
+                ViewAction::Emit(ViewEvent::ConfigUpdated { key, value, .. }) => {
+                    assert_eq!(key, "locale");
+                    assert_eq!(value, tag);
+                }
+                other => panic!("selecting locale {tag} must submit ConfigUpdated, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn complete_locale_shows_no_partial_badge_at_minimum_terminal_layout() {
+        // zh-Hant reached full en.json parity in #5143 and no shipped pack is
+        // partial anymore, so the picker must not render the partial badge.
+        let mut view = create_config_view(Locale::En);
+        view.focus_key("locale");
+        view.start_edit();
+        let edit = view.editing.as_mut().expect("locale choice editor");
+        edit.selected_choice = edit
+            .choices
+            .as_ref()
+            .and_then(|choices| choices.iter().position(|choice| choice == "zh-Hant"))
+            .expect("zh-Hant choice");
+
+        let area = Rect::new(0, 0, 40, 12);
+        let mut buf = Buffer::empty(area);
+        view.render(area, &mut buf);
+        let dump = buffer_text(&buf, area);
+        assert!(
+            dump.contains("zh-Hant"),
+            "zh-Hant choice must render at minimum layout: {dump:?}"
+        );
+        assert!(
+            !dump.contains("zh-Hant (partial)"),
+            "zh-Hant is a complete pack and must not show the partial badge: {dump:?}"
+        );
+    }
+
+    #[test]
+    fn settings_registry_types_every_config_row() {
+        let app = create_test_app();
+        let view = ConfigView::new_for_app(&app);
+        let registry = SettingsRegistry::new(&view);
+
+        let kind_for = |key: &str| {
+            let row = view
+                .rows
+                .iter()
+                .find(|row| row.key == key)
+                .unwrap_or_else(|| panic!("missing config row {key}"));
+            registry.meta(row).kind
+        };
+
+        assert_eq!(kind_for("provider"), SettingKind::Action);
+        assert_eq!(kind_for("provider_templates"), SettingKind::Action);
+        assert_eq!(kind_for("model"), SettingKind::Action);
+        assert_eq!(kind_for("low_motion"), SettingKind::Boolean);
+        assert_eq!(kind_for("default_mode"), SettingKind::Choice);
+        assert_eq!(kind_for("mention_menu_limit"), SettingKind::Integer);
+        assert_eq!(kind_for("mcp_open"), SettingKind::Action);
+        assert_eq!(kind_for("mcp_reconnect"), SettingKind::Action);
+        assert_eq!(kind_for("mcp_diagnose"), SettingKind::Action);
+        assert_eq!(kind_for("plugins_open"), SettingKind::Action);
+        assert_eq!(kind_for("mcp_config_path"), SettingKind::Text);
+        assert_eq!(kind_for("fast_model"), SettingKind::ReadOnly);
+
+        for row in &view.rows {
+            let meta = registry.meta(row);
+            assert_eq!(meta.category, row.section);
+            assert_eq!(
+                meta.kind == SettingKind::Choice || meta.kind == SettingKind::Boolean,
+                meta.choices.is_some(),
+                "choice metadata drifted for {}",
+                row.key
+            );
+        }
+    }
+
+    #[test]
+    fn config_labels_are_consumed_from_complete_locale_packs() {
+        for locale in Locale::shipped_complete() {
+            assert_eq!(
+                config_label_for_key_for_locale(*locale, "provider"),
+                tr(*locale, MessageId::ConfigLabelProvider)
+            );
+            assert_eq!(
+                config_label_for_key_for_locale(*locale, "features.mcp"),
+                tr(*locale, MessageId::ConfigLabelFeaturePrefix).replace("{name}", "Mcp")
+            );
+        }
+        assert_ne!(
+            config_label_for_key_for_locale(Locale::Ja, "provider"),
+            config_label_for_key_for_locale(Locale::En, "provider")
+        );
+    }
+
+    #[test]
+    fn model_row_hint_names_the_model_picker() {
+        let app = create_test_app();
+        let mut view = ConfigView::new_for_app(&app);
+        view.focus_key("model");
+
+        let hint = view.selected_row_hint().expect("model row hint");
+        assert!(hint.contains("Enter opens model picker"), "{hint}");
+        assert!(!hint.contains("Enter opens provider picker"), "{hint}");
+    }
+
+    #[test]
+    fn config_view_mouse_wheel_moves_rows_and_choice_selection() {
+        let app = create_test_app();
+        let mut view = ConfigView::new_for_app(&app);
+        let first_row = view.selected;
+
+        let _ = view.handle_mouse(MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert!(
+            view.selected > first_row,
+            "wheel should move the settings list"
+        );
+
+        view.focus_key("default_mode");
+        view.start_edit();
+        view.editing
+            .as_mut()
+            .expect("choice editor")
+            .selected_choice = 0;
+        let _ = view.handle_mouse(MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(
+            view.editing
+                .as_ref()
+                .expect("choice editor")
+                .selected_choice,
+            1
+        );
+    }
+
+    #[test]
     fn config_view_mouse_click_selects_row() {
         let app = create_test_app();
         let mut view = ConfigView::new_for_app(&app);
+        view.active_tab = ConfigTab::Models;
+        view.select_first_visible_row();
         let area = Rect::new(0, 0, 100, 30);
         let mut buf = Buffer::empty(area);
         view.render(area, &mut buf);
@@ -2716,13 +7270,9 @@ base_url = "https://api.xiaomimimo.com/v1"
         let hitboxes = view.last_row_hitboxes.borrow().clone();
         let (_, row_idx) = hitboxes
             .iter()
-            .find(|(_, idx)| {
-                view.rows
-                    .get(*idx)
-                    .is_some_and(|row| row.key == "default_model")
-            })
+            .find(|(_, idx)| view.rows.get(*idx).is_some_and(|row| row.key == "model"))
             .copied()
-            .expect("default_model row should have a hitbox");
+            .expect("model row should have a hitbox");
         let y = hitboxes
             .iter()
             .find_map(|(y, idx)| (*idx == row_idx).then_some(*y))
@@ -2737,12 +7287,140 @@ base_url = "https://api.xiaomimimo.com/v1"
 
         assert!(matches!(action, ViewAction::None));
         assert_eq!(view.selected, row_idx);
+
+        let second = view.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 20,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        });
+        match second {
+            ViewAction::Emit(ViewEvent::CommandPaletteSelected {
+                action: CommandPaletteAction::ExecuteCommand { command },
+            }) => assert_eq!(command, "/model"),
+            other => panic!("second click should open the model picker, got {other:?}"),
+        }
+        assert!(view.editing.is_none());
+    }
+
+    #[test]
+    fn config_view_tabs_are_clickable() {
+        let app = create_test_app();
+        let mut view = ConfigView::new_for_app(&app);
+        assert_eq!(view.active_tab, ConfigTab::General);
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buf = Buffer::empty(area);
+        view.render(area, &mut buf);
+
+        let hitboxes = view.last_tab_hitboxes.borrow().clone();
+        let (x0, _x1, y, tab) = hitboxes
+            .iter()
+            .copied()
+            .find(|(_, _, _, tab)| *tab == ConfigTab::Advanced)
+            .expect("Advanced tab should have a hitbox");
+
+        let action = view.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: x0.saturating_add(1),
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert!(matches!(action, ViewAction::None));
+        assert_eq!(tab, ConfigTab::Advanced);
+        assert_eq!(view.active_tab, ConfigTab::Advanced);
+        assert!(
+            view.rows
+                .get(view.selected)
+                .is_some_and(|row| row.section == ConfigSection::Mcp
+                    || row.section == ConfigSection::Fleet
+                    || row.section == ConfigSection::Workflow
+                    || row.section == ConfigSection::Session
+                    || row.section == ConfigSection::Legacy
+                    || row.section == ConfigSection::Experimental)
+        );
+    }
+
+    #[test]
+    fn config_view_mcp_action_rows_run_existing_commands() {
+        let app = create_test_app();
+        let mut view = ConfigView::new_for_app(&app);
+        for (key, command) in [
+            ("mcp_open", "/mcp"),
+            ("mcp_reconnect", "/mcp reload"),
+            ("mcp_diagnose", "/mcp validate"),
+            ("plugins_open", "/plugin"),
+        ] {
+            view.focus_key(key);
+            let action = view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+            match action {
+                ViewAction::Emit(ViewEvent::CommandPaletteSelected {
+                    action: CommandPaletteAction::ExecuteCommand { command: emitted },
+                }) => {
+                    assert_eq!(emitted, command, "{key}");
+                    assert!(!emitted.contains("/mcp auth"), "{key}");
+                }
+                other => panic!("{key} should run {command}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn config_view_bottom_hint_semantically_truncates_at_narrow_width() {
+        // The dense bottom status line must truncate on a word boundary with an
+        // ellipsis instead of leaving a mid-word fragment clipped by the
+        // terminal (#3987).
+        let mut app = create_test_app();
+        app.ui_locale = Locale::En;
+        let mut view = ConfigView::new_for_app(&app);
+        view.status = Some(
+            "CFGSTATUS persisted the configuration override to disk successfully \
+             without clipping the trailing MARKEREND status text"
+                .to_string(),
+        );
+
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        view.render(area, &mut buf);
+
+        let rows: Vec<String> = (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect();
+
+        // No rendered row may overflow the available columns.
+        for (idx, row) in rows.iter().enumerate() {
+            assert!(
+                crate::tui::ui_text::text_display_width(row) <= usize::from(area.width),
+                "line {idx} overflows: {row:?}"
+            );
+        }
+
+        let status_line = rows
+            .iter()
+            .find(|row| row.contains("CFGSTATUS"))
+            .expect("bottom status hint should be rendered");
+        assert!(
+            status_line.contains('…'),
+            "status should be truncated with an ellipsis: {status_line:?}"
+        );
+        assert!(
+            !status_line.contains("MARKEREND"),
+            "truncated status must drop trailing text: {status_line:?}"
+        );
     }
 
     #[test]
     fn config_view_typing_replaces_on_first_char() {
         let app = create_test_app();
         let mut view = ConfigView::new_for_app(&app);
+        view.selected = view
+            .rows
+            .iter()
+            .position(|row| row.key == "stream_chunk_timeout_secs")
+            .expect("editable row on the default tab");
 
         let _ = view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         let edit = view.editing.as_ref().expect("editing should be active");
@@ -2755,39 +7433,24 @@ base_url = "https://api.xiaomimimo.com/v1"
 
     #[test]
     fn config_view_escape_cancels_editing() {
-        let app = create_test_app();
+        let mut app = create_test_app();
+        app.ui_locale = Locale::En;
         let mut view = ConfigView::new_for_app(&app);
+        view.selected = view
+            .rows
+            .iter()
+            .position(|row| row.key == "stream_chunk_timeout_secs")
+            .expect("editable row on the default tab");
         let _ = view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(view.editing.is_some());
 
         let cancel = view.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(cancel, ViewAction::None));
         assert!(view.editing.is_none());
-        assert_eq!(view.status.as_deref(), Some("Edit cancelled"));
-    }
-
-    #[test]
-    fn shell_control_view_defaults_to_background() {
-        let mut view = ShellControlView::new();
-
-        let action = view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-
-        assert!(matches!(
-            action,
-            ViewAction::EmitAndClose(ViewEvent::ShellControlBackground)
-        ));
-    }
-
-    #[test]
-    fn shell_control_view_can_select_cancel() {
-        let mut view = ShellControlView::new();
-
-        let action = view.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
-
-        assert!(matches!(
-            action,
-            ViewAction::EmitAndClose(ViewEvent::ShellControlCancel)
-        ));
+        assert_eq!(
+            view.status.as_deref(),
+            Some(&*tr(Locale::En, MessageId::ConfigEditCancelled))
+        );
     }
 
     /// A modal that doesn't override `handle_paste` must report
@@ -2797,9 +7460,87 @@ base_url = "https://api.xiaomimimo.com/v1"
     #[test]
     fn default_modal_does_not_consume_paste() {
         let mut stack = ViewStack::new();
-        stack.push(ShellControlView::new());
+        stack.push(HelpView::new_for_locale(crate::localization::Locale::En));
         assert!(!stack.handle_paste("hello"));
-        assert_eq!(stack.top_kind(), Some(ModalKind::ShellControl));
+        assert_eq!(stack.top_kind(), Some(ModalKind::Help));
+    }
+
+    struct BareModal;
+
+    impl ModalView for BareModal {
+        fn kind(&self) -> ModalKind {
+            ModalKind::ContextMenu
+        }
+
+        fn handle_key(&mut self, _key: KeyEvent) -> ViewAction {
+            ViewAction::None
+        }
+
+        fn render(&self, area: Rect, buf: &mut Buffer) {
+            let x = area.x + area.width / 2;
+            let y = area.y + area.height / 2;
+            buf[(x, y)]
+                .set_symbol("M")
+                .set_style(Style::default().fg(Color::White).bg(Color::Red));
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+    }
+
+    #[test]
+    fn view_stack_paints_opaque_backdrop_before_modal() {
+        let area = Rect::new(0, 0, 24, 8);
+        let modal_x = area.x + area.width / 2;
+        let modal_y = area.y + area.height / 2;
+        let mut buf = Buffer::empty(area);
+        for y in area.top()..area.bottom() {
+            for x in area.left()..area.right() {
+                buf[(x, y)]
+                    .set_symbol("X")
+                    .set_style(Style::default().fg(Color::Red).bg(Color::Blue));
+            }
+        }
+
+        let mut stack = ViewStack::new();
+        stack.push(BareModal);
+        stack.render(area, &mut buf);
+
+        assert_eq!(buf[(modal_x, modal_y)].symbol(), "M");
+        for y in area.top()..area.bottom() {
+            for x in area.left()..area.right() {
+                if x == modal_x && y == modal_y {
+                    continue;
+                }
+                let cell = &buf[(x, y)];
+                assert_eq!(
+                    cell.symbol(),
+                    " ",
+                    "stale glyph at ({x},{y}) must be cleared"
+                );
+                assert_eq!(
+                    cell.bg,
+                    palette::WHALE_BG,
+                    "backdrop at ({x},{y}) must be opaque"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn view_stack_masks_links_behind_opaque_modals() {
+        let area = Rect::new(0, 0, 24, 8);
+        crate::tui::osc8::set_frame_links(vec![crate::tui::osc8::LinkRegion {
+            row: 3,
+            col_start: 2,
+            col_end: 18,
+            target: "https://example.invalid/under-modal".to_string(),
+        }]);
+        let mut stack = ViewStack::new();
+        stack.push(BareModal);
+        stack.render(area, &mut Buffer::empty(area));
+        assert!(crate::tui::osc8::take_frame_links().is_empty());
     }
 
     fn buffer_text(buf: &Buffer, area: Rect) -> String {
@@ -2811,5 +7552,103 @@ base_url = "https://api.xiaomimimo.com/v1"
             out.push('\n');
         }
         out
+    }
+
+    fn buffer_row_text(buf: &Buffer, area: Rect, y: u16) -> String {
+        (area.left()..area.right())
+            .map(|x| buf[(x, y)].symbol())
+            .collect()
+    }
+
+    /// 40x12 regression: the compact tier must surrender secondary chrome
+    /// (in-body title, column captions, separator) before it surrenders the
+    /// settings rows, and the wrapped footer height must come out of the
+    /// table budget instead of silently clipping rows.
+    #[test]
+    fn config_view_compact_heights_always_show_a_selectable_setting() {
+        let mut view = create_config_view(Locale::En);
+        for (width, height, label) in [(40u16, 12u16, "40x12"), (60, 16, "60x16")] {
+            let area = Rect::new(0, 0, width, height);
+            let mut buf = Buffer::empty(area);
+
+            view.render(area, &mut buf);
+
+            let dump = buffer_text(&buf, area);
+            let (selected_y, selected_idx) = {
+                let hitboxes = view.last_row_hitboxes.borrow();
+                assert!(
+                    !hitboxes.is_empty(),
+                    "{label} should register selectable setting hitboxes:\n{dump}"
+                );
+                hitboxes
+                    .iter()
+                    .find(|(_, idx)| *idx == view.selected)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        panic!("{label} selected setting should be rendered:\n{dump}")
+                    })
+            };
+            let row = buffer_row_text(&buf, area, selected_y);
+            let row_label = config_label_for_key(&view.rows[selected_idx].key);
+            let prefix: String = row_label.chars().take(8).collect();
+            assert!(
+                row.contains(&prefix),
+                "{label} hitbox row should contain the selected setting ({row_label:?}); got {row:?}"
+            );
+            assert!(
+                dump.contains("Search:"),
+                "{label} should keep the search affordance:\n{dump}"
+            );
+        }
+
+        // The selection anchor must hold while navigating across sections at
+        // the smallest supported size.
+        let area = Rect::new(0, 0, 40, 12);
+        for step in 0..12 {
+            view.move_selection(1);
+            let mut buf = Buffer::empty(area);
+            view.render(area, &mut buf);
+            let rendered = view
+                .last_row_hitboxes
+                .borrow()
+                .iter()
+                .any(|(_, idx)| *idx == view.selected);
+            assert!(
+                rendered,
+                "selected setting fell out of the 40x12 window after {} moves",
+                step + 1
+            );
+        }
+    }
+
+    /// 40x12 regression: the edit surface must keep the editable value line
+    /// (and its hint) above the wrapped footer.
+    #[test]
+    fn config_view_compact_edit_surface_keeps_value_line_visible() {
+        let mut view = create_config_view(Locale::En);
+        view.focus_key("approval_mode");
+        view.start_edit();
+        assert!(view.editing.is_some(), "approval_mode should be editable");
+        assert_eq!(
+            view.editing
+                .as_ref()
+                .and_then(|edit| edit.choices.as_ref())
+                .expect("session permission choices"),
+            &vec![
+                "ask".to_string(),
+                "auto-review".to_string(),
+                "full-access".to_string(),
+            ]
+        );
+        let area = Rect::new(0, 0, 40, 12);
+        let mut buf = Buffer::empty(area);
+
+        view.render(area, &mut buf);
+
+        let dump = buffer_text(&buf, area);
+        assert!(
+            dump.contains("Choose:") && dump.contains("Full Access"),
+            "the choice list must stay visible at 40x12:\n{dump}"
+        );
     }
 }

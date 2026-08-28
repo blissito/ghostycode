@@ -86,7 +86,13 @@ impl ToolSpec for DiagnosticsTool {
         };
 
         let git = probe_git(&context.workspace);
-        let sandbox_type = crate::sandbox::get_platform_sandbox().map(|s| s.to_string());
+        let sandbox_type = match context.shell_manager.lock() {
+            Ok(manager) => manager.configured_sandbox_type().map(|s| s.to_string()),
+            Err(poisoned) => poisoned
+                .into_inner()
+                .configured_sandbox_type()
+                .map(|s| s.to_string()),
+        };
         let sandbox_available = sandbox_type.is_some();
 
         // Bubblewrap availability (#2184).
@@ -155,18 +161,18 @@ fn probe_git(workspace: &Path) -> GitProbe {
 }
 
 fn probe_bwrap_available() -> bool {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         crate::sandbox::bwrap::is_available()
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
     {
         false
     }
 }
 
 fn probe_cgroup_version() -> Option<u8> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         let path = std::path::Path::new("/sys/fs/cgroup/cgroup.controllers");
         if path.exists() {
@@ -178,7 +184,7 @@ fn probe_cgroup_version() -> Option<u8> {
         }
         None
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
     {
         None
     }
@@ -243,6 +249,7 @@ mod tests {
             assert!(status.success(), "git {args:?} failed");
         };
         run(&["init", "-q"]);
+        run(&["config", "core.autocrlf", "false"]);
         run(&["config", "user.email", "test@example.com"]);
         run(&["config", "user.name", "Test User"]);
         fs::write(root.join("README.md"), "init\n").expect("write");
@@ -268,6 +275,42 @@ mod tests {
         let parsed: DiagnosticsOutput =
             serde_json::from_str(&result.content).expect("tool result should be json");
         assert_eq!(parsed.workspace_root, tmp.path().display().to_string());
+        let expected = ctx
+            .shell_manager
+            .lock()
+            .expect("shell manager")
+            .configured_sandbox_type()
+            .map(|kind| kind.to_string());
+        assert_eq!(parsed.sandbox_available, expected.is_some());
+        assert_eq!(parsed.sandbox_type, expected);
+    }
+
+    #[tokio::test]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+    async fn diagnostics_only_reports_configured_executable_bwrap_on_linux() {
+        let tmp = tempdir().expect("tempdir");
+        let ctx = ToolContext::new(tmp.path());
+        ctx.shell_manager
+            .lock()
+            .expect("shell manager")
+            .set_prefer_bwrap(true);
+
+        let result = DiagnosticsTool
+            .execute(json!({}), &ctx)
+            .await
+            .expect("execute");
+        let parsed: DiagnosticsOutput =
+            serde_json::from_str(&result.content).expect("tool result should be json");
+
+        assert_eq!(
+            parsed.bwrap_available,
+            crate::sandbox::bwrap::is_available()
+        );
+        assert_eq!(parsed.sandbox_available, parsed.bwrap_available);
+        assert_eq!(
+            parsed.sandbox_type.as_deref(),
+            parsed.bwrap_available.then_some("linux-bwrap")
+        );
     }
 
     #[tokio::test]

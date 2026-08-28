@@ -1,78 +1,184 @@
-# Installing Ghosty Code
+# Installing Ghosty
+
+> 阅读简体中文版：[zh_hans/INSTALL.md](zh_hans/INSTALL.md)
 
 This page covers every supported install path and the most common
 "it didn't install" failures, including **Linux ARM64** and other less
 common platforms.
 
 If you just want the short version, see the
-[main README](../README.md#quickstart) or use the one-liner below.
+[main README](../README.md#install) or
+[简体中文 README](../README.zh-CN.md#安装).
 
----
+This branch describes the **v0.9.11 source candidate**. Install commands that use
+`latest` resolve to the latest published package or GitHub Release, which may
+trail the source candidate. A candidate is not a published install until the
+matching package, tag, checksums, and release assets exist.
 
-## Quick install (recommended)
-
-No Node, no Rust — download the prebuilt binaries with one command:
+On macOS and Linux, the website installer is the shortest install/update path:
 
 ```bash
-curl -fsSL https://formmy.app/ghosty/install.sh | sh
+curl -fsSL https://ghosty.net/install.sh | sh
 ```
 
-It detects your OS/arch, downloads the matching `ghosty` and `ghosty-tui`
-binaries from the latest GitHub release, verifies them against the
-`ghosty-artifacts-sha256.txt` manifest, installs both to `~/.local/bin`, and
-prints the launch command (`ghosty --yolo`).
-
-The URL is a thin proxy that always serves the live
-[`scripts/install.sh`](../scripts/install.sh) from `main`, so there is no copy
-to keep in sync. The script honors the same overrides as the npm installer
-(see [Section 2](#2-download-safety-and-checksums) for checksums and
-[China / mirror-friendly install](#china--mirror-friendly-install) for mirrors):
-
-| Variable                  | Purpose                                          |
-| ------------------------- | ------------------------------------------------ |
-| `GHOSTY_VERSION`          | Pin which release to install (default: latest)   |
-| `GHOSTY_INSTALL_DIR`      | Install destination (default: `~/.local/bin`)    |
-| `GHOSTY_RELEASE_BASE_URL` | Override the download root (mirror/proxy)         |
-| `GHOSTY_USE_CNB_MIRROR`   | Use the CNB (China) mirror                        |
-
-If your platform has no prebuilt binary, use Cargo or build from source below.
+It downloads the matching `ghosty` release binary,
+verifies them against `ghosty-artifacts-sha256.txt`, installs to
+`~/.local/bin` by default. If a previous `ghosty-tui` command is present, it is refreshed to the same binary.
 
 ---
 
 ## 1. Supported platforms
 
-Ghosty Code ships matched `ghosty` and `ghosty-tui` prebuilt binaries for
-these platform/architecture combinations. Linux ARM64 is available from
-v0.8.8 onward; Linux RISC-V starts with the first release after v0.8.47.
+Published Ghosty releases ship a single `ghosty` prebuilt binary for their supported platform/architecture
+combinations. The table below is the intended v0.9.11 candidate matrix;
+Android/Termux is preview pending real-device QA. Linux ARM64 is available from
+v0.8.8 onward. Linux RISC-V prebuilts are temporarily paused because the locked
+`rquickjs-sys` dependency does not ship `riscv64gc-unknown-linux-gnu` bindings.
 
 | Platform     | Architecture | npm install | `cargo install` | GitHub release asset                                  |
 | ------------ | ------------ | :---------: | :-------------: | ----------------------------------------------------- |
-| Linux        | x64 (x86_64) |     ✅      |       ✅        | `ghosty-linux-x64`, `ghosty-tui-linux-x64`        |
-| Linux        | arm64        |     ✅      |       ✅        | `ghosty-linux-arm64`, `ghosty-tui-linux-arm64`    |
-| Linux        | riscv64      |     ✅      |       ✅        | `ghosty-linux-riscv64`, `ghosty-tui-linux-riscv64`|
-| macOS        | x64          |     ✅      |       ✅        | `ghosty-macos-x64`, `ghosty-tui-macos-x64`        |
-| macOS        | arm64 (M-series) | ✅      |       ✅        | `ghosty-macos-arm64`, `ghosty-tui-macos-arm64`    |
-| Windows      | x64          |     ✅      |       ✅        | `ghosty-windows-x64.exe`, `ghosty-tui-windows-x64.exe` |
-| Other Linux (musl, other architectures) | — |   ❌¹    |       ✅²       | build from source                                     |
-| FreeBSD / OpenBSD              | — |   ❌      |       ✅²       | build from source                                     |
+| Linux        | x64 (x86_64) |     ✅      |       ✅        | `ghosty-linux-x64`        |
+| Linux        | arm64        |     ✅      |       ✅        | `ghosty-linux-arm64`    |
+| Android / Termux | arm64 (aarch64) | ⚠️⁴ preview | ⚠️⁴ preview | `ghosty-android-arm64.tar.gz` preview archive when published |
+| Linux        | riscv64      |     ❌¹     |       ❌³       | temporarily unsupported until upstream bindings land |
+| macOS        | x64          |     ✅      |       ✅        | `ghosty-macos-x64`        |
+| macOS        | arm64 (M-series) | ✅      |       ✅        | `ghosty-macos-arm64`    |
+| Windows      | x64          |     ✅      |       ✅        | `ghosty-windows-x64.exe` |
+| Windows      | arm64        |     ✅      |       ✅        | `ghosty-windows-arm64.exe` |
+| Linux x64 or arm64 on musl (Alpine) | native arch | ✅ (static) | ✅ | matching static Linux asset |
+| Other Linux (musl on other arches) | — | ❌¹ | ✅² | build from source                                     |
+| FreeBSD 14+ / OpenBSD          | x64, arm64 |   ❌      |       ✅²       | `cargo install ghosty-cli --locked` (no prebuilt; see § FreeBSD) |
 
 ¹ The npm package will exit with a clear error and point you here.
 ² Provided your toolchain can compile a recent Rust workspace; see
   [Build from source](#7-build-from-source) below.
+³ RISC-V source builds currently need upstream `rquickjs-sys` RISC-V bindings or
+  a bindgen-enabled dependency build.
+⁴ The v0.9.11 source-candidate npm wrapper recognizes Android arm64 and resolves
+  the matching `ghosty` Android asset. npm
+  installation works only for a package version whose GitHub Release publishes
+  those matching assets. The Android/Termux path remains preview-only until the
+  real-device compile, startup, approval, file-tool, and update checks tracked
+  in #4236 and #4242 are complete.
 
-The Linux release assets are glibc builds, not musl builds. They dynamically
-link normal Linux runtime libraries such as `libdbus-1` and `libc`; SQLite is
-currently bundled into the binary through `rusqlite` so users do not need a
-separate `libsqlite3` runtime package for official release assets. Musl-based
-systems such as Alpine should use [Build from source](#7-build-from-source).
+Android / Termux is not the same target as Linux arm64. Do not install the
+Linux `ghosty-linux-arm64` archive in Termux; use the Termux-specific
+Android archive when a release or release candidate publishes one, or build
+from source inside Termux.
+
+The Linux **x64 and arm64** v0.9.11 candidate assets are **static musl builds**.
+The x64 release path has used musl since v0.8.65; v0.9.6 extends the same build
+and static-launch check to arm64. These binaries have no glibc dependency and
+run on their matching architecture across Ubuntu, Debian, RHEL/CentOS, and
+Alpine/musl. SQLite is bundled through `rusqlite`, so no separate `libsqlite3`
+runtime package is needed.
+
+### Linux ARM64 portability
+
+Linux arm64 assets before v0.9.6 were GNU libc builds and could inherit the
+Ubuntu 24.04 build host's `GLIBC_2.39` floor. Ubuntu 22.04 ships glibc 2.35, so
+those older arm64 binaries can fail with errors such as:
+
+```text
+version `GLIBC_2.39' not found
+```
+
+The npm wrapper, `ghosty update`, and the Unix archive installer retain their
+GNU-binary preflight for older releases. The v0.9.11 arm64 candidate instead uses
+`aarch64-unknown-linux-musl`, so it has no `GLIBC_*` floor. If you are installing
+an earlier release on an older arm64 distribution, use:
+
+```bash
+cargo install ghosty-cli --locked   # installs `ghosty`
+```
 
 > **Linux ARM64 note (v0.8.7 and earlier).** v0.8.7 and earlier do **not**
 > publish a Linux ARM64 prebuilt; users on HarmonyOS thin-and-light, Asahi
 > Linux, Raspberry Pi, AWS Graviton, etc. saw `Unsupported architecture: arm64`
-> from `npm i -g ghosty`. v0.8.8 publishes both `ghosty-linux-arm64`
-> and `ghosty-tui-linux-arm64`, so a plain `npm i -g ghosty` works
+> from `npm i -g ghosty`. v0.8.8 publishes `ghosty-linux-arm64`, so a plain `npm i -g ghosty` works
 > on any glibc-based ARM64 Linux. If you're stuck on v0.8.7, jump to
 > [Build from source](#7-build-from-source) — `cargo install` works fine.
+> For HarmonyOS PC and OpenHarmony cross-build setup, see
+> [HarmonyOS and OpenHarmony](HarmonyOS.md).
+
+### Android / Termux arm64
+
+Termux runs on Android's Bionic libc and uses `$PREFIX` as its Unix prefix, so
+it needs a Termux-specific Android arm64 archive. The Linux arm64 release asset
+targets standard Linux with musl; Android uses a distinct Rust target, so the
+Linux asset should not be used there.
+
+Install the minimum archive/runtime tools first:
+
+```bash
+pkg update
+pkg install -y ca-certificates curl tar gzip coreutils
+```
+
+When the release includes `ghosty-android-arm64.tar.gz`, install it with the
+archive's bundled installer. Passing `PREFIX="$PREFIX"` matters: the installer
+defaults to `~/.local`, while Termux users normally expect commands under
+`$PREFIX/bin`.
+
+```bash
+cd "$HOME"
+curl -L -O https://github.com/blissito/ghostycode/releases/latest/download/ghosty-android-arm64.tar.gz
+curl -L -O https://github.com/blissito/ghostycode/releases/latest/download/ghosty-bundles-sha256.txt
+sha256sum -c ghosty-bundles-sha256.txt --ignore-missing
+
+tar xzf ghosty-android-arm64.tar.gz
+cd ghosty-android-arm64
+PREFIX="$PREFIX" ./install.sh
+hash -r
+```
+
+If you are validating from source or building a release candidate locally,
+install the build packages before running Cargo:
+
+```bash
+pkg install -y rust clang pkg-config make git
+cargo install ghosty-cli --locked   # installs `ghosty`
+```
+
+The normal first-run setup path is implemented, but its Android interaction is
+still part of the preview QA above. Prefer provider environment variables for
+temporary credentials. `ghosty auth set` is available, but the Termux build
+has no supported OS keyring integration and falls back to file-backed secrets
+by writing `~/.ghosty/config.toml` and mirroring keys to
+`~/.ghosty/secrets/secrets.json`. Both are plaintext files protected by
+`0600` permissions and are not encrypted at rest.
+
+```bash
+ghosty auth set --provider deepseek
+ghosty auth status
+ghosty doctor
+```
+
+Maintainers should use this repeatable smoke checklist for a Termux / Android
+arm64 release candidate:
+
+```bash
+command -v ghosty
+test -x "$PREFIX/bin/ghosty"
+
+ghosty --version
+ghosty doctor
+ghosty exec --auto "run pwd"
+```
+
+Known limitations:
+
+- Commands inherit Android's per-app UID, SELinux, and seccomp protections and
+  any permissions granted to Termux. Ghosty's opt-in bubblewrap
+  child-process sandbox is Linux-only and is not built on Android, so approved
+  commands receive no Ghosty-specific filesystem narrowing.
+- The Termux build has no supported Android Keystore or desktop Secret Service
+  integration. Use `ghosty auth status` to confirm the active source and
+  prefer provider environment variables when file-backed plaintext storage is
+  not acceptable.
+- Terminal rendering varies by Android terminal app. The TUI always owns the
+  alternate screen. If a terminal app cannot render the full-screen TUI,
+  use `ghosty exec` for headless runs instead.
 
 ---
 
@@ -83,8 +189,10 @@ Official release binaries are published only from
 `ghosty`. Do not install release assets from look-alike repositories,
 archives, or search-result mirrors unless you deliberately trust that mirror.
 
-Every GitHub release includes `ghosty-artifacts-sha256.txt`. If you download
-binaries manually, verify them before running:
+Every GitHub release includes checksum manifests. Use
+`ghosty-artifacts-sha256.txt` for bare binaries and
+`ghosty-bundles-sha256.txt` for `.tar.gz` / `.zip` platform archives. If you
+download binaries manually, verify them before running:
 
 ```bash
 # Run from the directory containing the downloaded binaries.
@@ -92,7 +200,8 @@ curl -L -O https://github.com/blissito/ghostycode/releases/latest/download/ghost
 sha256sum -c ghosty-artifacts-sha256.txt --ignore-missing
 ```
 
-On macOS, use `shasum -a 256 -c ghosty-artifacts-sha256.txt` instead of
+On macOS, use
+`shasum -a 256 -c ghosty-artifacts-sha256.txt --ignore-missing` instead of
 `sha256sum`.
 
 If antivirus software flags an official release binary, treat it as unresolved
@@ -112,25 +221,54 @@ a download sourced from an impersonating repository or mirror.
 
 ## 3. Install via npm
 
+npm is the recommended install path (Node 18+; wrapper available for v0.8.56
+and later). It installs the registry's latest published version, not an
+unpublished source candidate.
+
 ```bash
 npm install -g ghosty
-ghosty
+ghosty --version   # prints the published version that was installed
 ```
 
-`postinstall` downloads the right pair of binaries from the matching GitHub
-release, verifies a SHA-256 manifest, and exposes both `ghosty` and
-`ghosty-tui` on your `PATH`.
+`postinstall` downloads the matching `ghosty` binary, verifies it
+against that source's SHA-256 manifest, and exposes `ghosty`
+on your `PATH`.
+
+On **Linux x64** (including OpenHarmony x64) the wrapper does **not** wait for
+a slow GitHub binary download or a long failure timeout. Unless you set an
+explicit release base URL or `GHOSTY_USE_CNB_MIRROR=1`, it concurrently
+fetches the small `ghosty-artifacts-sha256.txt` manifests from GitHub
+Releases and the first-party CNB release for the exact package version, accepts
+the first source whose HTTP response and manifest validate for the required
+assets, cancels the other probe, and downloads the binaries only from that
+locked source. CNB publishes Linux x64 only; other targets keep the GitHub-only
+path. The selected source is printed in install progress and written to
+`<binary>.source` next to the downloaded file. A checksum or source mismatch
+fails closed.
+
+On Windows, run those commands from **Windows Terminal** rather than `cmd.exe`
+so fonts and colors match the supported TUI. The GitHub Release also publishes
+`ghosty.bat` next to the bare x64 exe; that launcher prefers `wt.exe` and
+falls back to a direct launch when Windows Terminal is absent.
 
 Useful environment variables:
 
 | Variable                            | Purpose                                                                                |
 | ----------------------------------- | -------------------------------------------------------------------------------------- |
-| `DEEPSEEK_TUI_VERSION`              | Pin which release the wrapper downloads (defaults to `deepseekBinaryVersion`)          |
-| `DEEPSEEK_TUI_GITHUB_REPO`          | Point the downloader at a fork (`owner/repo`)                                          |
-| `DEEPSEEK_TUI_RELEASE_BASE_URL`     | Override the download root (e.g. an internal mirror or release-asset proxy)            |
-| `DEEPSEEK_TUI_FORCE_DOWNLOAD=1`     | Re-download even if a cached binary marker matches                                     |
-| `DEEPSEEK_TUI_DISABLE_INSTALL=1`    | Skip the `postinstall` download entirely (CI smoke, vendored binaries)                 |
-| `DEEPSEEK_TUI_OPTIONAL_INSTALL=1`   | Don't fail `npm install` on download/extract errors — useful in CI matrices            |
+| `GHOSTY_RELEASE_BASE_URL`        | Override the download root. Skips the Linux x64 GitHub/CNB race.                        |
+| `GHOSTY_USE_CNB_MIRROR=1`        | Force the CNB first-party mirror on Linux x64 / OpenHarmony x64. Other targets fail.   |
+| `GHOSTY_VERSION`                 | Pin which release the wrapper downloads (defaults to `ghostyBinaryVersion`).        |
+| `GHOSTY_GITHUB_REPO`             | Point the downloader at a fork (`owner/repo`).                                          |
+| `GHOSTY_FORCE_DOWNLOAD=1`        | Re-download even if a cached binary marker matches.                                    |
+| `GHOSTY_DISABLE_INSTALL=1`       | Skip the `postinstall` download entirely (CI smoke, vendored binaries).                 |
+| `GHOSTY_OPTIONAL_INSTALL=1`      | Don't fail `npm install` on retryable download errors — useful in CI matrices.          |
+| `GHOSTY_QUIET_INSTALL=1`         | Suppress installer progress messages.                                                   |
+| `GHOSTY_DOWNLOAD_TIMEOUT_MS`     | Override the total download budget in milliseconds.                                     |
+| `GHOSTY_DOWNLOAD_STALL_MS`       | Override the no-progress stall budget in milliseconds.                                  |
+
+The corresponding `DEEPSEEK_TUI_*` and `DEEPSEEK_*` variables remain accepted
+as legacy aliases, after the canonical `GHOSTY_*` names. New automation and
+support instructions should use only the Ghosty names.
 
 > **Slow npm download from mainland China?** If `npm install` itself is slow
 > (not just the postinstall binary download), use an npm registry mirror:
@@ -146,15 +284,35 @@ Useful environment variables:
 ## 4. Install via Cargo (any Tier-1 Rust target)
 
 If GitHub releases are slow, blocked, or you're on an unsupported architecture,
-install from crates.io directly. Both crates are required — the dispatcher
-delegates to the TUI runtime at runtime.
+install from crates.io directly. One Cargo package is required:
+`ghosty-cli` installs the `ghosty` command. npm and prebuilt releases also
+expose `ghosty-tui` as a convenience name for the same compiled runtime; Cargo does
+not create that alias, so define a shell alias yourself if you want the shorter
+name.
 
 ```bash
 # Requires Rust 1.88+ (https://rustup.rs)
-cargo install ghosty-cli --locked   # provides `ghosty`
-cargo install ghosty-tui     --locked   # provides `ghosty-tui`
+cargo install ghosty-cli --locked   # installs `ghosty`
 ghosty --version
 ```
+
+> **Linux: install build-time dependencies first.** `cargo install` compiles
+> from source, and on Linux the `ghosty-cli` crate links against
+> `libdbus-1` (used by the D-Bus secret-service backend for credential
+> storage). Install the required system packages before running `cargo install`:
+>
+> ```bash
+> # Debian / Ubuntu
+> sudo apt-get install -y build-essential pkg-config libdbus-1-dev
+>
+> # Fedora / RHEL
+> sudo dnf install -y gcc make pkgconf-pkg-config dbus-devel
+> ```
+>
+> If you use the npm wrapper or download GitHub Release binaries, these
+> build-time packages are **not** required — the prebuilt binary only
+> needs the runtime library (`libdbus-1`), which is already present on
+> most desktop Linux installs.
 
 ### China / mirror-friendly install
 
@@ -207,21 +365,6 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
 `rsproxy`, Tencent COS, and Aliyun OSS mirrors work the same way; pick whichever
 is fastest from your network.
 
-### Tencent Cloud remote-first setup
-
-For an always-on workspace that can be controlled from a phone, use the
-Tencent-native path instead of treating install as a single laptop step:
-
-- CNB mirror/source: `https://cnb.cool/ghosty.net/ghosty.git`
-- Tencent Lighthouse HK: `/opt/whalebro` remote workspace
-- Feishu/Lark: long-connection phone bridge
-- EdgeOne: optional public HTTPS edge for docs/status/webhook surfaces
-
-Start with [Tencent Cloud Remote-First Quickstart](TENCENT_CLOUD_REMOTE_FIRST.md),
-then follow [Tencent Lighthouse Hong Kong Phone Setup](TENCENT_LIGHTHOUSE_HK.md).
-
----
-
 ## 5. Install via Nix
 
 **Try it**
@@ -232,7 +375,7 @@ If you already have Nix with flake support, run:
 nix run github:blissito/ghostycode
 ```
 
-Nix builds `ghosty-tui` and then starts the `ghosty` dispatcher. Pass
+Nix builds `ghosty` (single binary) and then starts the dispatcher. Pass
 arguments after `--`, for example:
 
 ```sh
@@ -248,8 +391,8 @@ Add inputs to `flake.nix`:
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    ghosty-tui.url = "github:blissito/ghostycode";
-    ghosty-tui.inputs.nixpkgs.follows = "nixpkgs";
+    ghosty.url = "github:blissito/ghostycode";
+    ghosty.inputs.nixpkgs.follows = "nixpkgs";
   };
 }
 ```
@@ -258,7 +401,7 @@ Install into a NixOS module:
 
 ```nix
 {
-  outputs = { self, nixpkgs, ghosty-tui }:
+  outputs = { self, nixpkgs, ghosty }:
   let
     # replace system "x86_64-linux" with your system
     system = "x86_64-linux";
@@ -270,7 +413,7 @@ Install into a NixOS module:
       modules = [
         # ...
         {
-          environment.systemPackages = [ ghosty-tui.packages.${system}.default ];
+          environment.systemPackages = [ ghosty.packages.${system}.default ];
         }
       ];
     };
@@ -280,28 +423,73 @@ Install into a NixOS module:
 
 ---
 
+## Omarchy / AUR
+
+On Omarchy, install the prebuilt AUR package:
+
+```bash
+omarchy pkg aur add ghosty-bin
+ghosty --version
+```
+
+`ghosty-bin` packages the same checksum-pinned Linux release archives as the
+other binary install paths and provides both `ghosty` and `ghosty-tui`. It does
+not carry a separate Ghosty version; the existing `ghosty-tui`
+compatibility command remains an alias to the same runtime. Package updates
+arrive through `omarchy update`; the in-app updater leaves the pacman-owned
+binary to Omarchy.
+
+The AUR update follows the matching Ghosty tag and release assets, so it may
+appear after the GitHub release while its generated `PKGBUILD` and `.SRCINFO`
+are validated. Release-maintainer instructions live in
+[`packaging/aur/README.md`](../packaging/aur/README.md).
+
+---
+
+## Homebrew
+
+The formula is `ghosty`. The tap GitHub repo is still
+`blissito/homebrew-ghosty` until it is renamed; `brew tap blissito/ghostycode`
+keeps working either way.
+
+```bash
+brew tap blissito/ghostycode
+brew install ghosty
+```
+
+Update with `brew upgrade ghosty`. Existing Cellar installs under the
+legacy `deepseek-tui` formula name can still run `brew upgrade deepseek-tui`
+for one overlap release; new installs should use `ghosty`.
+
+---
+
 ## 6. Manual download from GitHub Releases
 
-Grab the matching pair of binaries for your platform from the
+Each platform appears on the Releases page in **two forms** (this is intentional — see #3208):
+the **bare binaries** (`ghosty-<platform>` and `ghosty-tui-<platform>`, no extension) and a **`.tar.gz` / `.zip` archive**
+(`ghosty-<platform>.tar.gz`) that bundles the same commands plus an
+`install.sh`. The npm wrapper and the in-app `ghosty update` download the
+matched runtime binaries; the archive is the easiest manual install (see §6).
+The steps below use the bare binaries directly.
+
+Grab the matching command set for your platform from the
 [Releases page](https://github.com/blissito/ghostycode/releases) and drop them
 side by side into a directory on your `PATH` (e.g. `~/.local/bin`):
 
 ```bash
 # Linux ARM64 example
 mkdir -p ~/.local/bin
-curl -L -o ~/.local/bin/ghosty      \
+curl -L -o ~/.local/bin/ghosty \
     https://github.com/blissito/ghostycode/releases/latest/download/ghosty-linux-arm64
-curl -L -o ~/.local/bin/ghosty-tui  \
-    https://github.com/blissito/ghostycode/releases/latest/download/ghosty-tui-linux-arm64
-chmod +x ~/.local/bin/ghosty ~/.local/bin/ghosty-tui
+chmod +x ~/.local/bin/ghosty
 ghosty --version
 ```
 
 > **macOS Gatekeeper note.** If you downloaded the binaries with a browser,
-> macOS may block them with "Apple cannot verify" warnings. Clear the quarantine
-> attribute on both binaries and retry:
+> macOS may block it with an "Apple cannot verify" warning. Clear the quarantine
+> attribute and retry:
 > ```bash
-> xattr -d com.apple.quarantine ~/.local/bin/ghosty ~/.local/bin/ghosty-tui 2>/dev/null || true
+> xattr -d com.apple.quarantine ~/.local/bin/ghosty 2>/dev/null || true
 > ```
 
 Verify integrity against the per-release SHA-256 manifest:
@@ -312,7 +500,39 @@ curl -L -o /tmp/ghosty-artifacts-sha256.txt \
 ( cd ~/.local/bin && sha256sum -c /tmp/ghosty-artifacts-sha256.txt --ignore-missing )
 ```
 
-(Use `shasum -a 256 -c` instead of `sha256sum` on macOS.)
+(Use `shasum -a 256 -c /tmp/ghosty-artifacts-sha256.txt --ignore-missing`
+instead of `sha256sum -c` on macOS.)
+
+### Roll back to a previous release
+
+If a new release is bad on your machine, install the last known-good version
+explicitly. Replace `X.Y.Z` with the version you want to restore.
+
+```bash
+# npm wrapper, only for versions that were published to npm
+npm install -g ghosty@X.Y.Z
+
+# Cargo path: one package installs ghosty
+cargo install ghosty-cli --version X.Y.Z --locked --force
+```
+
+For manual installs, download the matched binaries or the platform archive from the
+exact release tag and verify the matching checksum manifest from that same tag:
+
+```bash
+# individual binaries
+curl -L -o ghosty-artifacts-sha256.txt \
+  https://github.com/blissito/ghostycode/releases/download/vX.Y.Z/ghosty-artifacts-sha256.txt
+
+# platform archives
+curl -L -o ghosty-bundles-sha256.txt \
+  https://github.com/blissito/ghostycode/releases/download/vX.Y.Z/ghosty-bundles-sha256.txt
+```
+
+Inside a Ghosty workspace, `/restore list [N]` lists side-git file snapshots
+and `/restore <N>` restores files from the chosen snapshot. That workspace
+rollback does not change your installed binary version and does not rewrite
+conversation history.
 
 ### Windows Scoop
 
@@ -328,31 +548,74 @@ Scoop manifests are maintained outside this repository's release workflow and
 can lag GitHub/npm/Cargo releases. Use npm or manual GitHub release downloads
 when you need the newest version immediately.
 
+### Windows winget (v0.9.5+)
+
+GhostyCode publishes a winget manifest for `blissito.GhostyCode` (resolves #1561).
+Winget installs only the `ghosty` + `ghosty-tui` commands. GitHub Releases retain
+byte-identical `ghosty-tui-*` filenames only for legacy updater compatibility;
+they are not a third installed command.
+
+```powershell
+winget install blissito.GhostyCode
+ghosty --version
+```
+
+The manifest is at [`packaging/winget/blissito.GhostyCode.yaml`](../packaging/winget/blissito.GhostyCode.yaml)
+(also mirrored at [`.winget/blissito.GhostyCode.yaml`](../.winget/blissito.GhostyCode.yaml)) and lists both
+the NSIS installer (`GhostyCodeSetup.exe`, per-user, adds `%LOCALAPPDATA%\Programs\GhostyCode\bin` to the user PATH)
+and the portable ZIP fallback (`ghosty-windows-x64.zip` / `ghosty-windows-arm64.zip`). winget
+selects the matching architecture automatically; both install the single binary (`ghosty.exe` + `ghosty-tui.exe`).
+The zips also include `ghosty.bat`. Double-click that launcher (not the raw `.exe`) so the first
+window is Windows Terminal when it is installed.
+
+Update via `winget upgrade blissito.GhostyCode` or `ghosty update`. The winget package is
+maintained outside this repo's release workflow and can lag GitHub/npm/Cargo releases by one
+validation cycle — use npm or the GitHub Release asset when you need the newest version immediately.
+If `winget install` reports a hash mismatch, verify `ghosty-artifacts-sha256.txt` for the same
+tag and regenerate the manifest via `packaging/winget/generate-winget-manifest.sh` (see
+[`packaging/winget/README.md`](../packaging/winget/README.md)) before re-submitting to
+[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs).
+
+> **Windows ARM64 note.** The NSIS installer currently contains only the x64 binaries.
+> Windows ARM64 users should install via `winget install blissito.GhostyCode` (ARM64 ZIP) or
+> `npm install -g ghosty` under native ARM64 Node.js, or download
+> `ghosty-windows-arm64.zip` directly — all paths install native ARM64 binaries.
+
 ### Windows NSIS Installer
 
 A standalone NSIS-based installer is available starting with v0.8.50 for
 Windows users who prefer a traditional double-click setup (no npm, no Scoop, no
 Cargo required).
 
-**Download** `Ghosty CodeSetup.exe` from the
+The NSIS installer currently contains the Windows x64 binaries. Windows ARM64
+users should install through npm running under native ARM64 Node.js or download
+`ghosty-windows-arm64.zip` from the same release; both paths then use native
+ARM64 binaries.
+
+**Download** `GhostyCodeSetup.exe` from the
 [Releases page](https://github.com/blissito/ghostycode/releases/latest).
 
 **Install** by double-clicking the setup executable. The installer:
 
-- Installs `ghosty.exe` and `ghosty-tui.exe` side-by-side into
-  `%LOCALAPPDATA%\Programs\Ghosty Code\bin`
+- Installs `ghosty.exe` and `ghosty-tui.exe` side-by-side (single binary, no `ghosty-tui.exe`) into
+  `%LOCALAPPDATA%\Programs\GhostyCode\bin`
+- Installs `ghosty.bat`, which prefers Windows Terminal (`wt.exe`) when it is on `PATH` and
+  otherwise launches the exe directly
+- Creates a current-user Start Menu shortcut that opens that launcher, not the raw `.exe`
 - Adds the install directory to the **current user** `PATH`
 - Registers in Windows **Apps & Features** for easy uninstall
+
+Uninstall removes the binaries, `ghosty.bat`, the Start Menu shortcut, and the user `PATH` entry.
 
 **Silent install** (for IT admins, SCCM, Intune):
 
 ```powershell
-Ghosty CodeSetup.exe /S
+GhostyCodeSetup.exe /S
 ```
 
 The installer is per-user and does not request elevation. Run silent installs in
 the target user's context, or use a deployment tool that can run the installer
-for each user profile that needs Ghosty Code.
+for each user profile that needs Ghosty.
 
 The release-built installer is currently unsigned and may trigger Windows
 SmartScreen. Verify the SHA-256 checksum from `ghosty-artifacts-sha256.txt`
@@ -363,7 +626,7 @@ your environment requires signed application packages.
 
 ```powershell
 cd scripts\installer
-# Place ghosty.exe and ghosty-tui.exe here, then:
+# Place ghosty.exe and ghosty-tui.exe here (single binary, no ghosty-tui.exe), then:
 makensis /DVERSION=<version> ghosty.nsi
 ```
 
@@ -379,8 +642,10 @@ commands.
 
 ## 7. Build from source
 
-This is the catch-all for any platform we don't ship — including musl, riscv64,
-LoongArch, FreeBSD, and pre-2024 ARM64 distros.
+This is the catch-all for platforms we don't ship, including musl non-x64,
+LoongArch, FreeBSD, and pre-2024 ARM64 distros. Linux RISC-V currently also
+needs upstream `rquickjs-sys` RISC-V bindings or a bindgen-enabled dependency
+build before source builds are expected to work.
 
 ### Prerequisites
 
@@ -397,21 +662,41 @@ LoongArch, FreeBSD, and pre-2024 ARM64 distros.
 
 ```bash
 git clone https://github.com/blissito/ghostycode.git
-cd ghostycode
+cd GhostyCode
 
-cargo install --path crates/cli --locked   # provides `ghosty`
-cargo install --path crates/tui --locked   # provides `ghosty-tui`
+cargo install --path crates/cli --locked   # installs `ghosty`
 
 ghosty --version
 ```
 
-Both binaries land in `~/.cargo/bin/` by default; make sure that directory is
+The command lands in `~/.cargo/bin/` by default; make sure that directory is
 on your `PATH`.
+
+### FreeBSD 14+ (resolves #1097)
+
+FreeBSD has no prebuilt GitHub Release asset — `npm install -g ghosty` intentionally
+fails with `Unsupported platform: freebsd` and points to Cargo. Install from source:
+
+```bash
+pkg install -y rust pkgconf git
+cargo install ghosty-cli --locked   # installs `ghosty`
+ghosty --version
+ghosty doctor
+```
+
+The `rquickjs` FreeBSD bindings are generated at build time via `bindgen` (see
+`1582ba965`/`5eb0385e8`). No separate `pkg install ghosty` port exists yet —
+a native port is tracked as the follow-up to #1097 under `packaging/freebsd/`
+(contributions welcome). Validate with `cargo check --target x86_64-unknown-freebsd -p ghosty-cli --locked`
+on the release branch; the 7×1 release matrix (Linux musl x64/arm64,
+Android arm64, macOS x64/arm64, Windows x64/arm64) stays 7 targets — FreeBSD is a
+source-build target, not a prebuilt asset.
 
 ### Cross-compiling from x64 to ARM64 Linux
 
-If you want to build an ARM64 Linux binary on an x64 Linux host (e.g. for a
-HarmonyOS / openEuler ARM64 thin-and-light), use
+The release asset uses `aarch64-unknown-linux-musl` and is built on a native ARM
+runner. If you want to build a GNU-linked ARM64 Linux binary on an x64 Linux
+host (e.g. for a HarmonyOS / openEuler ARM64 thin-and-light), use
 [`cross`](https://github.com/cross-rs/cross), which wraps the official Rust
 cross-targets in a Docker container:
 
@@ -421,14 +706,14 @@ rustup target add aarch64-unknown-linux-gnu
 cargo install cross --locked
 
 # Per build
-cross build --release --target aarch64-unknown-linux-gnu -p ghosty-cli
-cross build --release --target aarch64-unknown-linux-gnu -p ghosty-tui
+cross build --release --target aarch64-unknown-linux-gnu -p ghosty-cli   # single binary
 ```
 
-The resulting binaries land in
-`target/aarch64-unknown-linux-gnu/release/ghosty` and
-`target/aarch64-unknown-linux-gnu/release/ghosty-tui`. Copy the matched pair
-to the ARM64 host (e.g. via `scp`) and `chmod +x` them.
+The resulting binary lands in
+`target/aarch64-unknown-linux-gnu/release/ghosty`. Copy it to the ARM64 host
+(e.g. via `scp`) and make it executable. This local GNU build is distinct from
+the portable musl release asset; either executable can be copied under the
+`ghosty-tui` convenience name.
 
 If you don't have Docker available, install the cross-linker directly and let
 Cargo do the work:
@@ -442,12 +727,12 @@ cat >> ~/.cargo/config.toml <<'EOF'
 linker = "aarch64-linux-gnu-gcc"
 EOF
 
-cargo build --release --target aarch64-unknown-linux-gnu -p ghosty-cli
-cargo build --release --target aarch64-unknown-linux-gnu -p ghosty-tui
+cargo build --release --target aarch64-unknown-linux-gnu -p ghosty-cli   # single binary
 ```
 
-The same recipe works for `aarch64-unknown-linux-musl` if your distro is
-musl-based.
+Producing `aarch64-unknown-linux-musl` while cross-compiling requires an
+appropriate musl cross-linker. The release workflow avoids that extra moving
+part by building and launching the musl binary on GitHub's native ARM runner.
 
 ### Windows build from source
 
@@ -500,21 +785,93 @@ that session and run `cargo build` from the project root.
 
 ```bash
 git clone https://github.com/blissito/ghostycode.git
-cd ghostycode
+cd GhostyCode
 set CARGO_HTTP_CHECK_REVOKE=false   # may be needed behind some Chinese ISPs
 cargo build --release
 ```
 
-Both binaries appear in `target\release\ghosty.exe` and
-`target\release\ghosty-tui.exe`.
+The Cargo-built binary appears at `target\release\ghosty.exe`. Release
+packaging separately exposes the same executable as `ghosty-tui.exe`.
 
-> **Prefer `npm install -g` on Windows unless you need to modify source.**
-> The npm package pulls prebuilt binaries and avoids the C toolchain
-> dependency entirely — see [Section 3](#3-install-via-npm-recommended).
+> Prefer not to build? Install via npm, Cargo, GitHub Releases, or the CNB
+> mirror — see the sections above.
 
 ---
 
-## 8. Troubleshooting
+## 8. Shell completions
+
+Ghosty generates its own completion scripts. One command per shell; each
+script completes **both** `ghosty` and the `ghosty-tui` shorthand.
+
+```bash
+ghosty completion <bash|zsh|fish|powershell|elvish>
+```
+
+`ghosty completions` is an accepted alias for the same command.
+
+The script is written to stdout, so installing it is a redirect to wherever
+your shell loads completions from.
+
+**Bash** — needs the `bash-completion` package loaded by your shell:
+
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+ghosty completion bash > ~/.local/share/bash-completion/completions/ghosty
+```
+
+For the current shell only: `source <(ghosty completion bash)`.
+
+**Zsh** — the script's `#compdef` line already covers both command names:
+
+```bash
+mkdir -p ~/.zfunc
+ghosty completion zsh > ~/.zfunc/_ghosty
+```
+
+If `~/.zfunc` is not already on `fpath`, add this to `~/.zshrc`:
+
+```zsh
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+**Fish**:
+
+```fish
+mkdir -p ~/.config/fish/completions
+ghosty completion fish > ~/.config/fish/completions/ghosty.fish
+```
+
+**PowerShell** — append to your profile so it loads in every session:
+
+```powershell
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PROFILE)
+ghosty completion powershell >> $PROFILE
+```
+
+For the current session only:
+
+```powershell
+ghosty completion powershell | Out-String | Invoke-Expression
+```
+
+**Elvish** — the script registers both command names:
+
+```elvish
+ghosty completion elvish >> ~/.config/elvish/rc.elv
+```
+
+Regenerate the script after upgrading Ghosty — it is a snapshot of the
+command surface at the version that produced it, not a live query.
+
+> Upgrading from v0.9.10 or earlier? Those releases emitted a script that
+> registered the internal `ghosty-tui` executable, so nothing completed for
+> `ghosty` or `ghosty-tui` ([#5526](https://github.com/blissito/ghostycode/issues/5526)).
+> Delete the old file and regenerate it with the commands above.
+
+---
+
+## 9. Troubleshooting
 
 ### `Unsupported architecture: arm64 on platform linux`
 
@@ -522,15 +879,17 @@ You're on a release earlier than v0.8.8 that doesn't publish Linux ARM64
 binaries. Either upgrade (`npm i -g ghosty@latest`) or use
 `cargo install` per [Section 4](#4-install-via-cargo-any-tier-1-rust-target).
 
-### `MISSING_COMPANION_BINARY` at runtime
+### `MISSING_COMPANION_BINARY` after upgrading an older install
 
-The dispatcher (`ghosty`) requires the TUI runtime (`ghosty-tui`) to be on
-the same `PATH`. If you installed only one crate via `cargo install`, install
-both:
+The current single binary runs the TUI in-process and does not require a
+companion executable. This error identifies a stale pre-v0.9.5 dispatcher;
+replace that installation with the current npm package or Cargo binary instead
+of downloading an extra runtime:
 
 ```bash
-cargo install ghosty-cli --locked
-cargo install ghosty-tui     --locked
+npm install -g ghosty
+# or
+cargo install ghosty-cli --locked --force
 ```
 
 ### `ghosty update` reports `no asset found for platform ghosty-linux-aarch64`
@@ -547,34 +906,43 @@ cargo install ghosty-cli --locked
 
 ### npm download is slow or times out from mainland China
 
-Set `DEEPSEEK_TUI_RELEASE_BASE_URL` to a mirrored release-asset directory
-(rsproxy, TUNA, Tencent COS, Aliyun OSS), or skip npm entirely and use the
-Cargo mirror setup in [Section 4](#4-install-via-cargo-any-tier-1-rust-target).
+On Linux x64 the npm wrapper already probes GitHub Releases and the CNB
+first-party checksum manifests in parallel and downloads binaries only from
+the first source that validates. You do not need `GHOSTY_USE_CNB_MIRROR=1`
+for that automatic path.
+
+If both first-party sources fail, set `GHOSTY_RELEASE_BASE_URL` to a
+mirrored release-asset directory (rsproxy, TUNA, Tencent COS, Aliyun OSS),
+or skip npm entirely and use the Cargo mirror setup in
+[Section 4](#4-install-via-cargo-any-tier-1-rust-target). The legacy
+`DEEPSEEK_TUI_RELEASE_BASE_URL` name is still accepted. `GHOSTY_USE_CNB_MIRROR=1`
+still forces CNB only on Linux x64 / OpenHarmony x64.
 
 ### `ghosty update` is blocked by GitHub from mainland China
 
 `ghosty update` normally contacts GitHub Releases for metadata and binary
 assets. On networks where GitHub is blocked or unreliable, use the CNB source
-mirror instead and install both binaries from the release tag:
+mirror instead and install the `ghosty-cli` package from the release tag.
+Cargo installs the `ghosty` command:
 
 To check the latest release without downloading or replacing binaries, run
 `ghosty update --check`.
 
 ```bash
-cargo install --git https://cnb.cool/ghosty.net/ghosty --tag vX.Y.Z ghosty-cli --locked --force
-cargo install --git https://cnb.cool/ghosty.net/ghosty --tag vX.Y.Z ghosty-tui     --locked --force
+cargo install --git https://cnb.cool/ghosty.net/ghosty --tag vX.Y.Z ghosty-cli --locked --force   # single binary
 ```
 
 If you operate a binary asset mirror, `ghosty update` can use it directly:
 
 ```bash
-DEEPSEEK_TUI_VERSION=X.Y.Z \
-DEEPSEEK_TUI_RELEASE_BASE_URL=https://your-mirror.example.com/DeepSeek-TUI/vX.Y.Z/ \
+GHOSTY_RELEASE_BASE_URL=https://your-mirror.example.com/GhostyCode/vX.Y.Z/ \
+GHOSTY_VERSION=X.Y.Z \
 ghosty update
 ```
 
 The mirror directory must contain `ghosty-artifacts-sha256.txt` and the
-platform binaries from the GitHub release.
+platform binaries from the GitHub release. The legacy
+`DEEPSEEK_TUI_RELEASE_BASE_URL` mirror variable remains supported as an alias.
 
 ### Debian/Ubuntu: `feature edition2024 is required` from `cargo install`
 
@@ -588,8 +956,9 @@ The package requires the Cargo feature called `edition2024`, but that feature
 is not stabilized in this version of Cargo
 ```
 
-Install current stable Rust through rustup, then rerun the two Cargo install
-commands from [Section 4](#4-install-via-cargo-any-tier-1-rust-target). For
+Install current stable Rust through rustup, then rerun the one Cargo package
+install command from [Section 4](#4-install-via-cargo-any-tier-1-rust-target).
+It installs `ghosty`. For
 mainland China networks, this rsproxy-based sequence has been verified to work:
 
 ```bash
@@ -599,8 +968,7 @@ export RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 rustup default stable
-cargo install ghosty-cli --locked
-cargo install ghosty-tui     --locked
+cargo install ghosty-cli --locked   # installs `ghosty`
 ```
 
 Afterward, `which cargo` should point to `~/.cargo/bin/cargo`, not
@@ -613,6 +981,22 @@ Install the C toolchain:
 ```bash
 sudo apt-get install -y build-essential pkg-config libdbus-1-dev
 ```
+
+### WSL2 / Ubuntu: `dbus-1` or `pkg-config` not found while building
+
+WSL2 uses the same Linux source-build path as Ubuntu. If `cargo install
+ghosty-cli --locked` fails while compiling the keyring or D-Bus secret
+storage crates, install the Linux build dependencies inside the WSL distro,
+then rerun the one Cargo package install command. It installs `ghosty`:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential pkg-config libdbus-1-dev
+cargo install ghosty-cli --locked   # installs `ghosty`
+```
+
+The prebuilt npm/GitHub binaries do not need these build-time packages; they
+only apply when WSL2 is compiling Ghosty from source.
 
 ### Wrapper installs but `ghosty` isn't found
 
@@ -661,9 +1045,9 @@ path-agnostic — moving `target-dir` does not help.
 
 1. **Add the project's `target/` directory to your AV exclusions list.**
 2. **Close the antivirus software temporarily** during `cargo build`.
-3. **Use `npm install -g ghosty` instead** — the npm package ships
-   prebuilt binaries and skips the Cargo build entirely
-   ([Section 3](#3-install-via-npm-recommended)).
+3. **Use the GitHub Release installer/archive instead** — the release assets
+   ship prebuilt binaries and skip the Cargo build entirely
+   ([Section 6](#6-manual-download-from-github-releases)).
 4. **Use `cargo install ghosty-cli --locked`** from crates.io — this
    changes the binary path, which some AV tools treat differently.
 
@@ -680,9 +1064,11 @@ target/debug/build/libsqlite3-sys-*/build-script-build
 
 If `ghosty` waits several seconds and prints `connect ETIMEDOUT` or
 `EAI_AGAIN` while fetching from `github.com`, the npm wrapper installed
-successfully but the prebuilt binary download from GitHub Releases is blocked
-or unreliable on your network. This download is separate from the npm registry
-package download.
+successfully but the prebuilt binary download is blocked or unreliable on
+your network. This download is separate from the npm registry package
+download. On Linux x64 the wrapper first races the small GitHub and CNB
+checksum manifests and does not wait for a full GitHub binary to time out
+before using a valid CNB manifest.
 
 Use one of these paths:
 
@@ -693,10 +1079,10 @@ Use one of these paths:
    ghosty
    ```
 
-2. Mirror the release assets internally and set `DEEPSEEK_TUI_RELEASE_BASE_URL`:
+2. Mirror the release assets internally and set `GHOSTY_RELEASE_BASE_URL`:
 
    ```bash
-   export DEEPSEEK_TUI_RELEASE_BASE_URL=https://your-mirror.example.com/DeepSeek-TUI/
+   export GHOSTY_RELEASE_BASE_URL=https://your-mirror.example.com/GhostyCode/
    ghosty
    ```
 
@@ -706,14 +1092,14 @@ Use one of these paths:
 3. Install via Cargo, which builds locally and does not download GitHub release
    assets. See [Section 4](#4-install-via-cargo-any-tier-1-rust-target).
 
-4. Download both `ghosty` and `ghosty-tui` manually from the
-   [Releases page](https://github.com/blissito/ghostycode/releases), place them
-   in a directory on `PATH`, and make them executable. See
+4. Download both matching `ghosty` and `ghosty-tui`
+   binaries from the [Releases page](https://github.com/blissito/ghostycode/releases),
+   place them in a directory on `PATH`, and make them executable. See
    [Section 6](#6-manual-download-from-github-releases).
 
 ---
 
-## 9. Verifying your install
+## 10. Verifying your install
 
 ```bash
 ghosty --version

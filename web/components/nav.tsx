@@ -1,99 +1,131 @@
 import Link from "next/link";
 import type { Locale } from "@/lib/i18n/config";
-import { Seal } from "./seal";
-import { Whale } from "./whale";
+import { FACTS } from "@/lib/facts.generated";
+import { fill, getChrome } from "@/lib/i18n/dictionaries";
+import { navLinks, REPO_URL, DISCORD_URL, APP_LOGIN_URL, APP_SIGNUP_URL } from "@/lib/i18n/links";
+import { fetchRepoStats, formatStars } from "@/lib/github";
+import { getEnv } from "@/lib/kv";
 import { LocaleSwitcher } from "./locale-switcher";
 import { MobileMenu } from "./mobile-menu";
+import { NavLinks } from "./nav-links";
+import { Seal } from "./seal";
+import { ThemeToggle } from "./theme-toggle";
+import { Whale } from "./whale";
 
-const EN_LINKS = [
-  { href: "/install", label: "Install", cn: "安装" },
-  { href: "/docs", label: "Docs", cn: "文档" },
-  { href: "/feed", label: "Activity", cn: "动态" },
-  { href: "/roadmap", label: "Roadmap", cn: "路线" },
-  { href: "/faq", label: "FAQ", cn: "问答" },
-  { href: "/contribute", label: "Contribute", cn: "参与" },
-];
+/**
+ * Newspaper masthead + primary nav.
+ *
+ * One dictionary path for every routed locale: labels, the issue strip, the
+ * wordmark seal and strapline, the star-badge aria, and the theme/menu
+ * controls all come from `getChrome(locale)`. No `isZh` branch, and the
+ * masthead weekday uses the locale's own Intl tag rather than en-US.
+ */
+export async function Nav({ locale = "en" }: { locale?: Locale }) {
+  const chrome = getChrome(locale);
+  const links = navLinks(locale, chrome);
+  const homeHref = `/${locale}`;
 
-const ZH_LINKS = [
-  { href: "/zh/install", label: "安装", cn: "" },
-  { href: "/zh/docs", label: "文档", cn: "" },
-  { href: "/zh/feed", label: "动态", cn: "" },
-  { href: "/zh/roadmap", label: "路线图", cn: "" },
-  { href: "/zh/faq", label: "常见问题", cn: "" },
-  { href: "/zh/contribute", label: "参与贡献", cn: "" },
-];
+  // Live star count — cached by fetchRepoStats. Falls back to a plain GitHub
+  // label when the API is unreachable at build time.
+  let stars = 0;
+  try {
+    const env = await getEnv();
+    stars = (await fetchRepoStats(env.GITHUB_TOKEN)).stars;
+  } catch {
+    /* keep fallback label */
+  }
 
-export function Nav({ locale = "en" }: { locale?: Locale }) {
-  const isZh = locale === "zh";
-  const links = isZh ? ZH_LINKS : EN_LINKS;
+  const now = new Date();
+  const issueDate = now.toISOString().slice(0, 10);
+  const weekday = now.toLocaleDateString(chrome.dateLocale, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+  const versionLabel = FACTS.version ? `v${FACTS.version}` : "v0.9.x";
 
   return (
-    <header className="hairline-b bg-paper/85 backdrop-blur sticky top-0 z-30">
-      {/* date / build strip */}
-      <div className="hairline-b">
-        <div className="mx-auto max-w-[1400px] px-6 py-1.5 flex items-center justify-between text-[0.66rem] font-mono uppercase tracking-[0.18em] text-ink-mute">
-          <div className="flex items-center gap-4">
-            <span>{isZh ? `第 ${new Date().toISOString().slice(0, 10)} 期` : `第 ${new Date().toISOString().slice(0, 10)} 期`}</span>
-            <span className="hidden sm:inline">· {isZh ? new Date().toLocaleDateString("zh-CN", { weekday: "long", month: "long", day: "numeric" }) : new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="hidden md:inline">ghosty.net</span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-jade rounded-full inline-block animate-pulse" />
-              <span>{isZh ? "API · 在线" : "API · 在线"}</span>
+    <header className="site-nav paper-nav">
+      {/* Issue / build strip — the newspaper masthead people loved */}
+      <div className="paper-issue-bar">
+        <div className="paper-issue-inner">
+          <div className="paper-issue-left">
+            <span>{fill(chrome.issueLabel, { date: issueDate })}</span>
+            <span className="paper-issue-sep" aria-hidden>
+              ·
             </span>
+            <span className="hidden sm:inline">{weekday}</span>
+          </div>
+          <div className="paper-issue-right">
+            <span className="hidden md:inline">ghosty.net</span>
+            <span className="tabular">{versionLabel}</span>
           </div>
         </div>
       </div>
 
-      {/* main nav */}
-      <div className="mx-auto max-w-[1400px] px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sm:gap-6">
-        <Link href={isZh ? "/zh" : "/"} className="flex items-center gap-3 group min-w-0">
-          <Seal char="深" size="md" />
-          <div className="leading-tight min-w-0">
-            <div className="font-display text-[1.2rem] sm:text-[1.35rem] font-semibold tracking-crisp flex items-center gap-2 truncate">
-              Ghosty Code
-              <Whale size={20} className="text-indigo hidden sm:inline-block" />
-            </div>
-            <div className="font-cjk text-[0.65rem] sm:text-[0.7rem] text-ink-mute tracking-widest truncate">
-              {isZh ? "开源模型 · 终端智能体" : "open models · terminal agent"}
-            </div>
+      <div className="site-nav-inner paper-nav-inner">
+        <Link href={homeHref} className="site-wordmark paper-wordmark" aria-label={chrome.navHomeAria}>
+          <Seal char={chrome.wordmarkSeal} size="md" />
+          <div className="paper-wordmark-text">
+            <span className="paper-wordmark-name">
+              Ghosty
+              <Whale size={18} className="paper-wordmark-whale" />
+            </span>
+            <span className="paper-wordmark-tag">{chrome.wordmarkTag}</span>
           </div>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-7">
-          {links.map((l) => (
-            <Link key={l.href} href={l.href} className="nav-link group">
-              <span>{l.label}</span>
-              {!isZh && "cn" in l && l.cn && (
-                <span className="font-cjk text-[0.66rem] ml-1.5 text-ink-mute">{l.cn}</span>
-              )}
-            </Link>
-          ))}
-        </nav>
+        <NavLinks links={links} primaryAria={chrome.navPrimaryAria} />
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="site-nav-actions">
+          <ThemeToggle
+            autoLabel={chrome.themeAuto}
+            lightLabel={chrome.themeLight}
+            darkLabel={chrome.themeDark}
+            ariaTemplate={chrome.themeAria}
+            titleLabel={chrome.themeTitle}
+          />
           <LocaleSwitcher current={locale} />
           <Link
-            href="https://github.com/blissito/ghostycode"
-            className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 hairline-t hairline-b hairline-l hairline-r font-mono text-[0.7rem] uppercase tracking-wider hover:bg-paper-deep transition-colors"
+            href={REPO_URL}
+            className="site-github-link paper-star-badge"
+            aria-label={chrome.starsAria}
           >
-            <span>★ GitHub</span>
+            <svg viewBox="0 0 16 16" aria-hidden fill="currentColor" className="brand-mark"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            ★ {stars > 0 ? formatStars(stars) : chrome.githubFallback}
           </Link>
           <Link
-            href={isZh ? "/zh/install" : "/install"}
-            className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 bg-indigo text-paper font-mono text-[0.72rem] uppercase tracking-wider hover:bg-indigo-deep transition-colors"
+            href={DISCORD_URL}
+            className="site-discord-link paper-discord-badge"
+            aria-label="Discord"
           >
-            {isZh ? "安装 →" : "Install →"}
+            <svg viewBox="0 0 71 55" aria-hidden fill="currentColor" className="brand-mark"><path d="M60.1 4.9C55.6 2.8 50.7 1.3 45.6.4c-.6 1.1-1.3 2.6-1.8 3.8-5.4-.8-10.8-.8-16.1 0-.5-1.2-1.2-2.7-1.8-3.8-5.1.9-10 2.4-14.5 4.5C2.6 18.2-.4 31.2 1 44c6.1 4.6 12.1 7.4 17.9 9.3 1.4-1.9 2.7-4 3.8-6.2-2.1-.8-4.1-1.8-6-3 .5-.4 1-.8 1.5-1.2 11.5 5.4 24 5.4 35.4 0 .5.4 1 .8 1.5 1.2-1.9 1.2-3.9 2.2-6 3 1.1 2.2 2.4 4.3 3.8 6.2 5.8-1.9 11.8-4.7 17.9-9.3 1.7-15-2.9-27.9-10.7-39.1zM23.7 36.3c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2 6.5 3.2 6.4 7.2c0 4-2.9 7.2-6.4 7.2zm23.4 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.5 0 6.5 3.2 6.4 7.2 0 4-2.9 7.2-6.4 7.2z"/></svg>
+          </Link>
+          <span className="paper-auth" role="group" aria-label={chrome.authGroupAria}>
+            <Link href={APP_LOGIN_URL} className="paper-auth-signin hidden lg:inline-flex">
+              {chrome.authSignIn}
+            </Link>
+            <Link href={APP_SIGNUP_URL} className="paper-auth-register hidden lg:inline-flex">
+              {chrome.authRegister}
+            </Link>
+          </span>
+          <Link
+            href={`/${locale}/install`}
+            className="paper-install-cta hidden xl:inline-flex"
+          >
+            {chrome.installCta}
           </Link>
           <MobileMenu
-            installHref={isZh ? "/zh/install" : "/install"}
-            installLabel={isZh ? "安装 →" : "Install →"}
-            links={links.map((l) => ({
-              href: l.href,
-              label: l.label,
-              cn: !isZh && "cn" in l ? l.cn : undefined,
-            }))}
+            installHref={`/${locale}/install`}
+            installLabel={chrome.installCta}
+            signInHref={APP_LOGIN_URL}
+            signInLabel={chrome.authSignIn}
+            registerHref={APP_SIGNUP_URL}
+            registerLabel={chrome.authRegister}
+            links={links}
+            openLabel={chrome.menuOpen}
+            closeLabel={chrome.menuClose}
+            navAria={chrome.navPrimaryAria}
           />
         </div>
       </div>

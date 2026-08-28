@@ -1,47 +1,59 @@
 ---
 name: plugin-creator
-description: Scaffold ghosty local plugin directories and activation notes. Use when the user asks to create, package, or sketch a plugin for ghosty.
+description: Scaffold a local Ghosty plugin bundle with a versioned manifest, namespaced Skills, and an explicit trust review.
 ---
 
 # Plugin Creator
 
-Use this skill when a user wants a DeepSeek plugin scaffold or a plan for a
-plugin-style extension.
-
-DeepSeek plugins are currently a documented packaging convention, not an
-auto-loaded runtime. Be explicit about that. A plugin becomes active only when
-it is referenced from a skill, hook, MCP server, or future plugin loader.
+Use this skill when a user wants a local Ghosty plugin bundle. Ghosty
+v0.9.1 has a deliberately bounded loader: trusted and enabled bundles may add
+declarative Skills and MCP servers through the existing engines. Other
+component kinds are inventory-only.
 
 ## Workflow
 
-1. Pick the location:
-   - Global user plugin: `~/.deepseek/plugins/<plugin-name>/`
-   - Workspace plugin: `<workspace>/plugins/<plugin-name>/`
-2. Normalize names to lower-case hyphen-case.
-3. Create `PLUGIN.md` with frontmatter:
+1. Pick a Ghosty-owned location:
+   - User bundle: `~/.ghosty/plugins/<plugin-name>/`
+   - Workspace bundle: `<workspace>/.ghosty/plugins/<plugin-name>/`
+2. Normalize the bundle name to lowercase hyphen-case.
+3. Create `plugin.toml`:
 
-```markdown
----
-name: my-plugin
-description: What this plugin packages or enables.
-status: draft
----
+```toml
+schema_version = 1
 
-# My Plugin
+[plugin]
+name = "my-plugin"
+version = "0.1.0"
+description = "What this bundle provides"
 
-What it does, how to enable it, and any scripts or MCP servers it expects.
+[skills]
+path = "skills"
 ```
 
-4. Add companion folders only when useful:
-   - `skills/` for model instructions
-   - `scripts/` for helpers invoked by a skill or hook
-   - `mcp/` for an MCP server package or config notes
-   - `assets/` for templates, examples, or fixtures
-5. Include an activation section in `PLUGIN.md` that says exactly how the user
-   should turn it on today.
-6. Validate by listing the created files and checking that `PLUGIN.md` has
-   `name` and `description` frontmatter.
+4. Put each Skill under `skills/<skill-name>/SKILL.md`. Ghosty exposes it
+   as `my-plugin:<skill-name>`, never as an unqualified command.
+5. Add `[mcp_servers.<name>]` only when the bundle needs an existing MCP
+   engine. Keep stdio commands and paths inside the bundle. Map local
+   environment values only as exact `${SOURCE_ENV}` references. For remote MCP,
+   use HTTPS (or loopback HTTP), forbid URL user information/query/fragment,
+   use only environment-backed headers or bearer tokens, and declare the exact
+   normalized endpoint host set in `[capabilities].network_hosts`. Never place
+   credentials in the manifest.
+6. Declare commands, agents, hooks, LSP, native extensions, filesystem roots,
+   or lifecycle mutation only when inventorying future work. Ghosty shows
+   them as inactive and still activates reviewed Skills and MCP from the same
+   bundle. A bundle that only declares those unsupported surfaces cannot be
+   enabled.
+7. Validate and review without executing bundle content:
+   - `/plugin validate <plugin-name>`
+   - `/plugin show <plugin-name>`
+   - `/plugin enable <plugin-name>` to open the content/capability review
+   - run the exact `/plugin trust ...` confirmation shown, then enable again
+8. Verify `/skills inspect` reports plugin provenance and `/plugin list`
+   reports the expected trust and activation state. Trust stages the reviewed
+   content but does not activate it; enablement rebuilds the current
+   workspace's Skill/MCP catalogue immediately.
 
-Do not claim that dropping a folder into `plugins/` changes runtime behavior by
-itself. If the user asks for a live plugin system, propose a loader design
-separately and keep the scaffold honest.
+Every user and workspace bundle starts untrusted and disabled. Do not add a
+marketplace, downloader, updater, compatibility scan, executable extension
+runtime, or automatic trust flow; those surfaces are outside v0.9.1.

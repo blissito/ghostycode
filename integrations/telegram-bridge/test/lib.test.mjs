@@ -22,7 +22,13 @@ import {
   stripGroupPrefix,
   threadListKeyboard,
   telegramIdentity,
+  telegramMarkdownV2,
+  telegramMessageBody,
+  plainTelegramText,
+  telegramPollingConflictDelayMs,
   telegramRetryDelayMs,
+  telegramSendRetryDelayMs,
+  isTelegramMarkdownParseError,
   looksLikePollingConflict,
   validateBridgeConfig
 } from "../src/lib.mjs";
@@ -109,9 +115,20 @@ test("stripGroupPrefix accepts private chat text without group prefix", () => {
   );
 });
 
+test("stripGroupPrefix accepts Telegram channel text without group prefix", () => {
+  assert.deepEqual(
+    stripGroupPrefix("inspect this", {
+      chatType: "channel",
+      requirePrefix: true,
+      prefix: "/cw"
+    }),
+    { accepted: true, text: "inspect this" }
+  );
+});
+
 test("parseCommand handles Telegram bot mentions", () => {
   assert.deepEqual(parseCommand("hello"), { name: "prompt", args: "hello" });
-  assert.deepEqual(parseCommand("/allow@Ghosty CodeBot abc remember"), {
+  assert.deepEqual(parseCommand("/allow@GhostyCodeBot abc remember"), {
     name: "allow",
     args: "abc remember"
   });
@@ -234,8 +251,69 @@ test("splitMessage chunks long text without splitting surrogate pairs", () => {
   assert.deepEqual(splitMessage("a🧪b", 2), ["a🧪", "b"]);
 });
 
+test("telegramMarkdownV2 escapes text while preserving useful markdown", () => {
+  assert.equal(
+    telegramMarkdownV2("**Build** passed for [CI](https://example.com/a_(b))."),
+    "*Build* passed for [CI](https://example.com/a_(b\\))\\."
+  );
+  assert.equal(telegramMarkdownV2("Use `cargo test -p ghosty`."), "Use `cargo test -p ghosty`\\.");
+  assert.equal(telegramMarkdownV2("Path C:\\tmp\\file"), "Path C:\\\\tmp\\\\file");
+  assert.equal(
+    telegramMarkdownV2("```rust\nfn main() { println!(\"hi\"); }\n```"),
+    "```rust\nfn main() { println!(\"hi\"); }\n```"
+  );
+});
+
+test("telegramMarkdownV2 rewrites pipe tables into phone-readable bullets", () => {
+  assert.equal(
+    telegramMarkdownV2("| Gate | Result |\n| --- | --- |\n| Lint | Pass |\n| Tests | Fail |"),
+    "*Gate / Result*\n• Gate: Lint; Result: Pass\n• Gate: Tests; Result: Fail"
+  );
+});
+
+test("telegram message bodies can fall back from MarkdownV2 to plain text", () => {
+  assert.deepEqual(telegramMessageBody("**Done**", { markdown: true }), {
+    text: "*Done*",
+    parse_mode: "MarkdownV2"
+  });
+  assert.deepEqual(telegramMessageBody("!!!!", { markdown: true, maxChars: 4 }), {
+    text: "!!!!"
+  });
+  assert.deepEqual(telegramMessageBody("**Done**", { markdown: false }), {
+    text: "Done"
+  });
+  assert.equal(plainTelegramText("[CI](https://example.com) **passed**"), "CI (https://example.com) passed");
+  assert.equal(
+    isTelegramMarkdownParseError({ errorCode: 400, description: "Bad Request: can't parse entities" }),
+    true
+  );
+});
+
 test("telegramRetryDelayMs honors retry_after", () => {
   assert.equal(telegramRetryDelayMs({ parameters: { retry_after: 2 } }), 2000);
+});
+
+test("telegramPollingConflictDelayMs escalates before going fatal", () => {
+  assert.deepEqual(
+    [0, 1, 2, 3, 4, 5].map((attempt) => telegramPollingConflictDelayMs(attempt)),
+    [15000, 25000, 35000, 45000, 55000, null]
+  );
+});
+
+test("telegramSendRetryDelayMs retries only safe send failures", () => {
+  assert.equal(
+    telegramSendRetryDelayMs({ errorCode: 429, parameters: { retry_after: 3 } }, 0),
+    3000
+  );
+  assert.equal(
+    telegramSendRetryDelayMs({ errorCode: 429, parameters: { retry_after: 3 } }, 3),
+    null
+  );
+  assert.equal(telegramSendRetryDelayMs(new TypeError("fetch failed"), 0), 1000);
+  assert.equal(telegramSendRetryDelayMs(new TypeError("fetch failed"), 1), 2000);
+  assert.equal(telegramSendRetryDelayMs(new TypeError("fetch failed"), 2), null);
+  assert.equal(telegramSendRetryDelayMs({ name: "AbortError" }, 0), null);
+  assert.equal(telegramSendRetryDelayMs({ errorCode: 500 }, 0), null);
 });
 
 test("looksLikePollingConflict detects Telegram 409 conflicts", () => {

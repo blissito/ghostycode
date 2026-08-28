@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 #[cfg(feature = "web")]
 use std::net::SocketAddr;
 #[cfg(feature = "web")]
@@ -9,12 +10,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::commands;
-use crate::config::{Config, StatusItem, normalize_model_name};
+use crate::config::{
+    Config, StatusItem, normalize_custom_model_id, normalize_model_name_for_provider,
+    validate_route,
+};
 use crate::localization::{normalize_configured_locale, resolve_locale};
 use crate::settings::Settings;
-use crate::tui::app::{
-    App, AppMode, ComposerDensity, ReasoningEffort, SidebarFocus, TranscriptSpacing,
-};
+use crate::tui::app::{App, AppMode, ComposerDensity, ReasoningEffort, TranscriptSpacing};
 use crate::tui::approval::ApprovalMode;
 
 #[cfg(feature = "web")]
@@ -40,7 +42,15 @@ pub struct ConfigUiDocument {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeSection {
-    #[schemars(title = "Current model")]
+    #[schemars(
+        title = "Active provider",
+        description = "Route fact only. Switch providers with /provider, then return here to tune this session."
+    )]
+    pub provider: String,
+    #[schemars(
+        title = "Current model",
+        description = "Model used by the active provider for this session. Save to apply the exact route choice."
+    )]
     pub model: String,
     pub approval_mode: ApprovalModeValue,
 }
@@ -52,19 +62,48 @@ pub struct SettingsSection {
     pub calm_mode: bool,
     pub low_motion: bool,
     pub fancy_animations: bool,
+    pub ocean_treatment: OceanTreatmentValue,
+    pub focus_texture: FocusTextureValue,
+    pub work_surface_placement: WorkSurfacePlacementValue,
+    #[schemars(range(min = 2, max = 16))]
+    pub work_surface_top_height: u16,
+    #[schemars(range(min = 26, max = 80))]
+    pub work_surface_side_width: u16,
     pub paste_burst_detection: bool,
     pub show_thinking: bool,
+    pub thinking_default_expanded: bool,
+    #[schemars(range(min = 0, max = 40))]
+    pub thinking_preview_lines: usize,
+    pub thinking_highlight: bool,
+    pub help_expand_groups: bool,
+    pub pin_last_prompt: bool,
     pub show_tool_details: bool,
+    pub inline_diffs: InlineDiffValue,
+    #[schemars(
+        title = "UI locale",
+        description = "Locale used by the TUI. Every shipped locale pack holds full English parity; nothing falls back."
+    )]
     pub locale: UiLocale,
     pub theme: UiThemeValue,
     #[schemars(
+        title = "Custom theme name",
+        description = "Theme slug from the fixed Ghosty themes directory; used only when theme is custom."
+    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_theme_name: Option<String>,
+    #[schemars(
         title = "Background color",
-        description = "Main TUI background color as #RRGGBB"
+        description = "Optional Blue Stage background override as #RRGGBB. Leave empty to keep the named theme."
     )]
     pub background_color: Option<String>,
     pub bracketed_paste: bool,
     pub composer_density: ComposerDensityValue,
     pub composer_border: bool,
+    #[schemars(
+        title = "Multiline composer mode",
+        description = "When enabled, Enter inserts a newline and Shift+Enter sends. Ctrl+J and Alt+Enter remain newline shortcuts."
+    )]
+    pub composer_multiline_mode: bool,
     pub composer_vim_mode: ComposerVimModeValue,
     #[schemars(range(min = 0))]
     pub mention_menu_limit: usize,
@@ -75,14 +114,20 @@ pub struct SettingsSection {
     pub status_indicator: StatusIndicatorValue,
     pub synchronized_output: SynchronizedOutputValue,
     pub default_mode: DefaultModeValue,
-    #[schemars(range(min = 10, max = 50))]
-    pub sidebar_width: u16,
-    pub sidebar_focus: SidebarFocusValue,
     pub context_panel: bool,
     #[schemars(range(min = 0))]
     pub max_history: usize,
     pub cost_currency: CostCurrencyValue,
-    pub prefer_external_pdftotext: bool,
+    #[schemars(
+        title = "Follow symlinks",
+        description = "Allow workspace discovery to cross symbolic links. Enable only when linked projects are part of this workspace."
+    )]
+    pub workspace_follow_symlinks: bool,
+    #[schemars(
+        title = "Provider model overrides",
+        description = "Durable model choices by provider identity. The active provider's entry follows Current model."
+    )]
+    pub provider_models: BTreeMap<String, String>,
     pub default_model: Option<String>,
 }
 
@@ -150,6 +195,7 @@ pub enum WebConfigSessionEvent {
 #[serde(rename_all = "snake_case")]
 pub enum ApprovalModeValue {
     Auto,
+    Bypass,
     Suggest,
     Never,
 }
@@ -168,19 +214,48 @@ pub enum UiLocale {
     #[serde(rename = "zh-Hans")]
     #[schemars(rename = "zh-Hans")]
     ZhHans,
+    #[serde(rename = "zh-Hant")]
+    #[schemars(rename = "zh-Hant")]
+    ZhHant,
     #[serde(rename = "pt-BR")]
     #[schemars(rename = "pt-BR")]
     PtBr,
     #[serde(rename = "es-419")]
     #[schemars(rename = "es-419")]
     Es419,
+    #[serde(rename = "vi")]
+    #[schemars(rename = "vi")]
+    Vi,
+    #[serde(rename = "ko")]
+    #[schemars(rename = "ko")]
+    Ko,
+    #[serde(rename = "ca")]
+    #[schemars(rename = "ca")]
+    Ca,
+    #[serde(rename = "de")]
+    #[schemars(rename = "de")]
+    De,
+    #[serde(rename = "fr")]
+    #[schemars(rename = "fr")]
+    Fr,
+    #[serde(rename = "id")]
+    #[schemars(rename = "id")]
+    Id,
+    #[serde(rename = "hi")]
+    #[schemars(rename = "hi")]
+    Hi,
+    #[serde(rename = "ru")]
+    #[schemars(rename = "ru")]
+    Ru,
+    #[serde(rename = "uk")]
+    #[schemars(rename = "uk")]
+    Uk,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum UiThemeValue {
     System,
-    Terminal,
     Dark,
     Light,
     Grayscale,
@@ -188,10 +263,24 @@ pub enum UiThemeValue {
     TokyoNight,
     Dracula,
     GruvboxDark,
-    Claude,
     Matrix,
-    SolarizedLight,
-    Ghosty,
+    Uwu,
+    Custom,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OceanTreatmentValue {
+    Ombre,
+    Flat,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FocusTextureValue {
+    Off,
+    Scrim,
+    Grain,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
@@ -226,10 +315,27 @@ pub enum TranscriptSpacingValue {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum InlineDiffValue {
+    Full,
+    Summary,
+    Off,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkSurfacePlacementValue {
+    Top,
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[schemars(description = "Startup mode: Act (agent wire), Plan, or Operate")]
 pub enum DefaultModeValue {
     Agent,
     Plan,
-    Yolo,
+    Operate,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
@@ -237,17 +343,6 @@ pub enum DefaultModeValue {
 pub enum CostCurrencyValue {
     Usd,
     Cny,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SidebarFocusValue {
-    Auto,
-    Work,
-    Tasks,
-    Agents,
-    Context,
-    Hidden,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
@@ -264,7 +359,8 @@ pub enum ReasoningEffortValue {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum StatusIndicatorValue {
-    Ghost,
+    Cw,
+    Whale,
     Dots,
     Off,
 }
@@ -284,7 +380,6 @@ pub enum StatusItemValue {
     Model,
     Cost,
     Status,
-    Coherence,
     Agents,
     ReasoningReplay,
     PrefixStability,
@@ -295,6 +390,7 @@ pub enum StatusItemValue {
     RateLimit,
     Tokens,
     Balance,
+    SessionMetrics,
 }
 
 pub fn parse_mode(arg: Option<&str>) -> Result<ConfigUiMode, String> {
@@ -316,32 +412,57 @@ pub fn parse_mode(arg: Option<&str>) -> Result<ConfigUiMode, String> {
 }
 
 pub fn build_document(app: &App, config: &Config) -> Result<ConfigUiDocument> {
-    let settings = Settings::load().unwrap_or_default();
-    let reasoning_effort = config
-        .reasoning_effort()
-        .map(ReasoningEffortValue::from_setting)
+    let settings = Settings::load_persisted().unwrap_or_default();
+    let reasoning_effort = app
+        .reasoning_effort_preference
+        .map(Into::into)
+        .or_else(|| {
+            config
+                .reasoning_effort()
+                .map(ReasoningEffortValue::from_setting)
+        })
         .unwrap_or_else(|| app.reasoning_effort.into());
     let default_model = settings.default_model.clone();
     let status_items = app.status_items.iter().copied().map(Into::into).collect();
     Ok(ConfigUiDocument {
         runtime: RuntimeSection {
+            provider: app.provider_identity_for_persistence().to_string(),
             model: app.model.clone(),
             approval_mode: app.approval_mode.into(),
         },
         settings: SettingsSection {
-            auto_compact: settings.auto_compact,
+            auto_compact: app.auto_compact,
             calm_mode: settings.calm_mode,
             low_motion: settings.low_motion,
             fancy_animations: settings.fancy_animations,
+            ocean_treatment: settings.ocean_treatment.as_str().into(),
+            focus_texture: settings.focus_texture.as_str().into(),
+            work_surface_placement: settings.work_surface_placement.as_str().into(),
+            work_surface_top_height: settings.work_surface_top_height,
+            work_surface_side_width: settings.work_surface_side_width,
             paste_burst_detection: settings.paste_burst_detection,
             show_thinking: settings.show_thinking,
+            thinking_default_expanded: settings.thinking_default_expanded,
+            thinking_preview_lines: settings.thinking_preview_lines,
+            thinking_highlight: settings.thinking_highlight,
+            help_expand_groups: settings.help_expand_groups,
+            pin_last_prompt: settings.pin_last_prompt,
             show_tool_details: settings.show_tool_details,
+            inline_diffs: settings.inline_diffs.as_str().into(),
             locale: UiLocale::from_setting(&settings.locale)?,
             theme: UiThemeValue::from_setting(&settings.theme)?,
+            custom_theme_name: crate::palette::normalize_user_theme_selector(&settings.theme)
+                .map_err(anyhow::Error::msg)?
+                .map(|selector| {
+                    selector
+                        .trim_start_matches(crate::palette::USER_THEME_PREFIX)
+                        .to_string()
+                }),
             background_color: settings.background_color.clone(),
             bracketed_paste: settings.bracketed_paste,
             composer_density: settings.composer_density.as_str().into(),
             composer_border: settings.composer_border,
+            composer_multiline_mode: settings.composer_multiline_mode,
             composer_vim_mode: settings.composer_vim_mode.as_str().into(),
             mention_menu_limit: settings.mention_menu_limit,
             mention_menu_behavior: settings.mention_menu_behavior.as_str().into(),
@@ -350,12 +471,16 @@ pub fn build_document(app: &App, config: &Config) -> Result<ConfigUiDocument> {
             status_indicator: settings.status_indicator.as_str().into(),
             synchronized_output: settings.synchronized_output.as_str().into(),
             default_mode: settings.default_mode.as_str().into(),
-            sidebar_width: settings.sidebar_width_percent,
-            sidebar_focus: settings.sidebar_focus.as_str().into(),
             context_panel: settings.context_panel,
             max_history: settings.max_input_history,
             cost_currency: CostCurrencyValue::from_setting(&settings.cost_currency)?,
-            prefer_external_pdftotext: settings.prefer_external_pdftotext,
+            workspace_follow_symlinks: settings.workspace_follow_symlinks,
+            provider_models: settings
+                .provider_models
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .collect(),
             default_model,
         },
         config: ConfigSection {
@@ -368,9 +493,15 @@ pub fn build_document(app: &App, config: &Config) -> Result<ConfigUiDocument> {
 
 pub fn build_schema() -> Value {
     let mut schema = serde_json::to_value(schema_for!(ConfigUiDocument)).expect("config ui schema");
-    schema["title"] = Value::String("ghosty Config".to_string());
-    schema["description"] =
-        Value::String("Edit runtime and persisted TUI configuration.".to_string());
+    schema["title"] = Value::String("Ghosty Config".to_string());
+    schema["description"] = Value::String(
+        "Tune live runtime choices and durable TUI defaults. Provider switching stays in /provider."
+            .to_string(),
+    );
+    // Provider switching is asynchronous and owns client preflight, so this
+    // editor shows the route identity only as validation context. `/provider`
+    // remains the sole provider-switch surface.
+    schema["$defs"]["RuntimeSection"]["properties"]["provider"]["readOnly"] = Value::Bool(true);
     schema
 }
 
@@ -379,8 +510,8 @@ pub fn run_tui_editor(app: &App, config: &Config) -> Result<ConfigUiDocument> {
     let document = build_document(app, config)?;
     let value = SchemaUI::new(serde_json::to_value(document.clone())?)
         .with_schema(build_schema())
-        .with_title("ghosty Config")
-        .with_description("Edit persisted settings and live runtime knobs.")
+        .with_title("Ghosty Config")
+        .with_description("Review the live route, then save the settings you want to keep.")
         .run(FrontendOptions::Tui(
             UiOptions::default()
                 .with_confirm_exit(true)
@@ -397,8 +528,10 @@ pub async fn start_web_editor(app: &App, config: &Config) -> Result<WebConfigSes
     let initial = serde_json::to_value(build_document(app, config)?)?;
     let session = WebSessionBuilder::new(build_schema())
         .with_initial_data(initial)
-        .with_title("ghosty Config")
-        .with_description("Save updates the browser draft. Exit commits changes back to the TUI.")
+        .with_title("Ghosty Config")
+        .with_description(
+            "Save updates this browser draft. Exit returns the reviewed changes to the TUI.",
+        )
         .build()?;
     let bound = bind_session(session, ServeOptions::default()).await?;
     let addr = bound.local_addr();
@@ -409,7 +542,7 @@ pub async fn start_web_editor(app: &App, config: &Config) -> Result<WebConfigSes
         let poll_tx = tx.clone();
         let poll_url = format!("{url}/api/session");
         let poll_task = tokio::spawn(async move {
-            let client = reqwest::Client::new();
+            let client = crate::tls::reqwest_client();
             let mut last: Option<ConfigUiDocument> = Some(app_snapshot);
             loop {
                 tokio::time::sleep(Duration::from_millis(750)).await;
@@ -482,7 +615,8 @@ pub fn apply_document(
     config: &mut Config,
     persist: bool,
 ) -> Result<ConfigUiApplyOutcome> {
-    validate_document(&doc)?;
+    validate_document(&doc, app, config)?;
+    let theme_setting = theme_setting_for_document(&doc)?;
     let mut notes = Vec::new();
     let previous_compaction = app.compaction_config();
     let previous_reasoning_effort = app.reasoning_effort;
@@ -494,17 +628,49 @@ pub fn apply_document(
         ("calm_mode", bool_str(doc.settings.calm_mode)),
         ("low_motion", bool_str(doc.settings.low_motion)),
         ("fancy_animations", bool_str(doc.settings.fancy_animations)),
+        ("ocean_treatment", doc.settings.ocean_treatment.as_setting()),
+        ("focus_texture", doc.settings.focus_texture.as_setting()),
+        (
+            "work_surface_placement",
+            doc.settings.work_surface_placement.as_setting(),
+        ),
+        (
+            "work_surface_top_height",
+            &doc.settings.work_surface_top_height.to_string(),
+        ),
+        (
+            "work_surface_side_width",
+            &doc.settings.work_surface_side_width.to_string(),
+        ),
         (
             "paste_burst_detection",
             bool_str(doc.settings.paste_burst_detection),
         ),
         ("show_thinking", bool_str(doc.settings.show_thinking)),
         (
+            "thinking_default_expanded",
+            bool_str(doc.settings.thinking_default_expanded),
+        ),
+        (
+            "thinking_preview_lines",
+            &doc.settings.thinking_preview_lines.to_string(),
+        ),
+        (
+            "thinking_highlight",
+            bool_str(doc.settings.thinking_highlight),
+        ),
+        (
+            "help_expand_groups",
+            bool_str(doc.settings.help_expand_groups),
+        ),
+        ("pin_last_prompt", bool_str(doc.settings.pin_last_prompt)),
+        (
             "show_tool_details",
             bool_str(doc.settings.show_tool_details),
         ),
+        ("inline_diffs", doc.settings.inline_diffs.as_setting()),
         ("locale", doc.settings.locale.as_setting()),
-        ("theme", doc.settings.theme.as_setting()),
+        ("theme", theme_setting.as_str()),
         (
             "background_color",
             doc.settings
@@ -518,6 +684,10 @@ pub fn apply_document(
             doc.settings.composer_density.as_setting(),
         ),
         ("composer_border", bool_str(doc.settings.composer_border)),
+        (
+            "composer_multiline_mode",
+            bool_str(doc.settings.composer_multiline_mode),
+        ),
         (
             "composer_vim_mode",
             doc.settings.composer_vim_mode.as_setting(),
@@ -547,14 +717,12 @@ pub fn apply_document(
             doc.settings.synchronized_output.as_setting(),
         ),
         ("default_mode", doc.settings.default_mode.as_setting()),
-        ("sidebar_width", &doc.settings.sidebar_width.to_string()),
-        ("sidebar_focus", doc.settings.sidebar_focus.as_setting()),
         ("context_panel", bool_str(doc.settings.context_panel)),
         ("max_history", &doc.settings.max_history.to_string()),
         ("cost_currency", doc.settings.cost_currency.as_setting()),
         (
-            "prefer_external_pdftotext",
-            bool_str(doc.settings.prefer_external_pdftotext),
+            "workspace_follow_symlinks",
+            bool_str(doc.settings.workspace_follow_symlinks),
         ),
         ("mcp_config_path", doc.config.mcp_config_path.as_str()),
     ] {
@@ -589,6 +757,30 @@ pub fn apply_document(
         if let Some(message) = result.message {
             notes.push(message);
         }
+
+        // `/model` and the schema-driven config editor share one durable
+        // provider-scoped model map. `set_config_value("model", ...)` owns the
+        // live App mutation, while this block persists that selection without
+        // rewriting the DeepSeek-only global fallback (#3227).
+        let mut provider_models = doc
+            .settings
+            .provider_models
+            .iter()
+            .map(|(provider, model)| (provider.clone(), model.clone()))
+            .collect::<std::collections::HashMap<_, _>>();
+        provider_models.insert(
+            app.provider_identity_for_persistence().to_string(),
+            app.model_selection_for_persistence(),
+        );
+        Settings::transact(|settings| {
+            settings.provider_models = (!provider_models.is_empty()).then_some(provider_models);
+            Ok(())
+        })?;
+        notes.push(format!(
+            "{} model saved for {}",
+            app.model_display_label(),
+            app.provider_identity_for_persistence()
+        ));
     }
 
     apply_reasoning_effort(app, config, doc.config.reasoning_effort, persist)?;
@@ -600,7 +792,7 @@ pub fn apply_document(
         app.status_items = new_status_items.clone();
         app.needs_redraw = true;
         if persist {
-            let path = commands::persist_status_items(&new_status_items)?;
+            let path = crate::config_persistence::persist_status_items(&new_status_items)?;
             notes.push(format!("status_items saved to {}", path.display()));
         } else {
             notes.push("status_items updated for this session".to_string());
@@ -637,41 +829,165 @@ pub fn open_browser(url: &str) -> Result<()> {
     crate::utils::open_url(url)
 }
 
-fn validate_document(doc: &ConfigUiDocument) -> Result<()> {
-    if !doc.runtime.model.trim().eq_ignore_ascii_case("auto")
-        && normalize_model_name(&doc.runtime.model).is_none()
+fn validate_document(doc: &ConfigUiDocument, app: &App, config: &Config) -> Result<()> {
+    let document_identity = config
+        .resolve_provider_identity(&doc.runtime.provider)
+        .map_err(anyhow::Error::msg)?;
+    if document_identity.provider != app.api_provider
+        || document_identity.key != app.provider_identity_for_persistence()
     {
-        bail!("invalid model '{}'", doc.runtime.model);
+        bail!(
+            "provider changed from '{}' to '{}' while editing; switch providers with /provider, then reopen /config",
+            app.provider_identity_for_persistence(),
+            doc.runtime.provider
+        );
+    }
+    validate_and_normalize_model(config, app.api_provider, &doc.runtime.model)?;
+    for (provider_id, model) in &doc.settings.provider_models {
+        let identity = config
+            .resolve_provider_identity(provider_id)
+            .map_err(anyhow::Error::msg)?;
+        validate_and_normalize_model(config, identity.provider, model)
+            .map_err(|err| anyhow::anyhow!("invalid provider_models.{provider_id} value: {err}"))?;
     }
     if doc.config.mcp_config_path.trim().is_empty() {
         bail!("mcp_config_path cannot be empty");
     }
+    let _ = theme_setting_for_document(doc)?;
     Ok(())
+}
+
+fn theme_setting_for_document(doc: &ConfigUiDocument) -> Result<String> {
+    let setting = if doc.settings.theme == UiThemeValue::Custom {
+        let name = doc
+            .settings
+            .custom_theme_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("custom theme requires custom_theme_name"))?;
+        format!("{}{}", crate::palette::USER_THEME_PREFIX, name)
+    } else {
+        doc.settings.theme.as_setting().to_string()
+    };
+    crate::palette::resolve_theme_setting(&setting, None)
+        .map(|(normalized, _, _)| normalized)
+        .map_err(anyhow::Error::msg)
+}
+
+/// Validate and normalize a model against the provider's *effective* route.
+///
+/// A custom DeepSeek base URL owns its own model namespace, so non-DeepSeek ids
+/// must be accepted here the same way request-time
+/// `wire_model_for_provider_route` preserves them. The previous provider-only
+/// gate rejected those saves even though the live session could use them.
+fn validate_and_normalize_model(
+    config: &Config,
+    provider: crate::config::ApiProvider,
+    model: &str,
+) -> Result<String> {
+    let model = model.trim();
+    if model.is_empty() {
+        bail!(
+            "invalid model '{model}' for provider '{}'",
+            provider.as_str()
+        );
+    }
+    if model.eq_ignore_ascii_case("auto") {
+        // Still run the provider gate so empty/unknown providers cannot sneak
+        // an `auto` through without the same checks as `/model auto`.
+        validate_route(provider, model).map_err(anyhow::Error::msg)?;
+        return Ok("auto".to_string());
+    }
+
+    // OpenCode Go is protocol-bound (Chat Completions only) even when its base
+    // URL is overridden — never open the custom-endpoint passthrough for it.
+    if provider == crate::config::ApiProvider::OpencodeGo {
+        validate_route(provider, model).map_err(anyhow::Error::msg)?;
+        return normalize_model_name_for_provider(provider, model).ok_or_else(|| {
+            anyhow::anyhow!(
+                "invalid model '{model}' for provider '{}'",
+                provider.as_str()
+            )
+        });
+    }
+
+    // Custom / self-hosted endpoints own their model id namespace. Match the
+    // request path (`wire_model_for_provider_route`) so saving `/config` on a
+    // custom deepseek gateway does not reject a non-DeepSeek wire id the
+    // session is already running.
+    if config.provider_uses_custom_endpoint(provider) {
+        return normalize_custom_model_id(model).ok_or_else(|| {
+            anyhow::anyhow!(
+                "invalid model '{model}' for provider '{}'",
+                provider.as_str()
+            )
+        });
+    }
+
+    validate_route(provider, model).map_err(anyhow::Error::msg)?;
+    normalize_model_name_for_provider(provider, model).ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid model '{model}' for provider '{}'",
+            provider.as_str()
+        )
+    })
 }
 
 fn reload_runtime_config(app: &mut App, config: &mut Config) -> Result<()> {
     let reloaded = Config::load(app.config_path.clone(), app.config_profile.as_deref())?;
     *config = reloaded.clone();
-    app.api_provider = reloaded.api_provider();
-    app.reasoning_effort = ReasoningEffort::from_setting(
-        reloaded
-            .reasoning_effort()
-            .unwrap_or_else(|| app.reasoning_effort.as_setting()),
-    );
-    app.last_effective_reasoning_effort = None;
+    // Match App startup precedence: an explicit config provider wins, while a
+    // config with no provider keeps the saved TUI provider. Reloading an
+    // unrelated setting must never pair a Z.ai model with DeepSeek merely
+    // because `Config::default()` is DeepSeek.
+    let settings = Settings::load_persisted().unwrap_or_default();
+    let identity = if reloaded
+        .provider
+        .as_deref()
+        .is_some_and(|provider| !provider.trim().is_empty())
+    {
+        reloaded.active_provider_identity(reloaded.api_provider())
+    } else if let Some(provider) = settings.default_provider.as_deref() {
+        reloaded.resolve_provider_identity(provider)
+    } else {
+        reloaded.active_provider_identity(reloaded.api_provider())
+    }
+    .map_err(anyhow::Error::msg)?;
+    app.set_provider_identity_record(identity);
+    let requested = reloaded
+        .reasoning_effort()
+        .map(ReasoningEffort::from_setting)
+        .or(app.reasoning_effort_preference)
+        .unwrap_or(app.reasoning_effort);
+    if reloaded.reasoning_effort().is_some() {
+        app.reasoning_effort_preference = Some(requested);
+    }
+    app.reasoning_effort = if app.auto_model {
+        requested
+    } else {
+        requested.normalize_for_provider(app.api_provider)
+    };
+    app.invalidate_route_receipts_for_reasoning_change();
     app.update_model_compaction_budget();
     app.mcp_config_path = reloaded.mcp_config_path();
     app.skills_dir = reloaded.skills_dir();
-    app.ui_locale = resolve_locale(&Settings::load().unwrap_or_default().locale);
+    app.ui_locale = resolve_locale(&settings.locale);
+    app.workflow_config = reloaded.workflow_config();
+    crate::tools::workflow::set_session_workflow_config(
+        &app.workspace,
+        app.workflow_config.clone(),
+    );
+    app.goal_max_continuations = reloaded.goal_max_continuations();
     Ok(())
 }
 
 fn config_reload_notes(app: &App, config: &Config) -> Vec<String> {
     let mut notes = Vec::new();
     notes.push("Config saved and reloaded".to_string());
-    if app.mcp_restart_required {
+    if app.mcp_reload_required {
         notes.push(format!(
-            "MCP tool pool still requires restart after {}",
+            "MCP tool pool still needs `/mcp reload` after {}",
             config.mcp_config_path().display()
         ));
     }
@@ -684,18 +1000,31 @@ fn apply_reasoning_effort(
     value: ReasoningEffortValue,
     persist: bool,
 ) -> Result<()> {
-    let effort: ReasoningEffort = value.into();
-    app.reasoning_effort = effort;
-    app.last_effective_reasoning_effort = None;
+    let requested = ReasoningEffort::from(value);
+    let effective = if app.auto_model {
+        requested
+    } else {
+        requested.normalize_for_provider(app.api_provider)
+    };
+    app.reasoning_effort = effective;
+    app.reasoning_effort_preference = Some(requested);
+    app.invalidate_route_receipts_for_reasoning_change();
     app.update_model_compaction_budget();
     if persist {
-        commands::persist_root_string_key(
+        crate::config_persistence::persist_root_string_key(
             app.config_path.as_deref(),
             "reasoning_effort",
-            effort.as_setting(),
+            requested.as_setting(),
+        )?;
+        // App startup gives settings.toml precedence over config.toml. Keep
+        // the schema-driven TUI/web editor aligned with the picker so an older
+        // saved startup value cannot silently undo this persisted choice on
+        // the next launch.
+        app.startup_defaults.apply_blocking(
+            crate::tui::startup_defaults::StartupDefaults::reasoning_effort(requested.as_setting()),
         )?;
     }
-    config.reasoning_effort = Some(effort.as_setting().to_string());
+    config.reasoning_effort = Some(requested.as_setting().to_string());
     Ok(())
 }
 
@@ -707,6 +1036,7 @@ impl ApprovalModeValue {
     fn as_setting(self) -> &'static str {
         match self {
             Self::Auto => "auto",
+            Self::Bypass => "bypass",
             Self::Suggest => "suggest",
             Self::Never => "never",
         }
@@ -720,8 +1050,18 @@ impl UiLocale {
             Self::En => "en",
             Self::Ja => "ja",
             Self::ZhHans => "zh-Hans",
+            Self::ZhHant => "zh-Hant",
             Self::PtBr => "pt-BR",
             Self::Es419 => "es-419",
+            Self::Vi => "vi",
+            Self::Ko => "ko",
+            Self::Ca => "ca",
+            Self::De => "de",
+            Self::Fr => "fr",
+            Self::Id => "id",
+            Self::Hi => "hi",
+            Self::Ru => "ru",
+            Self::Uk => "uk",
         }
     }
 
@@ -731,8 +1071,18 @@ impl UiLocale {
             Some("en") => Ok(Self::En),
             Some("ja") => Ok(Self::Ja),
             Some("zh-Hans") => Ok(Self::ZhHans),
+            Some("zh-Hant") => Ok(Self::ZhHant),
             Some("pt-BR") => Ok(Self::PtBr),
             Some("es-419") => Ok(Self::Es419),
+            Some("vi") => Ok(Self::Vi),
+            Some("ko") => Ok(Self::Ko),
+            Some("ca") => Ok(Self::Ca),
+            Some("de") => Ok(Self::De),
+            Some("fr") => Ok(Self::Fr),
+            Some("id") => Ok(Self::Id),
+            Some("hi") => Ok(Self::Hi),
+            Some("ru") => Ok(Self::Ru),
+            Some("uk") => Ok(Self::Uk),
             Some(other) => bail!("unsupported locale '{other}'"),
             None => bail!("invalid locale '{value}'"),
         }
@@ -743,7 +1093,6 @@ impl UiThemeValue {
     fn as_setting(self) -> &'static str {
         match self {
             Self::System => "system",
-            Self::Terminal => "terminal",
             Self::Dark => "dark",
             Self::Light => "light",
             Self::Grayscale => "grayscale",
@@ -751,17 +1100,21 @@ impl UiThemeValue {
             Self::TokyoNight => "tokyo-night",
             Self::Dracula => "dracula",
             Self::GruvboxDark => "gruvbox-dark",
-            Self::Claude => "claude",
             Self::Matrix => "matrix",
-            Self::SolarizedLight => "solarized-light",
-            Self::Ghosty => "ghosty",
+            Self::Uwu => "uwu",
+            Self::Custom => "custom",
         }
     }
 
     fn from_setting(value: &str) -> Result<Self> {
+        if crate::palette::normalize_user_theme_selector(value)
+            .map_err(anyhow::Error::msg)?
+            .is_some()
+        {
+            return Ok(Self::Custom);
+        }
         match crate::palette::normalize_theme_name(value) {
             Some("system") => Ok(Self::System),
-            Some("terminal") => Ok(Self::Terminal),
             Some("dark") => Ok(Self::Dark),
             Some("light") => Ok(Self::Light),
             Some("grayscale") => Ok(Self::Grayscale),
@@ -769,12 +1122,49 @@ impl UiThemeValue {
             Some("tokyo-night") => Ok(Self::TokyoNight),
             Some("dracula") => Ok(Self::Dracula),
             Some("gruvbox-dark") => Ok(Self::GruvboxDark),
-            Some("claude") => Ok(Self::Claude),
             Some("matrix") => Ok(Self::Matrix),
-            Some("solarized-light") => Ok(Self::SolarizedLight),
-            Some("ghosty") => Ok(Self::Ghosty),
+            Some("uwu") => Ok(Self::Uwu),
             Some(other) => bail!("unsupported theme '{other}'"),
             None => bail!("invalid theme '{value}'"),
+        }
+    }
+}
+
+impl OceanTreatmentValue {
+    fn as_setting(self) -> &'static str {
+        match self {
+            Self::Ombre => "ombre",
+            Self::Flat => "flat",
+        }
+    }
+}
+
+impl From<&str> for OceanTreatmentValue {
+    fn from(value: &str) -> Self {
+        if value.trim().eq_ignore_ascii_case("flat") {
+            Self::Flat
+        } else {
+            Self::Ombre
+        }
+    }
+}
+
+impl FocusTextureValue {
+    fn as_setting(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Scrim => "scrim",
+            Self::Grain => "grain",
+        }
+    }
+}
+
+impl From<&str> for FocusTextureValue {
+    fn from(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "scrim" => Self::Scrim,
+            "grain" => Self::Grain,
+            _ => Self::Off,
         }
     }
 }
@@ -835,12 +1225,71 @@ impl TranscriptSpacingValue {
     }
 }
 
+impl InlineDiffValue {
+    fn as_setting(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Summary => "summary",
+            Self::Off => "off",
+        }
+    }
+}
+
+impl From<&str> for InlineDiffValue {
+    fn from(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "summary" => Self::Summary,
+            "off" => Self::Off,
+            _ => Self::Full,
+        }
+    }
+}
+
+impl WorkSurfacePlacementValue {
+    fn as_setting(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
+}
+
+impl From<&str> for WorkSurfacePlacementValue {
+    fn from(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "left" => Self::Left,
+            "right" => Self::Right,
+            _ => Self::Top,
+        }
+    }
+}
+
 impl DefaultModeValue {
     fn as_setting(self) -> &'static str {
         match self {
             Self::Agent => "agent",
             Self::Plan => "plan",
-            Self::Yolo => "yolo",
+            Self::Operate => "operate",
+        }
+    }
+
+    /// User-facing label in config UI (wire values stay agent/plan/operate).
+    #[allow(dead_code)] // reserved for config UI option rendering / chrome
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Agent => "Act",
+            Self::Plan => "Plan",
+            Self::Operate => "Operate",
+        }
+    }
+
+    #[allow(dead_code)]
+    fn description(self) -> &'static str {
+        match self {
+            Self::Agent => "Do the work in this session.",
+            Self::Plan => "Design first; implement after you approve.",
+            Self::Operate => "Dispatch workers; keep the parent free for steers.",
         }
     }
 }
@@ -864,23 +1313,11 @@ impl CostCurrencyValue {
     }
 }
 
-impl SidebarFocusValue {
-    fn as_setting(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Work => "work",
-            Self::Tasks => "tasks",
-            Self::Agents => "agents",
-            Self::Context => "context",
-            Self::Hidden => "hidden",
-        }
-    }
-}
-
 impl From<ApprovalMode> for ApprovalModeValue {
     fn from(value: ApprovalMode) -> Self {
         match value {
             ApprovalMode::Auto => Self::Auto,
+            ApprovalMode::Bypass => Self::Bypass,
             ApprovalMode::Suggest => Self::Suggest,
             ApprovalMode::Never => Self::Never,
         }
@@ -895,6 +1332,9 @@ impl From<ReasoningEffort> for ReasoningEffortValue {
             ReasoningEffort::Medium => Self::Medium,
             ReasoningEffort::High => Self::High,
             ReasoningEffort::Auto => Self::Auto,
+            ReasoningEffort::Minimal => Self::Low,
+            ReasoningEffort::XHigh => Self::Max,
+            ReasoningEffort::Ultra => Self::Max,
             ReasoningEffort::Max => Self::Max,
         }
     }
@@ -908,6 +1348,9 @@ impl ReasoningEffortValue {
             ReasoningEffort::Medium => Self::Medium,
             ReasoningEffort::High => Self::High,
             ReasoningEffort::Auto => Self::Auto,
+            ReasoningEffort::Minimal => Self::Low,
+            ReasoningEffort::XHigh => Self::Max,
+            ReasoningEffort::Ultra => Self::Max,
             ReasoningEffort::Max => Self::Max,
         }
     }
@@ -948,10 +1391,15 @@ impl From<&str> for TranscriptSpacingValue {
 
 impl From<&str> for DefaultModeValue {
     fn from(value: &str) -> Self {
-        match AppMode::from_setting(value) {
-            AppMode::Agent => Self::Agent,
-            AppMode::Plan => Self::Plan,
-            AppMode::Yolo => Self::Yolo,
+        match value.trim().to_ascii_lowercase().as_str() {
+            "operate" | "operation" | "ops" => Self::Operate,
+            // yolo was a mode+permission bundle; startup mode becomes Act and
+            // permission posture is migrated separately on load.
+            other => match AppMode::from_setting(other) {
+                AppMode::Plan => Self::Plan,
+                AppMode::Operate => Self::Operate,
+                AppMode::Agent | AppMode::Yolo | AppMode::Auto => Self::Agent,
+            },
         }
     }
 }
@@ -959,7 +1407,8 @@ impl From<&str> for DefaultModeValue {
 impl StatusIndicatorValue {
     fn as_setting(self) -> &'static str {
         match self {
-            Self::Ghost => "ghost",
+            Self::Cw => "cw",
+            Self::Whale => "whale",
             Self::Dots => "dots",
             Self::Off => "off",
         }
@@ -992,25 +1441,11 @@ impl From<&str> for StatusIndicatorValue {
         // so a TOML file with `status_indicator = "🐳"` or `"none"`
         // resolves to the canonical enum variant.
         match value.trim().to_ascii_lowercase().as_str() {
+            "cw" | "mark" | "text" => Self::Cw,
             "dots" | "dot" => Self::Dots,
             "off" | "none" | "hidden" | "false" => Self::Off,
-            // Default to ghost for "ghost", "whale", aliases, and anything unknown
-            // (we'd rather restore the ghost indicator than silently
-            // hide it on a typo).
-            _ => Self::Ghost,
-        }
-    }
-}
-
-impl From<&str> for SidebarFocusValue {
-    fn from(value: &str) -> Self {
-        match SidebarFocus::from_setting(value) {
-            SidebarFocus::Auto => Self::Auto,
-            SidebarFocus::Work => Self::Work,
-            SidebarFocus::Tasks => Self::Tasks,
-            SidebarFocus::Agents => Self::Agents,
-            SidebarFocus::Context => Self::Context,
-            SidebarFocus::Hidden => Self::Hidden,
+            "whale" | "🐳" | "🐋" => Self::Whale,
+            _ => Self::Cw,
         }
     }
 }
@@ -1022,7 +1457,6 @@ impl From<StatusItem> for StatusItemValue {
             StatusItem::Model => Self::Model,
             StatusItem::Cost => Self::Cost,
             StatusItem::Status => Self::Status,
-            StatusItem::Coherence => Self::Coherence,
             StatusItem::Agents => Self::Agents,
             StatusItem::ReasoningReplay => Self::ReasoningReplay,
             StatusItem::PrefixStability => Self::PrefixStability,
@@ -1033,6 +1467,7 @@ impl From<StatusItem> for StatusItemValue {
             StatusItem::RateLimit => Self::RateLimit,
             StatusItem::Tokens => Self::Tokens,
             StatusItem::Balance => Self::Balance,
+            StatusItem::SessionMetrics => Self::SessionMetrics,
         }
     }
 }
@@ -1044,7 +1479,6 @@ impl From<StatusItemValue> for StatusItem {
             StatusItemValue::Model => Self::Model,
             StatusItemValue::Cost => Self::Cost,
             StatusItemValue::Status => Self::Status,
-            StatusItemValue::Coherence => Self::Coherence,
             StatusItemValue::Agents => Self::Agents,
             StatusItemValue::ReasoningReplay => Self::ReasoningReplay,
             StatusItemValue::PrefixStability => Self::PrefixStability,
@@ -1055,6 +1489,7 @@ impl From<StatusItemValue> for StatusItem {
             StatusItemValue::RateLimit => Self::RateLimit,
             StatusItemValue::Tokens => Self::Tokens,
             StatusItemValue::Balance => Self::Balance,
+            StatusItemValue::SessionMetrics => Self::SessionMetrics,
         }
     }
 }
@@ -1067,7 +1502,7 @@ fn bool_str(value: bool) -> &'static str {
 mod tests {
     use super::*;
     use crate::config::{ApiProvider, Config};
-    use crate::test_support::lock_test_env;
+    use crate::test_support::{EnvVarGuard, lock_test_env};
     use crate::tui::app::{App, TuiOptions};
     use std::fs;
     use std::path::PathBuf;
@@ -1075,27 +1510,11 @@ mod tests {
 
     fn app() -> App {
         let options = TuiOptions {
-            model: "deepseek-v4-pro".to_string(),
-            workspace: PathBuf::from("."),
-            config_path: None,
-            config_profile: None,
-            allow_shell: false,
             use_alt_screen: false,
-            use_mouse_capture: false,
-            use_bracketed_paste: true,
-            max_subagents: 1,
-            skills_dir: PathBuf::from("."),
-            memory_path: PathBuf::from("memory.md"),
-            notes_path: PathBuf::from("notes.txt"),
-            mcp_config_path: PathBuf::from("mcp.json"),
-            use_memory: false,
             // Keep this fixture independent from the developer's saved
             // `default_mode` setting.
             start_in_agent_mode: true,
-            skip_onboarding: true,
-            yolo: false,
-            resume_session_id: None,
-            initial_input: None,
+            ..crate::test_support::test_tui_options(PathBuf::from("."))
         };
         let mut app = App::new(options, &Config::default());
         // App::new merges developer-local settings, which can include a saved
@@ -1106,6 +1525,9 @@ mod tests {
         app.auto_model = false;
         app.api_provider = ApiProvider::Deepseek;
         app.model_ids_passthrough = false;
+        app.active_route_limits = None;
+        app.reasoning_effort_preference = None;
+        app.update_model_compaction_budget();
         app
     }
 
@@ -1118,8 +1540,101 @@ mod tests {
         let config = Config::default();
         let doc = build_document(&app, &config).expect("document");
         assert_eq!(doc.runtime.model, app.model);
-        assert_eq!(doc.runtime.approval_mode, ApprovalModeValue::Suggest);
+        // The document must mirror the live app posture. The developer's saved
+        // permission posture may legitimately be Bypass; this test must not
+        // rewrite that product setting into an assumed Suggest default.
+        assert_eq!(doc.runtime.approval_mode, app.approval_mode.into());
         assert_eq!(doc.config.reasoning_effort, ReasoningEffortValue::Max);
+    }
+
+    #[test]
+    fn build_document_uses_raw_reasoning_preference() {
+        let mut app = app();
+        app.api_provider = ApiProvider::OpenaiCodex;
+        app.reasoning_effort = ReasoningEffort::Low;
+        app.reasoning_effort_preference = Some(ReasoningEffort::Off);
+
+        let doc = build_document(&app, &Config::default()).expect("document");
+
+        assert_eq!(doc.config.reasoning_effort, ReasoningEffortValue::Off);
+    }
+
+    #[test]
+    fn config_ui_reasoning_keeps_raw_preference_for_fixed_route() {
+        let mut app = app();
+        app.api_provider = ApiProvider::OpenaiCodex;
+        app.reasoning_effort = ReasoningEffort::High;
+        app.reasoning_effort_preference = None;
+        let mut config = Config::default();
+
+        apply_reasoning_effort(&mut app, &mut config, ReasoningEffortValue::Off, false)
+            .expect("apply reasoning");
+
+        assert_eq!(app.reasoning_effort, ReasoningEffort::Low);
+        assert_eq!(app.reasoning_effort_preference, Some(ReasoningEffort::Off));
+        assert_eq!(config.reasoning_effort.as_deref(), Some("off"));
+    }
+
+    #[test]
+    fn persisted_config_ui_reasoning_updates_the_startup_precedence_layer() {
+        let _lock = lock_test_env();
+        let temp_root = tempfile::tempdir().expect("isolated Ghosty home");
+        let ghosty_home = temp_root.path().join(".ghosty");
+        fs::create_dir_all(&ghosty_home).expect("settings dir");
+        fs::write(
+            ghosty_home.join("settings.toml"),
+            "default_model = \"auto\"\nreasoning_effort = \"max\"\n",
+        )
+        .expect("seed settings");
+        let config_path = temp_root.path().join("config.toml");
+        fs::write(&config_path, "reasoning_effort = \"max\"\n").expect("seed config");
+        let _home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
+        let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
+        let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
+
+        let mut app = app();
+        app.config_path = Some(config_path.clone());
+        let mut config = Config::load(Some(config_path.clone()), None).expect("load config");
+
+        apply_reasoning_effort(&mut app, &mut config, ReasoningEffortValue::Low, true)
+            .expect("persist reasoning");
+
+        assert_eq!(
+            Settings::load_persisted()
+                .expect("reload settings")
+                .reasoning_effort
+                .as_deref(),
+            Some("low")
+        );
+        let persisted_config =
+            Config::load(Some(config_path), None).expect("reload persisted config");
+        let restored = App::new(
+            TuiOptions {
+                use_alt_screen: false,
+                start_in_agent_mode: true,
+                ..crate::test_support::test_tui_options(PathBuf::from("."))
+            },
+            &persisted_config,
+        );
+        assert!(restored.auto_model);
+        assert_eq!(restored.reasoning_effort, ReasoningEffort::Low);
+        assert_eq!(
+            restored.reasoning_effort_preference,
+            Some(ReasoningEffort::Low)
+        );
+    }
+
+    #[test]
+    fn legacy_startup_mode_values_project_to_agent_in_config_ui() {
+        assert_eq!(DefaultModeValue::from("agent"), DefaultModeValue::Agent);
+        assert_eq!(DefaultModeValue::from("operate"), DefaultModeValue::Operate);
+        assert_eq!(DefaultModeValue::from("yolo"), DefaultModeValue::Agent);
+        assert_eq!(DefaultModeValue::from("plan"), DefaultModeValue::Plan);
+        assert_eq!(DefaultModeValue::Agent.as_setting(), "agent");
+        assert_eq!(DefaultModeValue::Plan.as_setting(), "plan");
+        assert_eq!(DefaultModeValue::Operate.as_setting(), "operate");
+        assert_eq!(DefaultModeValue::Agent.label(), "Act");
+        assert_eq!(DefaultModeValue::Operate.label(), "Operate");
     }
 
     #[test]
@@ -1145,25 +1660,13 @@ cost_currency = "cny"
         )
         .expect("seed settings");
 
-        let old_config_path = std::env::var_os("DEEPSEEK_CONFIG_PATH");
-        // Safety: test-only environment mutation guarded by a module mutex.
-        unsafe {
-            std::env::set_var("DEEPSEEK_CONFIG_PATH", &config_path);
-        }
+        let _config_path = EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
 
         let app = app();
         let config = Config::default();
         let doc = build_document(&app, &config).expect("document");
 
         assert_eq!(doc.settings.cost_currency, CostCurrencyValue::Cny);
-        // Safety: restore the guarded test-only environment mutation above.
-        unsafe {
-            if let Some(value) = old_config_path {
-                std::env::set_var("DEEPSEEK_CONFIG_PATH", value);
-            } else {
-                std::env::remove_var("DEEPSEEK_CONFIG_PATH");
-            }
-        }
     }
 
     #[test]
@@ -1189,44 +1692,155 @@ background_color = "#1A1B26"
         )
         .expect("seed settings");
 
-        let old_config_path = std::env::var_os("DEEPSEEK_CONFIG_PATH");
-        unsafe {
-            std::env::set_var("DEEPSEEK_CONFIG_PATH", &config_path);
-        }
+        let _config_path = EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
 
         let app = app();
         let config = Config::default();
         let doc = build_document(&app, &config).expect("document");
 
         assert_eq!(doc.settings.background_color.as_deref(), Some("#1a1b26"));
-        unsafe {
-            if let Some(value) = old_config_path {
-                std::env::set_var("DEEPSEEK_CONFIG_PATH", value);
-            } else {
-                std::env::remove_var("DEEPSEEK_CONFIG_PATH");
-            }
+    }
+
+    #[test]
+    fn build_document_accepts_every_shipped_locale_from_settings() {
+        let _lock = lock_test_env();
+        let temp_root = tempfile::tempdir().expect("isolated Ghosty home");
+        let ghosty_home = temp_root.path().join(".ghosty");
+        fs::create_dir_all(&ghosty_home).expect("settings dir");
+        let settings_path = ghosty_home.join("settings.toml");
+        fs::write(&settings_path, "").expect("seed settings");
+        let _home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
+        let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
+        let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
+
+        let app = app();
+        let config = Config::default();
+        for tag in std::iter::once("auto").chain(
+            crate::localization::Locale::shipped()
+                .iter()
+                .map(|locale| locale.tag()),
+        ) {
+            fs::write(&settings_path, format!("locale = \"{tag}\"\n"))
+                .unwrap_or_else(|err| panic!("persist locale {tag}: {err}"));
+            let doc = build_document(&app, &config)
+                .unwrap_or_else(|err| panic!("build config document for {tag}: {err}"));
+            assert_eq!(
+                doc.settings.locale.as_setting(),
+                tag,
+                "typed config document must preserve persisted locale {tag}"
+            );
         }
+    }
+
+    #[test]
+    fn custom_theme_round_trips_through_typed_config_document() {
+        let _lock = lock_test_env();
+        let temp_root = tempfile::tempdir().expect("isolated Ghosty home");
+        let ghosty_home = temp_root.path().join(".ghosty");
+        let themes_dir = ghosty_home.join("themes");
+        fs::create_dir_all(&themes_dir).expect("themes dir");
+        fs::write(
+            themes_dir.join("ocean.json"),
+            r##"{"schema_version":1,"base":"dark","colors":{"accent_primary":"#123456"}}"##,
+        )
+        .expect("custom theme");
+        fs::write(
+            ghosty_home.join("settings.toml"),
+            r#"theme = "custom:ocean"
+"#,
+        )
+        .expect("settings");
+        let _home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
+        let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
+        let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
+
+        let mut app = app();
+        let mut config = Config::default();
+        let doc = build_document(&app, &config).expect("document");
+        assert_eq!(doc.settings.theme, UiThemeValue::Custom);
+        assert_eq!(doc.settings.custom_theme_name.as_deref(), Some("ocean"));
+
+        apply_document(doc, &mut app, &mut config, false).expect("apply custom theme");
+        assert_eq!(
+            app.ui_theme.accent_primary,
+            ratatui::style::Color::Rgb(0x12, 0x34, 0x56)
+        );
     }
 
     #[test]
     fn schema_contains_typed_enums() {
         let schema = build_schema();
+        assert_eq!(schema["title"], serde_json::json!("Ghosty Config"));
+        assert!(
+            schema["description"]
+                .as_str()
+                .is_some_and(|copy| copy.contains("Provider switching stays in /provider"))
+        );
+        assert_eq!(
+            schema["$defs"]["RuntimeSection"]["properties"]["provider"]["readOnly"],
+            serde_json::json!(true)
+        );
+        assert!(
+            schema["$defs"]["SettingsSection"]["properties"]["background_color"]["description"]
+                .as_str()
+                .is_some_and(|copy| copy.contains("Blue Stage"))
+        );
+        assert!(
+            schema["$defs"]["SettingsSection"]["properties"]["locale"]["description"]
+                .as_str()
+                .is_some_and(|copy| {
+                    copy.contains("Every shipped locale pack holds full English parity")
+                        && copy.contains("nothing falls back")
+                })
+        );
         let approval_mode = &schema["$defs"]["ApprovalModeValue"]["enum"];
         assert_eq!(
             approval_mode,
-            &serde_json::json!(["auto", "suggest", "never"])
+            &serde_json::json!(["auto", "bypass", "suggest", "never"])
         );
+        let default_mode_def = &schema["$defs"]["DefaultModeValue"];
+        let default_mode = default_mode_def
+            .get("enum")
+            .cloned()
+            .or_else(|| {
+                default_mode_def.get("oneOf").and_then(|ones| {
+                    let mut vals = Vec::new();
+                    for item in ones.as_array()? {
+                        if let Some(v) = item.get("const") {
+                            vals.push(v.clone());
+                        } else if let Some(arr) = item.get("enum").and_then(|e| e.as_array()) {
+                            vals.extend(arr.iter().cloned());
+                        }
+                    }
+                    Some(serde_json::Value::Array(vals))
+                })
+            })
+            .unwrap_or(serde_json::Value::Null);
+        assert_eq!(
+            default_mode,
+            serde_json::json!(["agent", "plan", "operate"]),
+            "DefaultModeValue schema: {default_mode_def}"
+        );
+        let inline_diffs = &schema["$defs"]["InlineDiffValue"]["enum"];
+        assert_eq!(inline_diffs, &serde_json::json!(["full", "summary", "off"]));
         let locale = &schema["$defs"]["UiLocale"]["enum"];
+        let expected_locales = std::iter::once("auto")
+            .chain(
+                crate::localization::Locale::shipped()
+                    .iter()
+                    .map(|locale| locale.tag()),
+            )
+            .collect::<Vec<_>>();
         assert_eq!(
             locale,
-            &serde_json::json!(["auto", "en", "ja", "zh-Hans", "pt-BR", "es-419"])
+            &serde_json::json!(expected_locales),
+            "UiLocale schema must match Locale::shipped()"
         );
         let theme = &schema["$defs"]["UiThemeValue"]["enum"];
         assert_eq!(
             theme,
             &serde_json::json!([
                 "system",
-                "terminal",
                 "dark",
                 "light",
                 "grayscale",
@@ -1234,12 +1848,33 @@ background_color = "#1A1B26"
                 "tokyo-night",
                 "dracula",
                 "gruvbox-dark",
-                "claude",
                 "matrix",
-                "solarized-light",
-                "ghosty"
+                "uwu",
+                "custom"
             ])
         );
+    }
+
+    #[test]
+    fn ui_locale_round_trips_every_shipped_locale() {
+        for locale in crate::localization::Locale::shipped() {
+            let tag = locale.tag();
+            let ui_locale = UiLocale::from_setting(tag)
+                .unwrap_or_else(|err| panic!("UiLocale must accept shipped locale {tag}: {err}"));
+            assert_eq!(
+                ui_locale.as_setting(),
+                tag,
+                "UiLocale must preserve shipped locale {tag}"
+            );
+            let serialized = serde_json::to_value(ui_locale)
+                .unwrap_or_else(|err| panic!("serialize UiLocale {tag}: {err}"));
+            assert_eq!(serialized, serde_json::json!(tag));
+            assert_eq!(
+                serde_json::from_value::<UiLocale>(serialized)
+                    .unwrap_or_else(|err| panic!("deserialize UiLocale {tag}: {err}")),
+                ui_locale
+            );
+        }
     }
 
     #[test]
@@ -1310,9 +1945,160 @@ mcp_config_path = "disk-mcp.json"
     }
 
     #[test]
+    fn zai_document_persists_provider_model_without_changing_deepseek_fallback() {
+        let _lock = lock_test_env();
+        let temp_root = tempfile::tempdir().expect("isolated config dir");
+        let state_dir = temp_root.path().join(".deepseek");
+        fs::create_dir_all(&state_dir).expect("state dir");
+        let config_path = state_dir.join("config.toml");
+        fs::write(
+            &config_path,
+            r#"default_text_model = "deepseek-v4-pro"
+mcp_config_path = "mcp.json"
+
+[providers.zai]
+model = "GLM-5.2"
+"#,
+        )
+        .expect("seed config");
+        fs::write(
+            state_dir.join("settings.toml"),
+            r#"default_provider = "zai"
+default_model = "deepseek-v4-pro"
+
+[provider_models]
+zai = "GLM-5.2"
+"#,
+        )
+        .expect("seed settings");
+
+        let _config_path_guard = EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
+
+        let mut config = Config::load(Some(config_path.clone()), None).expect("load config");
+        let mut app = app();
+        app.config_path = Some(config_path.clone());
+        app.set_provider_identity_record(
+            config
+                .active_provider_identity(ApiProvider::Zai)
+                .expect("Z.ai identity"),
+        );
+        app.set_model_selection("GLM-5.2".to_string());
+
+        let mut doc = build_document(&app, &config).expect("document");
+        assert_eq!(doc.runtime.provider, "zai");
+        assert_eq!(doc.runtime.model, "GLM-5.2");
+        assert_eq!(
+            doc.settings.provider_models.get("zai").map(String::as_str),
+            Some("GLM-5.2")
+        );
+        doc.runtime.model = "glm-5-turbo".to_string();
+
+        let outcome = apply_document(doc, &mut app, &mut config, true).expect("apply Z.ai model");
+        assert!(outcome.changed);
+        assert!(outcome.requires_engine_sync);
+        assert_eq!(app.api_provider, ApiProvider::Zai);
+        assert_eq!(app.model, "GLM-5-Turbo");
+
+        let settings = Settings::load_persisted().expect("persisted settings");
+        assert_eq!(
+            settings
+                .provider_models
+                .as_ref()
+                .and_then(|models| models.get("zai"))
+                .map(String::as_str),
+            Some("GLM-5-Turbo")
+        );
+        assert_eq!(settings.default_model.as_deref(), Some("deepseek-v4-pro"));
+        let persisted = fs::read_to_string(&config_path).expect("persisted config");
+        let persisted: toml::Value = toml::from_str(&persisted).expect("parse persisted config");
+        assert_eq!(
+            persisted["default_text_model"].as_str(),
+            Some("deepseek-v4-pro")
+        );
+    }
+
+    #[test]
+    fn zai_document_rejects_a_deepseek_model_before_mutating_app() {
+        let mut config = Config {
+            provider: Some("zai".to_string()),
+            ..Config::default()
+        };
+        let mut app = app();
+        app.set_provider_identity(ApiProvider::Zai, "zai");
+        app.set_model_selection("GLM-5.2".to_string());
+        let mut doc = build_document(&app, &config).expect("document");
+        doc.settings.provider_models.clear();
+        doc.runtime.model = "deepseek-v4-flash".to_string();
+
+        let error = apply_document(doc, &mut app, &mut config, false)
+            .expect_err("foreign model must be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("not compatible with provider 'zai'")
+        );
+        assert_eq!(app.api_provider, ApiProvider::Zai);
+        assert_eq!(app.model, "GLM-5.2");
+    }
+
+    #[test]
+    fn custom_deepseek_endpoint_accepts_non_deepseek_model_on_save() {
+        // Provider-only validation used to reject any non-DeepSeek id even when
+        // the active deepseek route pointed at a custom OpenAI-compatible
+        // gateway that owns its own model namespace.
+        let mut config = Config {
+            provider: Some("deepseek".to_string()),
+            base_url: Some("https://tenant-gateway.example.test/v1".to_string()),
+            default_text_model: Some("anthropic/private-model".to_string()),
+            ..Config::default()
+        };
+        let mut app = app();
+        app.set_provider_identity(ApiProvider::Deepseek, "deepseek");
+        app.set_model_selection("anthropic/private-model".to_string());
+        // Mirror a live custom-route session: the endpoint owns model ids.
+        app.active_route_base_url = "https://tenant-gateway.example.test/v1".to_string();
+        app.model_ids_passthrough = true;
+        let mut doc = build_document(&app, &config).expect("document");
+        doc.settings.provider_models.clear();
+        doc.runtime.model = "org/custom-router-id".to_string();
+
+        let outcome = apply_document(doc, &mut app, &mut config, false)
+            .expect("custom deepseek endpoint must accept non-DeepSeek wire ids");
+
+        assert!(outcome.changed);
+        assert_eq!(app.model, "org/custom-router-id");
+    }
+
+    #[test]
+    fn official_deepseek_endpoint_still_rejects_non_deepseek_model_on_save() {
+        let mut config = Config {
+            provider: Some("deepseek".to_string()),
+            ..Config::default()
+        };
+        let mut app = app();
+        app.set_provider_identity(ApiProvider::Deepseek, "deepseek");
+        app.set_model_selection("deepseek-v4-pro".to_string());
+        let mut doc = build_document(&app, &config).expect("document");
+        doc.settings.provider_models.clear();
+        doc.runtime.model = "org/custom-router-id".to_string();
+
+        let error = apply_document(doc, &mut app, &mut config, false)
+            .expect_err("official deepseek endpoint must reject non-DeepSeek ids");
+
+        assert!(
+            error.to_string().contains("org/custom-router-id"),
+            "error should name the rejected model, got: {error}"
+        );
+        assert_eq!(app.model, "deepseek-v4-pro");
+    }
+
+    #[test]
     fn status_item_only_apply_does_not_require_engine_sync() {
         let _lock = lock_test_env();
+        let dir = tempfile::tempdir().expect("isolated config dir");
         let mut app = app();
+        app.config_path = Some(dir.path().join("config.toml"));
         let mut config = Config::default();
         let mut doc = build_document(&app, &config).expect("document");
         doc.config.status_items = vec![StatusItemValue::Cost, StatusItemValue::Model];

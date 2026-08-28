@@ -2,10 +2,14 @@
 name = "ghosty-tui"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Terminal UI for open-source and open-weight coding models"
 default-run = "ghosty-tui"
+
+[lints]
+workspace = true
 
 [features]
 default = ["tui", "json", "toml"]
@@ -13,86 +17,131 @@ tui = ["dep:schemaui", "schemaui/tui", "json", "toml"]
 web = ["dep:schemaui", "schemaui/web", "json", "toml"]
 json = ["schemaui/json"]
 toml = ["schemaui/toml"]
+long-running-tests = []
+
+[lib]
+name = "ghosty_tui"
+path = "src/lib.rs"
 
 [[bin]]
 name = "ghosty-tui"
 path = "src/main.rs"
 
-# Legacy alias — forwards to `ghosty-tui` and prints a deprecation
-# notice. Will be removed in v0.9.0.
-[[bin]]
-name = "deepseek-tui"
-path = "src/bin/deepseek_tui_legacy_shim.rs"
-
 [dependencies]
-anyhow = "1.0.100"
-arboard = "3.4"
-ghosty-config = { path = "../config", version = "0.0.14" }
-ghosty-protocol = { path = "../protocol", version = "0.0.14" }
-ghosty-release = { path = "../release", version = "0.0.14" }
-ghosty-secrets = { path = "../secrets", version = "0.0.14" }
-ghosty-tools = { path = "../tools", version = "0.0.14" }
+ahash = "0.8"
+anyhow.workspace = true
+ghosty-config = { path = "../config", version = "0.0.15" }
+ghosty-command-contract = { path = "../command-contract", version = "0.0.15" }
+ghosty-core = { path = "../core", version = "0.0.15" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.15" }
+ghosty-hooks = { path = "../hooks", version = "0.0.15" }
+ghosty-lane = { path = "../lane", version = "0.0.15" }
+ghosty-paths = { path = "../paths", version = "0.0.15" }
+ghosty-protocol = { path = "../protocol", version = "0.0.15" }
+ghosty-release = { path = "../release", version = "0.0.15" }
+ghosty-secrets = { path = "../secrets", version = "0.0.15" }
+ghosty-telemetry = { path = "../telemetry", version = "0.0.15" }
+ghosty-tools = { path = "../tools", version = "0.0.15" }
+ghosty-workflow = { path = "../workflow", version = "0.0.15" }
+ghosty-workflow-js = { path = "../workflow-js", version = "0.0.15" }
 schemaui = { version = "0.12.0", default-features = false, optional = true }
 async-stream = "0.3.6"
-async-trait = "0.1"
+async-trait.workspace = true
 base64 = "0.22.1"
-axum = { version = "0.8.4", features = ["json"] }
-clap = { version = "4.5.54", features = ["derive"] }
-clap_complete = "4.5"
+axum.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
 colored = "3.0.0"
-crossterm = "0.28"
+crossterm = "0.29"
 dotenvy = "0.15.7"
-dirs = "6.0.0"
+encoding_rs.workspace = true
 fd-lock = "4.0.4"
+dirs.workspace = true
 futures-util = "0.3.31"
-ratatui = "0.30"
+oauth2 = "5"
+# ratatui-core >= 0.1.1 queries cursor position inside `Terminal::clear()`
+# and races our input loop at startup (ratatui/ratatui#2483/#2640).
+# ColorCompatBackend answers `get_cursor_position()` from tracked state
+# (#2640's recommended workaround), so the pin is no longer needed and lru
+# can resolve to >= 0.18.2 (RUSTSEC-2026-0253).
+ratatui = { version = "=0.30.2", features = ["unstable-rendered-line-info"] }
+ratatui-core = "0.1"
 regex = "1.11"
-reqwest = { version = "0.13.1", default-features = false, features = ["blocking", "json", "stream", "multipart", "form", "rustls", "http2", "gzip", "brotli"] }
+reqwest = { workspace = true, features = ["blocking", "stream", "form", "http2"] }
+rusqlite.workspace = true
+rmcp = { version = "2.2.0", default-features = false, features = ["auth", "client"] }
+rustls.workspace = true
 qrcode = { version = "0.14", default-features = false }
-similar = "2"
-rustyline = "15.0.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149", features = ["preserve_order"] }
+similar = "3"
+syntect = { version = "5.2", default-features = false, features = ["default-fancy"] }
+serde.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
 schemars = { version = "1.2.1", features = ["derive", "preserve_order"] }
 shellexpand = "3"
-toml = "0.9.7"
-tokio = { version = "1.49.0", features = ["full"] }
+toml.workspace = true
+toml_edit.workspace = true
+tokio.workspace = true
 tokio-util = { version = "0.7.16", features = ["io"] }
 unicode-width = "0.2"
 unicode-segmentation = "1.12"
-uuid = { version = "1.11", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
-tempfile = "3.16"
-thiserror = "2.0"
-tracing = "0.1"
-tracing-appender = { workspace = true }
-tracing-subscriber = { workspace = true }
-tower-http = { version = "0.6", features = ["cors"] }
+unicode-normalization = "0.1"
+urlencoding = "2.1"
+uuid.workspace = true
+chrono.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tower-http.workspace = true
 wait-timeout = "0.2"
-multimap = "0.10.0"
+webbrowser = "1.0"
 shlex = "1.3.0"
-starlark = "0.13.0"
-tiny_http = "0.12"
-portable-pty = "0.9"
-zeroize = "1.8.2"
+globset = "0.4"
 ignore = "0.4"
-image = { version = "0.25", default-features = false, features = ["png"] }
-pdf-extract = "0.7"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+htmd = "0.5.4"
+# lru >= 0.18.2 fixes RUSTSEC-2026-0253 (panic-unsafe `pop()`).
+lru = "0.18"
+parking_lot = "0.12"
 tar = "0.4"
 flate2 = "1.1"
-sha2 = "0.10"
+sha2.workspace = true
+semver.workspace = true
+rust-i18n = "4.1.0"
+shell-words = "1.1.1"
+mimalloc.workspace = true
+
+[build-dependencies]
+ghosty-build-support = { path = "../build-support", version = "0.0.15" }
 
 [dev-dependencies]
+cucumber = "0.23.0"
+jsonschema.workspace = true
 wiremock = "0.6"
+tiny_http = "0.12"
 pretty_assertions = "1.4"
-vt100 = "0.15"
+rio-vt = "0.5.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_System_Threading"] }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows", all(target_os = "linux", not(target_env = "ohos"))))'.dependencies]
+arboard = "3.4"
+
+[target.'cfg(not(target_env = "ohos"))'.dependencies]
+portable-pty = "0.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.3"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSError", "NSObject", "NSString", "NSURL"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.60", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Environment", "Win32_System_JobObjects", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+# `windows` re-exports most of windows-core's types but not all of them
+# (BOOL, HRESULT, … live in windows-core itself); window_control.rs names
+# windows_core::BOOL for the EnumWindows callback, so it must be a direct
+# dependency. Version already resolved via `windows` — no extra build work.
+windows-core = { version = "0.62" }

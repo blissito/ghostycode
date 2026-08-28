@@ -1,10 +1,10 @@
 # Docker
 
-Ghosty Code publishes a multi-arch Linux image to GitHub Container Registry
+Ghosty publishes a multi-arch Linux image to GitHub Container Registry
 for each release.
 
 ```bash
-docker pull ghcr.io/hmbown/ghosty:latest
+docker pull ghcr.io/blissito/ghostycode:latest
 ```
 
 ## Quick start
@@ -19,7 +19,7 @@ docker run --rm -it \
   -v ghosty-home:/home/ghosty/.ghosty \
   -v "$PWD:/workspace" \
   -w /workspace \
-  ghcr.io/hmbown/ghosty:latest
+  ghcr.io/blissito/ghostycode:latest
 ```
 
 Use a pinned release tag for reproducible installs:
@@ -30,7 +30,7 @@ docker run --rm -it \
   -v ghosty-home:/home/ghosty/.ghosty \
   -v "$PWD:/workspace" \
   -w /workspace \
-  ghcr.io/hmbown/ghosty:vX.Y.Z
+  ghcr.io/blissito/ghostycode:vX.Y.Z
 ```
 
 Replace `vX.Y.Z` with a tag from
@@ -38,12 +38,12 @@ Replace `vX.Y.Z` with a tag from
 
 ## Default image contract
 
-`ghcr.io/hmbown/ghosty:latest` and the semver tags are conservative runtime
+`ghcr.io/blissito/ghostycode:latest` and the semver tags are conservative runtime
 images:
 
 - the container runs as the non-root `ghosty` user with UID/GID `1000:1000`
 - the image does not grant passwordless `sudo`
-- the image is meant to run Ghosty Code against mounted workspaces, not to mutate
+- the image is meant to run Ghosty against mounted workspaces, not to mutate
   the base operating system at runtime
 - user state belongs in a volume mounted at `/home/ghosty/.ghosty`
 
@@ -57,12 +57,12 @@ explicit toolbox image instead of changing the default image contract.
 The repository includes an example
 [`docs/examples/Dockerfile.toolbox`](examples/Dockerfile.toolbox) that extends
 the official image with passwordless `sudo` and common development packages.
-Build it with a pinned Ghosty Code tag when you want repeatable project
+Build it with a pinned Ghosty tag when you want repeatable project
 environments:
 
 ```bash
 docker build -f docs/examples/Dockerfile.toolbox \
-  --build-arg GHOSTY_IMAGE=ghcr.io/hmbown/ghosty:vX.Y.Z \
+  --build-arg GHOSTY_IMAGE=ghcr.io/blissito/ghostycode:vX.Y.Z \
   --build-arg TOOLBOX_PACKAGES="git openssh-client curl build-essential pkg-config python3 python3-pip nodejs npm" \
   -t ghosty-toolbox:my-project .
 ```
@@ -84,7 +84,7 @@ docker run --rm -it \
   ghosty-toolbox:my-project
 ```
 
-Inside this opt-in image, Ghosty Code can use commands such as
+Inside this opt-in image, Ghosty can use commands such as
 `sudo apt-get update` and `sudo apt-get install -y <package>`. For repeatable
 containers, prefer baking those packages into the toolbox Dockerfile instead of
 letting a long-lived container drift.
@@ -101,7 +101,7 @@ the toolbox image from [`docs/examples/Dockerfile.toolbox`](examples/Dockerfile.
 and keeps the project state volume explicit:
 
 ```bash
-GHOSTY_IMAGE=ghcr.io/hmbown/ghosty:vX.Y.Z \
+GHOSTY_IMAGE=ghcr.io/blissito/ghostycode:vX.Y.Z \
 GHOSTY_TOOLBOX_IMAGE=ghosty-toolbox:my-project \
 GHOSTY_HOME_VOLUME=ghosty-my-project-home \
 GHOSTY_WORKSPACE="$PWD" \
@@ -139,12 +139,12 @@ it is intentionally outside the core Docker image.
 
 ## Project bootstrap scripts
 
-Ghosty Code does not automatically execute `.ghosty/setup.sh` or legacy
+Ghosty does not automatically execute `.ghosty/setup.sh` or legacy
 `.deepseek/setup.sh`. If you keep one of those files as a local project recipe,
 run it explicitly. For shared team setup, prefer a committed project script or
 the toolbox Dockerfile so the environment can be reviewed and rebuilt.
 
-For example, to run a committed bootstrap script before starting Ghosty Code:
+For example, to run a committed bootstrap script before starting Ghosty:
 
 ```bash
 docker run --rm -it \
@@ -250,7 +250,7 @@ sudo chown -R 1000:1000 ~/.ghosty
 docker run --rm -it \
   -e DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
   -v ~/.ghosty:/home/ghosty/.ghosty \
-  ghcr.io/hmbown/ghosty:latest
+  ghcr.io/blissito/ghostycode:latest
 ```
 
 That `chown` changes ownership of the host `~/.ghosty` directory. Skip it if
@@ -264,7 +264,7 @@ When stdin is not a TTY, `ghosty` drops to the dispatcher's one-shot mode
 
 ```bash
 echo "Explain the Cargo.toml in structured English." | \
-  docker run --rm -i -e DEEPSEEK_API_KEY ghcr.io/hmbown/ghosty:latest
+  docker run --rm -i -e DEEPSEEK_API_KEY ghcr.io/blissito/ghostycode:latest
 ```
 
 ## Building locally
@@ -281,9 +281,16 @@ docker buildx build --platform linux/amd64,linux/arm64 -t ghosty .
 ## Devcontainer
 
 The repository includes a [`.devcontainer/devcontainer.json`](../.devcontainer/devcontainer.json)
-configuration for VS Code / GitHub Codespaces. It pre-installs the Rust toolchain,
-rust-analyzer, and the `ghosty` binary. Open the repo in a devcontainer to get a
-ready-to-use development environment.
+configuration for VS Code / GitHub Codespaces. It builds a dedicated development
+image with the Rust toolchain, Git, `pkg-config`, and the DBus development headers
+required by the workspace. The first open runs `cargo build --locked` and installs
+rust-analyzer and the other editor extensions.
+
+The source checkout remains mounted from the host. GhostyCode state and Cargo build
+artifacts use Docker named volumes instead, so the configuration works when VS Code
+cannot provide a POSIX-style `HOME` variable (notably on Windows), and builds do not
+write thousands of small files through a Windows bind mount. Rebuild the container
+after changing the Dev Container configuration.
 
 ## Release status
 

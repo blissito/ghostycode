@@ -6,28 +6,140 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Package/release version to publish to npm, without the leading v'
+        description: 'Release version, without v; dispatch from the matching existing vX.Y.Z tag ref'
         required: true
         type: string
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
   RUSTFLAGS: -Dwarnings
 
 jobs:
+  resolve:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+      - name: Resolve release source
+        id: release
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if ! [[ "${INPUT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Release version '${INPUT_VERSION}' must use X.Y.Z." >&2
+              exit 1
+            fi
+            tag="v${INPUT_VERSION}"
+            if [[ "${GITHUB_REF}" != "refs/tags/${tag}" ]]; then
+              echo "::error::Dispatch release.yml from --ref ${tag}, not ${GITHUB_REF}." >&2
+              exit 1
+            fi
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          if ! [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag '${tag}' must use vX.Y.Z." >&2
+            exit 1
+          fi
+          if ! git rev-parse --verify "refs/tags/${tag}^{commit}" >/dev/null 2>&1; then
+            echo "::error::Release tag ${tag} does not exist. Create it from the frozen main commit before dispatching." >&2
+            exit 1
+          fi
+
+          sha="$(git rev-parse "refs/tags/${tag}^{commit}")"
+          event_sha="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+          if [[ "${event_sha}" != "${sha}" ]]; then
+            echo "::error::Trigger SHA ${event_sha} does not match ${tag} at ${sha}; the tag moved after this run was created." >&2
+            exit 1
+          fi
+
+          {
+            echo "tag=${tag}"
+            echo "sha=${sha}"
+            echo "version=${tag#v}"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Validate tagged release metadata
+        shell: bash
+        env:
+          SHA: ${{ steps.release.outputs.sha }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git checkout --detach "${SHA}"
+          expected="${TAG#v}"
+          workspace_version="$(grep -E '^version = "' Cargo.toml | head -n1 | sed -E 's/^version = "([^"]+)".*/\1/')"
+          npm_version="$(node -p "require('./npm/ghosty/package.json').version")"
+          binary_version="$(node -p "require('./npm/ghosty/package.json').ghostyBinaryVersion")"
+          sdk_version="$(node -p "require('./npm/runtime-sdk/package.json').version")"
+          vscode_version="$(node -p "require('./extensions/vscode/package.json').version")"
+          for pair in \
+            "workspace:${workspace_version}" \
+            "npm:${npm_version}" \
+            "npm binary:${binary_version}" \
+            "runtime-sdk:${sdk_version}" \
+            "vscode:${vscode_version}"; do
+            label="${pair%%:*}"
+            actual="${pair#*:}"
+            if [[ "${actual}" != "${expected}" ]]; then
+              echo "::error::${label} version ${actual} does not match tag ${TAG}." >&2
+              exit 1
+            fi
+          done
+          ./scripts/release/check-versions.sh --require-dated-release
+      - name: Require release source on main
+        run: ./scripts/release/ensure-release-on-main.sh "${{ steps.release.outputs.sha }}"
+      - name: Refuse an existing public asset set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: node scripts/release/ensure-release-assets-absent.js "${GITHUB_REPOSITORY}" "${TAG}"
+
   parity:
-    if: github.event_name == 'push'
+    timeout-minutes: 20
+    needs: resolve
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # resolve already proved GITHUB_SHA equals the tag commit. Do not
+      # interpolate needs.resolve.outputs.sha into checkout or cache keys —
+      # CodeQL treats a *sha* ref as an untrusted checkout on workflow_dispatch
+      # (default-branch cache write).
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-18
         with:
+          toolchain: stable
           components: clippy, rustfmt
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        id: sccache
+        continue-on-error: true
+      - name: Enable sccache
+        if: steps.sccache.outcome == 'success'
+        shell: bash
+        run: |
+          {
+            echo "SCCACHE_GHA_ENABLED=true"
+            echo "RUSTC_WRAPPER=sccache"
+            echo "SCCACHE_IGNORE_SERVER_IO_ERROR=1"
+          } >> "${GITHUB_ENV}"
       - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
         run: |
           for i in 1 2 3 4 5; do
             sudo apt-get update && break
@@ -35,19 +147,36 @@ jobs:
             sleep 15
           done
           sudo apt-get install -y libdbus-1-dev pkg-config
-      - uses: Swatinem/rust-cache@v2
+      # Restore after the trusted lockfile is on disk. Key is OS + arch +
+      # explicit stable toolchain + rust-cache's Cargo.lock / rust-toolchain
+      # hash. Never interpolate github.event, github.ref, github.sha, or inputs.
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           cache-bin: false
+          prefix-key: v1-${{ runner.os }}-${{ runner.arch }}-stable
       - name: Format check
         run: cargo fmt --all -- --check
       - name: Compile check
         run: cargo check --workspace --all-targets --locked
+      - name: OHOS dependency graph
+        run: ./scripts/release/check-ohos-deps.sh
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: |
+          cargo clippy --workspace --all-targets --all-features --locked -- \
+            -D warnings \
+            -A clippy::uninlined_format_args \
+            -A clippy::too_many_arguments \
+            -A clippy::unnecessary_map_or \
+            -A clippy::collapsible_if \
+            -A clippy::assertions_on_constants
       - name: Workspace tests
         run: cargo test --workspace --all-features --locked
-      - name: TUI snapshot parity
-        run: cargo test -p ghosty-tui-core --test snapshot --locked
+        env:
+          # Match the CI test lane: test threads get the same stack the product
+          # gives itself (main.rs GHOSTY_MAIN_STACK_BYTES). See the note in
+          # ci.yml's "Run tests" step. Without it this gate runs the deep
+          # engine/runtime futures on a stack that never ships.
+          RUST_MIN_STACK: '16777216'
       - name: Protocol schema parity
         run: cargo test -p ghosty-protocol --test parity_protocol --locked
       - name: State persistence parity
@@ -55,380 +184,164 @@ jobs:
       - name: Lockfile drift guard
         run: git diff --exit-code -- Cargo.lock
 
-  resolve:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.release.outputs.tag }}
-      source_ref: ${{ steps.release.outputs.source_ref }}
-      sha: ${{ steps.release.outputs.sha }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Resolve release source
-        id: release
-        shell: bash
-        run: |
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            tag="v${{ inputs.version }}"
-            if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
-              sha="$(git rev-list -n 1 "${tag}")"
-              source_ref="${tag}"
-            else
-              # Tag doesn't exist yet — build from HEAD
-              sha="${GITHUB_SHA}"
-              source_ref="${GITHUB_SHA}"
-              echo "Tag ${tag} not found; building from ${source_ref} @ ${sha}"
-            fi
-          else
-            tag="${GITHUB_REF_NAME}"
-            sha="${GITHUB_SHA}"
-            source_ref="${GITHUB_REF_NAME}"
-          fi
-
-          if [ -z "${sha}" ]; then
-            echo "Unable to resolve release source for ${tag}" >&2
-            exit 1
-          fi
-
-          # Version policy: stay on 0.0.x — only the patch (3rd) segment may
-          # change. Reject any bump to the major/minor segments so releases
-          # never roll past 0.0.x by accident. An optional prerelease suffix
-          # (e.g. v0.0.8-preview.0) is allowed for preview channels.
-          if ! printf '%s' "${tag}" | grep -Eq '^v0\.0\.[0-9]+(-[a-z0-9.]+)?$'; then
-            echo "Release tag '${tag}' violates the 0.0.x policy: only the patch segment may change (expected v0.0.<patch> or v0.0.<patch>-<prerelease>)." >&2
-            exit 1
-          fi
-
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "source_ref=${source_ref}" >> "$GITHUB_OUTPUT"
-          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
-
-  build:
+  artifacts:
     needs: [parity, resolve]
-    # `parity` is gated to tag-push events. On manual `workflow_dispatch`,
-    # parity is skipped, so let `build` proceed when parity either succeeded
-    # or was skipped — but never when it actually failed or the run was
-    # cancelled. Operators using dispatch are expected to have already run
-    # the same gates locally / via ci.yml on `main`.
-    if: ${{ !cancelled() && (needs.parity.result == 'success' || needs.parity.result == 'skipped') }}
+    if: ${{ !cancelled() && needs.resolve.result == 'success' && needs.parity.result == 'success' }}
+    uses: ./.github/workflows/release-artifacts.yml
+    with:
+      source_sha: ${{ needs.resolve.outputs.sha }}
+      version: ${{ needs.resolve.outputs.version }}
+      retention_days: 14
+
+  docker-build:
+    needs: [artifacts, resolve]
+    if: ${{ !cancelled() && needs.artifacts.result == 'success' }}
+    name: Docker ${{ matrix.platform }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          # --- ghosty (cli dispatcher, canonical) ---
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            binary: ghosty
-            artifact_name: ghosty-linux-x64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            binary: ghosty
-            artifact_name: ghosty-linux-arm64
-          - os: ubuntu-latest
-            target: riscv64gc-unknown-linux-gnu
-            binary: ghosty
-            artifact_name: ghosty-linux-riscv64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            binary: ghosty
-            artifact_name: ghosty-macos-x64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            binary: ghosty
-            artifact_name: ghosty-macos-arm64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            binary: ghosty.exe
-            artifact_name: ghosty-windows-x64.exe
-          # --- ghosty-tui (TUI runtime, canonical) ---
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            binary: ghosty-tui
-            artifact_name: ghosty-tui-linux-x64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            binary: ghosty-tui
-            artifact_name: ghosty-tui-linux-arm64
-          - os: ubuntu-latest
-            target: riscv64gc-unknown-linux-gnu
-            binary: ghosty-tui
-            artifact_name: ghosty-tui-linux-riscv64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            binary: ghosty-tui
-            artifact_name: ghosty-tui-macos-x64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            binary: ghosty-tui
-            artifact_name: ghosty-tui-macos-arm64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            binary: ghosty-tui.exe
-            artifact_name: ghosty-tui-windows-x64.exe
-    runs-on: ${{ matrix.os }}
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            architecture: amd64
+            cli_artifact: ghosty-linux-x64
+            shim_artifact: ghosty-tui-linux-x64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            architecture: arm64
+            cli_artifact: ghosty-linux-arm64
+            shim_artifact: ghosty-tui-linux-arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout release infrastructure
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          ref: ${{ needs.resolve.outputs.source_ref }}
-      - uses: dtolnay/rust-toolchain@stable
+          ref: ${{ needs.resolve.outputs.sha }}
+          path: infra
+      - name: Download Ghosty release binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
+          name: ${{ matrix.cli_artifact }}
+          path: docker-context/bin
+      - name: Download ghosty-tui release alias
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          cache-bin: false
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          for i in 1 2 3 4 5; do
-            sudo apt-get update && break
-            echo "apt-get update failed (attempt $i); retrying in 15s"
-            sleep 15
-          done
-          sudo apt-get install -y libdbus-1-dev pkg-config
-      - name: Install RISC-V cross-compilation toolchain
-        if: matrix.target == 'riscv64gc-unknown-linux-gnu'
-        run: |
-          # Install cross-compiler (available in standard repos)
-          sudo apt-get update
-          sudo apt-get install -y gcc-riscv64-linux-gnu libc6-dev-riscv64-cross
-
-          # Add Ubuntu ports for riscv64 packages
-          . /etc/os-release
-          sudo tee /etc/apt/sources.list.d/riscv64.sources <<SRC
-          Types: deb
-          URIs: http://ports.ubuntu.com/
-          Suites: ${UBUNTU_CODENAME} ${UBUNTU_CODENAME}-updates
-          Components: main universe
-          Architectures: riscv64
-          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-          SRC
-          sudo dpkg --add-architecture riscv64
-          sudo apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/riscv64.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
-          sudo apt-get install -y libdbus-1-dev:riscv64
-      - name: Install AArch64 cross-compilation toolchain
-        if: matrix.target == 'aarch64-unknown-linux-gnu' && runner.os == 'Linux'
-        run: |
-          . /etc/os-release
-          sudo tee /etc/apt/sources.list.d/arm64.sources <<SRC
-          Types: deb
-          URIs: http://ports.ubuntu.com/ubuntu-ports/
-          Suites: ${UBUNTU_CODENAME} ${UBUNTU_CODENAME}-updates ${UBUNTU_CODENAME}-security
-          Components: main universe
-          Architectures: arm64
-          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-          SRC
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/arm64.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
-          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross libdbus-1-dev:arm64 pkg-config
-      - name: Build
+          name: ${{ matrix.shim_artifact }}
+          path: docker-context/bin
+      - name: Verify native release bytes
         shell: bash
         env:
-          DEEPSEEK_BUILD_SHA: ${{ needs.resolve.outputs.sha }}
-          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-          CC_riscv64gc_unknown_linux_gnu: riscv64-linux-gnu-gcc
-          CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_LINKER: riscv64-linux-gnu-gcc
-          PKG_CONFIG_ALLOW_CROSS: 1
-          PKG_CONFIG_LIBDIR_aarch64_unknown_linux_gnu: /usr/lib/aarch64-linux-gnu/pkgconfig
-          PKG_CONFIG_LIBDIR_riscv64gc_unknown_linux_gnu: /usr/lib/riscv64-linux-gnu/pkgconfig
-        run: cargo build --release --locked --target ${{ matrix.target }}
-      - name: Rename binary
-        shell: bash
-        run: |
-          BIN_PATH="target/${{ matrix.target }}/release/${{ matrix.binary }}"
-          if [ ! -f "${BIN_PATH}" ]; then
-            echo "Binary not at ${BIN_PATH}; searching target/ for ${{ matrix.binary }}:"
-            find target -name "${{ matrix.binary }}" -type f
-            exit 1
-          fi
-          cp "${BIN_PATH}" "${{ matrix.artifact_name }}"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_name }}
-
-  bundle:
-    needs: [build, resolve]
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve.outputs.source_ref }}
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: 'ghosty*'
-      - name: Create platform archives
-        shell: bash
+          CLI_ARTIFACT: ${{ matrix.cli_artifact }}
+          SHIM_ARTIFACT: ${{ matrix.shim_artifact }}
         run: |
           set -euo pipefail
-          mkdir -p bundles/checksums
-          MANIFEST="bundles/checksums/ghosty-bundles-sha256.txt"
-          : > "$MANIFEST"
-
-          bundle() {
-            local platform="$1"   # linux-x64, linux-arm64, macos-x64, macos-arm64, windows-x64
-            local cli_src="$2"    # artifact name for ghosty binary
-            local tui_src="$3"    # artifact name for ghosty-tui binary
-            local ext="$4"        # tar.gz or zip
-            local variant="$5"    # '' (standard) or 'portable' (Windows only, no install script)
-            shift 5
-
-            local dir="bundles/ghosty-${platform}${variant:+-}${variant}"
-            mkdir -p "$dir"
-
-            # Copy binaries, stripping platform suffixes
-            local cli_dst="ghosty"
-            local tui_dst="ghosty-tui"
-            if [[ "$platform" == windows-* ]]; then
-              cli_dst="ghosty.exe"
-              tui_dst="ghosty-tui.exe"
-            fi
-            cp "artifacts/${cli_src}/${cli_src}" "$dir/${cli_dst}"
-            cp "artifacts/${tui_src}/${tui_src}" "$dir/${tui_dst}"
-
-            # Add install script (standard variant only)
-            if [[ "$variant" != "portable" ]]; then
-              if [[ "$platform" == windows-* ]]; then
-                cp scripts/release/install.bat "$dir/"
-                # Convert line endings to CRLF for Windows
-                sed -i 's/$/\r/' "$dir/install.bat" 2>/dev/null || true
-              else
-                cp scripts/release/install.sh "$dir/"
-                chmod +x "$dir/install.sh"
-              fi
-            fi
-
-            if [[ "$ext" == "zip" ]]; then
-              (cd bundles && zip -r "ghosty-${platform}${variant:+-}${variant}.zip" "ghosty-${platform}${variant:+-}${variant}/")
-            else
-              tar -czf "bundles/ghosty-${platform}${variant:+-}${variant}.tar.gz" -C bundles "ghosty-${platform}${variant:+-}${variant}/"
-            fi
-
-            local archive="ghosty-${platform}${variant:+-}${variant}.${ext}"
-            sha256sum "bundles/${archive}" | awk '{printf "%s  %s\n", $1, $2}' >> "$MANIFEST"
-            echo "  Created bundles/${archive}"
-          }
-
-          # Platform: linux-x64
-          bundle linux-x64 \
-            ghosty-linux-x64 ghosty-tui-linux-x64 tar.gz ""
-
-          # Platform: linux-arm64
-          bundle linux-arm64 \
-            ghosty-linux-arm64 ghosty-tui-linux-arm64 tar.gz ""
-
-          # Platform: linux-riscv64
-          bundle linux-riscv64 \
-            ghosty-linux-riscv64 ghosty-tui-linux-riscv64 tar.gz ""
-
-          # Platform: macos-x64
-          bundle macos-x64 \
-            ghosty-macos-x64 ghosty-tui-macos-x64 tar.gz ""
-
-          # Platform: macos-arm64
-          bundle macos-arm64 \
-            ghosty-macos-arm64 ghosty-tui-macos-arm64 tar.gz ""
-
-          # Platform: windows-x64 (standard + portable)
-          bundle windows-x64 \
-            ghosty-windows-x64.exe ghosty-tui-windows-x64.exe zip ""
-          bundle windows-x64 \
-            ghosty-windows-x64.exe ghosty-tui-windows-x64.exe zip "portable"
-
-          echo ""
-          echo "=== Archive checksums ==="
-          cat "$MANIFEST"
-
-      - name: Upload bundle artifacts
-        uses: actions/upload-artifact@v4
+          mv -- "docker-context/bin/${CLI_ARTIFACT}" docker-context/bin/ghosty
+          mv -- "docker-context/bin/${SHIM_ARTIFACT}" docker-context/bin/ghosty-tui
+          chmod 0755 docker-context/bin/ghosty docker-context/bin/ghosty-tui
+          cmp docker-context/bin/ghosty docker-context/bin/ghosty-tui
+          docker-context/bin/ghosty --version
+          docker-context/bin/ghosty-tui --version
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
-          name: ghosty-bundles
-          path: bundles/*
-          if-no-files-found: error
-
-  windows-installer:
-    needs: [build, resolve]
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Normalize image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Extract image labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
-          ref: ${{ needs.resolve.outputs.source_ref }}
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: 'ghosty*-windows-x64.exe'
-      - name: Install NSIS
-        shell: pwsh
-        run: choco install nsis -y --no-progress
-      - name: Build NSIS installer
-        shell: pwsh
+          images: |
+            ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=${{ needs.resolve.outputs.version }}
+      - name: Revalidate release tag before container upload
+        env:
+          EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+          TAG: ${{ needs.resolve.outputs.tag }}
         run: |
-          $ErrorActionPreference = "Stop"
-          $version = "${{ needs.resolve.outputs.tag }}".TrimStart("v")
-          Copy-Item "artifacts\ghosty-windows-x64.exe\ghosty-windows-x64.exe" "scripts\installer\ghosty.exe"
-          Copy-Item "artifacts\ghosty-tui-windows-x64.exe\ghosty-tui-windows-x64.exe" "scripts\installer\ghosty-tui.exe"
-          # Refresh PATH after choco install so makensis is discoverable
-          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1" -ErrorAction SilentlyContinue
-          refreshenv -ErrorAction SilentlyContinue
-          # Find makensis: try common locations, then fall back to PATH lookup
-          $makensis = $null
-          foreach ($candidate in @(
-              "${env:ProgramFiles}\NSIS\makensis.exe",
-              "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
-              (Get-Command makensis -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
-          )) {
-              if ($candidate -and (Test-Path $candidate)) {
-                  $makensis = $candidate
-                  break
-              }
-          }
-          if (!$makensis) {
-              throw "makensis.exe not found after NSIS install"
-          }
-          Push-Location scripts\installer
-          & $makensis "/DVERSION=$version" "ghosty.nsi"
-          Pop-Location
-          if (!(Test-Path "scripts\installer\GhostyCodeSetup.exe")) {
-              throw "GhostyCodeSetup.exe was not produced"
-          }
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+          ./infra/scripts/release/verify-remote-tag.sh \
+            "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "${TAG}" \
+            "${EXPECTED_SHA}"
+      - name: Assemble and push native image by digest
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+          DOCKER_BUILD_SUMMARY: false
         with:
-          name: GhostyCodeSetup.exe
-          path: scripts/installer/GhostyCodeSetup.exe
+          context: docker-context
+          file: infra/packaging/docker/Dockerfile.release
+          platforms: ${{ matrix.platform }}
+          provenance: mode=max
+          sbom: true
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+      - name: Smoke native image digest
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull "${IMAGE}"
+          docker run --rm --entrypoint ghosty "${IMAGE}" --version
+          docker run --rm --entrypoint ghosty-tui "${IMAGE}" --version
+      - name: Export image digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unexpected image digest: ${DIGEST}" >&2
+            exit 1
+          fi
+          mkdir -p digests
+          touch "digests/${DIGEST#sha256:}"
+      - name: Upload image digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: docker-digest-${{ matrix.architecture }}
+          path: digests/*
           if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
   docker:
-    needs: [build, resolve]
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
-    # The container image is a best-effort artifact. A docker build/push failure
-    # must never mark the release run as failed or block npm/Homebrew, which no
-    # longer depend on this job.
-    continue-on-error: true
+    timeout-minutes: 30
+    needs: [docker-build, resolve]
+    if: ${{ !cancelled() && needs.docker-build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout release source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve.outputs.source_ref }}
-          path: source
       - name: Checkout release infrastructure
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
+          ref: ${{ needs.resolve.outputs.sha }}
           path: infra
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Download native image digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: digests
+          pattern: docker-digest-*
+          merge-multiple: true
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -439,7 +352,7 @@ jobs:
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: |
             ${{ steps.image.outputs.name }}
@@ -454,181 +367,123 @@ jobs:
             type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=raw,value=v${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=raw,value=latest
-      - name: Build and push
-        uses: docker/build-push-action@v6
+      - name: Revalidate release tag before container publish
         env:
-          # The build record is useful in CI, but it is uploaded as a
-          # `.dockerbuild` artifact. The release job intentionally downloads
-          # all binary artifacts, so suppress the extra record artifact there.
-          DOCKER_BUILD_RECORD_UPLOAD: false
-          DOCKER_BUILD_SUMMARY: false
-        with:
-          context: source
-          file: infra/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: |
-            DEEPSEEK_BUILD_SHA=${{ needs.resolve.outputs.sha }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          ./infra/scripts/release/verify-remote-tag.sh \
+            "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "${TAG}" \
+            "${EXPECTED_SHA}"
+      - name: Publish multi-architecture manifest
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          mapfile -t digest_files < <(find digests -maxdepth 1 -type f -printf '%f\n' | sort)
+          if [[ "${#digest_files[@]}" -ne 2 ]]; then
+            echo "Expected exactly two native image digests; found ${#digest_files[@]}." >&2
+            exit 1
+          fi
+
+          sources=()
+          for digest in "${digest_files[@]}"; do
+            if ! [[ "${digest}" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "Unexpected image digest file: ${digest}" >&2
+              exit 1
+            fi
+            sources+=("${IMAGE}@sha256:${digest}")
+          done
+
+          tag_args=()
+          while IFS= read -r tag; do
+            [[ -n "${tag}" ]] && tag_args+=(--tag "${tag}")
+          done <<< "${TAGS}"
+          if [[ "${#tag_args[@]}" -eq 0 ]]; then
+            echo "No container tags were generated." >&2
+            exit 1
+          fi
+
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
+      - name: Verify and smoke published container
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}:${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "${IMAGE}"
+          raw_manifest="$(docker buildx imagetools inspect --raw "${IMAGE}")"
+          jq -e \
+            '[.manifests[] | select(.platform.os == "linux") | "linux/\(.platform.architecture)"] | unique | sort == ["linux/amd64", "linux/arm64"]' \
+            <<< "${raw_manifest}"
+          docker pull "${IMAGE}"
+          docker run --rm --entrypoint ghosty "${IMAGE}" --version
+          docker run --rm --entrypoint ghosty-tui "${IMAGE}" --version
 
   release:
-    # `docker` is intentionally NOT a dependency: the npm/binary release must
-    # not wait on (or be blocked by) the container-image build. Docker runs in
-    # parallel and is allowed to fail without affecting publication.
-    needs: [build, bundle, windows-installer, resolve]
-    if: ${{ !cancelled() && needs.build.result == 'success' && needs.bundle.result == 'success' && needs.resolve.result == 'success' }}
+    timeout-minutes: 30
+    needs: [artifacts, docker, resolve]
+    if: ${{ !cancelled() && needs.artifacts.result == 'success' && needs.docker.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          path: repo
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ghosty-release-assets
           path: artifacts
-          # Match both the canonical `ghosty*` artifacts and the legacy
-          # `deepseek*` shim artifacts that ship for the transition release.
-          pattern: '*'
-      - name: Generate Windows npm launcher asset
+      - name: Revalidate exact authoritative asset set
+        run: node repo/scripts/release/assemble-release-assets.js --verify artifacts
+      - name: Generate release body from CHANGELOG
         shell: bash
         run: |
-          set -euo pipefail
-          mkdir -p artifacts/ghosty-windows-launcher
-          {
-            printf '@echo off\r\n'
-            printf 'where wt >nul 2>nul\r\n'
-            printf 'set NO_ANIMATIONS=1\r\n'
-            printf 'if "%%ERRORLEVEL%%"=="0" (\r\n'
-            printf '    wt --title Ghosty Code cmd /k "%%~dp0ghosty-windows-x64.exe"\r\n'
-            printf ') else (\r\n'
-            printf '    "%%~dp0ghosty-windows-x64.exe"\r\n'
-            printf ')\r\n'
-            printf '\r\n'
-          } > artifacts/ghosty-windows-launcher/ghosty.bat
-      - name: List artifacts
-        run: find artifacts -type f
-      - name: Generate checksum manifest
-        shell: bash
+          ./repo/scripts/release/generate-release-body.sh \
+            "${{ needs.resolve.outputs.tag }}" repo/CHANGELOG.md > release-body.md
+      - name: Revalidate release tag before GitHub Release write
+        env:
+          EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+          TAG: ${{ needs.resolve.outputs.tag }}
         run: |
-          mkdir -p artifacts/checksums
-          # Canonical manifest used by ghosty's `ghosty update` flow.
-          manifest="artifacts/checksums/ghosty-artifacts-sha256.txt"
-          : > "${manifest}"
-          while IFS= read -r -d '' file; do
-            hash="$(sha256sum "${file}" | awk '{print $1}')"
-            base="$(basename "${file}")"
-            printf '%s  %s\n' "${hash}" "${base}" >> "${manifest}"
-          done < <(find artifacts -type f ! -path 'artifacts/checksums/*' -print0 | sort -z)
-          # Legacy alias manifest so v0.8.40 `deepseek update` clients can
-          # still find a manifest by their hardcoded name. Same content; will
-          # be removed once the legacy shim binaries are retired in v0.9.0.
-          cp "${manifest}" "artifacts/checksums/deepseek-artifacts-sha256.txt"
-          cat "${manifest}"
-      - uses: softprops/action-gh-release@v1
+          ./repo/scripts/release/verify-remote-tag.sh \
+            "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "${TAG}" \
+            "${EXPECTED_SHA}"
+      - name: Reconfirm public asset set is still empty
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: node repo/scripts/release/ensure-release-assets-absent.js "${GITHUB_REPOSITORY}" "${TAG}"
+      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: artifacts/*/*
-          # Prerelease tags (e.g. v0.0.8-preview.0) carry a `-suffix`; mark the
-          # GitHub Release as a pre-release so it never becomes "Latest".
-          prerelease: ${{ contains(needs.resolve.outputs.tag, '-') }}
-          body: |
-            > This release renames the project to **Ghosty Code**. The legacy
-            > `deepseek` and `deepseek-tui` binaries continue to ship as
-            > compatibility-only deprecation shims during v0.8.x; they print a
-            > one-line warning and forward to `ghosty` / `ghosty-tui`.
-            > They will be removed in v0.9.0. The legacy npm package
-            > `deepseek-tui` is deprecated and receives no further releases.
-            > See `docs/REBRAND.md` for the full migration story.
+          files: artifacts/*
+          prerelease: false
+          body_path: release-body.md
+          overwrite_files: false
+          fail_on_unmatched_files: true
 
-            ## Install
-
-            ### Recommended — npm (one command, both binaries)
-
-            ```bash
-            npm install -g ghosty
-            ```
-
-            The wrapper downloads both binaries from this Release and places them in the same directory.
-
-            ### Docker / GHCR
-
-            ```bash
-            docker run --rm -it \
-              -e DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
-              -v ~/.deepseek:/home/ghosty/.deepseek \
-              ghcr.io/hmbown/ghosty:${{ needs.resolve.outputs.tag }}
-            ```
-
-            The image ships the `ghosty` dispatcher and `ghosty-tui` runtime (plus the legacy `deepseek` / `deepseek-tui` shims during the transition). The `latest` tag is also updated on release.
-
-            ### Cargo (Linux / macOS)
-
-            ```bash
-            cargo install ghosty-cli ghosty-tui --locked
-            ```
-
-            Both crates are required — `ghosty-cli` produces the `ghosty` dispatcher and `ghosty-tui` produces the interactive runtime that the dispatcher delegates to. Installing only one binary will fail at runtime with a `MISSING_COMPANION_BINARY` error.
-
-            ### Manual download — platform archives (recommended)
-
-            Each archive below contains **both** the `ghosty` dispatcher and `ghosty-tui` runtime, plus an install script:
-
-            | Platform | Archive | Install script |
-            |---|---|---|
-            | Linux x64 | `ghosty-linux-x64.tar.gz` | `install.sh` |
-            | Linux ARM64 | `ghosty-linux-arm64.tar.gz` | `install.sh` |
-            | Linux RISC-V | `ghosty-linux-riscv64.tar.gz` | `install.sh` |
-            | macOS x64 | `ghosty-macos-x64.tar.gz` | `install.sh` |
-            | macOS ARM | `ghosty-macos-arm64.tar.gz` | `install.sh` |
-            | Windows x64 (installer) | `GhostyCodeSetup.exe` | NSIS setup |
-            | Windows x64 | `ghosty-windows-x64.zip` | `install.bat` |
-            | Windows x64 (portable) | `ghosty-windows-x64-portable.zip` | — |
-
-            **Unix (Linux / macOS):**
-            ```bash
-            tar xzf ghosty-<platform>.tar.gz
-            cd ghosty-<platform>
-            ./install.sh
-            ```
-
-            **Windows:**
-            - For the installer path, run `GhostyCodeSetup.exe`; it installs both binaries under `%LOCALAPPDATA%\Programs\Ghosty Code\bin` and adds that directory to the current-user PATH.
-            - Extract `ghosty-windows-x64.zip`
-            - Run `install.bat` (copies to `%USERPROFILE%\bin`)
-            - Add `%USERPROFILE%\bin` to your PATH
-
-            The **portable** Windows archive skips the install script — extract and run from any directory. The NSIS installer is currently unsigned and may trigger Windows SmartScreen until a signing certificate is wired into the release pipeline.
-
-            Individual binaries are also attached below for scripting and the npm wrapper. Legacy `deepseek-*` and `deepseek-tui-*` assets are compatibility-only deprecation shims for v0.8.x so that existing `deepseek update` invocations on v0.8.40 keep working; they forward to the canonical binaries. The legacy npm package `deepseek-tui` is deprecated and is not republished.
-
-            ### Verify (recommended)
-
-            Download the checksum manifests from this Release and verify:
-
-            ```bash
-            # Linux — archive bundles
-            sha256sum -c ghosty-bundles-sha256.txt
-
-            # Linux — individual binaries
-            sha256sum -c ghosty-artifacts-sha256.txt
-
-            # macOS
-            shasum -a 256 -c ghosty-bundles-sha256.txt
-            shasum -a 256 -c ghosty-artifacts-sha256.txt
-            ```
-
-            The legacy `deepseek-artifacts-sha256.txt` is also attached for backward compatibility and contains the same hashes as the canonical manifest.
-
-            ## Changelog
-
-            See [CHANGELOG.md](https://github.com/blissito/ghostycode/blob/main/CHANGELOG.md) for the full notes for this release.
+  # npm publish is intentionally NOT automated for ghostycode: the package is
+  # published from a developer machine (`cd npm/ghosty && npm publish`) after
+  # the GitHub Release has been created. Upstream publishes with npm trusted
+  # publishing (OIDC), which requires a trusted-publisher binding on the npm
+  # package that `ghostycode` does not have. The `prepublishOnly` hook verifies
+  # the GitHub Release assets first.
 
   homebrew:
+    timeout-minutes: 20
     needs: [release, resolve]
-    # Skip the stable Homebrew tap for prerelease tags (e.g. -preview.N) so a
-    # preview never bumps the stable formula.
-    if: ${{ !cancelled() && needs.release.result == 'success' && !contains(needs.resolve.outputs.tag, '-') }}
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -638,42 +493,40 @@ jobs:
         env:
           TOKEN: ${{ secrets.HOMEBREW_TAP_PAT || secrets.RELEASE_TAG_PAT }}
         run: |
-          if [ -z "${TOKEN:-}" ]; then
+          if [[ -z "${TOKEN:-}" ]]; then
             echo "No Homebrew tap token configured; skipping tap update."
             echo "available=false" >> "${GITHUB_OUTPUT}"
           else
             echo "available=true" >> "${GITHUB_OUTPUT}"
           fi
-      # Checkout main (not the tag) so the release-infra script is always
-      # available, even for tags created before this workflow was added.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         if: steps.homebrew-token.outputs.available == 'true'
         with:
-          ref: main
+          ref: ${{ needs.resolve.outputs.sha }}
       - name: Download checksum manifest
         if: steps.homebrew-token.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release download ${{ needs.resolve.outputs.tag }} \
-            --repo ${{ github.repository }} \
-            --pattern 'deepseek-artifacts-sha256.txt' \
+          gh release download "${{ needs.resolve.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern 'ghosty-artifacts-sha256.txt' \
             --dir /tmp
+      - name: Revalidate release tag before Homebrew tap write
+        if: steps.homebrew-token.outputs.available == 'true'
+        env:
+          EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          ./scripts/release/verify-remote-tag.sh \
+            "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "${TAG}" \
+            "${EXPECTED_SHA}"
       - name: Update Homebrew tap
         if: steps.homebrew-token.outputs.available == 'true'
         env:
           TAG: ${{ needs.resolve.outputs.tag }}
-          MANIFEST: /tmp/deepseek-artifacts-sha256.txt
+          MANIFEST: /tmp/ghosty-artifacts-sha256.txt
           TAP_REPO: blissito/homebrew-ghosty
           TOKEN: ${{ secrets.HOMEBREW_TAP_PAT || secrets.RELEASE_TAG_PAT }}
         run: bash .github/scripts/update-homebrew-tap.sh
-
-# npm publish is intentionally not automated — no automation token is
-# provisioned in CI. Release the npm wrapper manually from a developer
-# machine after the GitHub Release has been created:
-#
-#   cd npm/ghostycode && npm publish
-#
-# The `prepublishOnly` hook verifies the GitHub Release assets first. If the
-# npm account has 2FA enforced for writes, add `--otp=<code>` to the command
-# (the interactive prompt does not work in non-interactive shells).

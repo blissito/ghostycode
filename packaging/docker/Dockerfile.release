@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1
+# Release-only image assembly.
+#
+# The public release workflow supplies the already-built, native Linux musl
+# artifacts from release-artifacts.yml. Keeping compilation out of this image
+# build makes the container use the same exact runtime bytes as the archives
+# and avoids a second, emulated Rust build on the publication path.
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libdbus-1-3 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1000 ghosty \
+    && useradd --create-home --shell /bin/bash --uid 1000 --gid 1000 ghosty \
+    && install -d -m 0700 -o ghosty -g ghosty /home/ghosty/.ghosty \
+    && install -d -m 0700 -o ghosty -g ghosty /home/ghosty/.deepseek
+
+COPY --chmod=0755 --chown=ghosty:ghosty bin/ghosty /usr/local/bin/ghosty
+COPY --chmod=0755 --chown=ghosty:ghosty bin/ghosty-tui /usr/local/bin/ghosty-tui
+
+USER ghosty
+WORKDIR /home/ghosty
+ENTRYPOINT ["ghosty"]
+CMD []

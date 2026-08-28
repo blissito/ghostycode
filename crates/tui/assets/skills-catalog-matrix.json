@@ -1,0 +1,319 @@
+{
+  "_doc": [
+    "Provider-free expectation matrix for the bundled Ghosty starter pack (#4698).",
+    "This file is an authored contract, not a generated snapshot: the catalog matrix",
+    "tests assert a bijection between these entries and BUNDLED_SKILLS, so adding,",
+    "removing, or re-flagging a shipped skill fails until this file is updated too.",
+    "It describes deterministic registry/catalog/resolver behavior only. It makes no",
+    "claim about whether a model semantically routes to a skill at inference time."
+  ],
+  "_fields": {
+    "name": "canonical frontmatter name; also the installed directory name",
+    "tier": "BundledSkillTier::label() -- 'core' or 'tools'",
+    "invocation": "frontmatter invocation value ('model+user' or 'explicit-only')",
+    "aliases": "normalized aliases-for entries that resolve to this skill",
+    "in_model_catalogue": "true when the skill renders as an ambient catalogue line",
+    "shadowed_aliases": "aliases that collide with another canonical bundled name; the canonical skill wins resolution"
+  },
+  "generation": "10",
+  "skills": [
+    {
+      "name": "skill-creator",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [
+        "create-skill"
+      ],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "delegate",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "plugin-creator",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "skill-installer",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "mcp-builder",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "fleet-manager",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "help",
+      "tier": "tools",
+      "invocation": "explicit-only",
+      "aliases": [],
+      "in_model_catalogue": false,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "handoff",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "mcp-discovery",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "best-of-n",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "interview",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "plan",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "implement",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "debug",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "test",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "review",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [
+        "code-review"
+      ],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "security-review",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "simplify",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "verify",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [
+        "check-work"
+      ],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "research",
+      "tier": "core",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "frontend-design",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "webapp-testing",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "document",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "dataviz",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "docx",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "pdf",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "pptx",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "xlsx",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [],
+      "in_model_catalogue": true,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "documents",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [
+        "docx"
+      ],
+      "in_model_catalogue": true,
+      "shadowed_aliases": [
+        "docx"
+      ]
+    },
+    {
+      "name": "presentations",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [
+        "pptx"
+      ],
+      "in_model_catalogue": true,
+      "shadowed_aliases": [
+        "pptx"
+      ]
+    },
+    {
+      "name": "spreadsheets",
+      "tier": "tools",
+      "invocation": "model+user",
+      "aliases": [
+        "xlsx"
+      ],
+      "in_model_catalogue": true,
+      "shadowed_aliases": [
+        "xlsx"
+      ]
+    },
+    {
+      "name": "batch",
+      "tier": "core",
+      "invocation": "explicit-only",
+      "aliases": [],
+      "in_model_catalogue": false,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "dependency-update",
+      "tier": "core",
+      "invocation": "explicit-only",
+      "aliases": [],
+      "in_model_catalogue": false,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "release",
+      "tier": "core",
+      "invocation": "explicit-only",
+      "aliases": [],
+      "in_model_catalogue": false,
+      "shadowed_aliases": []
+    },
+    {
+      "name": "contributor-onboarding",
+      "tier": "core",
+      "invocation": "explicit-only",
+      "aliases": [],
+      "in_model_catalogue": false,
+      "shadowed_aliases": []
+    }
+  ]
+}

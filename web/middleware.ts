@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { locales, defaultLocale } from "@/lib/i18n/config";
+import { detectLocaleFromHeaders } from "@/lib/i18n/detect";
+import { pathLocale, replacePathLocale } from "@/lib/i18n/path";
 
 const COOKIE = "NEXT_LOCALE";
 
@@ -16,40 +17,72 @@ function applySecurityHeaders(res: NextResponse): NextResponse {
   return res;
 }
 
-function detectLocale(req: NextRequest): string {
-  // 1. Cookie
-  const cookie = req.cookies.get(COOKIE)?.value;
-  if (cookie && locales.includes(cookie as typeof locales[number])) return cookie;
+/**
+ * The one host this site is indexed under. `www` is also bound to this worker
+ * as a custom domain, so without this guard the entire site answers on two
+ * hosts and every page has a duplicate URL a crawler can reach.
+ *
+ * This runs before the locale and static-asset branches on purpose: the
+ * canonical host has to win for assets and API routes too, or a `www` page
+ * keeps pulling subresources from `www` after the document moved.
+ */
+const CANONICAL_HOST = "ghosty.net";
 
-  // 2. Accept-Language header
-  const accept = req.headers.get("accept-language") ?? "";
-  if (/^zh/i.test(accept.split(",")[0])) return "zh";
-
-  return defaultLocale;
+function canonicalHostRedirect(req: NextRequest): NextResponse | null {
+  const host = req.headers.get("host");
+  if (!host) return null;
+  // Compare without the port so local and preview hosts are untouched.
+  const bare = host.split(":")[0].toLowerCase();
+  if (bare !== `www.${CANONICAL_HOST}`) return null;
+  const url = req.nextUrl.clone();
+  url.host = CANONICAL_HOST;
+  url.port = "";
+  return NextResponse.redirect(url, 301);
 }
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Skip API routes, static files, _next (but still apply security headers).
+  const canonical = canonicalHostRedirect(req);
+  if (canonical) return applySecurityHeaders(canonical);
+
+  // Skip API routes, static files, _next, and the dot-less metadata route
+  // for the shared OG image (but still apply security headers).
   if (
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
+    pathname === "/opengraph-image" ||
     pathname.includes(".")
   ) {
     return applySecurityHeaders(NextResponse.next());
   }
 
-  // Check if locale is already in path
-  const seg = pathname.split("/")[1];
-  if (locales.includes(seg as typeof locales[number])) {
-    const res = NextResponse.next();
-    res.cookies.set(COOKIE, seg, { path: "/", maxAge: 60 * 60 * 24 * 365 });
+  // Check if locale is already in path (`pt-BR` is one segment).
+  const existing = pathLocale(pathname);
+  if (existing) {
+    // A miscased prefix names the same route, so fold `/pt-br/install` onto
+    // `/pt-BR/install` instead of letting it reach the bare-path branch
+    // below, which would redirect to `/en/pt-br/install` — a 404. One
+    // canonical spelling also keeps a single URL in the index.
+    const canonicalPath = replacePathLocale(pathname, existing);
+    let res: NextResponse;
+    if (canonicalPath === pathname) {
+      res = NextResponse.next();
+    } else {
+      const url = req.nextUrl.clone();
+      url.pathname = canonicalPath;
+      res = NextResponse.redirect(url, 308);
+    }
+    res.cookies.set(COOKIE, existing, { path: "/", maxAge: 60 * 60 * 24 * 365 });
     return applySecurityHeaders(res);
   }
 
-  // Redirect bare paths to detected locale
-  const locale = detectLocale(req);
+  // Redirect bare paths to the detected locale (deterministic: cookie, then
+  // Accept-Language full-tag/primary-subtag matching, then the default).
+  const locale = detectLocaleFromHeaders(
+    req.cookies.get(COOKIE)?.value,
+    req.headers.get("accept-language"),
+  );
   const url = req.nextUrl.clone();
   url.pathname = `/${locale}${pathname}`;
   const res = NextResponse.redirect(url);

@@ -35,8 +35,5 @@
       "0 0 * * *",
       "0 9 * * 1"
     ]
-  },
-  "build": {
-    "command": "npm run build && npx opennextjs-cloudflare build"
   }
 }

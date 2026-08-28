@@ -10,6 +10,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock};
 
+mod outcome;
+mod prepared;
+mod resources;
+
+pub use outcome::{ToolExecutionOutcome, ToolTerminalStatus};
+pub use prepared::PreparedToolCall;
+pub use resources::{ResourceClaim, schedule_non_conflicting};
+
 tokio::task_local! {
     static TOOL_EXECUTION_LOCK_HELD: ();
 }
@@ -56,6 +64,8 @@ pub enum ToolError {
     ExecutionFailed { message: String },
     #[error("Failed to execute tool: operation timed out after {seconds}s")]
     Timeout { seconds: u64 },
+    #[error("Tool execution cancelled: {message}")]
+    Cancelled { message: String },
     #[error("Failed to locate tool: {message}")]
     NotAvailable { message: String },
     #[error("Failed to authorize tool execution: {message}")]
@@ -80,6 +90,13 @@ impl ToolError {
     #[must_use]
     pub fn execution_failed(msg: impl Into<String>) -> Self {
         Self::ExecutionFailed {
+            message: msg.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn cancelled(msg: impl Into<String>) -> Self {
+        Self::Cancelled {
             message: msg.into(),
         }
     }
@@ -116,6 +133,13 @@ pub struct ToolResult {
     pub metadata: Option<Value>,
 }
 
+/// Provider-neutral non-text content returned alongside a tool result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolResultContentBlock {
+    Image { mime_type: String, data: String },
+}
+
 impl ToolResult {
     /// Create a successful result with content.
     #[must_use]
@@ -140,7 +164,7 @@ impl ToolResult {
     /// Create a successful result from JSON.
     pub fn json<T: Serialize>(value: &T) -> std::result::Result<Self, serde_json::Error> {
         Ok(Self {
-            content: serde_json::to_string_pretty(value)?,
+            content: serde_json::to_string(value)?,
             success: true,
             metadata: None,
         })
@@ -154,59 +178,179 @@ impl ToolResult {
     }
 }
 
+/// Name the JSON type of a value the way a tool schema would spell it.
+#[must_use]
+pub fn json_type_name(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+/// Render a value for an error message, truncated so a huge payload cannot
+/// swamp the transcript.
+#[must_use]
+pub fn value_preview(value: &Value) -> String {
+    let preview = value.to_string();
+    if preview.chars().count() > 120 {
+        preview.chars().take(117).collect::<String>() + "..."
+    } else {
+        preview
+    }
+}
+
+/// The one error every type mismatch on a tool parameter produces.
+///
+/// Names the parameter, the type that arrived, and the type the schema
+/// declares, plus the offending value — everything the caller needs to fix
+/// the call on the next turn without another round trip.
+#[must_use]
+pub fn type_mismatch(field: &str, value: &Value, expected: &str) -> ToolError {
+    ToolError::invalid_input(format!(
+        "field '{field}' must be {expected}; got {}. Received: {}",
+        json_type_name(value),
+        value_preview(value)
+    ))
+}
+
+/// Whether a value counts as "the caller did not supply this field".
+///
+/// JSON `null` is the wire spelling of absence, so an optional field set to
+/// `null` takes its default rather than erroring. This is the *only*
+/// tolerance in the optional extractors, and it is uniform across all of
+/// them: `null` means no value, and no value is exactly what a default is
+/// for. Every other type mismatch is an error.
+fn is_absent(value: Option<&Value>) -> bool {
+    matches!(value, None | Some(Value::Null))
+}
+
 /// Helper to extract a required string field from JSON input.
 pub fn required_str<'a>(input: &'a Value, field: &str) -> std::result::Result<&'a str, ToolError> {
-    input.get(field).and_then(Value::as_str).ok_or_else(|| {
-        // When the field is missing, list the fields the caller *did*
-        // supply so the model can spot the mismatch without a retry.
-        let provided: Vec<&str> = input
-            .as_object()
-            .map(|obj| obj.keys().map(|k| k.as_str()).collect())
-            .unwrap_or_default();
-        if provided.is_empty() {
-            ToolError::missing_field(field)
-        } else {
-            let hint = format!(
-                "missing required field '{field}'. Input provided: {}",
-                provided.join(", ")
-            );
-            ToolError::invalid_input(hint)
+    if let Some(value) = input.get(field) {
+        if let Some(string_value) = value.as_str() {
+            return Ok(string_value);
         }
-    })
+
+        return Err(type_mismatch(field, value, "a string"));
+    }
+
+    // When the field is missing, list the fields the caller *did*
+    // supply so the model can spot the mismatch without a retry.
+    let provided: Vec<&str> = input
+        .as_object()
+        .map(|obj| obj.keys().map(|k| k.as_str()).collect())
+        .unwrap_or_default();
+    if provided.is_empty() {
+        Err(ToolError::missing_field(field))
+    } else {
+        let hint = format!(
+            "missing required field '{field}'. Input provided: {}",
+            provided.join(", ")
+        );
+        Err(ToolError::invalid_input(hint))
+    }
 }
 
 /// Helper to extract an optional string field from JSON input.
-#[must_use]
-pub fn optional_str<'a>(input: &'a Value, field: &str) -> Option<&'a str> {
-    input.get(field).and_then(Value::as_str)
+///
+/// A wrong type is an error, never a silent `None`. See [`type_mismatch`]
+/// for why nothing is coerced.
+pub fn optional_str<'a>(
+    input: &'a Value,
+    field: &str,
+) -> std::result::Result<Option<&'a str>, ToolError> {
+    let value = input.get(field);
+    if is_absent(value) {
+        return Ok(None);
+    }
+    let value = value.expect("is_absent covers the None case");
+    value
+        .as_str()
+        .map(Some)
+        .ok_or_else(|| type_mismatch(field, value, "a string"))
 }
 
 /// Helper to extract a required u64 field from JSON input.
+///
+/// Absence (field missing or `null`) is a `missing_field` error; a value
+/// that is present but not a u64 is a [`type_mismatch`] naming the field and
+/// the expected type, so the caller fixes the field's type instead of
+/// re-sending it as missing.
 pub fn required_u64(input: &Value, field: &str) -> std::result::Result<u64, ToolError> {
-    input
-        .get(field)
-        .and_then(Value::as_u64)
-        .ok_or_else(|| ToolError::missing_field(field))
+    let value = input.get(field);
+    if is_absent(value) {
+        return Err(ToolError::missing_field(field));
+    }
+    let value = value.expect("is_absent covers the None case");
+    value
+        .as_u64()
+        .ok_or_else(|| type_mismatch(field, value, "a non-negative integer"))
 }
 
 /// Helper to extract an optional u64 field with default.
-#[must_use]
-pub fn optional_u64(input: &Value, field: &str, default: u64) -> u64 {
-    input.get(field).and_then(Value::as_u64).unwrap_or(default)
+///
+/// A wrong type is an error, never a silent fall back to `default`.
+pub fn optional_u64(
+    input: &Value,
+    field: &str,
+    default: u64,
+) -> std::result::Result<u64, ToolError> {
+    let value = input.get(field);
+    if is_absent(value) {
+        return Ok(default);
+    }
+    let value = value.expect("is_absent covers the None case");
+    value
+        .as_u64()
+        .ok_or_else(|| type_mismatch(field, value, "a non-negative integer"))
 }
 
 /// Helper to extract an optional bool field with default.
-#[must_use]
-pub fn optional_bool(input: &Value, field: &str, default: bool) -> bool {
-    input.get(field).and_then(Value::as_bool).unwrap_or(default)
+///
+/// A wrong type is an error, never a silent fall back to `default`. In
+/// particular the string `"true"` is refused rather than coerced: the
+/// default this used to fall back to is frequently the *opposite* of what
+/// the caller asked for, and some of those defaults gate irreversible
+/// actions.
+pub fn optional_bool(
+    input: &Value,
+    field: &str,
+    default: bool,
+) -> std::result::Result<bool, ToolError> {
+    Ok(optional_bool_opt(input, field)?.unwrap_or(default))
 }
 
-/// Specification that describes a tool available in the registry.
+/// Helper to extract an optional bool that has no default.
+///
+/// `None` means the caller did not supply the field; a wrong type is an
+/// error. Use this where "unset" is itself meaningful — an authority
+/// declaration that is dropped instead of read is a restriction that
+/// silently evaporates.
+pub fn optional_bool_opt(
+    input: &Value,
+    field: &str,
+) -> std::result::Result<Option<bool>, ToolError> {
+    let value = input.get(field);
+    if is_absent(value) {
+        return Ok(None);
+    }
+    let value = value.expect("is_absent covers the None case");
+    value
+        .as_bool()
+        .map(Some)
+        .ok_or_else(|| type_mismatch(field, value, "a boolean"))
+}
+
+/// Descriptor that describes a tool available in the registry.
 ///
 /// Contains the tool's name, its JSON input/output schemas, and
 /// execution constraints such as timeout and parallelism.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolSpec {
+pub struct ToolDescriptor {
     /// Unique name used to look up the tool.
     pub name: String,
     /// JSON Schema describing the tool's expected input parameters.
@@ -219,14 +363,14 @@ pub struct ToolSpec {
     pub timeout_ms: Option<u64>,
 }
 
-/// A [`ToolSpec`] together with its runtime configuration.
+/// A [`ToolDescriptor`] together with its runtime configuration.
 ///
-/// Wraps a `ToolSpec` and exposes the parallelism flag directly so the
+/// Wraps a `ToolDescriptor` and exposes the parallelism flag directly so the
 /// dispatcher can check it without digging into the inner spec.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConfiguredToolSpec {
-    /// The underlying tool specification.
-    pub spec: ToolSpec,
+pub struct ConfiguredToolDescriptor {
+    /// The underlying tool descriptor.
+    pub spec: ToolDescriptor,
     /// Whether this tool supports concurrent invocations.
     pub supports_parallel_tool_calls: bool,
 }
@@ -395,7 +539,7 @@ impl ToolCallRuntime {
 #[derive(Default)]
 pub struct ToolRegistry {
     handlers: HashMap<String, Arc<dyn ToolHandler>>,
-    specs: HashMap<String, ConfiguredToolSpec>,
+    specs: HashMap<String, ConfiguredToolDescriptor>,
     runtime: ToolCallRuntime,
 }
 
@@ -405,11 +549,11 @@ impl ToolRegistry {
     /// The tool's name is taken from `spec.name`. Returns an error if
     /// registration fails (currently infallible, but the `Result` is
     /// reserved for future validation).
-    pub fn register(&mut self, spec: ToolSpec, handler: Arc<dyn ToolHandler>) -> Result<()> {
+    pub fn register(&mut self, spec: ToolDescriptor, handler: Arc<dyn ToolHandler>) -> Result<()> {
         let name = spec.name.clone();
         self.specs.insert(
             name.clone(),
-            ConfiguredToolSpec {
+            ConfiguredToolDescriptor {
                 supports_parallel_tool_calls: spec.supports_parallel_tool_calls,
                 spec,
             },
@@ -419,7 +563,7 @@ impl ToolRegistry {
     }
 
     /// Return the configured specs for every registered tool.
-    pub fn list_specs(&self) -> Vec<ConfiguredToolSpec> {
+    pub fn list_specs(&self) -> Vec<ConfiguredToolDescriptor> {
         self.specs.values().cloned().collect()
     }
 
@@ -522,22 +666,124 @@ mod tests {
     use super::*;
 
     #[test]
+    fn tool_result_success_sets_plain_content() {
+        let content = "operation completed successfully";
+        let result = ToolResult::success(content);
+
+        assert!(result.success);
+        assert_eq!(result.content, content);
+        assert!(result.metadata.is_none());
+    }
+
+    #[test]
     fn tool_result_json_round_trips_content() {
         let result = ToolResult::json(&json!({"ok": true})).expect("json");
         assert!(result.success);
-        assert!(result.content.contains("\"ok\": true"));
+        let content: serde_json::Value =
+            serde_json::from_str(&result.content).expect("content is valid json");
+        assert_eq!(content, json!({"ok": true}));
     }
 
     #[test]
     fn helper_extractors_validate_shape() {
         let input = json!({"name": "demo", "count": 7, "enabled": true});
         assert_eq!(required_str(&input, "name").expect("name"), "demo");
-        assert_eq!(optional_u64(&input, "count", 0), 7);
-        assert!(optional_bool(&input, "enabled", false));
+        assert_eq!(optional_str(&input, "name").unwrap(), Some("demo"));
+        assert_eq!(optional_str(&input, "missing").unwrap(), None);
+        assert_eq!(optional_str(&json!({"name": null}), "name").unwrap(), None);
+        assert_eq!(optional_u64(&input, "count", 0).unwrap(), 7);
+        assert!(optional_bool(&input, "enabled", false).unwrap());
+        // "name" is present but a string: a type mismatch, not a missing
+        // field, so the caller fixes the type instead of re-sending the name.
+        let err = required_u64(&input, "name")
+            .expect_err("a present string is not a missing u64")
+            .to_string();
+        assert!(
+            err.contains("field 'name' must be a non-negative integer"),
+            "{err}"
+        );
+    }
+
+    /// The rule, stated once: an optional parameter of the wrong JSON type is
+    /// an error that names the parameter, what arrived, and what was wanted.
+    /// `null` alone means "absent" and takes the default.
+    #[test]
+    fn optional_extractors_refuse_type_mismatches_instead_of_defaulting() {
+        // The shipping bug: a stringy "true" became the default `false`,
+        // which for `dry_run` is the opposite of what the caller asked and
+        // gates an irreversible action.
+        let err = optional_bool(&json!({"dry_run": "true"}), "dry_run", false)
+            .expect_err("a stringy bool must not become the default")
+            .to_string();
+        assert!(err.contains("dry_run"), "{err}");
+        assert!(err.contains("must be a boolean"), "{err}");
+        assert!(err.contains("got string"), "{err}");
+        assert!(err.contains("\"true\""), "{err}");
+
+        for bad in [json!("true"), json!(1), json!(0), json!([]), json!({})] {
+            assert!(
+                optional_bool(&json!({"flag": bad}), "flag", false).is_err(),
+                "optional_bool accepted {bad}"
+            );
+        }
+        for bad in [json!("7"), json!(-1), json!(1.5), json!(true), json!([7])] {
+            assert!(
+                optional_u64(&json!({"n": bad}), "n", 42).is_err(),
+                "optional_u64 accepted {bad}"
+            );
+        }
+        for bad in [json!(7), json!(true), json!(["a"]), json!({"a": 1})] {
+            assert!(
+                optional_str(&json!({"s": bad}), "s").is_err(),
+                "optional_str accepted {bad}"
+            );
+        }
+
+        // `null` is the wire spelling of absence, uniformly across all three.
+        assert!(optional_bool(&json!({"flag": null}), "flag", true).unwrap());
+        assert_eq!(optional_u64(&json!({"n": null}), "n", 42).unwrap(), 42);
+        assert_eq!(optional_str(&json!({"s": null}), "s").unwrap(), None);
+    }
+
+    #[test]
+    fn type_mismatch_truncates_a_huge_offending_value() {
+        let big = Value::String("x".repeat(500));
+        let err = type_mismatch("body", &big, "a boolean").to_string();
+        assert!(err.contains("body"), "{err}");
+        assert!(err.ends_with("..."), "{err}");
+        assert!(err.chars().count() < 250, "{err}");
+    }
+
+    #[test]
+    fn required_u64_distinguishes_missing_from_type_mismatch() {
+        // Absent (or null) is a missing-field error.
         assert!(matches!(
-            required_u64(&input, "name"),
+            required_u64(&json!({}), "count"),
             Err(ToolError::MissingField { .. })
         ));
+        assert!(matches!(
+            required_u64(&json!({"count": null}), "count"),
+            Err(ToolError::MissingField { .. })
+        ));
+
+        // Present and valid values pass through, including the extremes.
+        assert_eq!(required_u64(&json!({"count": 42}), "count").unwrap(), 42);
+        assert_eq!(
+            required_u64(&json!({"count": u64::MAX}), "count").unwrap(),
+            u64::MAX
+        );
+
+        // Present but wrongly typed is a type mismatch naming the field and
+        // the expected type — never a missing-field misdirection.
+        for value in [json!(-1), json!(2.5), json!("42")] {
+            let err = required_u64(&json!({"count": value}), "count")
+                .expect_err("wrong type must not look missing")
+                .to_string();
+            assert!(
+                err.contains("field 'count' must be a non-negative integer"),
+                "{err}"
+            );
+        }
     }
 
     #[test]
@@ -552,11 +798,144 @@ mod tests {
     }
 
     #[test]
+    fn required_str_reports_wrong_type_when_field_exists() {
+        let input = json!({"replace": [{"path": "src/lib.rs", "content": "new body"}]});
+        let err = required_str(&input, "replace").expect_err("replace has wrong type");
+        let message = err.to_string();
+        assert!(message.contains("field 'replace' must be a string"));
+        assert!(message.contains("got array"));
+        assert!(message.contains(r#""content":"new body""#));
+        assert!(message.contains(r#""path":"src/lib.rs""#));
+    }
+
+    #[test]
     fn tool_error_display_matches_legacy_text() {
         let err = ToolError::missing_field("path");
         assert_eq!(
             err.to_string(),
             "Failed to validate input: missing required field 'path'"
+        );
+    }
+
+    #[test]
+    fn tool_error_missing_field_constructor() {
+        let err = ToolError::missing_field("my_field");
+        assert!(matches!(err, ToolError::MissingField { field } if field == "my_field"));
+    }
+
+    #[test]
+    fn tool_error_not_available_displays_reason() {
+        let err = ToolError::not_available("custom tool not found");
+
+        assert!(matches!(err, ToolError::NotAvailable { .. }));
+        assert_eq!(
+            err.to_string(),
+            "Failed to locate tool: custom tool not found"
+        );
+    }
+
+    #[test]
+    fn tool_error_permission_denied_displays_reason() {
+        let err = ToolError::permission_denied("unauthorized user");
+
+        assert!(matches!(err, ToolError::PermissionDenied { .. }));
+        assert_eq!(
+            err.to_string(),
+            "Failed to authorize tool execution: unauthorized user"
+        );
+    }
+
+    #[test]
+    fn tool_error_execution_failed_displays_reason() {
+        let err = ToolError::execution_failed("process crashed");
+
+        assert!(
+            matches!(err, ToolError::ExecutionFailed { ref message } if message == "process crashed")
+        );
+        assert_eq!(err.to_string(), "Failed to execute tool: process crashed");
+    }
+
+    #[test]
+    fn tool_error_invalid_input_creates_correct_variant() {
+        let err = ToolError::invalid_input("test invalid message");
+        match err {
+            ToolError::InvalidInput { message } => {
+                assert_eq!(message, "test invalid message");
+            }
+            _ => panic!("Expected ToolError::InvalidInput, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn tool_error_path_escape_display() {
+        let path = std::path::PathBuf::from("../outside");
+        let err = ToolError::path_escape(path);
+        assert_eq!(
+            err.to_string(),
+            "Failed to resolve path '../outside': path escapes workspace"
+        );
+    }
+
+    #[test]
+    fn tool_call_execution_subject_uses_local_shell_command_and_cwd() {
+        let call = ToolCall {
+            name: "shell".to_string(),
+            payload: ToolPayload::LocalShell {
+                params: ghosty_protocol::LocalShellParams {
+                    command: "ls -l".to_string(),
+                    cwd: Some("/custom/dir".to_string()),
+                    timeout_ms: None,
+                },
+            },
+            source: ToolCallSource::Direct,
+            raw_tool_call_id: None,
+        };
+
+        assert_eq!(
+            call.execution_subject("/fallback/dir"),
+            ("ls -l".to_string(), "/custom/dir".to_string(), "shell")
+        );
+    }
+
+    #[test]
+    fn tool_call_execution_subject_falls_back_for_shell_without_cwd() {
+        let call = ToolCall {
+            name: "shell".to_string(),
+            payload: ToolPayload::LocalShell {
+                params: ghosty_protocol::LocalShellParams {
+                    command: "echo hello".to_string(),
+                    cwd: None,
+                    timeout_ms: None,
+                },
+            },
+            source: ToolCallSource::Direct,
+            raw_tool_call_id: None,
+        };
+
+        assert_eq!(
+            call.execution_subject("/fallback/dir"),
+            (
+                "echo hello".to_string(),
+                "/fallback/dir".to_string(),
+                "shell"
+            )
+        );
+    }
+
+    #[test]
+    fn tool_call_execution_subject_uses_tool_name_for_non_shell_payloads() {
+        let call = ToolCall {
+            name: "my_tool".to_string(),
+            payload: ToolPayload::Function {
+                arguments: "{}".to_string(),
+            },
+            source: ToolCallSource::Direct,
+            raw_tool_call_id: None,
+        };
+
+        assert_eq!(
+            call.execution_subject("/fallback/dir"),
+            ("my_tool".to_string(), "/fallback/dir".to_string(), "tool")
         );
     }
 }

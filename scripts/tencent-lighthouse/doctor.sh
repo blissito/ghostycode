@@ -147,21 +147,21 @@ check_workspace() {
 }
 
 check_binaries() {
-  section "Ghosty Code binaries"
+  section "GhostyCode binaries"
   local cargo_bin="/home/${GHOSTY_USER}/.cargo/bin"
   local ghosty="${cargo_bin}/ghosty"
-  local tui="${cargo_bin}/ghosty-tui"
+  local ghosty-tui="${cargo_bin}/ghosty-tui"
   if [[ -x "${ghosty}" ]]; then
     pass "${ghosty} is executable"
     "${ghosty}" --version 2>/dev/null | sed 's/^/[info] ghosty version: /' || warn "ghosty --version failed"
   else
     fail "${ghosty} is missing or not executable"
   fi
-  if [[ -x "${tui}" ]]; then
-    pass "${tui} is executable"
-    "${tui}" --version 2>/dev/null | sed 's/^/[info] ghosty-tui version: /' || warn "ghosty-tui --version failed"
+  if [[ -x "${ghosty-tui}" ]]; then
+    pass "${ghosty-tui} is executable"
+    "${ghosty-tui}" --version 2>/dev/null | sed 's/^/[info] ghosty-tui version: /' || warn "ghosty-tui --version failed"
   else
-    fail "${tui} is missing or not executable"
+    fail "${ghosty-tui} is missing or not executable"
   fi
 }
 
@@ -347,7 +347,7 @@ check_localhost_health() {
 }
 
 main() {
-  printf 'Tencent Lighthouse Ghosty Code doctor (%s bridge)\n' "${BRIDGE_KIND}"
+  printf 'Tencent Lighthouse GhostyCode doctor (%s bridge)\n' "${BRIDGE_KIND}"
   check_commands
   check_node
   check_workspace

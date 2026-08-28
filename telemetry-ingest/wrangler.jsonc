@@ -1,0 +1,62 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ghosty-telemetry-ingest",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+
+  // Write-only ingest. One POST route, no assets, no KV, no D1, no queues, no
+  // cron. Nothing here reads back what was written; querying is the SQL API,
+  // authenticated with the owner's token, out of band. See README.md.
+
+  // Workers Analytics Engine is the only storage. The dataset is created
+  // implicitly on the first successful `writeDataPoint`, so there is no
+  // resource to provision ahead of the deploy.
+  "analytics_engine_datasets": [
+    {
+      "binding": "TELEMETRY",
+      "dataset": "ghosty_telemetry"
+    }
+  ],
+
+  // Per-install rate limiting. Keyed on `install_id` from the validated batch
+  // body — never on a network address. 20 POSTs per 60s is generous against the
+  // client's single bounded flush attempt at shutdown.
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    }
+  ],
+
+  // Invocation logs are OFF deliberately. Cloudflare describes them as
+  // "enriched with information available to Cloudflare in the context of the
+  // invocation", which is exactly the class of automatic per-request record
+  // this service promises not to keep. Nothing in `src/` logs anything either.
+  // `enabled` stays true so the owner can turn a specific, payload-free metric
+  // on later without a config archaeology dig.
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "invocation_logs": false
+    }
+  }
+
+  ,
+  // ROUTE. A self-describing hostname on purpose: someone inspecting their own
+  // network traffic should be able to tell what this is from the name alone.
+  // An opaque `t.` would have been shorter and would have looked evasive.
+  "routes": [
+    { "pattern": "telemetry.ghosty.net", "custom_domain": true }
+  ]
+  //
+  // `https://telemetry.ghosty.net/v1/telemetry` is the shipped default for
+  // `telemetry_endpoint` (`DEFAULT_TELEMETRY_ENDPOINT` in
+  // `crates/config/src/lib.rs`), so real batches arrive here. Only from
+  // sessions that have not opted out. v0.9.6 discloses anonymous usage
+  // counting on first interactive launch and enables it by default. See
+  // README.md.
+}

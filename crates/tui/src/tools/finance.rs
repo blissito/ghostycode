@@ -30,9 +30,11 @@ struct FinanceEndpoints {
 impl Default for FinanceEndpoints {
     fn default() -> Self {
         Self {
-            quote_base: std::env::var("DEEPSEEK_FINANCE_QUOTE_BASE_URL")
+            quote_base: std::env::var("GHOSTY_FINANCE_QUOTE_BASE_URL")
+                .or_else(|_| std::env::var("DEEPSEEK_FINANCE_QUOTE_BASE_URL"))
                 .unwrap_or_else(|_| "https://query1.finance.yahoo.com/v7/finance/quote".into()),
-            chart_base: std::env::var("DEEPSEEK_FINANCE_CHART_BASE_URL")
+            chart_base: std::env::var("GHOSTY_FINANCE_CHART_BASE_URL")
+                .or_else(|_| std::env::var("DEEPSEEK_FINANCE_CHART_BASE_URL"))
                 .unwrap_or_else(|_| "https://query1.finance.yahoo.com/v8/finance/chart".into()),
         }
     }
@@ -151,7 +153,7 @@ impl FinanceTool {
     pub fn new() -> Self {
         Self {
             endpoints: FinanceEndpoints::default(),
-            client: Client::builder()
+            client: crate::tls::reqwest_client_builder()
                 .user_agent(USER_AGENT)
                 .build()
                 .expect("failed to build HTTP client"),
@@ -165,7 +167,7 @@ impl FinanceTool {
                 quote_base: quote_base.into(),
                 chart_base: chart_base.into(),
             },
-            client: Client::builder()
+            client: crate::tls::reqwest_client_builder()
                 .user_agent(USER_AGENT)
                 .build()
                 .expect("failed to build HTTP client"),
@@ -239,18 +241,20 @@ impl ToolSpec for FinanceTool {
     }
 
     async fn execute(&self, input: Value, _context: &ToolContext) -> Result<ToolResult, ToolError> {
-        let raw_ticker = optional_str(&input, "ticker")
-            .or_else(|| optional_str(&input, "symbol"))
-            .ok_or_else(|| ToolError::missing_field("ticker"))?
-            .trim();
+        let raw_ticker = match optional_str(&input, "ticker")? {
+            Some(ticker) => Some(ticker),
+            None => optional_str(&input, "symbol")?,
+        }
+        .ok_or_else(|| ToolError::missing_field("ticker"))?
+        .trim();
         if raw_ticker.is_empty() {
             return Err(ToolError::invalid_input("ticker cannot be empty"));
         }
 
-        let type_hint = optional_str(&input, "type").map(str::trim);
-        let _market_hint = optional_str(&input, "market").map(str::trim);
+        let type_hint = optional_str(&input, "type")?.map(str::trim);
+        let _market_hint = optional_str(&input, "market")?.map(str::trim);
         let timeout_ms =
-            optional_u64(&input, "timeout_ms", DEFAULT_TIMEOUT_MS).clamp(100, MAX_TIMEOUT_MS);
+            optional_u64(&input, "timeout_ms", DEFAULT_TIMEOUT_MS)?.clamp(100, MAX_TIMEOUT_MS);
 
         let request = normalize_request(raw_ticker, type_hint);
         let timeout = Duration::from_millis(timeout_ms);

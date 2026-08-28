@@ -7,5739 +7,5023 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.14] - 2026-08-12
+## [0.0.15] - 2026-08-28
 
-### Fixed
-
-- **La sesión ya no “olvida” de golpe después de pegar capturas.** Los bytes de
-  las imágenes inline que llegaron en 0.0.13 se quedaban para siempre en el
-  historial y se reenviaban en cada turno, pero el estimador de contexto los
-  contaba como **cero tokens**. Cuatro capturas de 5 MB podían sumar cientos de
-  miles de tokens invisibles: la compactación automática nunca se disparaba, el
-  proveedor rechazaba la petición por límite de contexto y el motor compactaba
-  de emergencia en silencio. El síntoma que veía el usuario era que el asistente
-  perdía de pronto el hilo de la conversación. Ahora:
-  - Los bloques `image_url` sólo conservan sus bytes en los 2 mensajes más
-    recientes que los traen; los anteriores quedan con su línea
-    `[Attached image: … at <ruta>]`, así que el modelo mantiene la referencia y
-    puede releer el archivo con `image_analyze` si la necesita. Esto también
-    baja el peso del archivo de sesión en disco.
-  - El estimador cobra las imágenes que quedan (~1 token por cada 750 bytes
-    reales, con un piso por imagen) en vez de tratarlas como gratis.
-- **La compactación de emergencia ya avisa.** Cuando el contexto se desborda y
-  el motor resume la conversación para poder continuar, se emite un aviso claro
-  antes de reintentar en vez de hacerlo callado.
-- **Cambiar de modelo ya no apaga `auto_compact`.** El default por modelo se
-  aplica una sola vez, al arrancar. Antes, saltar a un modelo de 1M de contexto
-  (o ser actualizado a uno, como pasó con el cambio de `kimi-k2.6` a `kimi-k3`
-  en 0.0.12) apagaba la compactación automática a todo el que nunca la había
-  configurado, sin decir nada. El umbral sí sigue ajustándose a la ventana del
-  modelo activo.
-
-## [0.0.13] - 2026-07-25
-
-### Added
-
-- **Imágenes inline para el modelo principal.** Las referencias
-  `[Attached image: … at <ruta>]` del composer (pegado, `/attach`, arrastrar)
-  ahora viajan como bloques `image_url` en base64 hacia el modelo ruteado
-  cuando éste tiene visión (`kimi-k3`, `kimi-k2.6`, `glm-5*`, `gpt-4o/5`,
-  `claude-*`, `gemini-*`, `*-vl`, `*vision*`). Antes sólo se enviaba la ruta
-  en texto, así que un modelo con visión quedaba ciego y había que rebotar
-  por `image_analyze` o el OCR de `read_file`. Los modelos sin visión
-  (`deepseek-*`) conservan el comportamiento anterior. Tope de 4 imágenes por
-  mensaje y 5 MB por imagen; lo que no se pueda leer se omite y deja intacto
-  el fallback.
-
-### Fixed
-
-- **Arrastrar una captura al chat ya no pierde la imagen.** El terminal no
-  pega píxeles sino una ruta, normalmente dentro del temporal del sistema
-  (`/var/folders/…/T/` en macOS), que el SO purga antes de que el modelo
-  alcance a leerla. Ahora el archivo se copia a `~/.ghosty/clipboard-images/`
-  al momento de soltarlo y se registra como adjunto. Se manejan rutas entre
-  comillas, con espacios escapados y URLs `file://`.
-
-## [0.0.12] - 2026-07-20
-
-### Added
-
-- **Kimi K3 (Moonshot)** support. `kimi-k3` is now the default model for the
-  Moonshot provider (endpoint `api.moonshot.ai/v1`): 1M context window, reasoning
-  always on, 131K max output, native vision. `kimi-k2.6` (256K) is kept and stays
-  selectable at runtime from the `/model` picker and via alias, so both can be
-  switched on the fly. Also routable through OpenRouter as `moonshotai/kimi-k3`.
-  Registered across the config/TUI provider tables, the model registry, and the
-  context/output/reasoning capability tables (both the bare `kimi-k3` id and the
-  `moonshotai/kimi-k3` slug resolve to 1M so context measurement and compaction
-  are correct on the direct and OpenRouter paths).
-
-### Fixed
-
-- **Kimi/Moonshot tool-schema 400** (`tools.function.parameters.type is required
-  and must be "object"`). Tools whose `parameters` arrived without a root
-  `type` — empty or no-arg schemas, common for MCP tools — were rejected by the
-  Moonshot API. The Kimi tool normalizer now guarantees the root `parameters`
-  stays an object typed `"object"` (and injects a default schema when absent).
-- **Kimi/Moonshot cache tokens not counted.** Moonshot reports cache-hit prompt
-  tokens as a top-level `usage.cached_tokens`, not nested under
-  `prompt_tokens_details`; usage parsing now reads either shape so the cache hit
-  rate shows in the footer instead of `Cache: unavailable`.
-- **Kimi/Moonshot reasoning leaked into the answer.** The Moonshot provider now
-  classifies streamed `reasoning_content` as thinking, so it renders as a
-  Thinking cell (respecting `show_thinking`) instead of inlining into the reply.
-- **Language mirroring for bare greetings.** A lone language-neutral greeting or
-  interjection (`hey`, `hi`, `ok`, `thanks`, …) is now treated as ambiguous
-  rather than a decisive English signal, so a one-word greeting no longer flips
-  `reasoning_content` and the reply to English against the session language.
-
-## [0.0.11] - 2026-07-12
-
-### Fixed
-
-- **Stale HTTP connections after microVM suspend/resume.** The LLM HTTP client no
-  longer reuses idle pooled connections (`pool_max_idle_per_host(0)`). In a
-  Firecracker microVM that suspends and resumes (memory snapshot), an idle socket
-  goes stale — the remote closed it during sleep and the guest's monotonic clock
-  freezes, so any `pool_idle_timeout` fails to evict it — and the next request
-  hangs on the dead socket until timeout (the agent "stops responding" after
-  sleeping). Opening a fresh connection per request (~100ms handshake, negligible
-  vs a multi-second LLM turn) fixes this at the root. Does not affect streaming.
-
-## [0.0.10] - 2026-07-09
-
-### Added
-
-- **Direct Z.AI (GLM Coding Plan) provider** (`ProviderKind::Zai`), ported from
-  CodeWhale upstream. Use a z.ai token via `ghosty auth set --provider zai` or
-  the onboarding wizard's GLM step; requests hit `api.z.ai/api/coding/paas/v4`
-  with `GLM-5.2` by default (`GLM-5.1`, `GLM-5-Turbo` also available). Full
-  parity with DeepSeek on caching and reasoning: the request uses Z.AI's
-  documented thinking shape (`clear_thinking: false`) so `reasoning_content`
-  is preserved across turns for prefix-cache hits, and the response's
-  `reasoning_content` is classified as thinking (rendered as a Thinking cell,
-  respecting `show_thinking`) instead of leaking into the answer.
-- GLM models via OpenRouter as well: `z-ai/glm-5.2` (1M context) and
-  `z-ai/glm-5-turbo` (202K) join `z-ai/glm-5.1` in the open-model routing layer.
-- Onboarding wizard: optional GLM key step after EasyBits (only when no LLM
-  provider key is configured). Entering a z.ai token persists it as the
-  `[providers.zai]` key with `provider = "zai"` and model `GLM-5.2`; skippable
-  with Enter. Localized in English and Spanish.
-- Spanish (`es-419`) reasoning-language support: the model now keeps its
-  `reasoning_content` in Spanish for `es-419` sessions when thinking is visible
-  (previously only zh/ja/pt-BR/vi were handled, so Spanish reasoned in English).
+Ghosty se rebasa sobre CodeWhale 0.9.11 (commit `c8f38f0`), el proyecto del que
+nace. El delta propio de Ghosty se reaplica encima: proveedor `easybits`, tope de
+128 tools de DeepSeek, instalador `scripts/install.sh`, paquete npm `ghostycode`,
+la mascota. Todo lo que sigue en este archivo por debajo de esta entrada es el
+historial de upstream, conservado tal cual.
 
 ### Changed
 
-- **Turn-completion notifications now default to off.** The previous `auto`
-  default shelled out to `osascript` on macOS (attributed to "Script Editor",
-  with a sound) on every turn. Opt back in with `[notifications] method =
-  "auto" | "osc9" | "bel" | "ghostty"`.
-- Config validation is provider-aware: a non-DeepSeek model id (e.g. `GLM-5.2`)
-  is accepted when the active provider can resolve it, instead of always
-  requiring a DeepSeek model id.
-
-## [0.0.9] - 2026-06-15
-
-### Added
-
-- Idle ghost mascot now animates: the block ghost on the chat empty state and
-  the onboarding welcome blinks slowly and occasionally glances around (left,
-  right, up, down) or flashes a happy look. It rests looking left, and the
-  welcome screen now uses the same block ghost as the home screen. Runs at a
-  gentle ~5.5 FPS so it stays visible even on terminals that force low-motion
-  (Ghostty, VS Code, SSH).
-- EasyBits provider (DeepSeek-compatible reseller): `provider = "easybits"`
-  maps internally to DeepSeek; one EasyBits key serves both the LLM and the
-  bundled MCP server. `ghosty auth set --provider easybits` and `/provider
-  easybits`. See `docs/PROVIDERS.md`.
-
-### Fixed
-
-- EasyBits end-to-end: CLI dispatcher allowlist, onboarding engine respawn on
-  key save, `/provider easybits` persisting the alias (not `deepseek`),
-  onboarding no longer re-prompts for a key already configured, and
-  `sync_config_provider_from_app` no longer collapses `easybits`→`deepseek` at
-  startup (root cause of "DeepSeek API key not found").
-- Clear error when a stray `DEEPSEEK_PROVIDER`/`GHOSTY_PROVIDER` env var
-  overrides an explicit `easybits` config, naming the var and the fix.
-
-## [0.0.7] - 2026-06-13
-
-### Fixed
-
-- OSC 8 hyperlinks: rewired for ratatui 0.30.1. Control chars filtered from
-  Span content; links now injected post-render via `Cell::set_symbol()` with
-  `CellDiffOption::ForcedWidth`.
-- Windows installer CI: makensis.exe path resolution via PATH refresh.
-- Flaky CI: ignored SSE reconnection test and qa_pty integration tests
-  that require a real terminal.
-- Removed FUNDING.yml referencing original repo owner.
-- Welcome screen, language picker, EasyBits onboarding all localized to
-  Spanish and other shipped locales.
-- `/mcp` output compacted to counts instead of per-tool listing.
-- Composer cursor tests pinned to English locale to fix Windows CI.
-
-## [0.0.6] - 2026-06-13
+- **Un solo binario.** El runtime está consolidado en `ghosty`; `ghosty-tui`
+  deja de publicarse como comando. El instalador del tarball refresca un
+  `ghosty-tui` previo al binario nuevo si lo encuentra, para que nadie quede
+  ejecutando código viejo. `scripts/install.sh` y npm bajan un solo archivo.
+- **`easybits` es `ProviderKind` propio**, no un alias a `deepseek`. Se cierra el
+  bug por el que persistir el proveedor escribía `"deepseek"` y perdía el modo
+  al siguiente arranque. En la capa de rutas se clasifica como revendedor
+  (pass-through), no como proveedor directo: comparte catálogo y escalera de
+  esfuerzo con DeepSeek.
+- **La marca de la cabecera dice `ghosty`.** El valor `status_indicator = "cw"`
+  sigue siendo válido por compatibilidad; cambia lo que pinta.
+- Versión del workspace y de npm: `0.0.15`. La política de numeración sigue en
+  `0.0.x`.
 
 ### Added
 
-- EasyBits MCP onboarding step (optional, non-blocking).
-- OSC 8 hyperlinks enabled by default (Cmd+Click URLs in compatible terminals).
-- Default locale changed to Spanish (es-419).
-
-### Changed
-
-- Onboarding flow simplified: Welcome → Language → ApiKey → EasyBits → Chat.
-- TrustDirectory step removed from normal onboarding flow.
-
-### Fixed
-
-- Welcome onboarding screen now localized (uses app.tr(), previously hardcoded English).
-- Spanish (es-419) added to the language picker at onboarding step 2.
-- EasyBits MCP key paste (Cmd+V) fixed during onboarding; bracketed paste events
-  were not routed to the EasyBits input field.
-- Composer cursor tests pinned to English locale to prevent locale-dependent
-  failures on CI (Spanish placeholder wraps differently at narrow widths).
-
-## [0.8.53] - 2026-06-03
-
-### Added
-
-- **Hugging Face Inference Providers.** Added `huggingface` as a native
-  provider route (`/provider huggingface`). Supports `HUGGINGFACE_API_KEY`
-  or `HF_TOKEN` for auth, `HUGGINGFACE_BASE_URL` and `HUGGINGFACE_MODEL`
-  for overrides, and `deepseek-ai/DeepSeek-V4-Pro` / `deepseek-ai/DeepSeek-V4-Flash`
-  as default models. Org-prefixed model IDs pass through.
+- **Mascota.** El fantasma en bloques vuelve a la pantalla vacía y a la
+  bienvenida, con halo y una línea de tiempo de ojos más rica (parpadeo simple
+  y doble, miradas, sonrisa, sorpresa, de reojo, corazones, sueño, brillo).
+  Reloj y despertador propios, fuera de `low_motion` a propósito: a ~5.5 fps
+  no hay parpadeo posible, y congelarlo dejaba al fantasma muerto en Ghostty,
+  VS Code y SSH.
+- **`ghosty auth set` en una instalación nueva deja ese proveedor activo.**
+  Antes guardaba la key y dejaba `provider = "deepseek"`, así que el usuario de
+  cero arrancaba con un proveedor distinto al que acababa de configurar. Sobre
+  un config existente no cambia nada.
+- **Tope de 128 tools de DeepSeek** reaplicado en `core/engine/tool_catalog.rs`:
+  aviso antes de enviar la petición. Sigue haciendo falta porque
+  `apply_tool_surface_budget` de upstream marca tools como diferidas pero no las
+  saca del array, y DeepSeek las cuenta todas.
+- `docs/TALLER.md`: guía de taller con instalación pineada, EasyBits en modo
+  híbrido (cajas por MCP, S3/DB por REST) y tabla de fallas.
 
 ### Fixed
 
-- **Agent-mode shell error copy.** The missing-tool error for shell tools
-  now directs users to `allow_shell = true` instead of nudging toward YOLO
-  mode. `/config` surfaces `allow_shell` in the Permissions section.
-- **Provider description.** `/provider` command description is now neutral
-  instead of recommending specific providers.
-
-### Community
-
-Thanks to **@xyuai** for provider persistence, `/logout` scope clarification,
-provider picker key replacement, and MiMo auth cleanup work (#2714, #2715,
-#2717, #2718), and **@RefuseOdd** for configurable `path_suffix` support on
-OpenAI-compatible endpoints (#2558).
-
-## [0.8.52] - 2026-06-03
-
-### Added
-
-- **SiliconFlow China region provider.** Added the `siliconflow-CN` provider
-  variant for the China regional endpoint, sharing the existing
-  `[providers.siliconflow]` credentials and `SILICONFLOW_API_KEY` slot
-  instead of creating a second credential namespace; the provider picker and
-  registry docs now expose the regional route explicitly (#2588, #2615).
-- **Multimodal `/attach` image forwarding.** Attached images are now sent as
-  OpenAI-compatible `image_url` content blocks so multimodal providers can
-  actually see image attachments (#2584, #2587, #2607).
-- **Sub-agent lifecycle hooks and runtime metadata.** Sub-agent spawn/complete
-  hook events, mode-change runtime messages, mode metadata on turns, localized
-  context-inspector strings, and drag-to-resize sidebar width are included in
-  this release slice.
-
-### Fixed
-
-- **Sub-agents now auto-cancel after stale heartbeats.** Running sub-agents
-  track manager-visible progress and are auto-cancelled after the configurable
-  `[subagents] heartbeat_timeout_secs` window (default 300s), releasing their
-  concurrency slot and unblocking parent turns that would otherwise wait
-  forever (#2603, #2614, #2620).
-- **Work panel state survives transient lock misses.** The sidebar caches the
-  last successful Work summary so checklist and strategy progress no longer
-  disappear into "Work state updating..." while the engine briefly owns the
-  shared todo/plan locks (#2606, #2616).
-- **SiliconFlow-CN no longer breaks main.** Filled the missing CLI provider
-  exhaustiveness arms and removed the duplicate/unreachable TUI config arms
-  left by the #2615 landing; direct auth now stores the China-region variant in
-  the shared SiliconFlow provider table (#2616, #2618, #2619).
-- **v0.8.51 image-attach closure corrected.** The `/attach` multimodal fix
-  landed after the v0.8.51 tag, so this release is the first version that
-  actually contains it for users installing from the published release line
-  (#2584, #2607).
-- **Legacy SSE MCP reconnects are retryable again.** Closed or reset
-  `POST /messages` requests on stale legacy SSE sessions now trigger the same
-  reconnect-and-retry path as closed SSE streams, removing a release-gate flake
-  and matching the intended recovery behavior (#2597).
-- **Cache-hit cost accounting uses one telemetry source.** Mixed DeepSeek
-  `prompt_cache_hit_tokens` and OpenAI-style `cached_tokens` usage payloads no
-  longer infer cache misses from the wrong hit count, avoiding inflated TUI cost
-  estimates on cached DeepSeek turns (#2567, #2609).
-- **Cygwin/MSYS2 config paths honor exported `$HOME`.** Ghosty Code and legacy
-  DeepSeek config roots now prefer a non-empty `$HOME` before falling back to the
-  platform home resolver, while `GHOSTY_HOME` remains the strongest explicit
-  override (#2369, #2610).
-
-### Community
-
-Thanks to **@xyuai** (#2587), **@IcedOranges** (#2584), **@BH8GCJ** (#2588),
-**@shenjackyuanjie** (#2618, #2619), **@idling11** (#2606, #2616),
-**@AresNing** (#2578), **@caiyilian** (#2567), **@buko** (#2369),
-**@gordonlu**, **@encyc**, and **@simuusang** (#2603, #2620) for reports,
-patches, retesting, and release-stabilization signals that shaped this pass.
-
-## [0.8.51] - 2026-06-02
-
-### Added
-
-- **Arcee AI as a direct provider.** New `[providers.arcee]` config block and
-  `ARCEE_API_KEY` / `ARCEE_BASE_URL` / `ARCEE_MODEL` environment variables,
-  wired through CLI auth (`ghosty auth set --provider arcee`), the TUI
-  provider picker, and the model registry. The default direct-API model is
-  `trinity-large-thinking` (reasoning-capable, 262K context and 262K max
-  output); `trinity-large-preview` (262K context, non-reasoning) and
-  `trinity-mini` (128K context) are also selectable. OpenRouter's
-  `arcee-ai/trinity-large-thinking` route remains separate.
-- **Arcee Cloudflare-WAF compatibility.** The opening turn to the Arcee gateway
-  uses a benign read-only tool surface (`read_file`, `list_dir`, `file_search`,
-  `grep_files`, `git_status`, `git_diff`, `checklist_write`, `update_plan`) and
-  splits example payloads such as `python -c …` out of the system prompt, so the
-  WAF does not reject the first request; the full tool catalog stays reachable
-  through tool-search. `trinity-large-thinking`'s `reasoning_content` is
-  recognized and replayed on tool-call turns.
-- **Expanded model catalog.** Added context-window, max-output, and
-  reasoning-capability metadata for additional model IDs, including
-  `qwen/qwen3.6-flash`, `qwen/qwen3.6-plus`, `qwen/qwen3.6-max-preview`, and
-  Xiaomi MiMo v2.5 chat/ASR/TTS variants; `trinity-large-preview`'s context
-  window was corrected to 262K.
-- **Provider-aware model picker.** The picker groups models by provider, shows
-  per-model hints, and remembers a saved model per provider.
-
-### Changed
-
-- **Auto-compaction is now percentage- and model-aware.** The per-model
-  threshold helper is `compaction_threshold_for_model_at_percent(model,
-  percent)` (replacing the effort-based variant), and the default
-  `auto_compact_threshold_percent` is 80%. Auto-compaction defaults on for
-  models with a context window of 256K or smaller and stays opt-in for 1M-token
-  models (e.g. DeepSeek V4) to protect prefix-cache economics, unless the user
-  has explicitly set `auto_compact`.
-- **Clearer provider/gateway errors.** HTTP error bodies are sanitized before
-  display — HTML interstitials and Cloudflare "Access Denied" pages collapse to
-  a one-line reason (with the ray/error ID) instead of dumping raw markup into
-  the transcript — and 403s are split into authentication vs. authorization
-  (gateway/WAF block) categories.
-- The invalid-model error now names the active provider and lists Arcee among
-  the options.
+- `scripts/install.sh` resolvía la versión contra `api.github.com`, que limita a
+  60 peticiones/hora **por IP**: en un taller con WiFi compartida, el asistente
+  61 no instalaba. Ahora resuelve por el redirect de `/releases/latest`, con la
+  API como respaldo. Además: preflight de `curl`/sha, verificación de que el
+  checksum cubrió la línea esperada, borrado de `com.apple.quarantine` en macOS
+  y aviso de instalación previa.
+- El wrapper npm ignoraba `ghostyBinaryVersion` y habría bajado la versión
+  equivocada en cuanto divergiera de `version`; `check-versions.sh` lo vigila.
 
 ### Removed
 
-- **The session "cycle" / checkpoint-restart system.** Removed the `/cycles`,
-  `/cycle <n>`, and `/recall` commands, the `recall_archive` tool, the
-  cycle-handoff briefing prompt, the sidebar "cycles" lines, and the
-  `cycle_manager` engine plumbing (`EngineConfig.cycle`, `Event::CycleAdvanced`,
-  seam-manager cycle thresholds and flash briefings). Long sessions no longer
-  auto-reset their context at a fixed token boundary — reclaim budget with
-  `/compact` or model-aware auto-compaction instead. Existing on-disk cycle
-  archives are left untouched but are no longer read or written.
+- Módulos que upstream retiró y Ghosty aún arrastraba: `slop_ledger` (y el
+  comando `/slop`), `seam_manager`, `session_failure_classifier`,
+  `theme_qa_audit`. `error_taxonomy/` y los tests de paleta de upstream cubren
+  lo que hacían.
+- `vision/attach.rs` y `onboarding/glm_key.rs`: superados por `image_attach.rs`
+  y por `zai` como proveedor de primera clase en upstream.
 
-### Fixed
-
-- Assistant turns no longer leave an orphaned role glyph (the stray "blue dot")
-  when a turn streams only whitespace between reasoning and a tool call.
-- Scrolling the mouse wheel over the right-hand sidebar no longer leaks into the
-  transcript scroll.
-- The sidebar hover tooltip now appears only for truncated lines, sits below the
-  cursor, and uses a neutral surface color instead of the warning-orange
-  highlight that overlapped neighbouring rows.
-- Corrected the README's description of the Constitution (Article VII is the
-  hierarchy itself; Article II's truth duty overrides even a user request) to
-  match `prompts/base.md`.
-- Repaired release-blocking unit and integration tests left failing by the
-  cycle-removal and compaction-threshold refactors (relay instruction,
-  model-reject message, compaction budget, mock-LLM threshold helper).
-- Fixed DEC private-mode CSI fragment leakage into composer text after
-  terminal resets, restoring clean prompt editing (#2592).
-- The engine now recovers from turn-level panics instead of killing the
-  main event loop, keeping the session alive through transient failures
-  (#2583, #1269).
-- Deeply nested files are now discoverable via @-mention and Ctrl+P file
-  picker; the default walk depth was relaxed to handle monorepo layouts (#2488).
-- Command-palette selection stays visible when scrolling through long lists
-  instead of scrolling off-screen (#2590).
-- exec_shell child processes now inherit .NET/NuGet and Windows app-data
-  environment variables, fixing toolchain resolution on Windows (#1857).
-- A warning is emitted when shell/sandbox config keys are nested under
-  unknown top-level sections instead of being silently ignored (#2589).
-- Diff-render now preserves leading whitespace in patch content lines,
-  fixing an extra-space regression in PR previews (#2591). Thanks @zlh124.
-- Model selection from the /model command now persists per-provider across
-  restarts, with a warning when persistence fails.
-
-### Community
-
-Thanks to **@zlh124** (#2591) and **@reidliu41** (#2601) for the fixes
-harvested into this release. Thanks also to **@idling11** (#2602),
-**@gordonlu** (#2585), **@cyq1017** (#2593), **@xyuai** (#2587, #2584),
-and **@IcedOranges** (#2584) for reports, drafts, and investigations
-that shaped this release cycle.
-
-## [0.8.50] - 2026-06-02
 
 ### Added
 
-- Added a Windows NSIS installer release artifact and classroom/lab deployment
-  checklist, harvested from #2045 for #1987. The release workflow now builds
-  `Ghosty CodeSetup.exe` from the canonical Windows binaries, and the installer
-  adds/removes only the exact current-user PATH entry.
-- Added deterministic session timestamps in session listings, receipt-export
-  boundary docs, and current-model turn metadata for routed/auto sessions.
-- Added exact AtlasCloud provider-hinted model ID pass-through for explicit
-  `vendor/model-id` selections, harvested from #2569 without freezing a
-  brittle provider catalog.
-- Added Xiaomi MiMo speech/TTS support with a `ghosty speech` CLI command,
-  `tts` tool alias, and config wiring for voice-design and voice-clone models,
-  harvested from #2560.
-- Added a three-zone immutable prefix diagnostic layer (FrozenPrefix Phase 2)
-  that logs cache-prefix drift at debug level without blocking requests,
-  harvested from #2514.
-- Added a Cache Guard CI integration test suite simulating prefix-cache
-  behaviour across nine scenarios, gated behind `GHOSTY_CACHE_GUARD=1`,
-  harvested from #2503.
-- Added a plan-mode byte-stability invariant test verifying that the tool
-  catalog head remains byte-identical across mode toggles, harvested from
-  #2519.
-- Localized all 15 `/queue` command messages across 7 shipped locales,
-  harvested from #2568.
-- Added localized `FanoutCounts` MessageId for i18n of the aggregate worker
-  stats line in fanout cards, harvested from #2566.
-- Added contribution gate CI workflows (PR gate, issue gate, contributor
-  approval) with a dry-run mode, harvested from #2565.
+- Add provider-native web search for documented Xiaomi MiMo 2.5 Pro and 2.5
+  chat routes while keeping neighboring models and custom gateways fail-closed.
+- Add structured provider-native web search for exact Z.AI global and Zhipu
+  China general API routes, using each site's documented search engine value.
+  Existing `open.bigmodel.cn` configurations now share Z.AI's official model
+  namespace and credential scope; unknown model IDs still pass through.
+- Add provider-native web search for documented Qwen models on ModelStudio
+  Token Plan's Responses Harness, without enabling Coding Plan or Anthropic
+  routes.
+- Add provider-native web search for documented DeepSeek V4 routes through the
+  Responses API, with fail-closed capability gating for compatible custom
+  endpoints.
+- Z.ai `GLM-5.3-Flash` and OpenRouter `z-ai/glm-5.3-flash` are first-class
+  picker rows (`/model GLM-5.3-Flash`). Flash is the faster/explore sibling
+  of `GLM-5.3`; the Z.ai default stays `GLM-5.3`. List price is $0.15/$0.50
+  per 1M (durable; the 50% promo through 2026-09-09 is not the catalog row).
+- Baseten, Groq, and Cerebras are bundled OpenAI-compatible setup templates
+  (`[providers.<id>] kind = "openai-compatible"`), not new `ProviderKind`
+  variants. `/provider` fills URL, model, and env from one catalog row.
+- MCP manager copy now names the server, the failure, and one recovery
+  command (`The X MCP server requires OAuth reauthentication. Run /mcp login X`).
+- Settings Advanced exposes clickable MCP Connect, Reconnect, and Diagnose
+  actions, while Extensions and Problems route recovery through the existing
+  `/mcp login`, `/mcp reload`, `/mcp validate`, and `/plugin validate` commands
+  (#5643, #5655).
+
+- Added `/import-claude` (#5557): reads `~/.claude.json` and
+  `~/.claude/settings.json` read-only and renders an explicit, reviewable
+  migration plan plus a written report. MCP servers route through the
+  existing `/mcp import <name> --approve` consent flow, allowlisted env keys
+  become an unapplied portable bundle for `ghosty config import`, and
+  permissions/hooks map to manual follow-ups; secret-shaped values are named
+  but never echoed or imported.
+- Added the managed Chat relay: account-owned Chat commands now execute on the
+  native runtime thread engine through a new `runtime_chat_relay` module
+  instead of a second execution path. Each Chat thread is a dedicated,
+  isolated runtime thread with an empty model-visible tool allowlist, a
+  chat-only system prompt, and no workspace, memory, skill, credential, or
+  local-path context; the active interactive TUI thread is never reused. The
+  relay keeps one durable state file per scope behind a session-wide owner
+  lock, binds a saved session permanently to its first remote target, replays
+  exact duplicate commands from retained results instead of starting a second
+  inference turn, terminalizes orphaned reservations on restart, and rejects
+  (never queues into) a busy local Work turn with an immediate retryable
+  result. Stop commands require the exact run and turn identity, and a worker
+  aborts on any account or target mismatch during token refresh.
+
+- Added a verified Omarchy/AUR packaging path: `packaging/aur` now carries a
+  `PKGBUILD` template, `.SRCINFO` renderer and tests, release-candidate
+  render step, and docs; the live AUR compatibility alias `ghosty-tui ->
+  ghosty` is preserved, AUR dependencies match the live package, and the
+  self-updater refuses to fight an Omarchy/package-manager installation.
+- Added a Fleet run-wide cost/token usage ceiling (R6, #5567): an accumulator
+  plus admission gate and alert bound a whole run's spend across workers.
+- Added the real provider cache hit rate to `/context` (C3, DSH #3): the
+  token-weighted provider-reported rate from the same telemetry `/cache`
+  aggregates, plus an honest "no cache telemetry yet" state when nothing is
+  recorded.
+- Added per-step cost movement: `TurnUsage` receipts are priced as they land
+  so the live cost surface moves during long agentic turns instead of only at
+  `TurnComplete` (#5578), and the footer now honestly shows `cost: unknown`
+  when nothing can be priced instead of hiding the line.
+- Added the underwater session surface: the ambient water reads session state
+  from across the room, its animation shape follows live agent activity, and
+  attention tints are steady (no breathing) with a distinct reading treatment
+  and no mid-water seam on tall windows.
+- Added `@path:START-END` ranged line mentions (#5550, picker half to follow),
+  a predictable last-copy backup file for clipboard exports with the path
+  named when the clipboard fails (#5555), `wait` on multiple background shell
+  tasks with `until=any|all` (#5549, named-kill half to follow), and composer
+  double-click word / triple-click line selection.
+- Added workflow parallel-`schema` slot partial success (#5583): a slot that
+  produces a schema-valid partial result no longer fails the whole parallel
+  branch.
+- Added plugin load-failure startup hints (#5579) and OpenRouter app
+  attribution headers on outbound requests.
+- Added `ghosty doctor --fix` (with `--yes` for non-interactive consent):
+  the doctor now computes a concrete repair plan — delete stale `.tmp*`
+  leftovers from interrupted atomic writes, tighten secret-store file
+  permissions to `0600`, disable structurally broken (Error-status) MCP
+  entries through the atomic MCP save path, and scaffold missing user-global
+  `skills`/`tools`/`plugins` directories — shows it, and applies it only after
+  explicit consent. Every action is narrowly scoped and idempotent; JSON and
+  context-JSON modes stay read-only and conflict with `--fix` (#5552, v1).
+- Added `/context` reporting of the real provider prompt-cache hit rate (C3)
+  alongside token pressure.
 
 ### Changed
 
-- Hardened theme repainting and sidebar color use so theme switches do not
-  leave stale Whale-dark panel colors behind.
-- Made legacy config migration visible when Ghosty Code copies old DeepSeek-era
-  config into the Ghosty Code config path.
+- Provider-native web search now applies domain constraints before accepting an
+  attempt, discards generated answers when returned citations violate those
+  constraints, and preserves the caller's configured/local timeout as an
+  independent fallback budget (#5681).
+- Idle session metrics omit zero facts (`0 turns`, `LLM 0s`) until the
+  runtime has evidence. Working chrome says `in the current` instead of a
+  generic `working`.
+- Deleted nine uncompiled `runtime_contract/` staging files. Live contracts
+  remain `model.rs` and `termination.rs`.
+
+- The first #5587 dead-code sweep converts audited test-only helpers to
+  `#[cfg(test)]`, keeping production builds free of test-only APIs without
+  changing runtime behavior.
+- `/plugin reload` is now discoverable when on-disk plugin bundles change: the
+  next send and `/plugin list` nudge once with `Run /plugin reload to apply`
+  instead of silently keeping the stale catalog (#5579). Trust is unchanged;
+  this does not auto-reload.
+- Context-pressure warnings and critical alerts now remain visible in sticky UI
+  status until compaction or explicit dismissal, instead of disappearing into
+  scrolling turn metadata (#5620).
+- The Runtime thread store defaults to a per-session root
+  (`$GHOSTY_HOME/sessions/<id>/runtime`) so multiple Ghosty processes on
+  one machine no longer share one owner lock (#5630). The exclusive lock is
+  unchanged; `GHOSTY_RUNTIME_DIR` still selects a shared root when that is
+  intended.
+- Session token totals now include display-only per-model-call deltas while a
+  turn is running, including input/output and cache-class counters; the
+  authoritative `TurnComplete` totals still reconcile exactly once (#5581).
+- Transcript focus now exposes per-block actions: `y` copies content, `Y`
+  copies the rendered metadata view, Enter opens a fullscreen block pager, and
+  `r` opens raw detail; the existing Tasks rail shortcuts remain unchanged
+  (#5551).
+- Provider neutrality (#5588): model resolution of omitted/aliased models is
+  now provider-relative, OpenAI-native defaults no longer route through
+  another provider's table, CLI credentials stay provider-scoped, and NVIDIA
+  credentials no longer leak into the DeepSeek keychain. Neutrality test
+  matrices exercise several providers instead of standing in with one.
+- The workflow engine module was decomposed out of its 3k-line mega-file into
+  `journal`, `usage`, and `report` modules plus a module directory (#5586
+  slices 1a/B/C/D), a semantic-free move verified by normalized-content hash.
+- Compaction refusals are now always named (#5577): silent holds under context
+  pressure are gone, the context meter honors the same provider-billed prompt
+  the trigger uses (T1), and prune outcomes are projected without cloning the
+  transcript.
+- Step budgets now end honestly: an ~80% soft landing nudges the model to
+  write its final report, and exhaustion grants exactly one bounded
+  report-on-exhaustion turn instead of dying silently (A1/A2).
+- Contributor credit: recognized agent contributors (e.g. `Ghosty Agent`)
+  may now carry `Co-authored-by` trailers; unknown bot/tool trailers are
+  still rejected by the credit gate.
 
 ### Fixed
 
-- Fixed `/context` to use the effective routed model for context-window
-  budgeting, so DeepSeek V4 routes report the 1M-token window and legacy
-  DeepSeek routes keep the 128K fallback.
-- Fixed npm wrapper version output so `--version` prefers the installed binary
-  version instead of stale package metadata when both are available.
-- Fixed multiline composer arrow navigation so holding Up/Down at the first or
-  last line no longer replaces the current draft with prompt history.
-- Fixed foreground `exec_shell` output collection so timeout and inherited-pipe
-  cleanup cannot wedge later tool calls behind the global tool lock.
-- Clarified the English DeepSeek account-balance footer chip from `bal` to
-  `balance` so it is less likely to be mistaken for session spend.
-- Fixed truncated subagent tool calls and repeated truncated subagent responses
-  so they return model-visible errors instead of silently failing.
-- Moved Paste to the first position in the right-click context menu so users
-  copying text from the output area can paste with a single left-click instead
-  of navigating past cell-specific actions.
+- Account sessions no longer read the macOS Keychain. Unsigned or rebuilt
+  `ghosty` binaries were a new Keychain ACL principal every time, so
+  `ghosty web` and the TUI popped a password dialog on start. Sessions
+  now use `~/.ghosty/secrets/secrets.json` (mode 0600), the same store
+  as provider keys. Extracted from the Keychain-retirement half of #5632.
+- Hardened the dispatcher-side config parse the same way: `ConfigStore`
+  loads and project-config parsing now deserialize `ConfigToml` on a
+  dedicated 16 MiB-stack thread (the guided-setup save path could overflow
+  a 2 MiB worker stack the same way the TUI's `ConfigFile` parse did), and
+  the #5585 setup-confirm toast test runs its runtime on an equally sized
+  thread instead of overflowing the default libtest stack.
+- Fixed detached interactive agents reporting worker usage after the parent
+  turn ends with the usage missing from the session/live `/cost` total
+  (#5597): interactive turns acquire an owner-scoped runtime usage lease,
+  late usage enters the session cost pool without reopening the sealed
+  mailbox, and worker/session/reload accounting share one hashed response
+  identity so retried deliveries stay exactly-once.
+- Fixed the sub-agent fiasco class: in-workspace absolute `git -C` no longer
+  trips the read-only child shell gate with a coherent bounded gate (#5595),
+  turn end parks turn-owned children resumably instead of silently cancelling
+  them (#5596), stale write-claims are released by liveness with coordinate
+  release (#5562), and the verifier role description matches its real
+  surface (#5562).
+- Fixed workflow responseSchema failure handling (#5583): bounded repair with
+  typed receipts (kind + attempt), raw-output receipts persisted as artifacts
+  that survive reload, and failures surfaced instead of null success (#5528).
+  Degraded owner snapshots no longer project as ordinary Completed runs
+  (#5582), typed task error kinds enable fail-fast parallel/pipeline (R9), and
+  `/workflow confirm` finds the draft despite interleaved messages.
+- Fixed the DeepSeek session that never auto-compacted at 842k/1M (#5577): the
+  exact `billed_842k_on_a_1m_window_compacts_despite_a_small_estimate`
+  regression pins the trigger.
+- Fixed sandbox escapes and authority gaps: workspace-write tools resolve
+  hard-linked files before writing (S2, #5569), an opt-in read deny-list
+  bounds full-disk reads in any posture (S1, #5568), and session grants match
+  the command family instead of widening the whole tool (R2).
+- Fixed provider-transport robustness: non-streaming HTTP requests are bounded
+  by a read timeout (R4), and Chat-Completions mid-stream error frames surface
+  instead of hanging (R3). MCP OAuth expiry now reacts to 401/403 with a named
+  recovery path and login hint instead of looking like a broken server (T4,
+  #5572).
+- Fixed Fleet lifecycle gaps: detached workers are reaped when their manager
+  dies (R7) and the per-task wall-clock timeout is enforced (R5); the local
+  Fleet host compiles on non-Unix targets; detached schema repair stays within
+  the runtime budget.
+- Fixed prompt-cache correctness: the tool catalog is fingerprinted in
+  provider wire order (C1), prefix changes between requests are always
+  declared (C5) — including the newly named mid-turn `change:tool_surface`
+  reasons for deferred-tool admission, tool-search activation, and runtime MCP
+  tool arrival — and a reasoning-only response stopped at the output limit now
+  fails the turn honestly instead of re-issuing a request that can only
+  reproduce the stop.
+- Fixed docs/public-surface drift: REBRAND.md no longer presents
+  `api.deepseeki.com` as a China fallback (#5564), and the web facts/tool
+  counts match the repository.
 
-### Community
+- Heavy pull requests now run the real Linux workspace nextest, doctest, and
+  lockfile lanes directly on GitHub Actions instead of reporting a green
+  placeholder while waiting for a branch-specific CNB mirror (#5547).
+- Fleet roster members in a selected Fleet now expose a visible edit affordance
+  and a direct `m` model-picker shortcut, while the coordinator row remains
+  read-only (#5604, covers #5589).
+- The context inspector now attributes bounded tool-schema cost to the built-in
+  catalog and each discovered MCP server without changing prompt assembly or
+  cache behavior (#5553).
+- The goal-continuation quiet period (`[goal] continuation_delay_seconds`,
+  added in #5508) now applies on every dispatch path. Previously the
+  within-turn dispatch hook fired the next continuation prompt immediately
+  whenever a model step ended with the goal still active, so CLI-resumed and
+  host-managed sessions never observed the configured delay (measured
+  end-to-start gaps of ~9 s with a 300 s delay configured). The wait now
+  runs unconditionally inside `goal_continuation_message_if_needed`,
+  remains cancellable, and pause/clear/terminal `update_goal` calls still
+  cancel a pending pass (#5534).
+- Two unit tests no longer depend on process-global environment state that
+  sibling tests mutate concurrently.
+  `route_budget::tests::v4_trigger_uses_window_percent_when_it_fits_spendable_input`
+  asserted no-override output-budget values while reading
+  `GHOSTY_MAX_OUTPUT_TOKENS` / `DEEPSEEK_MAX_OUTPUT_TOKENS` without
+  holding `lock_test_env()`, so a concurrent writer could flip the value
+  mid-assertion (the order-dependent full-suite flake).
+  `prompts::tests::system_prompt_prefix_never_leaks_private_content` read the
+  real home via `HOME`/`USERPROFILE`, so a machine with
+  `~/.ghosty/instructions.md` leaked its absolute path into the prompt and
+  failed the no-private-paths assertion unless a sibling's temporary `HOME`
+  guard happened to be live. Both tests now hold the env barrier and pin the
+  variables (the route-budget test removes the overrides; the prompts test
+  points `HOME`/`USERPROFILE` at a scratch dir). Assertions unchanged.
 
-Thanks to **@ZhulongNT** (#2045), **@cyq1017** (#2521, #2536, #2537, #2559,
-#2562, #2563, #2564), **@HUQIANTAO** (#2527, #2519, #2503), **@lucaszhu-hue**
-(#2569), **@idling11** (#2573), **@encyc** (#2514), **@xyuai** (#2560),
-**@gordonlu** (#2568, #2566), and **@nightt5879** (#2565) for the work
-harvested into this release pass. Thanks
-also to issue reporters and verification helpers including **@New2Niu**
-(#2561), **@buko** (#2533, #2369), **@wywsoor** (#2494), **@ctxyao** (#2556),
-**@Dr3259** (#2380), **@caiyilian** (#2567), and **@chinaqy110** (#2571) for
-reports and acceptance details that shaped these fixes, plus the WeChat/Chinese
-UX reports relayed during the final triage pass.
+- TUI sessions now apply a subtle OSC 12 cursor accent only on explicitly
+  supported terminals and restore the terminal default through normal, panic,
+  and signal cleanup paths (#5554).
 
-## [0.8.49] - 2026-06-01
+## [0.9.11] - 2026-08-22
+
+Ghosty v0.9.11 tightens the long-running agent loop, makes workflow
+failures visible instead of successful-looking, adds an experimental
+vision-capable DeepSeek route, and prepares reproducible Ghosty-versus-Pi
+evaluation without publishing a result before a real run. The complete
+item-level change record is retained below the categorized release highlights.
 
 ### Added
 
-- Added the missing `[providers.moonshot]` example block for Moonshot/Kimi,
-  documented `completion_sound`, and refreshed the tool-surface docs for the
-  current registry, including `finance`, `web.run`, git history tools, memory,
-  OCR, and other registered tools.
+- Added first-party `deepseek-v4-flash-vision-exp` discovery and selection for
+  DeepSeek, including the `flash-vision` alias, bundled offline metadata,
+  registry and picker entries, and image-input capability on the chat route.
+  Context and output limits inherit from V4 Flash until DeepSeek publishes
+  distinct values; pricing remains unknown rather than guessed.
+- Added a provider-controlled Ghosty-versus-Pi parity harness with three
+  hermetic coding tasks, route and reasoning-effort receipts, doctor/dry-run
+  modes, and bounded result artifacts. The repository ships the harness, not a
+  benchmark verdict; comparable real runs remain an acceptance gate.
+- Added portable, secret-free config export/import with a reviewable plan,
+  explicit headless consent, backup and rollback, and idempotent re-import.
+- Added bounded multi-file diagnostics through the existing model-facing `lsp`
+  tool without increasing the tool-catalog count. Thanks to **Isabel Wu
+  ([@wuisabel-gif](https://github.com/wuisabel-gif))** for PR #5524.
+- Added portable presentation, media-attachment, and operation-digest facets to
+  the command contract, then moved all seven utility handlers onto the
+  contract-backed dispatch path. Thanks to **Paulo Aboim Pinto
+  ([@aboimpinto](https://github.com/aboimpinto))** for PR #5525.
 
 ### Changed
 
-- Hardened prefix-cache fingerprints to hash API-visible tool schema details,
-  not just tool names, so schema and description drift invalidates cached
-  prefixes before it can confuse model calls (#2264).
-- Kept `finance` registered independently from web-search tools and prevented
-  duplicate web/patch tool registration in agent and YOLO modes.
+- Sub-agent, Fleet-worker, workflow-task, and thread-runtime model turns no
+  longer inherit a hidden role-based step ceiling. An omitted or zero
+  `max_steps` is unbounded; a positive user/config value remains an explicit
+  cap and is still clamped to the runtime safety ceiling. Wall-clock, provider,
+  heartbeat, cancellation, and admission safeguards are unchanged.
+- `/rc` now mirrors one shared session rather than transferring terminal
+  ownership: local and web prompts remain available while idle, approvals use
+  first-decision-wins semantics, and transport/integrity failures remain
+  fail-closed.
+- The terminal status rows around the composer are now two stable bands:
+  `provider · model · thinking level` is the persistent identity row below
+  the composer in every phase, and a separate activity row above the
+  composer carries the live phase, notices, and cost/metrics. Sending a
+  prompt no longer relocates the route identity above the composer, and
+  neither row ever duplicates it.
+- The embedded local Web client now uses the current CWC Ocean hierarchy and
+  readable control sizing, follows the shared Enter/Shift+Enter composer
+  grammar, and chooses a provider plus model per new thread without mutating
+  Runtime defaults. Exact image-input capability is labelled honestly; a
+  vision-capable route does not imply that browser attachments exist.
+- The runtime now has one authoritative model-turn loop. The placeholder
+  `crates/core` engine tree is gone, while the active TUI loop and its extracted
+  tool-call stages retain existing policy, hook, cancellation, and budget
+  behavior. Thanks to **Sun Zhenyuan
+  ([@bistack](https://github.com/bistack))** for PR #5523.
 
 ### Fixed
 
-- Fixed the DeepSeek V4-Pro cost estimate after the 2026-05-31 pricing cutoff:
-  the post-promotion official rate remains one quarter of the original price,
-  so Ghosty Code no longer shows roughly 4x too much after June 1 (#2489).
-- Fixed Kimi/Moonshot tool schema normalization by moving parent `type` fields
-  into `anyOf`/`oneOf` items, with regression coverage for nested schema shapes
-  that could otherwise still fail Kimi validation (#2438).
-- Fixed raw ANSI/SGR fragments leaking into footer, shell-label, and sidebar
-  activity text during active tool execution (#2481).
-- Fixed `[tui]` config parsing when `status_items` is omitted, restoring the
-  documented default footer order for older and hand-written configs (#2483).
-- Fixed a shell env-scrubbing test so it does not depend on the user's default
-  shell understanding POSIX parameter expansion.
-- Removed stale `qwen/qwen3.7-max` references left in `config.example.toml`
-  after the v0.8.48 preset removal.
-
-### Community
-
-Thanks to **@idling11** (#2480, #2485), **@reidliu41** (#2493),
-**@hongqitai** (#2495), and **@encyc** (#2477) for the fixes and reliability
-work harvested into this release.
-
-Thanks also to reporters and verification helpers whose issues shaped the
-release: **@A-Corner** (#2438), **@taiwan988** (#2483), **@AiurArtanis**
-(#2489), and **@blissito** (#2481).
-
-## [0.8.48] - 2026-05-31
-
-### Added
-
-- **Recent large OpenRouter model presets.** Added completions, aliases,
-  routing metadata, and docs for Arcee Trinity Large Thinking,
-  MiniMax M3, Xiaomi MiMo v2.5, Qwen 3.6 open-weight models, Kimi K2.6,
-  GLM 5.1, Tencent Hy3, Gemma 4, and Nemotron (#2461).
-- **Provider and web-search expansion.** Added Xiaomi MiMo provider support,
-  SiliconFlow, AtlasCloud static models, Volcengine Ark search, Baidu AI
-  Search, provider-picker coverage, and richer custom-provider docs
-  (#2246, #1868, #2421, #2429, #2371, #2394, #2287).
-- **Workflow and tool ergonomics.** Added the external-tool abstraction,
-  pluggable TUI tool registry, custom slash-command allowed-tools enforcement,
-  opt-in Unix socket hook sink, message-submit transform hooks, tool-cache
-  introspection, and cache warmup-key tracking (#2294, #2420, #2326, #2430,
-  #2434, #2423, #2424).
-- **TUI workflow features.** Added `/purge`, `/hunt`, thinking fold/unfold,
-  terminal-transparent/Solarized Light/Claude themes, footer branch display,
-  macOS notifications, intent summaries before approval prompts, and the
-  mobile runtime smoke/QR workflow (#2387, #2306, #2385, #2276, #2270, #2267,
-  #2347, #2260, #2389, #2403).
-- **Platform and localization coverage.** Added RISC-V prebuilt-binary
-  support, Vietnamese localization, Java/Vue language-server defaults, runtime
-  event envelopes, task migration/env isolation fixes, and state-message
-  parent IDs for future forks (#2383, #2358, #2367, #2252, #2272, #2308).
-
-### Removed
-
-- **Qwen 3.7 Max OpenRouter preset.** Removed from the model registry, docs,
-  and examples. Qwen 3.7 Max is a hosted model, not open-source; the preset
-  will return when an open-weight Qwen 3.7 release ships.
-
-### Changed
-
-- **Release hardening.** CI now runs clippy/docs checks, web frontend lint and
-  type checks, provider-registry drift checks, broader crate docs, and a large
-  unit-test pass across core, MCP, TUI core, app-server, and web helpers
-  (#2443, #2444, #2274, #2446-#2460, #2440, #2441, #2450, #2448, #2454).
-- **Prompt, context, and model routing behavior.** Stabilized project-context
-  pack ordering, exposed the auto route in turn metadata, allowed embedders to
-  override or inline constitutional instructions, moved volatile environment
-  context below the prompt boundary, and used the effective model for
-  compaction budgeting (#2418, #2410, #2356, #2311, #2314, #2437).
-- **Execution policy foundation.** Added typed ask-rule groundwork and kept
-  `task_shell_start` gated behind `allow_shell`, preparing the permission UI
-  path without broadening default shell access (#2404, #2384).
-
-### Fixed
-
-- **Windows and shell reliability.** Suppressed alt-screen logging on Windows,
-  added the Windows batch launcher path, kept task shell tools eagerly loaded,
-  loaded exec-shell companion tools consistently, covered controlling-terminal
-  behavior, and improved shell tool availability errors (#2259, #2295, #1861,
-  #2271, #2331, #2414, #2412).
-- **Session and transcript durability.** Fixed hidden-worktree discovery
-  saturation, stalled in-progress turn recovery, session persistence
-  truncation, cached-transcript user-message highlighting, large tool-output
-  receipting, session-detail block serialization, and deterministic composer
-  history flushing (#2273, #2329, #2283, #2395, #2386, #2297, #2265, #2375).
-- **Provider and UI polish.** Accepted custom model IDs in `/model` for
-  non-DeepSeek providers, fixed Feishu per-chat model switching, localized
-  context-menu labels, updated terminal tab naming, kept picker selections
-  visible, allowed slash-space composer messages, and improved PDF text
-  cleanup (#2280, #2149, #2320, #2319, #2324, #2316, #2266).
-- **Security and dependency hygiene.** Bumped `tar` and `qs`, trusted fake-IP
-  placeholder ranges only when explicitly configured, decoded Bing result URL
-  entities, fixed legacy MCP SSE connections, and replaced manual tool error
-  display code with `thiserror` derives (#2364, #2425, #2355, #2245, #2301,
-  #2442).
-
-### Community
-
-Thanks to contributors whose PRs landed or were harvested in this release:
-**@cy2311** (#1861),
-**@LING71671** (#1902, #2287, #2292),
-**@axobase001** (#1968, #2296, #2297, #2298),
-**@dzyuan** (#1993),
-**@mvanhorn** (#2107, #2236),
-**@malsony** (#2129),
-**@gaord** (#2133, #2265, #2285),
-**@yuanchenglu** (#2149),
-**@idling11** (#2161, #2266, #2306),
-**@h3c-hexin** (#2245, #2311, #2313, #2314, #2354, #2355, #2356),
-**@AdityaVG13** (#2246),
-**@Sskift** (#2248),
-**@cyq1017** (#2252, #2332, #2375),
-**@HUQIANTAO** (#2257, #2267, #2283, #2384, #2385, #2389, #2403, #2440-#2458, #2460),
-**@New2Niu** (#2260),
-**@AiurArtanis** (#2270),
-**@Lee-take** (#2272),
-**@nightt5879** (#2274, #2344, #2347, #2373),
-**@AresNing** (#2278, #2318/#2434),
-**@AccMoment** (#2281),
-**@reidliu41** (#2291, #2316, #2324, #2357, #2366, #2386, #2431),
-**@aboimpinto** (#2290, #2294, #2295, #2326, #2433),
-**@zhuangbiaowei** (#2301),
-**@donglovejava** (#2302, #2329, #2330, #2331),
-**@hongqitai** (#2308, #2432),
-**@zlh124** (#2319, #2320, #2325),
-**@encyc** (#2336, #2338),
-**@Implementist** (#2426/#2429, #2439),
-**@lihuan215** (#2333/#2430),
-**@LeoAlex0** (#2388, #2395),
-**@jimmyzhuu** (#2371),
-**@rockyzhang** (#2383),
-**@mo-vic** (#2387),
-**@hufanexplore** (#2367),
-**@hoclaptrinh33** (#2358),
-and **@BryonGo** (#2437).
-
-Thanks also to reporters and verification helpers whose issues, patches,
-screenshots, logs, or retest requests shaped this release: **@buko** (#2359,
-#2360, #2369, #2469), **@yyyCode**, **@gaslebinh-glitch**, **@Dr3259**,
-**@lpeng1711694086-lang**, **@VerrPower**, **@yan-zay**, **@jretz**,
-**@Neo-millunnium**, **@caeserchen**, **@T-Phuong-Nguyen**, **@zhyuzhyu**,
-**@0gl20shk0sbt36**, **@hatakes**, **@goodvecn-dev**, **@bevis-wong**,
-**@PurplePulse**, and **@nbiish**.
-
-## [0.8.47] - 2026-05-26
-
-### Added
-
-- **Closed-loop verification gate, runtime goal tools, DuckDuckGo default
-  web search, Xiaomi MiMo, global AGENTS.md fallback, `/new`, composer
-  selection, transcript copy cleanup, CNB mirror support, and Docker toolbox
-  docs** shipped in the published v0.8.47 release.
-
-### Changed
-
-- **DeepSeek-first release framing, project-context logging, state-root
-  migration, Ghosty Code README paths, and reasoning-locale behavior** were
-  finalized for the v0.8.47 release.
-
-### Fixed
-
-- **Provider picker scrolling, auto model restore, cache-inspect hashing,
-  insecure LAN provider guard, large tool-output compaction, queued-message
-  ordering, shell/Yolo startup handling, Windows alt-screen logging, and
-  tooltip contrast** were fixed in the v0.8.47 release.
-
-### Community
-
-Thanks to contributors credited in the v0.8.47 GitHub Release, including
-**@Fire-dtx**, **@imkingjh999**, **@harvey2011888**, **@victorcheng2333**,
-**@IIzzaya**, **@PurplePulse**, **@cyq1017**, **@knqiufan**,
-**@Colorful-glassblock**, **@hongqitai**, **@EmiyaKiritsugu3**,
-**@aboimpinto**, **@HUQIANTAO**, **@mvanhorn**, **@LING71671**, and
-**@reidliu41**.
-
-## [0.8.46] - 2026-05-26
-
-### Added
-
-- **`GHOSTY_*` env aliases.** `GHOSTY_PROVIDER`, `GHOSTY_MODEL`,
-  and `GHOSTY_BASE_URL` are public product-scoped aliases that take
-  precedence over the legacy `DEEPSEEK_*` forms. The `DEEPSEEK_*` names
-  remain accepted for back-compat.
-- **Platform archive bundles.** Release artifacts now ship as per-platform
-  archives (`tar.gz` for Linux/macOS, `.zip` for Windows) containing both
-  `ghosty` and `ghosty-tui` binaries plus an install script. No more
-  downloading two loose files and guessing which ones to pick (#2193).
-- **Windows portable archive.** `ghosty-windows-x64-portable.zip` ships
-  the two binaries without an install script for USB-stick distribution
-  (#2193).
-- **Web install download tile.** The website install page now shows a
-  platform-aware download tile with arch detection, SHA256 checksum
-  display, and China mirror links, instead of burying the download behind
-  the Cargo instructions (#2192).
-- **Whale dark palette refresh.** Better contrast and layer separation
-  across the TUI color scheme (#2197).
-- **Auto-collapse finished sub-agents.** Completed sub-agent sessions now
-  collapse automatically in the sidebar, reducing noise during long
-  sessions (#2195).
-- **Shell-running status chip.** A `⏳ shell running` chip appears in the
-  TUI footer while background shell tasks are active (#2194).
-- **Sandbox process hardening (Linux).** `PR_SET_DUMPABLE=0`,
-  `NO_NEW_PRIVS`, and `RLIMIT_CORE=0` are applied at shell startup to
-  harden child processes against inspection and privilege escalation
-  (#2183).
-- **CONTRIBUTING.md cross-links.** Issue and PR templates are now
-  cross-linked from CONTRIBUTING.md to improve contributor onboarding
-  (#2203).
-
-### Changed
-
-- **DeepSeek-first focus.** v0.8.46 refocuses on delivering the
-  highest-quality experience on DeepSeek first. Additional first-class
-  provider paths are planned for v0.9.0 after the core DeepSeek workflow
-  is solid.
-
-### Fixed
-
-- **Model name casing preserved.** `normalize_model_name_for_provider` no
-  longer lowercases user-set model names such as `DeepSeek-V4-Flash`,
-  preventing API lookup failures on case-sensitive backends (#2109).
-- **Esc in model picker applies selection.** Dismissing the model picker
-  with Esc now applies the last-highlighted choice instead of reverting
-  (#2196).
-- **Web install downloads both binaries.** The `install-binary.tsx`
-  snippet now fetches both `ghosty` and `ghosty-tui`, fixing the
-  `MISSING_COMPANION_BINARY` trap on fresh npm installs (#2191).
-- **`grep_files` skips large directories.** The pure-Rust search tool
-  now skips known-large directories (`.git`, `node_modules`, `target`)
-  before walking, preventing hangs on deep or slow filesystems.
-- **Version-update hint uses semver.** The update notification in the
-  footer now compares versions semantically instead of lexicographically,
-  so `0.8.10 > 0.8.9` is recognized correctly.
-- **CVE-2026-8723 in feishu-bridge.** Bumped `qs` to `>=6.15.2` in the
-  Feishu bridge integration (#2198).
-
-### Community
-
-Thanks to new contributors whose PRs landed in this release:
-**@donglovejava** (#2154, #2163, #2166, #2167, #2168),
-**@encyc** (#2152),
-**@saieswar237** (#2178),
-**@sximelon** (#2174),
-**@nanookclaw** (#2135),
-**@Sskift** (#2119),
-**@xin1104** (#2105),
-**@mrluanma** (#2059),
-**@Lellansin** (#2055),
-**@zhuangbiaowei** (#2145),
-**@aboimpinto** (#1872),
-and continuing contributors **@reidliu41**, **@cyq1017**, **@idling11**,
-**@h3c-hexin**, **@wdw8276**, **@zlh124**, and **@jeoor**.
-
-## [0.8.45] - 2026-05-25
-
-### Added
-
-- **RLM session objects.** `rlm_open` can now load `session://` refs,
-  exposing the active prompt, history, and session data as symbolic objects
-  inside RLM REPLs (#2047).
-- **Command palette voice input.** The command palette can launch a configured
-  speech-to-text helper and show footer status while transcription runs
-  (#2047).
-- **Moonshot/Kimi provider.** Moonshot/Kimi is now a first-class provider,
-  including API-key auth, model completion, CLI auth, secret-store
-  integration, and optional Kimi CLI credential reuse.
-- **Deterministic whale-species sub-agent names.** Sub-agents now get stable,
-  human-readable whale-species nicknames (e.g. "Beluga", "Orca") while
-  preserving the raw agent ID in the popup (#2035, #2016).
-- **`/balance` command scaffold.** Registered the `/balance` slash command
-  as a placeholder for future provider billing queries (#2035, #2019).
-- **Readable `/restore` snapshot labels.** Snapshot labels now include the
-  originating user prompt so restore listings are easier to identify. Thanks
-  @idling11 (#2111).
-- **Sidebar hover tooltips.** Truncated Work and Tasks sidebar lines now expose
-  their full text on hover. Thanks @idling11 (#2110).
-
-### Changed
-
-- **AGENTS.md is now maintainer-local.** The project instructions file no
-  longer ships as a tracked repo file; it lives in maintainer-local ignored
-  state (#2047).
-
-### Fixed
-
-- **Sub-agent completion handoff compatibility.** Completion handoffs now use a
-  chat-template-safe role and emit before terminal updates, fixing strict
-  OpenAI-compatible/self-hosted backends and preserving transcript ordering.
-  Thanks @h3c-hexin and @cyq1017 (#2057, #2120).
-- **Self-hosted context budgeting.** Sub-500K self-hosted model windows now keep
-  a usable input budget instead of disabling preflight compaction after output
-  reservation underflow. Thanks @h3c-hexin (#2060).
-- **Goal prompts start actionable.** Goal-start prompts now open in an
-  actionable state instead of requiring an extra nudge. Thanks @cyq1017
-  (#2097).
-- **Composer session title display.** The composer chrome shows the current
-  session title again and avoids grayscale luma overflow in debug builds.
-  Thanks @wdw8276 (#2108).
-- **Approval prompts use a one-step confirmation flow.** Enter now commits the
-  selected approval option directly, destructive warnings remain visible, and
-  abort cancels the active turn instead of only denying the current tool call.
-  Thanks @reidliu41 (#2143).
-- **Model picker selection survives Esc.** Dismissing the model picker with Esc
-  no longer loses the highlighted selection. Thanks @reidliu41 (#2056).
-- **Moonshot/Kimi sessions launch from the dispatcher.** The `ghosty`
-  wrapper now includes Moonshot/Kimi in the TUI provider allowlist, so
-  `ghosty --provider moonshot --model kimi-k2.6` reaches the TUI instead of
-  stopping after config resolution.
-- **Slash recovery no longer restores command tails in the composer.**
-  Resuming a session or recovering from a crash no longer leaves stale
-  slash-command text (e.g. `/sessions`) in the composer input (#2047, #2032).
-- **Remembered tool approvals now update the live active turn.**
-  When the "remember" checkbox is set on an approval dialog, the active
-  turn's auto-approve flag flips immediately instead of waiting for the
-  next turn. Thanks @gaord (#2047, #2041).
-- **YAML block scalars in SKILL.md frontmatter.** Multi-line descriptions
-  using `>` or `|` indicators are now parsed correctly — folded block
-  scalars join non-empty lines with spaces, literal scalars preserve
-  newlines, and all three chomping modes (strip/clip/keep) are supported.
-  Thanks @zlh124 (#1908, #1907).
-- **User messages highlighted in the transcript.** User-authored messages
-  now render with a full-row background in the live TUI transcript, making
-  it easier to scan prior turns. Assistant and system messages are
-  unaffected. Thanks @reidliu41 (#1995, #1672).
-- **Cancellable `list_dir` and `file_search`.** Long directory walks and
-  file searches now respond to user cancel/stop requests with a 30-second
-  fallback timeout, preventing the TUI from hanging on deep or slow
-  filesystems (#2035).
-
-### Community
-
-- **README contributor acknowledgements resynced.** The Thanks list now
-  includes the latest contributor rows for @donglovejava, @encyc,
-  @saieswar237, @sximelon, @nanookclaw, @Sskift, @xin1104, @mrluanma,
-  @Lellansin, and @zhuangbiaowei, while preserving the existing @jeoor
-  acknowledgement in the consolidated list.
-
-## [0.8.44] - 2026-05-24
-
-### Added
-
-- **`codew` convenience alias.** `codew` is a short-form command that silently
-  forwards to `ghosty`. Six fewer keystrokes, same binary. Ships with the
-  Rust `ghosty-cli` crate and the npm `ghosty` package (#2013).
-- **Session picker inline rename.** Press `r` in the session picker (Ctrl+R)
-  to rename the selected session inline. Type the new title, Enter to confirm,
-  Esc to cancel (#1600).
-- **Plan detail display.** The \"Plan Confirmation\" modal now shows the plan
-  explanation and step list from `update_plan` so you can review what was
-  proposed before accepting (#834).
-- **Agent team UX.** Delegate cards in the transcript now show human-readable
-  roles (scout, builder, reviewer, verifier, executor) and the completion
-  summary instead of raw `agent_xxx` IDs (#1981).
-- **`--continue` / `-c` CLI flag.** `ghosty --continue` resumes your most
-  recent interactive session for the current workspace.
-
-### Changed
-
-- **App state migrates to `~/.ghosty/`.** New installs write product-owned
-  state (config, sessions, tasks, skills, logs, etc.) under `~/.ghosty/`.
-  `~/.deepseek/` continues to work as a compatibility fallback — no data loss,
-  no forced migration. `GHOSTY_HOME` and `GHOSTY_CONFIG_PATH` env vars
-  are now supported alongside existing `DEEPSEEK_*` vars (#2011).
-- **Project config overlay prefers `.ghosty/config.toml`** before
-  `.deepseek/config.toml`. Both are read; the Ghosty Code root takes precedence.
-- **Doctor reports active state root** and whether legacy `~/.deepseek/`
-  state is also present.
-- **README contributor acknowledgements are current for this release.**
-  Thanks @jeoor, @LING71671, and @ousamabenyounes for the fixes and reports
-  now reflected in the public credits.
-- **Harvested-contribution credit audit completed.** The README Thanks list now
-  includes previously missed community helpers whose code, reports, or review
-  notes were already credited in older changelog entries but not in the public
-  contributor surface: @mvanhorn, @krisclarkdev, @tdccccc, @LittleBlacky,
-  @AnaheimEX, @THatch26, @alvin1, @knqiufan, @IIzzaya, @duanchao-lab,
-  @imkingjh999, @eng2007, @chennest, @kunpeng-ai-lab, @asdfg314284230,
-  @maker316, @lalala-233, @muyuliyan, @czf0718, @MeAiRobot, @tiger-dog,
-  @MMMarcinho, @lucaszhu-hue, @sandofree, @zhuangbiaowei, @NorethSea,
-  @Jianfengwu2024, @Fire-dtx, @oooyuy92, @qinxianyuzou, @tyouter,
-  @xulongzhe, @YaYII, @47Cid, and @JafarAkhondali.
-- **Harvest guidance now requires GitHub-visible attribution.** Maintainer
-  harvests should preserve the original commit author where possible or add
-  `Co-authored-by` trailers from the original PR commits, in addition to the
-  existing `Harvested from PR #N by @handle` trailer and changelog credit.
-- **Enter now steers when busy-waiting.** When the model is busy but not
-  actively streaming (waiting on tool results, sub-agents, or shell
-  commands), pressing Enter tries to steer your message into the current
-  turn instead of silently queueing it. During active streaming, Enter
-  still queues to avoid interrupting in-flight reasoning (#2009).
-
-### Fixed
-
-- **`/save` no longer creates repo-local `session_*.json`.** Default saves
-  now go to the managed sessions directory instead of the current workspace.
-  Explicit `/save path/to/file.json` exports still work as before (#2010).
-- **Boot-time session prune** caps managed sessions at 50 on every startup,
-  preventing unbounded growth of `~/.ghosty/sessions/`.
-- **Checkpoint path resolution** no longer hardcodes `~/.deepseek/` — uses
-  the resolved session directory instead.
-- **Plain startup no longer auto-opens the session picker.** `ghosty` and
-  `codew` start in a fresh composer again even when saved sessions exist.
-  Use `/sessions`, Ctrl+R, `--resume`, or `--continue` when you want to resume.
-- **Work sidebar now refreshes immediately** after `checklist_write`,
-  `checklist_update`, and `update_plan` tool calls, matching the existing
-  `todo_write` behavior instead of relying on the 2.5s periodic poll (#1787).
-
-## [0.8.43] - 2026-05-24
-
-### Fixed
-
-- **`grep_files` now respects the cancellation token.** Long-running file
-  searches cancel promptly instead of running to completion after the user
-  aborts (#1839). Thanks @LING71671.
-- **npm installer stream-pause race condition fixed.** The install script now
-  pauses HTTP response streams immediately, preventing early data loss that
-  caused "Invalid checksum manifest line" errors (#1860). Thanks @jeoor.
-- **Ctrl+Z restores the last cleared composer draft.** Pressing Ctrl+Z in an
-  empty composer recovers the text that was last cleared with Ctrl+U or
-  Ctrl+S, matching the muscle memory users expect from other editors (#1911).
-  Thanks @LING71671.
-- **Clipboard works on non-wlroots Wayland compositors.** The Linux clipboard
-  path now tries `wl-copy` before `arboard`, fixing silent copy failures on
-  niri, River, cosmic-comp, and GNOME mutter (#1938). Thanks @ousamabenyounes.
-
-### Added
-
-- **`/goal` remains the persistent objective surface.** Use `/goal <objective>`
-  to set a goal and `/goal done` to mark it complete. Goal status appears in
-  the Work sidebar with elapsed time, but it does not change Plan / Agent /
-  YOLO mode or approval behavior. A tabbed Ralph-style Goal loop is deferred to
-  v0.8.44 (#2007).
-- **Post-turn receipts cite evidence for every completed turn.** When a turn
-  finishes, a receipt line shows in the transcript tail with a summary of
-  tool calls, file changes, and evidence that supports the agent's claims.
-  Tool evidence is collected per-turn and flushed on new dispatch.
-- **Stall reason classification.** When a turn has been running for more than
-  30 seconds, the footer now appends a classified reason: "waiting for model",
-  "tools executing", "sub-agents working", "compacting context", or "waiting —
-  no recent activity".
-- **Decision card widget for structured user input.** When Brother Whale needs
-  a choice, it surfaces a bordered card with numbered options, keyboard
-  navigation (1-9 / j/k / arrows), and Enter/Esc to confirm or cancel.
-- **Tasks sidebar now shows fuller turn IDs and supports copy-to-clipboard.**
-  Turn ID prefixes are widened from 12 to 16 characters for disambiguation,
-  background job status is presented as "X running, Y completed" instead of
-  ambiguous "X active (Y running)", and `y` / `Y` yank affordances copy the
-  current turn ID or full status line to the system clipboard (#1975).
-
-### Changed
-
-- **Contributor count and acknowledgement surfaces refreshed.** The website
-  fallback contributor count now reflects 98 live GitHub contributors (up from
-  the stale 91). All three README translations (English, 中文, 日本語) now
-  include 30+ previously unlisted contributors whose PRs were merged since
-  April 2026.
-- **README and web surface rebrand refinements.** Crate descriptions, npm
-  package text, and website copy now consistently position Ghosty Code as
-  open-model-first and provider-spanning, with DeepSeek V4 as the first-class
-  path.
-- **New contributor names added to README acknowledgements.** Thanks to
-  @Apeiron0w0, @aqilaziz, @ChaceLyee2101, @ComeFromTheMars, @CrepuscularIRIS,
-  @dst1213, @eltociear, @fuleinist, @greyfreedom, @h3c-hexin, @heloanc,
-  @hxy91819, @J3y0r, @JiarenWang, @jinpengxuan, @KhalidAlnujaidi, @laoye2020,
-  @lbcheng888, @linzhiqin2003, @Liu-Vince, @lixiasky-back, @pengyou200902,
-  @punkcanyang, @Rene-Kuhm, @SamhandsomeLee, @sockerch, @sternelee,
-  @Wenjunyun123, @whtis, and @wuwuzhijing for the translations, typo fixes,
-  docs polish, and small UX improvements that landed across the 0.8.42 →
-  0.8.43 cycle.
+- Chat Completions streams now require terminal proof from `[DONE]` or a
+  non-empty `finish_reason`. Protocol-only frames no longer count as answer
+  content or time-to-first-token, and a provider continuation that ends after
+  tool results with no answer or tool call fails durably instead of producing
+  a false `Completed` receipt.
+- A selected v2 Fleet now drives one bounded, deterministic Agent roster across
+  terminal and runtime surfaces. Fleet operator/member/explicit-route
+  precedence, resolved member identity, and exact `vision` requirement
+  admission now fail visibly instead of silently falling back, first-matching,
+  or rerouting.
+- A workflow whose `task()` dispatch was rejected no longer loses that failure
+  inside a `parallel()` null slot or presents a successful-looking run. Rejected
+  dispatches now fail the run, persist as typed bounded receipts with an exact
+  count, and appear in transcript, activity detail, and workflow-panel views.
+- Provider readiness, credential-source explanations, focused-agent scrolling,
+  compact `/status` and `/help` rendering, shell/web output bounds, MCP
+  lifecycle reporting, and narrow-terminal onboarding received the detailed
+  fixes recorded below.
+- Portable config import/export now preserves typed tables, arrays, numbers,
+  booleans, and datetimes without stringifying them, while refusing
+  machine-bound trust overlays, credential readers, automatically executable
+  hooks/LSP definitions, local-path authority, machine-local network proxy
+  routes, cookies, redaction placeholders, and nested or camel/dotted
+  credential keys. Project and global bundle operations now load and validate
+  the document for their actual scope in both directions, including a
+  workspace whose document still lives under the legacy app directory.
+- `ghosty login` now means Ghosty account sign-in (the same browser
+  device flow as `ghosty account login`, with `--no-open` and
+  `--timeout-seconds`); provider API keys are configured exclusively through
+  `ghosty auth set --provider <provider>`, and the hidden legacy
+  `--api-key`/`--provider` flags redirect loudly instead of silently writing
+  a key.
+- Account sessions prefer the OS credential manager and now fall back
+  automatically to the private `0600` Ghosty secrets file on headless
+  hosts, SSH boxes, and containers; the `GHOSTY_CLOUD_ALLOW_FILE_SESSION_STORE`
+  opt-in is deprecated and ignored.
+- `/update` gained a `Ctrl+Shift+U` install chord (catalogued in
+  `docs/KEYBINDINGS.md`, localized in all 15 packs) and a startup hint that
+  names the previous and current version on the first launch of a newer
+  build, pointing at `/change`.
+- Fleet product-model copy pass: the TUI, docs, and locale packs now use
+  Fleet / Member / Role / Model / Access / Saved consistently so a user can
+  say "scout", "DeepSeek V4 Flash", or the member name and mean the same
+  thing.
+- A reasoning model that returns only hidden reasoning and a clean stop (no
+  answer, no tool call) is now re-requested automatically up to twice before
+  the turn fails, instead of dead-ending with "the provider response was
+  incomplete." The retry reuses the cached prefix so it is cheap; an
+  output-length stop (`length`/`max_tokens`) is never retried, and a
+  persistently answerless model still fails honestly after the bound.
+- Model-bound tool results now use a credential-shaped redaction policy:
+  only values that look like secrets (known prefixes, JWTs, bearer tokens,
+  PEM private-key blocks, long opaque strings) are masked before a `read` or
+  shell result reaches the model, so code such as `password:
+  credentials?.password` or `"password-validator": "^5.3.0"` stays byte-exact
+  for edits and read-back. Exact configured credential values are still always
+  replaced, and logs/previews/exports keep the broad key-based scrubber. (#5546,
+  reported by @ronohara)
+- Terminal input shutdown no longer waits forever on a wedged TTY read,
+  Windows launch receipts can atomically replace an existing record, and the
+  complete `/status` report now follows the active locale without rewriting
+  exact custom-provider identities that contain brace-like text.
+- Localized READMEs again match the English install and third-party-notice
+  surface, including shell-completion guidance in all 18 translations.
 
 ### Security
 
-- **Thinking blocks can be collapsed/expanded via keyboard.** Space on an
-  empty composer toggles the focused thinking cell between collapsed and
-  expanded, complementing the existing mouse right-click context menu (#1972).
-- **Sub-agent completion events no longer delayed to the next turn.** The turn
-  loop now drains late-arriving sub-agent completions at the final checkpoint
-  before breaking, so child-agent sentinels surface immediately instead of
-  appearing in the following turn (#1961).
-- **`ghosty doctor` now referenced correctly in SSE timeout errors.**
-  The error message shown when SSE streams fail to connect now points users to
-  `ghosty doctor` (not the legacy `deepseek doctor`).
+- Unified OAuth device-code polling now validates verification URLs before
+  opening them, redacts token-bearing types, honors server slowdown intervals,
+  and keeps credential save/logout mutations serialized.
+- Project instructions, rules-directory traversal, secret-shaped config data,
+  URL fingerprints, and shell network authority now retain the explicit bounds
+  and fail-closed behavior described in the detailed record.
 
-## [0.8.42] - 2026-05-24
+### Contributors
 
-### Changed
+- **Sun Zhenyuan ([@bistack](https://github.com/bistack))** — tool-call stage
+  extraction with the existing execution and policy contracts preserved
+  (#5523).
+- **Isabel Wu ([@wuisabel-gif](https://github.com/wuisabel-gif))** — bounded
+  multi-file `read_lints` support (#5524), plus independently reviewed
+  completion-routing overlap in #5530.
+- **Lstarsky0 ([@Lstarsky0](https://github.com/Lstarsky0))** — maintainer review
+  hardening for truthful per-file states and truncation metadata in #5524.
+- **Paulo Aboim Pinto ([@aboimpinto](https://github.com/aboimpinto))** — portable
+  presentation/media/digest facets and the seven utility-handler migrations
+  (#5525).
+- **RepentStar ([@RepentStar](https://github.com/RepentStar))** — reported and
+  reproduced the stale completion-generator path and missing `ghosty-tui`
+  registration fixed for #5526.
 
-- **Ghosty Code now ships with the Brother Whale agent identity prompt.** The
-  built-in system prompt frames the agent as trusted, calm, careful, and
-  responsible, and adds the coordination principle that great intelligence
-  creates spaces where future intelligences can work together.
-- **Ghosty Code positioning is clarified as DeepSeek-first and open-model
-  oriented.** README, rebrand notes, crate metadata, and npm package text now
-  describe Ghosty Code as an agentic terminal for open source and open-weight
-  coding models while preserving the official DeepSeek provider as first-class.
-- **Model auto-routing is documented separately from TUI modes.** README and
-  modes docs now reserve "mode" for Plan / Agent / YOLO, describe
-  `--model auto` as model/thinking routing, and name the fast
-  `deepseek-v4-flash` thinking-off seam as Fin.
-- **Rebrand shim docs now match the v0.8.x transition window.** The npm and
-  migration notes no longer imply the legacy `deepseek-tui` package/shims
-  expired immediately after v0.8.41.
+### Detailed change record
+
+The notes below are preserved in full so the categorized highlights do not
+erase behavior, migration, security, compatibility, or verification details.
+
+- Provider completion is now evidence-based. A Chat Completions stream reaches
+  `MessageStop` only after `[DONE]` or a non-empty `finish_reason`; raw EOF
+  without either is a typed failure. Message-start, ping, usage/terminal
+  deltas, block-stop, and message-stop frames do not count as productive
+  content or mint time-to-first-token. After tool results, a terminal provider
+  step with no answer or tool call now emits a durable failed turn and never
+  fabricates an empty assistant message.
+
+- A selected v2 Fleet is the single effective Agent roster across terminal,
+  Runtime threads, direct Workflow, Fleet execution, doctor, and
+  setup/readiness; legacy profile layers are consulted only when no Fleet is
+  selected, and invalid selections fail visibly with bounded, redacted errors.
+  Member references resolve exact id first and otherwise require a unique
+  display name, role, pinned model, offline model name, or provider/model route;
+  `agent action=roster` exposes that same bounded roster. The Fleet operator
+  supplies fresh-root and inherited-member routing unless an explicit launch
+  route or member pin wins, the resolved member is shown separately from the
+  requested alias, and `requires = ["vision"]` is admitted only on an exact
+  route with verified offline `image_input` support—never by silent rerouting
+  or custom-proxy inference. Fleet selection remains an explicit user/folder
+  contract independent of legacy project-profile loading.
+
+- **Breaking (app-server):** `/prompt`, `prompt/request` and `prompt/run` now
+  execute a real model turn instead of reporting success for work they never
+  did. `Runtime::handle_prompt` called no model: it resolved config, ran a
+  local `ModelRegistry` lookup, emitted three canned hook events
+  (`ResponseDelta` was literally the string `model-selected`), and returned
+  HTTP 200 with `output` set to a stringified JSON echo of the caller's own
+  routing metadata — the prompt included. Worse, when a `thread_id` was
+  supplied it appended a real user row, flipped the thread to `Running`, and
+  then wrote that echo into durable history as an **assistant message** plus a
+  `prompt_response` checkpoint. Nothing marked the row synthetic and nothing
+  ever moved the thread out of `Running`. All three endpoints now route
+  through the same `RuntimeBridge` that stdio `thread/message` has always
+  used, so `output` is the model's streamed text, `model` is what the runtime
+  reports for the thread that ran the turn, and `events` are the real
+  streaming frames. `Runtime::handle_prompt` and its synthetic history write
+  are gone.
+
+- **Breaking (app-server):** a failed prompt is now a typed failure rather
+  than a success-shaped body. `POST /prompt` returns
+  `{"error":{"code":...,"message":...}}` with `400` (invalid request), `404`
+  (thread not found), `503` (`runtime_unavailable`) or `500`, instead of HTTP
+  500 carrying a `PromptResponse` with the error text stuffed into `output`
+  where model text belongs. The stdio surface gained JSON-RPC `-32005`
+  `runtime_unavailable` for "the turn engine could not be reached, so nothing
+  ran" — distinct from `-32603`, and retryable. There is no configuration in
+  which a prompt silently echoes instead of running.
+
+- **Breaking (app-server):** `POST /thread` with a `Message` body runs the
+  turn. It previously replied `status: "accepted"` with a
+  `ResponseDelta("queued")` frame while starting no worker and calling no
+  bridge — the stdio path for the same request has always done real work, so
+  the two transports disagreed about what `accepted` meant. HTTP now replies
+  `status: "completed"` once the turn reaches a terminal state, with the
+  streamed frames in `events` and the turn id in `data`. `Runtime::handle_thread`
+  no longer accepts `ThreadRequest::Message` at all: it owns thread
+  bookkeeping, not the turn engine, and returns an error naming
+  `POST /v1/threads/{id}/turns` rather than a canned acceptance.
+
+- **Breaking (app-server):** `AppRequest::SubmitUserInput` now refuses
+  explicitly (`ok: false`, `error: "user_input_reply_unsupported"`) instead of
+  returning `resolved: true` and filing the answers in a map that had no
+  reader anywhere in the crate — every answer submitted was silently
+  discarded. It cannot be made to work on this transport: while a turn
+  streams, the stdio loop executes only `thread/interrupt` and queues
+  everything else, so an answer sent there would wait on the very turn
+  waiting for it. The refusal names the surface that does accept it,
+  `POST /v1/user-input/{thread_id}/{request_id}` on the runtime API. The
+  client-visible refusal is whitespace-clean, and the `/tool` path that mints
+  the `UserInputRequest` is unchanged and still genuine.
+- Split the coordination ledger out of `tools/subagent/coord.rs` into
+  `tools/subagent/coord/ledger.rs`. The file held two unrelated things: the
+  model-facing `agents/*` tool wrappers, and the durable decision/claim/
+  contention records those wrappers happen to write — records whose consumers
+  are mostly *not* in the tool layer (`tui::coordination_detail`,
+  `tui::work_surface`, `tui::ui::tests`, `core::engine::tests` all name these
+  types). At 3.8k lines, reading either one started by scrolling past the
+  other. A pure move with a glob re-export from `coord`, so every
+  `crate::tools::subagent::coord::{…}` path still resolves and no consumer file
+  was edited; the only content change the move required is one constant going
+  from private to `pub(super)` because its caller stayed behind. `coord.rs` is
+  now 2.3k lines and `ledger.rs` 1.6k.
+
+- `agent` is now the only sub-agent tool the model can see. `AGENTS.md` has
+  said "the model-facing sub-agent surface is `agent` only" since the lifecycle
+  tools were removed, but six more were reachable: `agents/list`,
+  `agents/message`, `agents/followup`, `agents/interrupt`, `agents/coordinate`,
+  and `agents/wait` all defaulted to model-visible, so they shipped in the
+  catalog and `tool_search` could load any of them — and the `agent`
+  description told the model they existed. They now declare
+  `model_visible() -> false`, the same shape `rlm` and `exec_shell` use: still
+  registered, still executable by name so a persisted transcript replays
+  against the same implementation, never advertised and never returned by
+  either `tool_search` matcher.
+
+  Five of the six were already duplicates of an `agent` action. The sixth was
+  not: `agents/coordinate action=claim` was the *only* way to widen a write
+  claim, and write enforcement fails closed, so hiding it would have left a
+  refusal ("expand it first with…") pointing at a tool the model could no
+  longer call. `agent` gains one action, `claim`, taking the write scope
+  vocabulary `action=start` already uses (`write_roots`, plus parse-accepted
+  `exact_files` and `coordination_contracts`). It keeps `agents/coordinate`'s
+  `Auto` approval — gating it deadlocks autonomous fan-in — and it can only
+  widen the caller's own scope; peer contention still fails. A scopeless claim
+  is refused rather than reported as granted, because `expand_write_claim`
+  returns the unchanged claim with `Ok` when every list is empty.
+
+  Collapsing six tools into one action set also collapses the gating: `agent`
+  is deliberately exempt from both name-keyed gates (`posture_permits_tool`
+  short-circuits it so delegation depth governs spawning, and
+  `execution_envelope` classifies it `Bounded` so a read-only member can fan
+  out read-only work), so a capability folded into it inherits no gate. `claim`
+  is therefore gated per action, reproducing the envelope check that kept
+  `agents/coordinate` off a read-only role's catalog — in the catalog and again
+  at dispatch, since catalog shaping is not an authority boundary. The other
+  actions keep exactly the visibility they had.
+- One placement table now decides which wire channel a message role belongs
+  in, and unrepresentable role/dialect pairs are refused at the outbound seam
+  (`DeepSeekClient::prepare_outbound_request`) instead of at the provider.
+  Chat Completions and OpenAI Responses used to drop an unfamiliar role
+  silently, Anthropic Messages forwarded `message.role` verbatim and took an
+  opaque provider 400 for it, and Google cloud-code was alone in failing
+  closed. Positioned `system` and `developer` history — including compaction
+  and branch summaries — is carried natively by Chat Completions and Responses
+  and projected, in place, onto Anthropic's user channel. It is neither
+  hoisted nor dropped. Genuinely unknown roles keep the previous
+  dialect-specific fail-closed/omit behavior, now decided in one table. The
+  dead `"tool"` arm in the Responses adapter is gone — nothing constructs that
+  role.
+
+- Message roles are a closed `Role` enum (`crates/core/src/role.rs`) instead of
+  a free-form `String` on `Message`. Four wire adapters each decided
+  independently what an unfamiliar role meant, and a typo in a role string was
+  a silent transcript edit rather than a compile error. `Role` keeps an
+  `Unrecognized(String)` variant and serializes via `as_str()`, so a saved
+  session's bytes are unchanged, a transcript written by a newer build still
+  loads here, and `assistant_interrupted` stays a distinct session item — no
+  session schema bump and no migration ladder.
+
+- Portable config bundles: `ghosty config export --portable` writes a
+  deterministic, secret-free bundle (credential and machine-specific keys
+  dropped), and `ghosty config import <FILE|URL|->` applies one with a
+  strict versioned envelope, a printed added/changed/skipped/conflicting/
+  rejected plan, consent gating (`--yes` required headless), a timestamped
+  backup with rollback, and idempotent re-import. Credential-shaped entries
+  are rejected by key name and value shape — rejections name the field,
+  never the value. Remote imports revalidate the HTTPS-or-loopback-HTTP policy
+  on every same-scheme redirect hop, and duplicate keys across applicable
+  section labels fail before any backup or write instead of silently resolving
+  by section order. Structured TOML values round-trip with their original
+  types and exact named-provider identity; recursive sanitization covers
+  arrays/tables and camel-case, dotted, cookie, and access-key spellings while
+  retaining ordinary token-count metrics. Machine-bound project trust,
+  credential-source consent, automatic hook/LSP execution, and local-path
+  authority are non-portable and fail before mutation. A missing target is
+  created transactionally and removed again on rollback, and project/global
+  scope validation rejects the wrong document before import or export.
+  Imported tables deep-merge portable fields into the target, so omitted
+  machine-local provider credentials, endpoints, and executable definitions
+  remain intact instead of being erased by a sanitized bundle.
+
+- `/rc` is now a shared-session mirror instead of a terminal takeover.
+  Attaching the web app no longer locks the local composer or hides
+  approvals: both surfaces can prompt while idle (one turn runs at a
+  time), approval cards stay visible in the terminal and are shared with
+  the web with first-decision-wins semantics (the losing side is told, a
+  web decision dismisses the local card), and structured questions are
+  answered locally instead of cancelled. Fail-closed behavior survives —
+  the post-failure reconnect lockout, integrity-gated `/rc stop`, and the
+  fail-closed shared-approval channel on transport loss are unchanged.
+  The takeover vocabulary ("web owns prompts and approvals") is gone from
+  every surface.
+
+- Auto-mode provider readiness no longer reports "key saved · not checked"
+  forever. Readiness checks are recorded against the concrete model the
+  router ran, but auto-mode reads resolved against the literal `auto`
+  identity, which never matched any recorded check — so the setup receipt,
+  model picker, and fleet setup view showed an eternal unchecked badge
+  even after hundreds of successful turns. The read now falls back to the
+  most recent check on the same route (provider + endpoint + auth class);
+  concrete-model reads keep exact per-model scoping.
+
+- The focused sub-agent transcript now scrolls like the main transcript.
+  The frame renderer sampled the ocean column through a `ChatWidget` whose
+  constructor consumed `pending_scroll_delta` — every PageUp/PageDown and
+  wheel event was swallowed by an invisible widget before the focused pane
+  could read it. The delta is now parked across the sample; the pane pins
+  on user scroll-up, follows new child activity at tail, and
+  jump-to-bottom releases the pin.
+
+- Every Codex OAuth Responses request carried `max_output_tokens`, a parameter
+  that endpoint rejects outright ("Unsupported parameter: max_output_tokens"),
+  so every gpt-5.6-sol turn — including every sub-agent on that route — failed
+  at the first request. Codex Responses bodies now ship without a client-side
+  output cap; the backend applies its own. Every other Responses route keeps
+  the central cap on the wire, exactly as before.
+
+- The model-facing `lsp` tool now supports a bounded `read_lints` operation
+  for multi-file, workspace-relative LSP diagnostics without adding another
+  tool catalog entry (#4070).
+
+- HTTP 400 classification no longer calls an unsupported-parameter error a
+  context-window overflow. Responses shape errors such as "Unsupported
+  parameter: max_output_tokens" name a token-shaped field, which the generic
+  keyword rules read as prompt-size exhaustion and pointed users at compaction
+  that could never help. Such responses now classify as invalid requests.
+
+- xAI device login validated nothing about the URL it opened. The
+  `verification_uri` from the device-code response went straight to
+  `webbrowser::open` with no parse, no scheme check and no credential check, so a
+  spoofed or compromised issuer could hand the platform's "open this" call a
+  `file:` path, a custom application scheme (`vscode://`, `slack://`), or a
+  credential-bearing URL. The shared primitive now refuses anything that is not a
+  web page before the URI is printed or opened. **Behaviour change:** a
+  non-loopback plain-`http:` verification URI now aborts login where it
+  previously opened; `http:` on a loopback host is still allowed, because local
+  runtimes legitimately use it.
+- The xAI OAuth types no longer print bearer material through `Debug`. Five types
+  holding tokens (`GrokAuthEntry`, `TokenResponse`, `DeviceCodeResponse`,
+  `DeviceCodeGrant` and the poll outcome) either redact or no longer derive
+  `Debug` at all, so a token has no printable path through a `{:?}` on any
+  surrounding struct. The shared `DevicePollOutcome` derives nothing, which the
+  compiler enforces.
+- **Behaviour change:** an `interval` of `0` from the authorization server now
+  falls back to RFC 8628's five-second default rather than a one-second floor,
+  in both the xAI and account device flows.
+
+- OAuth device-code login is now one implementation. xAI/Grok device login and
+  Ghosty account login each carried their own hand-rolled RFC 8628 polling
+  loop with nothing shared between them; both now call a single primitive
+  (`ghosty-config`'s `device_code`), ported from pi. Three fixes come with
+  it. `slow_down` now honours a server-supplied `interval` instead of always
+  adding five seconds, which is what stops polling from running early forever
+  under WSL and VM clock drift. Timing out after a `slow_down` now says so and
+  names clock drift, rather than reading as a plain timeout. And the xAI
+  verification URI is validated before it is handed to the browser opener —
+  Ghosty previously opened whatever the device-code response said, so a
+  spoofed or compromised issuer could point the platform "open this" call at a
+  `file:` path or a custom application scheme. It must now be `https:`, or
+  `http:` on a loopback host for self-hosted issuers. Stored credential files
+  are unchanged and existing logins keep working. MCP OAuth is untouched: it
+  delegates to `rmcp`/`oauth2` and was never hand-rolled.
+- Shell output truncation now stays inside its own budget. A truncated shell
+  result keeps a 6 KB head, a 24 KB tail, and any high-signal lines rescued
+  from the omitted middle — but that rescued block was bounded only by a line
+  count. One rustc `error:` line carrying a long inferred type or a minified
+  bundler frame is routinely hundreds of kilobytes, so a "30 KB" result could
+  arrive at 430 KB with the omitted line pasted back in whole. Each rescued
+  line is now clipped and the block has a 4 KiB ceiling; the signal survives,
+  the payload does not.
+
+- Fetched web pages in non-Latin scripts no longer arrive half-read. Page text
+  was reflowed against a column budget measured in bytes, so Cyrillic and Greek
+  wrapped at roughly half the intended width and CJK at two thirds — and since
+  the page view is delivered by line count, the surplus lines pushed real
+  content off the end of the window. A Russian or Japanese URL returned a
+  fraction of the text an English one did, for the same call. Wrapping now
+  measures display width.
+
+- The `bash` tool no longer tells the model it has no default timeout when it
+  does. An omitted timeout has always been bounded at 120 seconds and the
+  command killed there, but the tool description and its `timeout` field both
+  claimed otherwise — steering the model away from the one parameter that
+  would have saved a longer build. Both now name the real bound.
+- MCP servers no longer restart because an unrelated setting was saved. The
+  lazy config reload re-reads every watched source whenever one of their
+  mtimes moves and keeps the live connections only when the content hash
+  matches — but the hash was taken over `serde_json` bytes produced straight
+  from the config's `HashMap`s, and two `HashMap`s with identical contents do
+  not iterate in the same order. Any touch of any watched file therefore hashed
+  differently, tore down every connection, and SIGTERMed and respawned every
+  stdio child. Keys are now sorted before hashing.
+
+- An MCP server marked `required` now still tells you *why* it failed to start.
+  `connect_all` appended a generic "required MCP server failed to initialize"
+  entry after the real per-server error, and the snapshot folds those pairs into
+  a map keyed by server name — so the contentless entry replaced the diagnosis
+  and /mcp showed the marker instead of "No such file or directory". The marker
+  is now only synthesized when nothing else reported a cause.
+
+- A crashed stdio MCP server is now rebuilt instead of being handed back dead.
+  A failed transport *read* disconnected the connection; a failed *write* did
+  not, so after the child exited the connection stayed `Ready`, the pool reused
+  it on every later tool call, and /mcp kept listing the server as connected.
+
+- An MCP response carrying neither `result` nor `error` is now an error rather
+  than an empty success. It previously reached the model as a successful tool
+  call with a `null` payload, indistinguishable from a tool that did nothing.
+  An explicit `"result": null` is still a valid empty success.
+- Stdio MCP server requests are answered while the client is idle instead of
+  blocking behind the zero-capacity response rendezvous until an unrelated
+  client call. `ping` receives its prompt empty result, unsupported methods
+  receive JSON-RPC `-32601`, and the reader keeps only a weak stdin handle so
+  dropping the client still delivers graceful EOF.
+- `base_url_fingerprint` is a persisted-key change for two input shapes.
+  The digest is serde-serialized into `ProviderCatalogCache` and
+  `LiveOffering`, pricing defect receipts, and
+  `TurnRecord.routed_usage_source_ids` — it is not an in-memory-only cache
+  label. Empty or whitespace-only values (and scheme-less query-only strings
+  that strip to an empty authority) now hash the invalid-or-secret-bearing
+  sentinel instead of SHA-256 of the empty string. Scheme-less URLs that
+  contain `@` now strip `userinfo` before hashing, matching the
+  scheme-bearing branch, so a typed `user:pass@host/v1` no longer embeds the
+  password in a stored digest. `routed_usage_source_fingerprint` feeds
+  arbitrary scheme-less source ids into the same function, so a turn
+  rehydrated from an older build can fail to dedupe one routed-usage row.
+  Recovery is a cache miss and a re-fetch, not corruption. Empty input was
+  not restored to the old digest: an empty authority is not a usable
+  endpoint, and mapping it to the same sentinel the scheme branch already
+  uses for an empty host keeps invalid inputs from minting a unique cache
+  scope.
+
+- Diagnostic lines that mention token *counts* are no longer swallowed by
+  secret redaction. A stream error such as `max tokens = 8192 but budget =
+  4096` was matching the `token` hint as a substring of the English word
+  `tokens`, and the spaced-assignment pass then dropped the rest of the
+  line, leaving `max tokens = [redacted]`. Token counts are not credentials;
+  the hint now matches a credential identifier (`token`, `api_token`) rather
+  than an English word, so the numbers survive while `token = Bearer …` is
+  still redacted.
+- Dashboard thread search no longer loads every thread's transcript to decide
+  whether the row matches. `GET /v1/threads/summary?search=` walked the full
+  thread list and called `get_thread_detail` on each row before matching, and
+  that detail read is itself a whole-store walk of every turn JSON and every
+  item JSON. A non-matching keystroke was therefore
+  O(threads × (all_turns + all_items)) file reads — on the order of 10^8 JSON
+  parses at a few thousand threads. Search now matches `id`, title, and model
+  from the thread record (and, when the title is unset, the single latest-turn
+  file that supplies the displayed title) and loads detail only for matches, so
+  preview stays a display field rather than a search key. Session summary
+  already refused to search last-message text for the same reason.
+
+- Silent `#[allow(dead_code)]` suppressions on the modules AGENTS.md warns
+  auditors not to delete — prompt zones, context budget, the route seam —
+  and on the next-largest holders (palette tokens, hotbar actions, core
+  events) are now `#[expect(dead_code)]`, or gone where the lint was already
+  stale. A suppression that stops matching the lint fails the `-Dwarnings`
+  gate instead of sitting quiet. The same gate is recorded in
+  `[workspace.lints]` so member crates inherit it from the manifest rather
+  than only from CI `RUSTFLAGS`.
+- "missing key" now says where it looked. The provider picker reported
+  credential readiness as the bare strings `missing key` / `key:not-set`,
+  which named no source at all — so a home whose secret store held a working
+  DeepSeek key could show `DeepSeek  missing key` in the picker while a real
+  turn from that same home completed, and nothing on screen said which layer
+  disagreed. Every row now resolves through one sourced resolver and states
+  the place its credential came from ("OPENROUTER_API_KEY", `secret store
+  "deepseek"`, `[providers.x] api_key`, "xAI OAuth", a consented external CLI
+  file); a row without a credential lists the places that were probed, in
+  precedence order, and the command that fixes the first of them. Where a
+  durable slot is deliberately *not* read — an inactive provider whose config
+  table carries no api-key marker — the row says so rather than implying an
+  empty slot.
+
+- Provider credential precedence is now stated once, in a doc comment beside
+  the single resolver that enforces it, instead of being implied by a
+  150-line cascade of provider special cases. No precedence decision changed:
+  `has_api_key_for` is now a wrapper over that resolver, and a test asserts
+  the two agree for every provider.
+
+- Credential saves and logouts no longer interleave. Both took a snapshot of
+  the durable slot, wrote it, mutated the config document, and rolled back on
+  failure, with no lock held across the sequence — so a save racing a logout
+  on the same slot could leave the secret store and the config file
+  disagreeing. Both now hold that provider's credential write lock for the
+  whole read-modify-write.
+
+  Design ported from pi-mono (MIT, Copyright (c) 2025 Mario Zechner); see
+  `docs/THIRD_PARTY_NOTICES.md`.
+
+- Enumerating stored credentials no longer fails closed on one bad slot.
+  Listing used to propagate a backend read error, so a single unreadable
+  secret-store entry made `/provider` and logout treat every other stored
+  credential as missing. Enumeration now skips the unreadable slot and
+  continues, matching the probe loop it replaced.
+
+- The first screen of first run no longer cuts its own headline. The welcome
+  and ready titles, and the provider-step heading, were emitted as single
+  unwrapped lines while the sentence beneath them wrapped, so at 40 columns
+  German read "Ghosty arbeitet mit dir in diesem O", Russian lost its final
+  stop, and Japanese lost "します。". Headings are prose and now wrap like it,
+  in every shipped locale.
+
+- The workspace-trust screen no longer cuts its own question in half on a small
+  terminal. The question, the prompt-injection risk hint, and the trust-effect
+  hint were each pushed as one unwrapped line, so at 40 columns the screen read
+  "Should Ghosty work with the instruc" — severed mid-word with nothing
+  marking the cut, while the workspace path directly beneath it wrapped
+  correctly. Asking someone to grant filesystem trust while the question itself
+  is truncated is the worst place in the product for that to happen. All three
+  now wrap through the same helper the rest of onboarding uses, which also
+  means they wrap correctly in Japanese and Chinese. Verified across all
+  fifteen shipped locales at 40, 60, 80 and 120 columns.
+- `ghosty completions <shell>` generated a script for the wrong program.
+  The subcommand forwarded to the in-tree `ghosty-tui` binary, which
+  rendered completions from *its own* clap tree under *its own* name, so the
+  output ended in `complete -F _ghosty__tui ... ghosty-tui` (bash),
+  `#compdef ghosty-tui` (zsh), and
+  `Register-ArgumentCompleter -Native -CommandName 'ghosty-tui'`
+  (PowerShell). Sourcing it registered nothing for `ghosty` or `ghosty-tui` —
+  the two commands current installers expose — so tab completion appeared to
+  do nothing. The forwarded tree was also stale against the real CLI: it offered
+  `pr`, `scorecard`, and `session-diagnostics`, which `ghosty` does not
+  have, and omitted `run`, `rc`, `config`, `model`, `thread`, `lane`,
+  `workflow`, `web`, `account`, `app-server`, `mcp-server`, `metrics`,
+  `update`, `cloud`, `completion`, and `lane-log-proxy`, which it does.
+  Completions are now rendered in-process from the CLI's own command tree,
+  and `completions` is an alias of the existing
+  `completion` subcommand rather than a second, divergent path. Regenerate any
+  script you installed from an earlier release. Reported by **RepentStar**
+  (#5526); part of the `deepseek-tui`-era identifier retirement in #5443.
+
+- Completion scripts now fire for the `ghosty-tui` shorthand as well as
+  `ghosty`. Releases publish `ghosty-tui` as a byte-identical copy of the
+  `ghosty` binary, so a script bound to only one of the two names was half
+  installed for anyone who types the short one. Each shell gets its own
+  idiomatic hook rather than a second copy of the script: bash re-binds the
+  generated function, zsh widens the `#compdef` tag line to
+  `#compdef ghosty ghosty-tui`, fish adds `complete -c ghosty-tui -w ghosty`,
+  PowerShell registers `-CommandName 'ghosty','ghosty-tui'`, and Elvish aliases
+  the completer with
+  `set edit:completion:arg-completer[ghosty-tui] = $edit:completion:arg-completer[ghosty]`.
+
+- Documented shell completions. `docs/INSTALL.md` § 8 now gives the generate
+  and install commands for bash, zsh, fish, PowerShell, and Elvish, with a
+  note to regenerate after upgrading and to delete scripts produced by
+  v0.9.10 or earlier. There was previously no completion documentation
+  anywhere in the repository, which is how #5526 was reported as three
+  problems instead of one.
+- `/status` was 31 rows. On an 80x24 terminal the transcript viewport is 18, so
+  typing `/status` landed you on the *tail* of the report: the version, route,
+  directory, mode and sandbox rows had already scrolled past, and what stayed on
+  screen was five `not reported` rows and a `$0.0000`. The report is 18 rows on a
+  fresh session — `Window override:` is present unless the value is already
+  configured. That is the viewport's height, so once `/status` itself occupies a
+  history cell the title row still scrolls off; it does not fit that terminal
+  whole. Provider, model and reasoning effort are one `Route:` lockup, the way
+  the header rail already writes them. Mode and its permissions are one statement
+  of posture. `Rate limits:` is gone — it was a `push_row` of a string literal
+  and could never say anything but "not available from provider telemetry". The
+  per-turn token ledger is gone too, because `/tokens` is that ledger's whole
+  subject and `/status` was printing six rows of it at the same weight as the
+  sandbox policy; the two facts that lived nowhere else, the cumulative in/out
+  split and the cumulative cache totals, survive on one `Session tokens:` row.
+  `Footer items:` no longer prints ten internal config keys across the full
+  width — `/statusline` owns them, and the report now points there in the same
+  row that points at `/tokens`. Two blank gutters do the grouping; the
+  `===================` rule under the title is gone.
+
+- The `/status` window-override key has its own labelled row. It used to be
+  parenthesised onto the end of the provenance row, which pushed
+  `context_window in config.toml` past the right edge at 80 columns and wrapped
+  the sentence. `Window source:` states the provenance and `Window override:`
+  names the exact key — and the override row is omitted entirely when the value
+  is already configured, rather than advising you to set what you have set.
+
+- `/help` no longer truncates anything. Every label and description used to run
+  through a `truncate_to_width` that appended `…`, which in a two-hundred-row
+  list promises text no keystroke can reveal and lands mid-token:
+  `(aliases: /qin…` left the parenthesis hanging open. Descriptions now shed
+  whole fields — the alias parenthetical first, then trailing clauses at their
+  own joints, and only where there is no joint at all, the sentence's short form
+  on a whole word with no mark, keeping the head noun of a simple verb +
+  modifier + noun phrase rather than the adjectives that qualified it. The
+  focused row's description is restated under the filter at the panel's full
+  width, *only when the row itself could not hold it*, so a wide terminal does
+  not say the same sentence twice. At 60 columns that restatement is itself
+  shed — the `/advisor` detail stops before `session` — so the detail is longer
+  than the row, not a copy of the original sentence.
+
+- The `/help` label column is measured instead of assumed. It was a flat 28
+  columns at every terminal size, so at 60 columns twenty blank cells sat
+  between `/advisor` and a description cut down to 21. Each group now sizes its
+  column to the labels it actually holds, which nearly doubles the description
+  column on a narrow terminal, and the label — the string you have to type —
+  reads one step brighter than the description that qualifies it.
+
+- `/help` stopped spending rows on itself. The match count moved onto the filter
+  row it describes, the blank spacer under it is gone, and the footer no longer
+  repeats `type to filter` while the filter box says `Type to filter` two lines
+  above — at 60 columns that duplicate was what pushed the footer onto a second
+  row. A group header also stopped printing `▸ ▾`: the selection cursor and the
+  collapsed chevron are the same glyph, and a focused collapsed group was
+  showing it twice for two different facts. Help now opens focused on the first
+  entry rather than the header above it.
+
+- The bottom status rail is no longer one run-on sentence. At 120 columns it
+  read `▌· idle · Ollama · deepseek-v4-flash · max · Anonymous usage counts are
+  on. … ⌥V:output · /context:context · fn+F1:keys` — live state, route
+  identity, a telemetry consent notice, and keyboard hints all strung together
+  by the same middle dot in the same ink, so nothing was grouped and the eye
+  had nothing to skim by. At 80 columns it simply stopped mid-notice, and at 60
+  the row overflowed and was clipped by the terminal mid-word. The rail now
+  divides its groups with a blank gutter instead of another dot (the dot is
+  kept for peers *inside* a group), the model name reads one step brighter than
+  the qualifiers that narrow it, and `Esc to interrupt` reads in the same hint
+  weight as the right-hand chords rather than in the separator weight.
+
+- Nothing on the status rail is ever truncated now. A notice sheds whole
+  sentences to fit, and if one sentence is still too long it sheds at the inner
+  joints — a colon, a semicolon — with the trailing mark cut so the phrase that
+  survives does not itself advertise that more was coming. Route identity sheds
+  the provider, then the reasoning effort, rather than rendering
+  `deepseek-v4-flash-prev…`; a clipped model name is worse than no model name
+  because routes share prefixes. Clauses rejoin without a Latin space after a
+  full-width stop, so the Japanese receipt reads as Japanese.
+
+- A notice now stands the standing facts down instead of queueing behind them.
+  Route identity and the ledger chips are still there in ten seconds; the
+  notice is not, so it takes the row and the key hints yield last. This is what
+  makes the telemetry receipt readable at 80 columns, where it used to be
+  simultaneously always present and never legible.
+
+- The status rail no longer advertises `/context:context`. It was spending
+  eighteen columns of a 24-row screen to name a slash command that announces
+  itself the moment you type `/`; the rail advertises chords you cannot
+  discover any other way. The rail now reads the same at 80 columns as at 200.
+
+- The idle screen no longer has an absolute path stretched across it. The
+  workspace caption between the wordmark and "What do you want to accomplish?"
+  was composed at full length and then truncated to the lane width, which made
+  the centering inset `(width - caption.width()) / 2` evaluate to zero — so a
+  line that was written to be centered rendered flush-left and full-bleed,
+  cutting the centered whale/wordmark/prompt composition in half. The clipping
+  also destroyed the information it was supposed to carry: at 80 columns the
+  line read `/private/tmp/claude-501/-Volumes-.../34267917-11f4-4d15-911a-…`,
+  which tells the reader nothing about where they are. The caption now sheds
+  detail instead of being cut — MCP count first, then branch, then leading path
+  components — so it always fits with room to center, and the folder you are
+  standing in is the last thing to go. Elisions land on a path separator rather
+  than mid-directory.
+
+- Removed the placeholder engine tree in `crates/core/src/engine/`. Its
+  `Engine::run` accepted `Op::SendMessage`, appended to a journal, and emitted
+  `TurnComplete { status: "completed" }` without ever contacting a model, and
+  `TurnExecutor` was a struct with a field-copy constructor and a
+  `step < max_steps` comparison. Nothing in the workspace referenced any of it —
+  the only mention of `ghosty_core::engine` anywhere was a doc comment inside
+  the tree itself — but its comments ("the real turn loop is wired here in the
+  next slice") were what `docs/ARCHITECTURE.md` leaned on to claim that
+  `crates/core` owns the agent loop. There is now exactly one turn loop in the
+  workspace, `Engine::run_turn`, and a guard test fails if a second one appears.
+  `docs/ARCHITECTURE.md` and `AGENTS.md` now say where it actually lives.
+
+- First-run onboarding no longer silently truncates its explanation in
+  languages that do not put spaces between words. `wrap_words` split on
+  whitespace, so a Japanese sentence arrived as a single token, the
+  line-break check (which only fires once a line is non-empty) never
+  triggered, and the over-wide line was clipped by the terminal. At 80
+  columns the provider screen read
+  "Hosted providers need a key, but loca" and stopped — losing exactly the
+  half that tells the reader local runtimes need no key, on the screen where
+  they choose a provider. Space-less scripts now break by display width on
+  grapheme clusters, and a line may not begin with closing punctuation
+  (`。`, `、`, `」`, `）` and friends). Wrapping for languages that do use
+  spaces is unchanged.
+
+- Project instructions are bounded by one budget and no longer treat other
+  agents' files as law by default. Previously `.claude/instructions.md` and
+  `CLAUDE.md` sat at ranks 2 and 3 of the canonical instruction list — *above*
+  Ghosty's own `.ghosty/instructions.md` — `.claude/rules/` was an
+  auto-discovered rules directory, and `.cursorrules`, `.cursor/rules`,
+  `.clinerules`, `.windsurf/rules`, `.gemini`, `.github/copilot-instructions.md`
+  and `.github/muse-instructions.md` were all imported into the system prompt
+  with no opt-in. Dropping a `CLAUDE.md` written for a different tool into a
+  repository silently made it standing authority here, which is an injection
+  surface rather than a convenience. Ghosty now reads `AGENTS.md`, the
+  cross-agent `.agents/AGENTS.md`, and its own instruction files by default;
+  every other agent's format is opt-in by name through
+  `project_instruction_imports` (env `GHOSTY_PROJECT_INSTRUCTION_IMPORTS`),
+  imported files rank *below* Ghosty's own, and a workspace that contains an
+  un-imported format says so in a warning naming the exact setting.
+- Separately, a symlinked candidate rules directory — `.cursor/rules`,
+  `.windsurf/rules`, or `.gemini` pointing outside the workspace — was
+  traversed and its contents imported as instruction authority, because the
+  directory check followed the link while only the files inside it were
+  checked. The two instruction loaders now apply the same no-follow rule that
+  `.ghosty/rules/` already had.
+- The three separate ceilings on standing instructions (200 KiB for the
+  root->workspace chain, 500 KiB for the rules block, 40 KiB for imported
+  fragments, and a global layer that was merged in after the chain budget had
+  already closed and so counted against nothing) are replaced by a single
+  48 KiB aggregate budget covering all of them together. Instructions claim it
+  before rules, and are trimmed from the broadest scope inward so the
+  nearest-scope file is the last thing dropped rather than the first thing
+  stranded. Truncation still leaves an explicit marker.
+
+- Editing the workspace no longer grants the shell outbound network access.
+  `workspace-write` sandboxes are created network-restricted; `curl`, package
+  installs, and `git fetch` inside a sandboxed shell are denied by the OS
+  sandbox unless network is granted explicitly. This closes a real gap rather
+  than tightening a working boundary: the elevation added in #273 was justified
+  by the application-level `NetworkPolicy` remaining "the only outbound
+  boundary", but that policy governs `fetch_url`, `web_search`, and MCP HTTP
+  and never constrained shell subprocesses, so workspace-write turns had
+  unrestricted egress with nothing enforcing anything. Network now comes from
+  one of three explicit places: the new `sandbox_network_access` config key
+  (also `GHOSTY_SANDBOX_NETWORK_ACCESS`), a `danger-full-access` posture, or
+  the existing post-denial elevation prompt that grants network for a single
+  call. Yolo and `--yolo`/Bypass are unchanged — they resolve to
+  `danger-full-access`, which applies no sandbox at all. `external-sandbox`
+  reports the network it was actually granted instead of hardcoding `true`, and
+  `/status` reads the flag instead of printing "network on" for every
+  workspace-write policy. Platforms with no sandbox backend (default Linux
+  without bubblewrap, and Windows) still enforce nothing, and both `/status`
+  and `doctor` continue to say so.
+
+- The nightly Windows ARM64 artifact build works again. Every nightly from
+  2026-08-16 failed while compiling `ghosty-tui`, deterministically on the
+  same codegen unit across all three build attempts, with
+  `thread 'optimize module ghosty_tui...-cgu.13' has overflowed its stack`.
+  The trigger is stack depth in the LLVM worker threads that run per-codegen-unit
+  optimization, not the workflow's `lto=off` override: holding the crate and
+  every flag fixed and varying only `RUST_MIN_STACK` on aarch64 shows 1 MiB
+  crashes rustc while 2 MiB and 4 MiB succeed. Unix std defaults to 2 MiB and
+  passed; the Windows ARM64 runner sat under the requirement. Nightly now sets
+  `RUST_MIN_STACK` explicitly for every target, because the requirement follows
+  from the size of `crates/tui` rather than from the platform. The redundant
+  `codegen-units` override is gone -- `[profile.release]` already sets 16, so
+  restating it never changed anything. Shipped binaries were never affected;
+  `release-artifacts.yml` builds `--profile dist` with fat LTO and
+  `codegen-units = 1`.
+
+- Test debt: the transcript history-cell suite has been rebuilt. It was 123
+  tests across 3,964 lines, and about a third of it pinned the current skin
+  rather than any behavior -- `assert_eq!(spans[1], "⣤")` for the
+  reduced-motion marker, `title_span.style.fg == theme.tool_title_color`,
+  `visible[1] == "▏ done: scan repo"`, four separate tests each asserting one
+  shape of fenced code never takes the transcript rail, and one test whose
+  only assertion was `!text.is_empty()` under a name promising it checked the
+  rendered tool id. Assertions like those break on every legitimate visual
+  change and catch nothing a reader of the transcript would notice, which is
+  the liability `d64b9429b` named. The replacement is 40 tests, each named
+  for the property it protects and asserting the property instead of the
+  token: reduced motion is checked by rendering the same running card at two
+  different elapsed times and requiring the frames to match -- which also
+  catches an animation leak the glyph constant missed -- and a frozen marker
+  must stay visible rather than landing on the spinner's invisible blank
+  (U+2800). Severity colors are checked by requiring warning not to read as
+  error rather than by naming a palette entry. A streaming assistant glyph
+  must actually pulse when motion is allowed, checked against
+  `pulse_brightness` rather than by sleeping on the 2s sine. Each of the
+  invariants claimed was verified to fail the new suite when deliberately
+  broken in the renderer.
+## [0.9.10] - 2026-08-19
+
+- Show the full slash-command or `/model` completion row in a bounded, wrapping hover popover whenever narrow terminals truncate it, closing the remaining scoped gap from [#998](https://github.com/Hmbown/GhostyCode/issues/998). Thanks [@AiurArtanis](https://github.com/AiurArtanis) and [@formp3](https://github.com/formp3) for identifying the affected surfaces.
+- `registry_sync` no longer ships the full MCP Registry catalog into the
+  conversation. It takes a required query, scores the local snapshot
+  host-side, and returns at most eight matches; the complete catalog stays on
+  disk, and the compaction and spillover exemptions that let a multi-hundred-
+  kilobyte dump reach the model unchanged are gone.
+- Providers that mirror the outgoing `(reasoning omitted)` replay placeholder
+  back as a reasoning delta no longer have that echo ingested as real
+  thinking: the exact transport placeholder is dropped on arrival, so live
+  sessions stop showing a stream of placeholder reasoning blocks and saved
+  transcripts stay free of them.
+- Mid-stream connection drops during an interactive turn no longer persist a
+  synthetic `[runtime]` user message. Retry state is a typed engine-internal
+  descriptor; a thinking-only drop re-issues the request without claiming a
+  partial reply was preserved, the retry budget is enforced in mechanism, and
+  recovery produces exactly one authoritative final answer.
+
+Ghosty v0.9.10 is a retention, identity, and product-clarity release: the shell and
+transcript can no longer retain unbounded tool output in memory or on disk,
+mid-turn history inserts no longer strand in-flight tool rows, every agent
+that ran this session is visible from `/agents list`, the PTY acceptance
+lane has a stall watchdog and bounded CI steps, approval outcomes are
+durable and fail closed (cyq1017, #5360), and three $HOME disk leaks are
+reclaimed. Extension surfaces now name their real state and act only
+through the reviewed install and trust flows, and sub-agent, shell, task,
+and workflow state is owned by the session that created it (#5518). Test
+threads get an 8 MiB stack so the lib suite can no longer
+abort under load.
 
 ### Fixed
 
-- **User-authored messages render as literal plain text.** Leading whitespace,
-  whitespace-only lines, repeated spaces, and Markdown-looking `#` / `-` text
-  now survive in transcript history, while assistant messages still render
-  Markdown normally.
-- **English turns stay English after localized context.** The Brother Whale
-  identity and base language rules no longer inject native-script examples into
-  the English prompt path, and the prompt now calls out localized READMEs, issue
-  text, file contents, and tool results as data rather than language signals.
-- **Stream decode failures no longer leave the turn visually stuck.** The UI
-  now marks an active turn failed and flushes live cells as soon as the engine
-  emits a stream error, so the sidebar/footer recover without requiring
-  Ctrl+C (#1960).
-- **RLM contexts now expose `_ctx`.** Persistent RLM REPLs bind `_ctx` as a
-  compatibility alias for the loaded source alongside `_context` and
-  `content`, and the prompt/docs call out the exact names (#1962).
-- **`handle_read` is easier to recover from.** The tool keeps accepting full
-  `var_handle` objects directly, adds `introspect: true` for size/projection
-  hints, and validation failures now include copy-pasteable examples (#1963).
-- **The help picker keeps the selected row visible while scrolling.** `/help`
-  now budgets against the real modal body height, wraps Up/Down navigation,
-  and uses a stronger selected-row highlight (#1964).
-- **Unicode `git_status` paths stay readable.** Chinese and other non-ASCII
-  repository paths now survive status parsing and display cleanly (#1936,
-  #1953).
-- **Project-local and configured skills appear in the slash menu.** Workspace
-  skills and configured skill directories now feed the command picker instead
-  of only the bundled set (#1955, #1956).
-- **Repeated Tab mode switching no longer stacks composer-obscuring toasts.**
-  The mode-switch notification now deduplicates instead of accumulating rows
-  over the composer (#1926, #1957).
-- **Local tool UX surfaces are clearer.** `github_close_pr` now has the same
-  guarded closure workflow as issue close, `handle_read` redirects artifact
-  refs to `retrieve_tool_result`, Plan handoffs use plainer wording, and shell
-  rows/sidebar tasks show the actual running command instead of placeholder
-  labels.
+- First run starts on the welcome screen again. A missing key no longer
+  skips Welcome and auto-opens the local-provider list: Enter walks to the
+  calm provider explanation, then Enter opens the picker so a first API key
+  can be set. Returning missing-key recovery still opens the picker on
+  launch.
+- A foreground `bash` command that named no timeout is bounded again. The
+  model-facing `bash` tool left an omitted `timeout_ms` at the internal
+  ceiling (~24.8 days) instead of the 120 s default its own schema
+  advertises, so a CLI that blocked on an interactive prompt or a hung
+  network call held the turn open indefinitely — one report sat on a single
+  unauthenticated CLI call for over two hours with the tool row simply
+  counting seconds. The advertised default now applies, which arms the
+  existing recovery: the process is killed and the model is told to rerun
+  with `background=true` and poll with `action="wait"`. An explicit
+  `timeout_ms` is still honored for genuinely long foreground work, and
+  background and interactive runs keep their own lifetimes.
+- The Extensions (`/plugin`) Marketplace is no longer a read-only list.
+  Every recommendation and stored candidate names its truthful state and
+  primary action — Add, Enable, Configured, or Unavailable — and Enter or a
+  mouse click runs that action through the existing reviewed `/mcp add
+  recommended`, `/mcp enable`, and `/plugin` install/trust controllers, so
+  no second trust path exists. Browser Use and Sandbox Runtime stay
+  honestly Unavailable with their real setup routing instead of implying an
+  install Ghosty cannot perform.
+- The Extensions MCP tab now renders one honest inventory: the header count
+  and the visible rows derive from the same configured-server set, so
+  `MCP (6)` can no longer sit above two rendered rows. Disabled servers
+  stay visible and labeled disabled instead of silently disappearing, and
+  configured servers absent from the live snapshot list as not-yet-inspected
+  with their own explicit reload affordance through the MCP command
+  controller.
+- Installed plugin rows now act on their real state: Enter opens an active
+  bundle (`/plugin show`), offers Enable for a trusted-but-disabled bundle,
+  or routes an untrusted bundle to the existing trust review — through the
+  same confirmation and persistence controllers as the slash commands.
+- Sub-agent handoffs and rosters, background shell jobs, durable tasks,
+  delayed continuations, and workflow controls are now scoped to the
+  session that owns them. Records carry immutable root-session ownership,
+  stale completion-channel payloads are rejected before deduplication,
+  background work drains and reports only to its owning session, and
+  legacy ownerless jobs fail closed (#5518 failure class reported by
+  @hxfhd; the report's exact JavaScript provenance was not claimed as
+  reproduced).
+- The resolved route envelope now reaches every outbound model call: all
+  wire dialects and auxiliary calls clamp at the shared transport seam
+  under one wire/reservation budget, provider input limits are honored, and
+  switching models on the same protocol no longer inherits the previous
+  model's limits (#5516, #5518).
+- First-run continuity: the chosen onboarding provider persists across
+  restarts, a missing first-run config no longer interrupts the flow, and
+  the automatic working-agreement checkpoint renders as a standalone setup
+  handoff instead of regressing the onboarding rail to the full wizard's
+  4/10 progress.
+- Explicitly worded natural-language `/goal` declarations now create a
+  durable goal in the provider-neutral engine before model dispatch, while
+  ordinary tasks and quoted transcripts stay out of goal mode and prose
+  acknowledgement alone can no longer stand in for goal creation.
+- `/model` now keeps the current Z.ai default (`GLM-5.3`) visible when an
+  older installation has an explicit `GLM-5.2` route saved. The saved 5.2
+  route remains exact; choosing 5.3 sends and remembers the distinct 5.3 ID.
+- The constitution checkpoint now leads with the bundled balanced agreement;
+  the default path writes no custom constitution. The startup launch surface
+  distinguishes read-only Chat from folder-bound, approval-gated Work.
+- Tabby and other IME bridges no longer observe a stale visible caret while a
+  frame diff is being painted; Ghosty hides the cursor during the diff,
+  restores the canonical composer cell, and only then reveals it again
+  (BrathonBai, #5023).
+- Pre-header HTTP/2/SSE transport failures get one bounded HTTP/1.1 retry;
+  authentication, provider-semantic, response-body, and already-pinned HTTP/1
+  failures remain fail-closed (demian-welt, #4683).
+- MCP `tools/call` images now travel as bounded typed content instead of
+  leaking base64 through model-visible JSON. Direct and parallel calls share
+  the same MIME, size, validation, and one-image boundary (PR #5515 by
+  @cacdcaecawae).
+- Linux npm installs and updates race GitHub Releases against the CNB mirror
+  at the checksum-manifest layer, then download from the first verified source
+  without making users wait through a doomed slow-source timeout.
+- `GHOSTY_PREFER_BWRAP` now applies the documented Linux sandbox override,
+  and Ghosty-era names own build metadata, hook session/tool-call IDs, and
+  sandbox child markers. The corresponding `DEEPSEEK_*` names remain as 0.9.x
+  compatibility aliases (#5443).
+- Windows default launch prefers Windows Terminal: zip archives ship
+  `ghosty.bat` (CRLF, `wt.exe` then the exe), `install.bat` copies that
+  launcher, and the NSIS Start Menu shortcut opens it instead of the raw
+  binary (#1854).
+- `fix(tui): make the header status mark honour its setting` — `status_indicator`
+  did nothing for three of its four documented values. The header hardcoded a
+  leading `cw` span *and* asked for a second mark beside the effort chip, then
+  filtered the second one against the literal `"cw"`; because `cw`, the legacy
+  `whale` opt-in, and every unknown value all normalize onto that same mark,
+  the filter discarded them and left `off` with nothing to turn off. `cw`,
+  `whale`, `off`, and a typo all rendered byte-identical headers. There is one
+  mark now and the setting owns it: `cw`/`whale` draw the typographic mark,
+  `dots` draws the activity frames, `off` removes it (thejayjetson, #5512).
+- `fix(tui): rebase active-cell tool bindings on every mid-turn history
+  insert` — `/rename` mid-turn left the running tool row spinning forever
+  (#5478).
+- `fix(tui): bound what the shell and transcript retain from tool output` —
+  a 1.1 MB Bash call kept over a megabyte resident for up to an hour; raw
+  streams now cap at 16 MiB in flight and release delivered output, and
+  retained tool outputs cap at 64 KiB per record / 8 MiB per transcript
+  (#5472).
+- `fix(tui): reclaim the three $HOME disk leaks` — orphaned session dirs,
+  the unbounded audit.log, and stranded writer temp files.
+- `fix(tui): persist approval outcomes before execution` (cyq1017) —
+  approval receipts are committed to a session-owned log before execution
+  proceeds; unpersistable evidence blocks the tool; resume reconstructs
+  closed and interrupted approvals (#5360).
+- `test(tui): break the LazyLock/env-barrier deadlock in the test harness`.
+- `ci: give test threads the 8 MiB stack they need` — the lib suite aborted
+  with SIGABRT under load on the default 2 MiB stack.
+- YOLO entry points honor a locked approval policy: `--yolo`, `/mode yolo`,
+  `/zidong`, and Alt+Y can no longer set Full Access + trust + shell when
+  config or managed requirements own the posture.
+- Terminal PTY tools fail closed without a sandbox backend under a narrowed
+  filesystem posture, and otherwise start `$SHELL -i` through
+  `SandboxManager::prepare` like `bash`.
+- Skill update refuses to replace a directory that has no `.installed-from`
+  marker — same ownership gate plugins already used.
+- `cp`/`mv` are workspace-safe only when every path operand stays inside
+  the workspace — Auto-Review no longer auto-allows `cp /etc/passwd .`.
+- Main CI no longer shares one concurrency group per branch: each SHA
+  gets a verdict instead of a cancelled pending run. A hermetic Safety
+  gate job runs authorization tests in under 15 minutes (test bankruptcy
+  restructuring — no tests deleted).
+- Config-fixture tests no longer honor `lock_test_env` as a license to
+  read a populated `~/.ghosty/config.toml`; they need an `EnvVarGuard`
+  like settings already did. Safety-gate and CNB workspace tests pin a
+  hermetic `GHOSTY_HOME`. `exec_persistent_service` is serialized in
+  nextest and inside the cargo-test binary instead of dropped (#5355).
+- Short CLI no longer waits up to three seconds for a telemetry POST on
+  exit; `session_end` is recorded and the buffer ships on the next
+  interactive session.
+- Bare `/` now opens a deliberately small starter set: `/help`, `/setup`,
+  `/model`, `/settings`, `/resume`, and `/rc`. The full command inventory
+  remains searchable through `/help`, the command palette, and direct prefix
+  typing, without front-loading the entire control surface (#5442, #5439).
+- First run now asks only for decisions needed to become usable, keeps the
+  offline route explicit, and leaves optional provider, tools, policy, and
+  appearance work in the progressive `/setup` repair guide. The idle aquarium
+  asks one task-oriented question instead of advertising a tutorial or command
+  billboard, and the localized telemetry choice appears after the workspace is
+  ready without blocking the composer.
+- Provider, active model, and reasoning effort moved out of the crowded header
+  into a quiet, width-aware footer identity. Compact layouts keep model and
+  effort before provider detail and shed whole low-priority groups instead of
+  clipping the composer or control hints.
+- The model picker no longer re-parses `~/.ghosty/config.toml` once per
+  provider when deciding who has a saved key.
 
-### Thanks
+### Added
 
-Thanks to **cyq ([@cyq1017](https://github.com/cyq1017))** for the Unicode
-`git_status`, local/configured skill discovery, and mode-switch toast fixes in
-#1953, #1956, and #1957. Thanks to **Reid
-([@reidliu41](https://github.com/reidliu41))** for the help picker scrolling
-and selection fix in #1964.
+- `/workflows` opens a live run dashboard over this workspace's durable
+  workflow journal: every retained run with status, phases, child roster,
+  progress, and host-side cancel — observation only, it never launches a run.
+- Repository instructions now assemble from the actual containing checkout:
+  applicable `AGENTS.md` files resolve repository-root to current-directory in
+  order under one aggregate budget, a linked worktree is its own root, and
+  scope is never inferred from path mentions or whichever branch is named
+  `main`.
+- `/goal` is a codex-style control plane: setting an objective dispatches it
+  to the engine, which owns the goal and starts the first goal turn itself —
+  the objective is never echoed back as the user's own message, pause/resume
+  are real control ops, and the hunt-era vocabulary and trophy cards are
+  gone.
+- `/extensions` and `/plugins` open one localized inventory for Hooks,
+  Plugins, local Marketplace catalogs, Skills, and MCP. Reviewed suggestions
+  include Playwright, Chrome DevTools, Cua Computer Use, Browser Use, and the
+  sandbox runtime without granting trust or installing anything on open.
+- Turn Inspector now opens the newest turn and pages across complete recorded
+  user, reasoning, tool/subagent, and assistant output with page-scoped search,
+  copy, and export (sky-sun-moon, #1682).
+- Background tasks have bounded incremental persistence, durable terminal
+  reasons, truthful timeout/cancellation receipts, restart recovery, and
+  interruptible continuous-goal delays (#5497, #5508).
+- `/title` once again controls the terminal window title independently from
+  `/rename`, survives session save/load, and sanitizes control, bidi, and
+  zero-width characters (PR #5509 by @SparkofSpike).
+- MCP snapshots preserve whether capabilities were advertised by the server,
+  discovered through the bounded legacy fallback, or not observed (#4170).
+- `ghosty auth status --diagnostic` reports canonical paths, isolation
+  source, backend class, and value-free provider-source presence without
+  opening credential stores or creating/migrating state (#2369).
+- `ghosty doctor --probe-search` performs an explicit credential-free,
+  policy-checked transport probe for the selected search provider; ordinary
+  doctor and JSON output remain offline (#5442).
+- The safe deferred `read_media` tool is available to supported read-only
+  roles, and history receipts distinguish localized tool execution outcomes
+  without exposing raw payloads (#5102).
+- **npm Linux x64 first-party source selection.** The wrapper concurrently
+  fetches the GitHub Releases and CNB checksum manifests for the exact
+  package version, locks the first source whose HTTP response and manifest
+  validate, and downloads binaries only from that source. Explicit
+  `GHOSTY_RELEASE_BASE_URL` / `GHOSTY_USE_CNB_MIRROR=1` still skip the
+  race; other targets stay on GitHub.
+- `/workflow <objective>` and `/workflow run <path>` now produce a bounded,
+  tool-less proposal for review. Only `/workflow confirm` can launch that
+  reviewed draft; status, cancel, settings, and the `/workflows` dashboard stay
+  host-owned and do not spend a model turn (#5439).
+- `feat(tui): add cancellable cadence to continuous goals` (M-Maciej) —
+  `[goal] continuation_delay_seconds` gives coordinator goals a visible quiet
+  period between successful turns while reusing the existing coalesced goal
+  continuation token; Esc, Ctrl+C, pause/done/blocked/clear cancel before the
+  next provider request, and failures never continue (#5508).
+- `feat(tui): add command context adapters and migration gate (FEAT-015)`
+  (aboimpinto) — TUI-owned capability facets, a dual-path dispatch seam, and
+  source-aware CI enforcement so a command slice cannot claim to be migrated
+  while it still accepts concrete `App`. Zero production commands migrate in
+  this slice (#5316).
+- `feat(web): move docs/hooks and docs/troubleshooting onto the dictionary
+  spine` (Lstarsky0) — both pages now read copy from the locale dictionaries
+  instead of inline bilingual literals (#5337).
+- `feat(web): move docs/constitution and docs/runtime-api onto the dictionary
+  spine` (Lstarsky0) — both pages now read copy from the locale dictionaries
+  instead of inline bilingual literals; another incremental phase of #5337,
+  not completion of the full epic (#5517).
+- `docs(i18n): complete Tier 1 of Chinese docs localization` (SparkofSpike) —
+  Chinese and Indonesian docs move to `docs/zh_hans/` and `docs/id/`, with
+  redirect stubs at the old paths for one release cycle (#5482).
+- `feat(tui): show repository context in git chrome` (wuisabel-gif) — the TUI
+  header now identifies the active repository or linked worktree before the
+  branch and dirty marker, so operators can see where the agent is working
+  without opening the worktree manager (#5437).
+- `feat(tui): formalize the status-bar color grammar` — seven semantic
+  families live in `docs/design/STATUS_BAR_COLOR_GRAMMAR.md` and
+  `palette::grammar`; header and phase-strip ink resolve through named
+  `ChromeInk` slots so chrome cannot invent an eighth meaning or spend
+  Failure red on a dirty worktree or selected mode. The footer's session
+  metrics strip resolves through the same inks, and the red reservation is
+  checked against every selectable theme, not just the whale default;
+  typed footer toasts resolve through the grammar too.
+  Repo/worktree chrome stays metadata and still renders when Git names a
+  location but not a ref (#5437).
+- `feat(tui): first slice of the agents roster` — every agent that ran this
+  session, receipts-only, via `/agents list` and the sidebar fan-out rows
+  (#5479 spec items 1 and 5).
+- `ci: bound PTY acceptance and add a stall watchdog to the harness` —
+  QA_PTY_STALL_TIMEOUT_SECS aborts a wedged PTY run with a diagnostic;
+  the isolated PTY step is capped at 15 minutes; Windows NSIS provisioning
+  gets a bounded retry (#5496).
+- `chore(scripts): dev-cache warns before it fills a disk` (#5465 class).
 
-## [0.8.41] - 2026-05-23
+### Contributors
+
+- [Sh1Zuku](https://github.com/SparkofSpike) (`@SparkofSpike`) — restored
+  `/title` as an independent, persistent terminal-window title in PR #5509,
+  in addition to the Tier 1 Chinese and Indonesian documentation work below.
+- [Sun Zhenyuan](https://github.com/bistack) (`@bistack`) — extracted the
+  turn-loop stream processor in PR #5514 while preserving retry, cancellation,
+  usage, TTFT, steering, and partial-response behavior.
+- [OctoBored](https://github.com/OctoBored) (`@OctoBored`) — supplied the
+  working no-token Star History mirror used across the localized README set
+  after the canonical chart endpoint began returning a restricted placeholder
+  (#5510).
+- [cacdcaecawae](https://github.com/cacdcaecawae) (`@cacdcaecawae`) — added
+  provider-neutral typed MCP image forwarding in PR #5515; the harvested
+  version also makes malformed image fields produce a visible omission receipt.
+- [DingYong4223](https://github.com/DingYong4223) (`@DingYong4223`) — reported
+  the narrow-terminal completion truncation closed by the bounded hover reveal
+  (#998). Thanks also to @AiurArtanis and @formp3 for identifying the affected
+  completion surfaces.
+- [sky-sun-moon](https://github.com/sky-sun-moon) (`@sky-sun-moon`) — reported
+  the missing full per-turn input, reasoning, tool, and assistant pages that
+  shaped Turn Inspector navigation (#1682).
+- [cy2311](https://github.com/cy2311) (`@cy2311`) — reported the Windows launch
+  path that now ships and installs a Windows Terminal-aware batch launcher
+  (#1854).
+- [demian-welt](https://github.com/demian-welt) (`@demian-welt`) — provided the
+  reproducible pre-header SSE transport failure behind the bounded HTTP/1.1
+  retry (#4683).
+- [BrathonBai](https://github.com/BrathonBai) (`@BrathonBai`) — reported the
+  Tabby/CJK IME candidate-window jump that led to the hide-diff-position-show
+  cursor transaction (#5023).
+- M-Maciej (@M-Maciej) — the real-world organization-coordinator use case and
+  5–30 minute cadence requirement behind cancellable cross-turn goal delays
+  (#5508).
+- cyq1017 (@cyq1017) — approval outcomes are persisted before execution can
+  proceed: receipts commit to a session-owned log first, unpersistable
+  evidence blocks the tool, stale decisions are rejected, and resume
+  reconstructs closed and interrupted approvals (#5491, closes #5360).
+- aboimpinto (@aboimpinto) — the TUI-owned dependency-injection and migration
+  infrastructure that makes slash-command extraction safe: seven capability
+  facets, a dual-path dispatch seam, and source-aware CI enforcement so a
+  command slice cannot claim migration while it still accepts concrete `App`
+  (#5506, EPIC-005/FEAT-015 under #5316, which they also filed).
+- wuisabel-gif (@wuisabel-gif) — the TUI header now names the active
+  repository or linked worktree before the branch and dirty marker, derived
+  from Git's common directory and capped by shell density tier (#5511, the
+  repo/worktree slice of #5437).
+- SparkofSpike (@SparkofSpike) — Tier 1 of the Chinese docs localization:
+  Chinese and Indonesian documentation moves to `docs/zh_hans/` and
+  `docs/id/` with redirect stubs held at the old paths for one release cycle
+  (#5507, epic #5482, which they also filed).
+- Lstarsky0 (@Lstarsky0) — `docs/hooks` and `docs/troubleshooting` move onto
+  the dictionary spine, retiring their inline bilingual literals in favor of
+  locale dictionaries with token-aware code spans (#5504, closes #5337, which
+  they also filed).
+- Lstarsky0 (@Lstarsky0) — `docs/constitution` and `docs/runtime-api` follow
+  the same dictionary spine: 28 inline `isZh` branches become typed English
+  and Chinese dictionaries held to key and token parity, while the other
+  sixteen locales keep the English fallback (#5517, a further phase of #5337).
+- @thejayjetson — the header status-indicator report that pinned the
+  regression to a specific setting, with every value, theme, and
+  `fancy_animations` combination already ruled out (#5512).
+- hxfhd (@hxfhd) — reported the deterministic cross-session contamination
+  class behind this release's session-ownership boundary, plus route
+  budgeting evidence (#5518).
+- sfdzhmr (@sfdzhmr) — reported the route budgeting root causes that exact
+  route-limit propagation now closes (#5516).
+
+## [0.9.9] - 2026-08-18
+
+Ghosty v0.9.9 is a truth-and-resilience release: the shell tool can no
+longer wedge a session when the host runs out of disk or descriptors,
+unverified context windows and output ceilings are labeled honestly at every
+surface, DeepSeek V4 is priced on the published peak/off-peak tiers, SSE
+UTF-8 fails closed in every dialect, Fleet shadowing is visible, bwrap gets
+container essentials and extra roots, the `dsh` skin rides the bundle
+profile, the `agent` tool schema is down to 12 fields, and README/website
+locales grow to 18 and 8.
+
+### Fixed
+
+- The lowercase `bash` tool no longer wedges when its complete-output spill
+  file cannot be created: a full temp volume or exhausted descriptor table
+  used to fail *every* call — `echo ok` included — with the harness-internal
+  "Failed to create streaming shell output" and never recover until the
+  host was cleaned up. The spill is now best-effort (the bounded tail is
+  still returned and the truncation notice says why the full-output path is
+  missing), and any remaining spawn/stream failure names the exhausted
+  resource — disk, file descriptors, memory — and says the next call is safe
+  to retry (#5465; the wedge that took out the owner's own 0.9.9 session).
+- A concrete route/offering output limit now outranks the conservative
+  8,192-token compatibility guess for an uncatalogued model. Routes that
+  publish no output limit remain fail-closed, documented model ceilings stay
+  authoritative, and a route limit can never raise the requested cap (#5460).
+- Context-window honesty at every surface (#5239, #5441): the
+  `model-name hint` and `fallback` rungs of the context-window ladder are
+  guesses, and every surface that renders one now says so — the status line,
+  `/status`, `/config`, the context-pressure message, the model picker chips,
+  and the auto-router inventory. Unverified windows still drive real budgets
+  (compaction trigger, context meter, output reservation); they just stop
+  reading as capabilities anyone checked. A window parsed from an `_Nk`
+  model-name suffix (`qwen3-32b-256k` → 256K) is now its own
+  `model-name hint` rung below `catalog`, because it is optimistic rather
+  than conservative — a catalog or provider-reported value beats it. The
+  `[providers.<name>] context_window` override remains the hard fix and
+  renders as `configured` with no marker.
+- Output-ceiling honesty (#5440): an Anthropic-family model the catalog does
+  not describe keeps the 64K Messages floor as its clamp and the ChatGPT/
+  Codex OAuth route keeps its 4K policy, but `OutputCeilingSource` gained an
+  `unverified` rung for both, so exec-stream receipts and the model picker
+  label them `unverified`/"assumed floor" instead of `documented`. Clamp
+  values are unchanged.
+- Telemetry default-on is visible (#5441): `ghosty doctor`'s
+  runtime-posture section gained a `telemetry=on (default)`-style row with
+  the source that decided it (cli | env | config | default), and
+  `ghosty config get telemetry` reports the resolved consent with its
+  source instead of `key not found` on a machine whose batches ship. Truth
+  change only; resolution and behavior are untouched.
+- Fleet: a scout's read-only shell carve-out (#5428) is now honored by both
+  the posture gate and the execution envelope, so `git log`, `find | head`,
+  `npm view` and the other bounded read-only commands run in-place instead
+  of being refused as "Executes" (#5426). Delegation still never widens
+  authority: the role-isolation test and docs/SUBAGENTS.md pin that a child
+  cannot exceed its parent's posture (#5426, #5435).
+- `/rename` and `/title` now apply mid-first-turn: the session file does
+  not exist until the first autosave, so the rename fell through with
+  NotFound; the shared path now prefers the per-session checkpoint and
+  rebuilds from App state, with a PTY regression test through the live
+  event loop (#5430).
+- `integrations dsh plan` no longer refuses DeepSeek's default
+  Responses-dialect route (`deepseek-v4-flash`); Responses and
+  Anthropic-Messages routes are carried through pi-ai
+  `openai-responses` / `anthropic-messages` instead of being approximated
+  or refused; only credentialed base URLs are still refused, with an error
+  that names provider and model (#5434).
+- Session cost no longer sits at `unverified_live_pricing` when live pricing
+  cannot be verified (control-plane 503, Models.dev capabilities-only
+  overlays): provider-docs bundled fallback rates for the DeepSeek V4
+  family on Fireworks / OpenCode Zen restore a usable figure, live
+  per-provider rows still win, and `kimi-k3` stays unpriced until a
+  published rate exists (#5241; harvested from #5402).
+- Release assets: `release.yml` asset-freshness checks compare against the
+  release job's own `started_at`, so job-level reruns of the npm step are no
+  longer poisoned by earlier uploads (#5429).
+- macOS CI: the `agent_focus_pty` auto-review receipt test waited on a
+  worker that had already completed and raced the rail's focus; it now holds
+  the child's wrap-up and waits for a settled live row (refs #5056, #5403).
+- DeepSeek V4 pricing follows the published peak/off-peak tiers (peak
+  01:00–04:00 and 06:00–10:00 UTC; off-peak is half of peak) for
+  `deepseek-v4-flash` and `deepseek-v4-pro` in USD and CNY, resolved from
+  each turn's recorded time; the stale single-tier rows understated cost up
+  to ~4×. Because every direct DeepSeek first-party rate is now
+  time-windowed, the scorecard fails closed (`missing_recorded_time`) on an
+  undated DeepSeek turn instead of guessing a tier (#5470; #5241 follow-up,
+  verified against api-docs.deepseek.com on 2026-08-17).
+- SSE UTF-8 split across HTTP/2 DATA frames now fails closed in every
+  streaming dialect: a shared strict decoder, tail flush, and
+  `decode_failed` propagation (`InvalidSseUtf8`) replace the per-dialect
+  approximations, with byte-chunk decoder tests (#5374; supersedes draft
+  #5404).
+- CI: `release_four_read_only_fleet_roles_launch_with_canonical_prompts`
+  answered Fleet children with SSE while they call the blocking JSON path;
+  the parse failure was retried and double-counted the worker on slow macOS
+  runners (#5471; refs #5056).
+- Context: every web tool surface (`Web`, `web_search`, `web.run`,
+  `fetch_url`) now uses the noisy-result soft limit, so large fetches are
+  compacted like shell output instead of consuming the ordinary hard limit
+  (#5474, thanks @h3c-hexin).
+- Routing: a lowercase saved selector such as `glm-5.2` resolves against the
+  owning Z.ai / DeepSeek catalog row (case-fold fallback, only when exactly
+  one provider-owned wire id matches) instead of being classified as another
+  provider's bare model (#5475, thanks @h3c-hexin; diagnosis by @asto18089
+  in Pinvou/GhostyCode#14).
+- Model catalog brought current as of 2026-08-17 against the official
+  pricing pages: gpt-5.6-terra / gpt-5.6-luna rates, `claude-sonnet-5` keeps
+  $2/$10 (the announced September increase was withdrawn), `claude-opus-5`
+  added, `kimi-k3` and `kimi-k2.7-code-highspeed`, `MiniMax-M2.7-highspeed`,
+  Mistral first-party rows, xAI `grok-4.5` / `grok-4.3` with long-context
+  tiers, Gemini and Qwen limits, and RedNote's `dots3-note` preview as an
+  OpenRouter row (no first-party API exists yet) — every number carries its
+  source and a pinned test (#5485).
+- Website: copy on ghosty.net rewritten in plain declarative sentences —
+  one idea per sentence, numbers from the generated facts, no self-narration
+  — with a voice sheet at docs/design/WEB_VOICE.md (#5483).
+- CI: the release workflows no longer restore npm/cargo caches after
+  checking out a caller-supplied SHA — the CodeQL cache-poisoning Highs
+  #88–#107 are closed with a contract test over the workflow files (#5463).
+- Compact TUI rows below 60 columns no longer reserve a hidden session-metrics
+  strip, so narrow terminals reclaim the row instead of clipping the
+  transcript (#5486).
+- Ghostty's truecolor underwater field now uses a dedicated synchronized
+  60 FPS lane instead of the legacy 30 FPS compatibility cap, with continuous
+  caustic fades replacing visibly stepped color changes.
+- Live reasoning's advertised `Space:expand` action now runs before the
+  composer's first-character paste-burst hold, while spaces in an active paste
+  remain payload. The newest reasoning preview also spends only genuinely free
+  viewport rows before truncating instead of stopping at the fixed 10/12-row
+  fallback on roomy terminals.
+- Strict `cargo doc` builds no longer fail on bare URLs in rustdoc comments;
+  the remaining links are explicit Markdown targets (#5489).
 
 ### Changed
 
-- **Project renamed to ghosty.** The canonical CLI dispatcher is now
-  `ghosty` (was `deepseek`) and the TUI runtime is `ghosty-tui`
-  (was `deepseek-tui`). The 14 workspace crates are renamed from
-  `deepseek-*` / `deepseek-tui-*` to `ghosty-*` / `ghosty-tui-*`.
-  The npm wrapper package is now `ghosty` (was `deepseek-tui`). See
-  [docs/REBRAND.md](docs/REBRAND.md) for migration notes.
-- **DeepSeek provider integration is unchanged.** `DEEPSEEK_*` env vars,
-  model IDs (`deepseek-v4-pro`, `deepseek-v4-flash`, the legacy
-  `deepseek-chat` / `deepseek-reasoner` aliases), the
-  `https://api.deepseek.com` host, and the `~/.deepseek/` config
-  directory are all preserved.
+
+- The model-facing `agent` tool advertises exactly 12 fields — `action`,
+  `prompt`, `type`, `profile`, `name`, `agent_id`, `message`, `until`,
+  `detached`, `worktree`, `write_roots`, `resume_from` — down from 33
+  (#5324, refs #5123). Budgets (`max_steps`, `wall_time_secs`, `max_depth`),
+  routing overrides (`model`, `model_strength`, `thinking`), worktree-path
+  knobs, the deliberate/spawn-contract fields and the wait/status/interrupt
+  extras moved off the advertised schema. Every removed field stays
+  parse-accepted and honored unchanged (same contract as `token_budget`), so
+  saved transcripts, ACP/MCP clients and Fleet configs replay as-is; the
+  #5426/#5435 containment clamps are untouched. Child budgets now resolve
+  from role defaults (60/120 turns, 1800 s wall time, unchanged clamps) and
+  new `[subagents]` keys `default_max_steps` / `default_wall_time_secs`.
+  Because the tool catalog is part of the session-pinned prompt prefix
+  (docs/CACHE.md), upgrading re-fills the KV prefix once per session.
+- TUI prose — user messages, assistant answers, and reasoning/thinking —
+  now wraps at the full content width on wide terminals, matching
+  tool/status cells, instead of stopping at a 105-column rail that left a
+  dead right margin on ultrawide displays (#5436).
+- Configured skill prompts are stable across session roots and operating
+  systems: only custom configured roots hide their physical path, ordinary
+  workspace/global skills keep a discoverable privacy-safe path, warning
+  replacements are boundary-aware (including non-UTF-8 Unix paths), and
+  Windows separators render as `/`. The skills prompt is also 50 bytes
+  leaner without raising a runtime-contract ceiling (#5492, #5473).
+- Auto-router classifier requests accept `[auto.router] timeout_secs`, while
+  preserving the existing default when the key is absent (#5494).
+- Every `ci.yml` job now has an explicit 10–90 minute timeout appropriate to
+  its workload, bounding stale assigned runners instead of inheriting
+  GitHub's six-hour default (#5495).
+- The docs shell and shared web components now route localized copy through
+  the typed dictionary spine; these are two incremental phases of #5337,
+  not completion of the full epic (#5488, #5490).
+- Dependency: rusqlite 0.40.2 (#5391).
+- Documentation: stale A/B/C-tier references, provider defaults, module
+  descriptions, and line anchors now match the current code (#5481).
+
+### Added
+
+- `[transcript] prose_measure` (positive integer, optional): caps prose
+  wrap at N columns for owners who want a bounded reading measure on
+  ultrawide terminals. `0` or absent keeps the full width; negative or
+  non-integer values are rejected with a clear config error. Tool, diff,
+  and status cells never inherit the cap (#5436).
+- Localization: README translations for Français, Deutsch, 繁體中文, हिन्दी,
+  Türkçe, Italiano, Polski, العربية and Català join the existing nine
+  (#5451); ghosty.net routes fr, de, ca, hi, tr, it, pl and ar (with
+  `dir="rtl"` plumbing) as partial locales (#5453).
+- Docs: README Integrations section (incl. the DeepSeek Harness `dsh` plugin
+  path, docs/INTEGRATIONS_DSH.md) localized across all READMEs; RFC keeping
+  the deterministic-first auto-review hybrid (#5427); Claude Code parity
+  reference for agents/workflows/plugins/skills
+  (docs/design/CLAUDE_CODE_PARITY.md); config.example.toml / SUBAGENTS.md /
+  TOOL_LIFECYCLE.md brought back in line with the code (#5447).
+- `dsh` integration: the Ghosty palette is applied through the bundle
+  profile via dsh's documented `overrideTokens` (on by default;
+  `ghosty integrations dsh update --skin false` turns it off), replacing
+  the 0.9.8 exported-CSS skin that dsh's inline body variables overrode
+  (docs/design/DSH_BUNDLE_SKIN.md, docs/INTEGRATIONS_DSH.md) (#5469).
+- `dsh` integration: an ambient ocean scene behind the DSH web UI — slow
+  whale silhouettes, a school of `><>` glyph fish, bubbles — drawn on a
+  canvas under a translucent veil of the Ghosty palette, plus an explicit
+  responsive `WHALE BROTHERS / GHOSTY × DEEPSEEK HARNESS` lockup; light
+  and dark, ~30 fps capped, paused when hidden, a static frame under
+  `prefers-reduced-motion`; on by default with the skin,
+  `ghosty integrations dsh update --ocean false` turns it off (#5484).
+- Fleet: agent shadowing is visible — a roster-row badge, a Layers block in
+  agent detail, and a `doctor` "Fleet roster layers" section (JSON
+  `operate_fleet.roster.multi_layer`), in all 15 TUI locales. Layer collapse
+  and `[fleet.profiles]` migration stay for 0.9.10 (#5098).
+- Sandbox: bwrap containers get the `--dev/--proc/--tmpfs` essentials plus
+  configurable extra roots (`bwrap_ro_roots` / `bwrap_dev_roots`) so
+  toolchains that live outside the workspace stay reachable read-only
+  (#5410).
+- Tests: `crates/tui/tests/README.md` states the keyless assembled-journey
+  rule and maps the Auto-Review guardian acceptance items to the engine
+  journeys that exercise them (#5361).
+- OrcaRouter's default endpoint is classified as an aggregator billing
+  surface, so pricing and session-cost reporting use the correct billing
+  posture instead of treating it as a first-party provider (#5493).
+- Dependencies: ratatui 0.30.2, thiserror 2.0.20.
+
+### Removed
+
+- `dsh` integration: the exported-CSS skin file and its "skin export" status
+  line (superseded by the bundle-applied `overrideTokens` skin, #5469).
+
+### Contributors
+
+- hexin (@h3c-hexin) — a concrete route/offering output limit outranks the
+  8,192-token compatibility guess for an uncatalogued model (#5461, closes
+  #5460); web tool results use the noisy soft limit (#5474); owned direct
+  model casing resolves safely (#5475); and configured-skill prompts stay
+  stable across ephemeral roots and operating systems (#5492, #5473).
+- Gabriel-Degret (@Gabriel-Degret) — configurable auto-router classifier
+  timeout (#5494; first contribution).
+- @asto18089 — diagnosed the Z.ai `glm-5.2` casing collision and wrote the
+  first provider-scoped fix in Pinvou/GhostyCode#14 (carried upstream in
+  #5475).
+- Reports and reproductions that shaped this release: @hardy922 (context-
+  window honesty, #5239), @redstar (bwrap extra roots, #5410), @all-lopezg
+  (SSE UTF-8 garbling on DeepSeek Flash, #5374), @alitvak69 (unverified live
+  pricing, #5241), and @wuisabel-gif (the macOS filtered-suite hang
+  investigation on #5056).
+
+## [0.9.8] - 2026-08-16
+
+Ghosty v0.9.8 ships the remaining assigned finish. Remaining web
+settings polish moves to v0.9.9. Prefab third-party templates that have
+a published OpenAI-compatible host ship here (#5350).
+
+### Fixed
+
+- `sudo` (and `su`/setuid helpers) work again for wheel-group administrators
+  who want Ghosty to be able to escalate: the Linux startup hardening's
+  irreversible `PR_SET_NO_NEW_PRIVS` flag — inherited by every child process —
+  is now skippable with `GHOSTY_NO_NEW_PRIVS=0` (#5413). The flag stays on
+  by default; the no-ptrace and no-core-dump measures are never skipped.
+
+- Abort-class process deaths no longer poison the terminal (#5424). A
+  stack overflow, allocation failure, or double panic skips the panic hook
+  and every cleanup guard, which is how a v0.9.7 user's mid-turn exit left
+  mouse capture leaking SGR sequences into their shell. An
+  async-signal-safe handler now restores the terminal modes and appends a
+  one-line cause marker to `~/.ghosty/crashes/last-fatal-signal.log`
+  before re-raising, keeping the honest 128+signal wait status. A SIGKILL
+  (OOM killer) remains uninterceptable by design.
+
+### Changed
+
+- Prompt-cache prefix is pinned for the session. The tool loop no longer
+  recomposes the system prompt from disk on every model step, so an agent
+  writing a file no longer busts the provider KV prefix cache mid-turn. The
+  system prompt and tool catalog are re-composed only on a declared header
+  change (`/model`, mode, goal, session resume), which re-pins under a logged
+  reason; an undeclared change is reported as drift and the original pin is
+  kept instead of silently becoming the new baseline. Workspace, AGENTS.md,
+  skills, memory, and goal drift now reaches the model as one bounded
+  `<context_update>` user message at the next user turn — a history append,
+  not a header rewrite. `/cache stats` shows the pin reason, the last-miss
+  reason, the undeclared-drift count, and the context-update count. See
+  [docs/CACHE.md](docs/CACHE.md).
+
+- Plugin compatibility is now per-component. A reviewed, trusted, enabled
+  bundle that mixes Skills or MCP with unsupported commands, agents, hooks,
+  LSP, native, filesystem-roots, or lifecycle-mutation declarations keeps the
+  supported adapters active and reports the rest as inactive (`full` /
+  `partial` / `unsupported`). All-unsupported bundles still cannot be enabled.
+  The capability hash is now v2 and binds this build's activation policy, so
+  older v1 receipts and any later adapter-enablement change fail closed as
+  needs-review. Skills and each MCP transport re-request their own capability
+  at the consumption boundary.
+
+### Added
+
+- Opt-in multiline composer mode (`composer_multiline_mode = true`) makes
+  Enter insert a newline and Shift+Enter send. Alt+Enter, Ctrl+J, and supported
+  Ctrl+Enter/Cmd+Enter behavior stays unchanged (#5345, @AiurArtanis).
+
+- `/plugin marketplace add|list|show|remove|install` completes the
+  federated marketplace journey (#5311). `add` reads one LOCAL catalog
+  document in the real published schemas (Kimi, Claude, Codex, or
+  Ghosty native) — no network, regular files only — and persists it
+  beside the plugin state with the same hardened, fail-closed store.
+  `list`/`show` render every candidate with per-entry diagnostics,
+  display-only tiers, and honest install plans that say when Ghosty
+  cannot fetch a source; `install` routes through the existing reviewed
+  installer, so installed bundles still enter disabled and untrusted.
+  Foreign auto-install policy (Codex `INSTALLED_BY_DEFAULT`) is visibly
+  ignored; nothing is auto-installed, auto-trusted, or granted vendor
+  trust.
+
+- `/rc` attach now includes an observed `owner/name` git remote when the
+  folder has a GitHub, CNB, or Gitee origin, so CWC can label the paired
+  session. Paths stay off the wire. Reconnect after both this client and
+  CWC #202 land to backfill existing empty rows.
+
+- The local Runtime web client keeps the thread rail clipped so **New
+  thread** cannot paint over the session fact chips. Chips wrap instead
+  of sliding under the rail.
+
+- Z.ai `GLM-5.3` is live on the Coding Plan and is now the default direct
+  Z.ai model: `DEFAULT_ZAI_MODEL` resolves to `GLM-5.3` in both
+  `ghosty-tui` and `ghosty-config`, and it is the first `/model` row
+  after `/provider zai`. Explicit `GLM-5.2` selections (`model = "GLM-5.2"`
+  and its `glm-5.2` aliases) keep their own id — only the default moved.
+  Limits and reasoning options still inherit from `GLM-5.2` until Z.ai
+  publishes distinct 5.3 numbers. No USD price is claimed. A live call
+  can still 429 with entitlement code 1311 on accounts that are not
+  provisioned for 5.3.
+
+- The TUI transcript renders Markdown blockquotes (`>` lines) with a quote
+  rail — nested quotes, inline bold/code/links, wrapped continuation rows, and
+  selection copy that keeps the quote text and skips the rail chrome.
+
+- Sub-agent details show the resolved model, fleet role, and type. Labels
+  use the session/role name instead of a generic Agent N (#5371, #5287).
+
+- Documented catalogue output ceilings (including DeepSeek V4's 384K maximum)
+  remain authoritative bounds, while ordinary requests start at a safe 64K
+  cap and explicit overrides can raise it within the resolved route window. A
+  clean output-limit stop continues the turn instead of killing it (#5373,
+  #5516, #5518). Thanks @sfdzhmr and @hxfhd for the route evidence.
+
+- Ollama Cloud is a first-class hosted provider (`/provider ollama-cloud`)
+  on the official OpenAI-compatible `https://ollama.com/v1` route. Local
+  Ollama stays keyless. The exact released `ollama` + Cloud URL tuple keeps
+  a bounded compatibility path across saved sessions, Fleet, and nested
+  subagents; neighboring remotes stay custom and fail closed against
+  inherited official credentials.
+
+- Homebrew ships a `ghosty` formula. `brew tap Hmbown/deepseek-tui &&
+  brew install ghosty` is the install path; `brew upgrade ghosty`
+  updates it. The legacy `deepseek-tui` formula remains a deprecated alias
+  for one overlap release.
+
+- `/title [name|off]` sets a per-session tab/window title, shown as
+  `[title] …` in front of the terminal window title (`Ghosty` /
+  `reasoning…` / `using tool…` / `done`). The `title` config key supplies
+  the default (`/config title … --save` persists it); multi-window
+  workflows can tell parallel sessions apart at a glance. `/title` is
+  independent of `/rename`, which keeps naming the session in the picker
+  and composer. Control, bidi, and zero-width format characters are
+  stripped from both the saved session name and the window title, so the
+  picker, the Runtime API, `ghosty sessions`, and the OSC 0 tab title
+  all carry the same escape-free text (#5419, #5430).
+- Eden AI is a named OpenAI-compatible Chat Completions provider (`edenai`,
+  aliases `eden-ai` / `eden_ai`) with `EDENAI_API_KEY`, global and EU base-URL
+  overrides, a live provider-scoped model catalog, and
+  `deepseek/deepseek-v4-pro` as the verified default. Generic reasoning fields
+  stay omitted because Eden AI routes multiple upstream model families
+  (#5422, Kai Nacke).
+- Children (sub-agents and Fleet workers) inherit the session's permission
+  posture faithfully: Auto-Review's deterministic floor and model guardian
+  decide a worker's held calls (fail closed when unavailable, never a
+  prompt); under Ask a held call is raised in the parent's approval UI and
+  the worker waits visibly; Full Access still fails closed on the safety
+  floor. Each prompt-less decision is a one-line note in that worker's
+  transcript (focus mode) and an audit-log record.
+- Worker role defaults keep what the role does not intend to withhold:
+  every built-in role keeps network reads; `planner` may run read-only
+  shell probes; `custom` inherits the parent's write/network/shell posture
+  and is narrowed only by its explicit tool list or the spawning call.
+  Read-only roles (`scout`, `reviewer`, `planner`, `verifier`,
+  `consultant`) still never write the workspace. The focused worker's
+  header states its effective posture from the runtime snapshot.
+- `/workflow status`, `/workflow cancel [run_id]`, `/workflow settings`, and
+  `/workflow help` are answered by Ghosty itself from the run journal and
+  live run state — no model turn — and `/workflow run <path>` launches a
+  checked-in workflow as-is. `/config workflow` and `/config goal` explain
+  the effective tables. The workflow tool now honors the session `[workflow]`
+  table (`automatic`, `auto_start_read_only`, `require_approval_for_writes`,
+  limits) instead of product defaults.
+- Goal mode enters as readily as DeepSeek Harness: the agent may create the
+  session goal when a direct request describes a verifiable multi-turn end
+  state, and Ghosty shows a one-line `Goal set` receipt with how to pause
+  or clear it. Bare `/goal` shows plain progress (and how to continue when no
+  turn is running), prints usage on an empty session instead of asking the
+  model, and `/goal help|status` are reserved words.
+
+- Whale Teams in the terminal: the six Signal Cut whale identities (Scout,
+  Patch, Harbor, Echo, Keel, Lantern) appear as species badges on `/fleet`
+  roster rows and worker rows, with an identity portrait in the roster detail
+  pane and a six-state word (Resting, Thinking, Working, Waiting for you,
+  Blocked, Offline) derived only from the child's real runtime status. Colors
+  come from the theme tokens, every glyph has an ASCII fallback, and the
+  working wake animates only under full motion. See
+  `docs/design/WHALE_TEAMS_TUI.md`.
+- A session metrics strip on the phase row (`4 turns · 108 steps │ LLM
+  11m46s · Tool call 1m52s │ TTFT avg 1.5s · 120 tok/s │ Cache hit 99% │
+  Input 9.3M`), on by default as the `session_metrics` footer item
+  (`/statusline`, `[tui].status_items`). Every value comes from engine
+  receipts — turn starts, per-model-call usage with stream time,
+  time-to-first-token and whole-call time, tool start/complete edges, and
+  provider-reported cache and input tokens. Cells without evidence are
+  omitted, never estimated. `/status` prints the untrimmed line; the phase
+  row sheds its lowest-value groups to fit the columns it actually has.
+- Auto-Review decisions nobody was prompted for are now visible in the
+  transcript as one-line notes: model-guardian allow/deny verdicts with
+  their risk tier and stated reason, guardian failures (denied, fail
+  closed), deterministic policy blocks, and holds Auto-Review denied
+  without pausing. The audit log keeps the full record. `/permissions`
+  ends with the active posture, what it decides on its own versus never,
+  and the audit-log path. The footer's `Esc to interrupt` hint is
+  localized. See `docs/design/AUTO_MODE_PARITY.md` for the Claude Code /
+  Kimi Code parity ledger and follow-ups.
+- `ghosty integrations dsh status|plan|connect|update|launch|disable|enable|remove`
+  connects an existing official DeepSeek Harness (`dsh` 0.1.0-rc.6, verified)
+  through Ghosty using only its documented seams: a `--patch` overlay that
+  pins the exact Ghosty provider/model/endpoint identity (native
+  `deepseek-official` route, or a hand-declared `openai-completions` route
+  named `ghosty-<provider>` for OpenAI-compatible providers), the
+  Ghosty permission posture exported as `DSH_PERMISSION_MODE`, and an
+  append-only receipt. Ghosty writes only under
+  `$GHOSTY_HOME/integrations/dsh/`, never copies API keys or edits DSH
+  files, never broadens permissions (`--allow-full-access` only mirrors an
+  existing Ghosty full-access posture), and reports not-installed /
+  offline / incompatible / detected / connected / stale-config /
+  stale-version / disabled honestly. Anthropic Messages and OpenAI Responses
+  routes are refused as not carriable. The documented DSH plugin path is an
+  explicit opt-in: `install-bundle` materializes a Ghosty bundle package
+  (`ghosty-dsh-bundle`, MIT notice retained) and installs it with
+  `dsh plugin --profile ghosty add <path>` into a dedicated `ghosty`
+  profile (pnpm required, reported truthfully when missing; `web`/`headless`
+  untouched), so `dsh --profile ghosty` alone carries the identity;
+  `update` regenerates the bundle patch and `remove-bundle` reverses it,
+  leaving the DSH-owned profile directory in place. `/setup tools` and `ghosty doctor`
+  show the read-only detection state; `doctor` also lists the DSH read-only
+  credential consent alongside Codex and Grok. The optional `--skin` export
+  writes a Ghosty token stylesheet generated from the TUI palette
+  (Blue Stage dark/light, ombre water column, mode/permission/state colors,
+  reduced-motion fallbacks); DSH exposes no custom-theme API, so the sheet is
+  labeled an unsupported overlay and is never injected. See
+  `docs/INTEGRATIONS_DSH.md`.
+
+### Fixed
+
+- Selecting the `google` provider kind resolved to the `antigravity`
+  TUI identity (and vice versa): the agy provider entry was inserted at
+  different positions in the config-level enum and the TUI's
+  discriminant-indexed lookup table. The table now matches the enum, so
+  provider pickers, sorted display, and kind round-trips are correct.
+
+- The provider picker's key-entry stage accepted typed input and pastes
+  for OAuth-only providers after `antigravity` declared OAuth
+  acquisition; those gates now key off the OAuth acquisition class
+  instead of a hard-coded provider identity.
+
+- The webhook hook sink no longer panics when its HTTP client fails to
+  build; it falls back to a default client (#5381, EvanProgramming).
+
+- Session-index JSONL writes are serialized behind a process-wide mutex
+  so concurrent state stores cannot drop an append during compaction
+  (#5382, EvanProgramming; complements the cross-process file lock).
+
+- A billed `max_tokens` stop followed by a transport error fails the turn
+  instead of continuing into a second request. A clean output-limit stop
+  still continues. Mid-size context windows keep the ordinary 65K internal
+  reservation so compaction does not collapse to the 1K headroom floor
+  when the catalogue documents a matching output ceiling.
+
+- Thinking cycle, `/effort`, and Settings now walk each model's real ladder
+  instead of the DeepSeek off/high/max shortcut. Grok 4.6 is
+  auto/low/medium/high/xhigh (cannot disable); Grok 4.5 is
+  auto/low/medium/high; first-party DeepSeek keeps a documented `low` tier.
+  `/effort` persists and receipts through the same path as Ctrl+T.
+
+- Google Gemini is its own backend (`/provider google`) on the official
+  OpenAI-compatible route with thought-signature capture/replay and
+  fail-closed replay for thinking models. Antigravity (`agy` 1.1.13) is
+  a separate provider: consent-gated read-only import of the official
+  CLI's login, then a text-only cloud-code stream
+  (`/v1internal:streamGenerateContent`). Tools, images, and unknown SSE
+  shapes fail closed. Gemini 3.7 Flash is not advertised until a live
+  turn succeeds on this wire. The website 44-count still excludes
+  Antigravity.
+
+- DeepSeek Flash SSE on macOS no longer turns mid-character HTTP/2
+  flushes into U+FFFD replacement characters (#5374). Invalid UTF-8
+  fails the line instead of using lossy decode.
+
+- `[workshop] read_result_max_bytes` and `tool_result_max_bytes` raise
+  the model-visible read/tool-result floor; they never lower the
+  compile-time defaults and cap at 2MiB (#5367).
+
+- Fireworks and OpenCode Zen DeepSeek V4 Flash/Pro keep a bundled
+  family rate when the live control plane is down, so session cost is
+  not stuck on `unverified_live_pricing` (#5241). `kimi-k3` stays
+  unpriced until a published rate exists.
+
+- Provider setup ships a typed beginner template catalog (#5350). OpenCode
+  Zen/Go stay first-class key-only rows with their documented hosts and
+  curated models. SenseNova fills a named OpenAI-compatible table on the
+  published `https://token.sensenova.cn/v1` host (`S` or `/provider setup
+  sensenova`). Agnes is listed as unpublished because this repository has
+  no published URL. `/provider` `P` and Settings → beginner templates open
+  the list; `T` tests `/models` and refreshes status without treating 2xx
+  as model-ready. `/model` names a failed Models.dev refresh as
+  `refresh failed; catalog available` instead of `cache failed`.
+
+- Privileged release workflows no longer restore rust-cache, sccache,
+  or npm caches after checking out a caller-supplied SHA (CodeQL
+  cache-poisoning #88–#106). Catalog drift no longer prints raw
+  bundled/upstream blobs (#107).
+
+- Cancelling a turn now cancels its foreground child agents with it.
+
+- Empty compaction no longer wipes conversation history.
+
+- Wide terminals and tmux panes fill the full available width again for the
+  transcript and composer (#5322). The brief v0.9 session-shell side gutter
+  is gone so expanding a pane rematerializes layout the same way shrinking
+  does.
+
+- The agent tool schema rejects empty calls.
+
+- The local web client keeps recovered stream gaps closed, user questions
+  answerable, manual bootstrap access intact, and streamed prose quiet for
+  assistive tech.
+
+- Website zh-Hans copy now says 宪章, matching the TUI pack (#5397,
+  Lstarsky0).
+
+- Public website provider facts include Google Gemini and Ollama Cloud
+  (44 runnable routes). Antigravity stays credential-plane-only.
+  Harvested from #5398 (Lstarsky0) with that correction.
+
+- The website models page carries a truthful read-only settings preview
+  built from repository facts; it never implies the site can change local
+  configuration (#5370, #5411, mvanhorn).
+
+- The canonical `ultra` reasoning effort now maps to each provider's
+  maximum tier alongside the legacy `ultracode` alias, instead of being
+  silently dropped (#5303, #5409, buiducnhat).
+
+- Session titles truncate by character count, not byte offset, so
+  multi-byte titles (CJK, emoji) cut at the intended width and word
+  boundary instead of past the limit (#5415).
+- Wide terminals and tmux panes fill the full available width again for the
+  transcript and composer (#5322). The brief v0.9 session-shell side gutter is
+  gone so expanding a pane rematerializes layout the same way shrinking does.
+- The background verifier test drives the current libtest executable
+  instead of the rustup `rustc` shim, so the TUI suite no longer depends
+  on `$HOME` or holds the process-wide test environment lock across an
+  async wait (#5056, #5423, Isabel Wu).
+
+### Removed
+
+- The source-structure budget ratchet (CI step, checker, baseline JSON).
+  It measured line counts, not quality: every legitimate feature required
+  a hand-edited ceiling and the accompanying "review" was self-review, so
+  it bought ceremony, not protection. Behavior-measuring gates (dead-code,
+  runtime-contract, persistence-backlog) stay enforced.
+- DeepSeek can reuse a key already stored by official DeepSeek Harness
+  (`dsh`) after
+  `ghosty auth external-consent --provider deepseek --mode read-only`.
+  Ghosty reads only `DEEPSEEK_API_KEY` from the exact granted
+  `$DSH_HOME/.credentials.yaml` and never writes or refreshes that file.
+- The TUI markdown parser now honors CommonMark fence-length rules: a ````
+  opener is not closed by a shorter ``` line, so `>` content inside a longer
+  fence stays literal code instead of escaping into a quote.
+- Sub-agents finalize when the parent session id changes, so a closed
+  session cannot block new children as a live owner (#5372).
+- Child spawn-route receipts stay live and usage is deduped by response
+  (#5366).
+- Doctor keeps persisted setup readiness across first-run / update
+  checkpoints (#5340).
+- Approval default selection is applied and explained; agents are told
+  when approvals are disabled (#5293).
+- A `/models` 2xx probe is a connection check, not model readiness.
+- Site layout uses one container, the ticker no longer implies false
+  provider readiness, and install links stay in the active locale.
+
+### Contributors
+
+- EvanProgramming (@EvanProgramming) — webhook client panic fallback
+  (#5381); session-index JSONL mutex (#5382).
+- Lstarsky0 (@Lstarsky0) — session peek hides internal runtime events
+  (#5376); thinking-ladder test re-pin (#5378); provider-count follow-ups
+  (#5383/#5384); macOS agy fixture canonicalization (#5392); zh-Hans 宪章
+  terminology (#5397); regenerated website facts harvested and corrected
+  from #5398.
+- Matt Van Horn (@mvanhorn) — read-only models settings preview on the
+  website (#5411, fixes #5370).
+- Nhat Bui (@buiducnhat) — canonical `ultra` reasoning effort mapped across
+  provider effort tables (#5409); session titles truncated by character
+  count, not byte offset (#5415).
+- Sh1Zuku (@SparkofSpike) — `/title` and the session name in the terminal
+  tab/window title, plus the mid-turn title deadlock fix (#5419).
+- Kai Nacke (@redstar) — Eden AI provider registration, aliases,
+  `EDENAI_API_KEY`, and the global/EU endpoints (#5422).
+- Isabel Wu (@wuisabel-gif) — background verifier test isolated from
+  rustup and `$HOME` (#5423, slice of #5056).
+
+## [0.9.7] - 2026-08-12
+
+Ghosty v0.9.7 keeps the catalog ordinary. Grok 4.6 lands as a normal catalog
+row instead of a provider-shaped pile of special cases, OrcaRouter joins as a
+named provider, and a panic-safety advisory in `lru` is cleared by lifting the
+pin that caused it rather than living around it.
+
+### Added
+
+- Grok 4.6 is the direct xAI default, with the `grok` alias moving onto it and
+  `grok-4.5` still explicitly selectable. Its 500K context, text/image input,
+  tool and structured-output support, `low`/`medium`/`high`/`xhigh` reasoning
+  efforts (default `high`), and server-side web search all come from the
+  Models.dev-shaped catalog rather than model-specific code. `reasoning_effort`
+  reaches the wire only on the exact first-party `https://api.x.ai/v1` route,
+  and the usage-aware 200K-token pricing boundary is scoped to direct xAI so
+  aggregator routes reusing the model slug cannot inherit xAI billing.
+- OrcaRouter is a first-class named provider: `ORCAROUTER_API_KEY`, default base
+  URL `https://api.orcarouter.ai/v1`, `deepseek/deepseek-v4-pro` default,
+  `orcarouter/auto` routing, CLI `--provider` selector, and TUI picker entries
+  (#5321).
+
+### Changed
+
+- Reasoning-effort normalization and the model picker read a model's published
+  `reasoning_options` list from the catalog instead of collapsing every route to
+  the historic Low/Medium ladder. Any catalog row that publishes an effort list
+  keeps its own vocabulary.
+- Docs record DeepSeek's live `DeepSeek-V4-Pro-0813` backend label while the
+  callable API ID stays `deepseek-v4-pro`. No aliases are remapped and no
+  `deepseek-v4-pro[1m]` selector is sent.
+
+### Fixed
+
+- Auto-Review once again executes proven read/build/test shell commands and
+  bounded workspace writes without opening an approval modal. Explicit policy
+  blocks, unknown tools, publish operations, secret actions, MCP mutations,
+  and shell commands requiring approval still fail closed (#5323; reported by
+  USTHzhanglu and root-caused by Lstarsky0).
+- Copying a user or assistant message takes its canonical content instead of
+  reserialized transcript lines, keeping role glyphs, continuation rails, and
+  visual wrapping out of the clipboard while preserving authored Unicode,
+  Markdown, and hard line breaks. Tool and Thinking cells stay on the existing
+  full-transcript path (#5319).
+- `load_session` no longer runs crash recovery on every read. Snapshot reads go
+  through a side-effect-free `load_session_snapshot` and recovery is explicit
+  via `recover_session_for_resume`, so an embedding host inspecting a durable
+  session while a tool is still running no longer gets a spurious crash repair
+  (#5320).
+
+### Security
+
+- `lru` moves to 0.18 to clear RUSTSEC-2026-0253, where `LruCache::pop()` was
+  not panic-safe and could leave dangling list pointers. The `ratatui-core`
+  `=0.1.0` pin that transitively forced `lru` ^0.16 is lifted, so
+  `ColorCompatBackend` now answers `get_cursor_position()` from tracked cursor
+  state — the upstream-recommended workaround for the startup CPR race
+  (ratatui/ratatui#2483, ratatui/ratatui#2640) that the pin originally worked
+  around. `ratatui` itself stays pinned at `=0.30.0`, so the API surface is
+  unchanged.
+
+### Known issues
+
+- The integration test
+  `exec_persistent_service::failed_exec_kills_pending_service_and_exits_nonzero`
+  is a confirmed flake under parallel load ("service pid file never appeared").
+  It passes in isolation and is unrelated to any v0.9.7 change.
+
+### Contributors
+
+- XhesicaFrost (@XhesicaFrost) — canonical message copy (#5319).
+- h3c-hexin (@h3c-hexin) — session snapshot and crash-recovery split (#5320).
+- XiaoHuo888-hue (@XiaoHuo888-hue) — OrcaRouter provider registration (#5321).
+- USTHzhanglu (@USTHzhanglu) — Auto-Review regression report and Windows
+  evidence (#5323).
+- Lstarsky0 (@Lstarsky0) — Auto-Review regression root-cause analysis (#5323).
+
+## [0.9.6] - 2026-08-11
+
+Ghosty v0.9.6 is a subtractive release: fewer runtime guards, one stable
+prompt, truthful provider endings, and a smaller compaction path that preserves
+the provider cache. The changes were grounded by matched Terminal-Bench 2.1
+runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
+
+### Added
+
+- `web_search` defaults to Firecrawl Cloud without an API key; keyless requests
+  are headerless and quota-bounded, while an optional user key raises limits.
+- Green web builds on `main` now emit an actionable manual-deploy reminder, so
+  site changes cannot quietly appear shipped while Cloudflare still serves an
+  older revision.
+- Mistral AI is a first-class provider route, including Codestral models,
+  first-party reasoning support, authentication, picker entries, and aliases.
+- Headless `Bash` can transfer explicitly requested persistent Unix services
+  out of an exec run, with ownership and cleanup receipts.
+- `/remote-env` opens hosted Work from the current GitHub or CNB branch tip and
+  states exactly which unpushed, dirty, ignored, secret, and session state stays
+  local.
+- Linux ARM64 release and nightly assets are static musl builds with native
+  launch checks.
+- Maintainers can report observed daily active installs from the same anonymous,
+  aggregate telemetry dataset; no additional client data is collected.
+- Fleet-dispatched members under a read-only evidence (no-network) ceiling now
+  keep the `Web` tool's read-only `search` and `fetch` actions — parity with an
+  ordinary scout — while every reaching surface (`web.run`, `fetch_url`,
+  `github`, MCP) stays denied and the sentinel-backed capability envelope
+  remains the fail-closed backstop.
+- `/fleet setup` can show an optional, deterministic, unratified role-to-model
+  advisory built only from configured ready routes. Accept, edit, and reject
+  all remain inside the existing human-reviewed profile save boundary; the
+  advisory never launches a Fleet or writes a second configuration.
+- `/update` checks for a newer Ghosty release and installs it from inside
+  the TUI, while `tui_help` gives agents the same command and key map users see.
+- Markdown file paths render as OSC 8 links where the terminal supports them,
+  and every agent row can open that agent's transcript directly.
+- ACP editor sessions can execute multi-round file, search, Git, patch, and
+  explicitly enabled shell tool calls through the shared Runtime registry.
+  Shell access requires both the client's terminal capability and Ghosty's
+  headless shell opt-in, and cancellation stops an in-flight tool before the
+  turn returns (#5225 by @rafaelcavalheri).
+- Lowercase `read` returns bounded typed PNG, JPEG, GIF, and WebP results to
+  image-capable Chat, Responses, Anthropic, and ACP routes. Text-only routes
+  receive an explicit omission receipt; image bytes never spill into ordinary
+  transcript, export, compaction, or relay text.
+
+### Changed
+
+- Anonymous usage counting is on by default for fresh installs and disclosed in
+  a native first-run Ghosty modal with an immediate opt-out. Prior declines
+  remain off. Ghosty does not collect conversations, code, prompts, files,
+  repo or branch names, credentials, model content, or per-turn activity
+  timelines.
+- Wide terminals use a responsive, full-screen ocean canvas with modest
+  gutters: prose keeps a readable measure while tools, diffs, work surfaces,
+  the composer, and status chrome can use the available width. Turn and major
+  activity seams breathe without padding every call inside a tool group.
+- Root CLI help describes product actions directly instead of exposing internal
+  TUI/runtime layers.
+- `Bash action="wait"` now blocks by default when a wait is requested; callers
+  can still ask for a nonblocking snapshot, and persistent service ownership
+  remains explicit.
+- Compaction is one cache-stable summary request followed by one committed
+  replacement summary and a bounded recent-message tail. Older saved sessions
+  still restore.
+- Ask, Work, Auto-Review, and Full Access share one stable base prompt. Modes
+  continue to differ through permissions and the live tool catalog; the former
+  Act label is now Work throughout the product and shipped locales.
+- Full Access now auto-approves non-bypassable tools consistently, and the
+  default choice shown on ordinary approval cards is configurable.
+- Model, context-window, dispatch-name, and nested-agent spawn receipts report
+  the route and limits actually used rather than silently substituting a
+  guessed identity.
+- Child-agent launches mint one immutable route receipt before admission and
+  preserve it through status, interruption, completion, resume, Work Graph,
+  and ledger projections, so provider/model attribution cannot drift (#5305).
+- Goal runs no longer stop because of internal continuation, repeated-gap, or
+  unanswered-question guards. Explicit user limits and terminal goal states
+  remain authoritative.
+- Account-owned `/rc` remote control now keeps exclusive ownership and a
+  crash-recoverable delivery journal until the server acknowledges terminal,
+  approval, failure, and snapshot state.
+- `todo_write` is an optional progress surface rather than required model
+  ceremony.
+- New turns use one small, stable toolbox: `read`, `write`, `edit`, `bash`,
+  `agent`, `todo_write`, and `tool_search`. The optional progress tool stays
+  visible as familiar working memory; specialized native, Web, MCP, plugin,
+  memory, task, and verification tools are policy-filtered and searchable;
+  activated schemas stay in a bounded per-conversation cache. Every sub-agent
+  keeps its own search and cache, including policy-allowed Web research, while
+  forked context and parent activations remain warm starts rather than allowlists.
+- The direct file and shell schemas follow Pi's deliberately small contract:
+  bounded complete-line reads, hash-free writes, unambiguous multi-edit with
+  BOM/CRLF preservation and conservative fuzzy matching, and one foreground
+  `bash` command with a bounded chronological output tail. Modes change
+  execution authority, not those primitive names.
+- Ghosty no longer re-states the To-do list to the model. The model learns
+  what is on the list from the tool result its own `todo_write` call returned,
+  which is ordinary conversation history — the same way Pi's To-do works. The
+  transient `<ghosty:work_state>` block that used to ride the tail of every
+  parent turn-loop and sub-agent step request is gone, along with the stable
+  system prefix being disturbed by list changes. A snapshot is still shown once,
+  where a person asked for it: the `<ghosty:fork_state>` block a newly forked
+  sub-agent is handed, `/relay` handoff instructions, and the agent card. The
+  complete To-do stays visible in the UI. A structural test asserts real
+  outbound provider request bodies do not carry the list.
+- Scout and Reviewer name the read-only investigator roles. Both expose exactly
+  one shell entry point — canonical lowercase `bash`, bounded by the strict
+  read-only classifier — and the legacy `Bash` alias stays denied in the catalog
+  and at dispatch. Previously a case-insensitive name match let a call spelled
+  `Bash` execute through that carve-out, returning raw shell to a read-only role.
+
+### Fixed
+
+- Sending more context while a lowercase `bash` command is running now moves
+  the command to `/jobs` and returns a successful running receipt instead of
+  falsely reporting `Command exited with code -1`; the process keeps running
+  and its completion still arrives through the normal runtime event.
+
+- First-run usage disclosure now opens as a native Ghosty modal instead of a
+  shell questionnaire before application startup. Telemetry remains unarmed
+  until the native choice is made, and an in-memory Disable choice governs the
+  current session even when its preference cannot be saved.
+- `/compact` completion, failure, queued, duplicate, and mailbox outcomes are
+  durable transcript receipts instead of short-lived toasts. A stray terminal
+  event can no longer leave every later compaction stuck as already running.
+- Compaction now follows Codex's simple transcript shape: recent user context
+  followed by one ordinary history checkpoint. It never appends the summary,
+  the To-do list, or volatile shell/worker state to the standing system prompt;
+  reloads migrate the persisted carrier back into exactly one history item.
+- Automatic compaction uses a percentage of the real context window, clamped to
+  the route's spendable ceiling. Pressure comes from the current parent-route
+  prompt, not cumulative billing or child-model usage.
+- Compaction, review, verify, routing, setup, Fleet, MCP, RLM, vision,
+  translation, and sub-agent calls inherit the resolved route's normal output,
+  sampling, and reasoning policy. Small internal-task token caps no longer
+  truncate thinking routes or special-case individual providers.
+- Incomplete provider responses fail truthfully across ordinary turns and every
+  internal model consumer. Partial text stays interrupted, pending tool calls do
+  not execute, and billed usage is retained.
+- Transport-only `(reasoning omitted)` placeholders no longer enter new
+  transcripts and are filtered from restored sessions. Reasoning expand/collapse
+  actions stay attached to the exact rendered cell, including after replacement,
+  restore, filtering, and resize (#5291).
+- Step-budget exhaustion is a typed failure and cannot release a pending
+  persistent service. Cancellation after terminal usage still charges the turn.
+- Deferred tools now preserve a completed result when a provider reuses its
+  tool-call ID on the retry turn, preventing successful plugin calls from
+  entering a repeated execution loop.
+- Website setup, provider, diagnostics, Fleet, and single-runtime claims now
+  match the source candidate.
+- Opening the sub-agent register no longer hides the to-do list: the Agents
+  panel shows the full register and the durable checklist together, and the
+  register header is a two-way door that returns to Tasks on a second click.
+- The ⌥V / Alt+V details chord opens the selected work-surface row's own
+  inspector instead of the transcript's nearest tool cell, so a selected
+  to-do row shows its own content rather than the latest reasoning.
+- The first-run usage disclosure now asks a clear question — "Help improve
+  Ghosty?" — with unambiguous "Yes, keep anonymous counts" / "No, turn off
+  tracking" choices in every shipped locale, and states the persistent opt-out
+  command. Consent semantics are unchanged: telemetry stays unarmed until a
+  choice is made.
+- macOS screencapture screenshots referenced in a message are copied to a
+  stable attachments directory the moment the message is received, and the
+  reference is rewritten to the stable path, so the image still exists when
+  the agent reads it. Only files under a screencapture "Temporary Items"
+  directory are touched; copies are idempotent and a failed copy keeps the
+  original reference.
+- Manual `/compact` during an active turn now queues even when the engine's
+  bounded op mailbox is saturated. The request defers client-side, retries as
+  mailbox slots free, and cannot latch as already running after it settles.
+- Interactive `/load`, startup `--resume`, and `/resume` picker paths preserve
+  the persisted provider, endpoint, and model identity; picker resume also
+  leaves a durable transcript receipt.
+- Relative `mcp_config_path` values no longer depend on the launch directory or
+  silently load an empty server pool: Ghosty warns and falls back to the
+  user-global MCP configuration. Explicit absolute paths remain authoritative.
+- Alibaba Model Studio `qwen3.8-max` and `qwen3.8-max-preview` still stream
+  their current reasoning, but no longer replay historical `reasoning_content`
+  that those routes do not accept. Historical reasoning replay is now gated by
+  the exact provider/API/model contract, so unknown `*-thinking` lookalikes
+  fail closed while documented Qwen, Kimi, DeepSeek, Mistral, Anthropic, and
+  Responses continuity rules remain intact.
+- Compatibility File/patch calls retain optional content-hash guards when a
+  caller supplies them. The new direct `write` and `edit` schemas do not expose
+  hash or prior-read ceremony.
+- Shell previews hold back incomplete UTF-8 sequences instead of emitting
+  replacement characters, and compaction receipts report token deltas.
+- Nested agents may narrow but can never widen their inherited depth budget
+  (#5317 by @ousamabenyounes).
+- Container publication now assembles AMD64 and ARM64 images in parallel on
+  native runners from the already-verified static release binaries, then
+  publishes and checks one multi-architecture manifest. It no longer rebuilds
+  both targets through the single long-running QEMU job that lost its runner.
+
+- Google Gemini is its own backend (`/provider google`) on the official
+  OpenAI-compatible route with thought-signature capture/replay and
+  fail-closed replay for thinking models. Antigravity (`agy` 1.1.13) joins
+  as a separate credential-plane provider: consent-gated read-only import
+  of the official CLI's login with `ANTIGRAVITY_API_KEY`/`AGY_ADC_AUTH`
+  precedence; requests fail closed until the cloud-code wire protocol is
+  implemented.
+
+### Removed
+
+- The no-progress guard, repeated-read guard, and injected tool-error strategy
+  coaching. Productive polling, repeated inspection, and model-owned recovery
+  are no longer interrupted by runtime heuristics.
+- Never-wired decision-card, keybinding, hover, shell-execution, engine-op, and
+  release-script paths were deleted so the supported runtime has one route for
+  each behavior.
+
+### Contributors
+
+- Xavier Pestel (@xavierpestel-ai) — Mistral AI provider route (#5295).
+- Ben Younes (@ousamabenyounes) — inherited nested-agent depth cap (#5317).
+- Rafael Cavalheri (@rafaelcavalheri) — ACP agentic tool turns (#5225).
+
+## [0.9.5] - 2026-08-08
+
+Ghosty v0.9.5 consolidates the terminal application into one compiled
+runtime while preserving the familiar `ghosty` and `ghosty-tui` commands. It
+also expands the managed Runtime API, makes session and Fleet work easier to
+inspect and resume, and removes the hidden local continuation backstop that
+could end productive work without a final assistant response.
+
+### Added
+
+- **`model = "auto"` for prompt-based tier selection**: When set, the
+  dispatcher analyses the user's prompt before delegating to the TUI and
+  selects `deepseek-v4-pro` for complex tasks or `deepseek-v4-flash` for simple
+  tasks (PR #5257).
+- Runtime API controls for persistent goals, bounded memory inspection, MCP
+  server and skill lifecycle management, and durable Fleet receipt evidence.
+- Append-only session-tree history with `/tree`, `/branch`, `/fork`, and
+  `/resume`, plus `/rc` remote control and managed login.
+- A unified Fleet roster for built-in dispatch postures and a pinned indicator
+  that keeps active background work visible above the composer.
+- Incremental MCP registry refreshes that return the local snapshot immediately
+  and update it in the background.
+- Scout and Reviewer agents can use a bounded direct-command evidence shell for
+  read-only workspace, Git, and GitHub inspection, and can keep private working
+  notes in their own To-do while the durable transcript retains their evidence.
+
+### Changed
+
+- `ghosty-cli` now contains the terminal runtime directly. Release installers
+  expose byte-identical `ghosty` and `ghosty-tui` commands without a separate TUI
+  executable. v0.9.5 introduced deprecated `ghosty-tui-*` release filenames
+  as byte-identical compatibility copies; later releases retain those filenames
+  while installed v0.9.4 clients remain supported upgrade sources.
+- Startup release checks cache successful lookups for one hour. The updater
+  downloads and verifies the primary runtime once, then refreshes any existing
+  `ghosty-tui` or legacy `ghosty-tui` command paths from the same bytes.
+- Headless `ghosty exec` runs and verifier benchmark rollouts no longer
+  impose a 100-step default. `--max-turns` remains available as an explicit
+  opt-in ceiling; Fleet workers retain their separately configured budget.
+- Goal token and time budgets are telemetry rather than default stop
+  conditions, and automatic goal continuation is unlimited unless the user
+  explicitly configures a continuation ceiling.
+- Command-palette and slash-completion shadowing now share one alias-aware
+  discovery contract.
+- The website install guidance, localized product copy, navigation controls,
+  social metadata, and Cloudflare build pipeline now describe and deploy the
+  same one-runtime release contract.
+
+### Fixed
+
+- The hidden 20-step no-user-input backstop no longer ends productive turns.
+  Tool results, queued steering, child completions, REPL feedback, and goal
+  continuations can all reach the next provider step and a final assistant
+  response; explicit user-configured limits and genuine stuck-loop guards remain.
+- Complete error details are directly inspectable after a failure instead of
+  leaving the terminal with a clipped, unrecoverable error fragment.
+- A newly minted OAuth credential is adopted in the same provider-selection
+  flow instead of requiring a second picker trip.
+- Fresh session titles can replace a stale cached `New Session` placeholder,
+  unknown model context limits fail loudly, and release/source-install fallbacks
+  no longer request binaries removed by the single-runtime conversion.
+
+### Contributors
+
+- [Sh1Zuku](https://github.com/SparkofSpike) (`@SparkofSpike`) fixed stale
+  cached session titles that could pin the `New Session` placeholder.
+- [Paulo Aboim Pinto](https://github.com/aboimpinto) (`@aboimpinto`) built the
+  shared alias-aware command discovery contract and acceptance coverage.
+- [Sun Zhenyuan](https://github.com/bistack) (`@bistack`) contributed the
+  background incremental MCP Registry refresh.
+- [SKY ZHAO](https://github.com/skyzhao1223) (`@skyzhao1223`) contributed
+  prompt-based `model = "auto"` routing in PR #5257.
+
+## [0.9.4] - 2026-08-07
+Ghosty v0.9.4 ships the release-train harness work: the familiar Fleet
+roster/setup face with a clear operator-leader and user/folder scope, a
+work strip that keeps actionable agents instead of a permanent archive,
+waiting policy that forbids polling without freezing independent work,
+calmer tool output and session recovery, account/Workflow-search/
+automation/handoff surfaces, a shorter translation-ready website, and
+release-blocker fixes across permissions, DeepSeek Responses, SQLite,
+File edits, terminal width, and Windows installation.
+
+### Added
+
+- Memory maintenance: `remember` gains `revise` and `retire` beside the
+  default `append`. Both name the exact note they target and both require
+  the evidence for the change. Append-only memory decays — a correction
+  sits behind the note it contradicts and both keep reaching the model —
+  so the model can now keep its own durable notes true instead of only
+  adding to them.
+- An audit trail for durable state the model writes about you. Every
+  in-place memory edit is journalled to `memory/JOURNAL.md`, and every
+  continual-harness `refine` / `remove` to a `JOURNAL.md` beside its state,
+  each with before, after, and evidence. Harness removal previously left no
+  record at all even though the entry leaves state entirely, so the journal
+  is now the only place its content survives.
+- A first-run tip that says so: the first time Ghosty saves something
+  durable it points at `/memory`, translated into all fifteen complete
+  locale packs. This state shaped later sessions and nothing ever mentioned
+  it existed.
+
+- Sub-agent checkpoint resume: `agents/followup` resumes an
+  `interrupted_continuable` child from its checkpoint into a fresh agent loop —
+  new agent id, original prompt plus the prior conversation tail — when a
+  runtime is attached, and otherwise keeps queue-only semantics with the
+  `continuation_handle` returned; a second followup on the same interrupted id
+  returns the existing resumed target instead of spawning a duplicate (PR #5242).
+- MCP Registry discovery with Registry-first tool selection: `registry_sync`
+  surfaces the eligible local stdio catalog as a complete model-side candidate
+  set, connect-failure messages classify early-exit and usage-help output and
+  point recovery at the next Registry candidate, and a bundled `mcp-discovery`
+  skill documents the flow (PR #5238).
+- Progressive fresh-context disclosure: fresh sessions ship a minimal
+  constitutional kernel — ground truth, user intent and scope, truthful
+  completion, guarantees in mechanism, and precedence — with procedural
+  playbooks disclosed on demand, an opt-in project context pack
+  (`project_context_pack_enabled`) counted in context reports, and `load_skill`
+  catalogue discovery via `name="list"`; the measured fresh-context budget
+  drops by roughly 40% (PR #5077).
+- Named Fleet store v2: one self-contained TOML Fleet per configuration
+  (`schema = "fleet"`), with scope-explicit selection (user-global default vs
+  folder override), migration receipts from legacy role profiles, and atomic
+  saves that refuse to clobber a different Fleet on the same slug.
+- Scout replaces the user-facing "faster" control: catalog-verified fast
+  siblings only, never a guessed model name; pinned Scout survives operator
+  changes.
+- Truthful model-picker rows: vision/tools/limits chips only when the catalog
+  knows, with provider → family → exact model grouping.
+
+- **Opt-in product telemetry, off by default.** A first-run notice asks once, on
+  a terminal, with declining pre-selected — Enter declines. Nothing is collected
+  unless both `telemetry = true` and a recorded "Enable" answer are present, so
+  a `telemetry = true` written before this release stays inert: the key has been
+  settable and inert for a long time, and setting it was never consent.
+
+  An enabled session sends its batches to the first-party ingest endpoint,
+  `https://telemetry.ghosty.net/v1/telemetry`, which is the shipped default
+  for `telemetry_endpoint`. That is a Cloudflare Worker whose complete source is
+  in this repository under `telemetry-ingest/`; it writes to Workers Analytics
+  Engine, whose row is exactly `_sample_interval`, `blob1`–`blob20`, `dataset`,
+  `double1`–`double20`, `index1`, and `timestamp` — **there is no IP, country,
+  or geo column**, so storing one is structurally impossible rather than merely
+  disabled. The handler reads two request headers, never touches the request's
+  geo properties, logs nothing, and validates against a closed field set that
+  rejects an entire batch carrying any unpublished key. Cloudflare's retention
+  for that data is a fixed three months. Setting `telemetry_endpoint = ""`
+  instead writes each batch to `$GHOSTY_HOME/telemetry/dryrun.jsonl` and
+  constructs no HTTP client at all, so you can read exactly what would have been
+  sent.
+
+  Turning it off is an answer, not a flag: it deletes the random install id,
+  truncates every buffered event, and leaves a permanent tombstone that a
+  session already running re-checks before it appends and before it sends. A
+  failed wipe fails closed. `GHOSTY_TELEMETRY=0` is a hard floor that beats
+  `--telemetry true` and the config key, and a value the parser cannot read
+  also resolves to off. Fleet workers are hard-off. A repo-local
+  `.ghosty/config.toml` can set neither key.
+
+  Never collected: prompts, completions, tool arguments, diffs, file contents,
+  filenames, paths, git remotes, repo or branch names, memory entries, chat
+  history, credentials (not even a boolean asserting one exists), model ids,
+  custom provider table names, MCP server names, error or panic message bodies,
+  per-event timestamps, keystrokes, clipboard, screenshots, or location. The
+  full schema is [`docs/TELEMETRY.md`](docs/TELEMETRY.md), and a test parses the
+  field names out of that file and asserts set equality with the structs the
+  serializer uses.
+
+  This supersedes the roadmap's previous "no Ghosty product telemetry" entry,
+  which moves from "Ruled out" to an opt-in framing. What stays ruled out:
+  always-on or silent telemetry, per-keystroke or per-tool-call phone-home, and
+  any third-party ad or analytics SDK in the runtime binary.
+- Registered `GLM-5.3` (direct Z.ai) and `z-ai/glm-5.3` (OpenRouter) as
+  selectable GLM routes, with their aliases (`glm-5.3`, `glm-5-3`,
+  `zai-glm-5.3`, `zai-glm-5-3`). Z.ai had **not released GLM-5.3 as of
+  2026-08-03** — the ids are registered so they resolve to the Z.ai/OpenRouter
+  routes instead of being rewritten to another vendor's model, and they will
+  fail upstream until Z.ai ships the model. Metadata (context, output,
+  reasoning controls) is inherited wholesale from `GLM-5.2` pending official
+  Z.ai release metadata; pricing is intentionally absent, and `GLM-5.2` remains
+  the default Z.ai model. No third-party gateway roster gained the model:
+  OpenCode Zen, OpenCode Go, Alibaba Model Studio, and TelecomJS publish no
+  glm-5.3 entry, so Ghosty advertises none.
+
+- Managed Ghosty account commands (`account login`, `status`, `logout`, and
+  `keys`) with browser device flow, profile- and origin-scoped secure sessions,
+  refresh/revocation, redacted BYOK-vault management, and a token-free Runtime
+  account receipt. Provider authentication remains separate, and `cloud`
+  remains a compatibility alias.
+- `/automation` operator controls to list, inspect, pause, resume, delete, and
+  run durable automations. Creation remains on the approval-gated
+  model-visible `automation` tool.
+- A provider-neutral `WorkflowSearchSpec` authoring and freeze boundary, plus
+  structured 2–16-candidate experimental search in the best-of-N Workflow
+  starter. It freezes baseline, route, evidence, evaluator, gate, score, budget,
+  and review policy before admission; it validates gate/scoring commands but
+  does not execute or certify them itself.
+- The bundled generation-9 `handoff` skill for compact, decision-ready
+  continuation across sessions.
+- Expanded terminal LaTeX rendering for aligned and matrix environments,
+  cases, arrays, text/font/accent commands, brackets, symbols, and
+  command-aware scripts (PR #4981).
+- Exact 40-character build provenance and secure account-session capability
+  receipts on `/v1/runtime/info`; unknown source provenance continues to fail
+  closed.
+- Acceptance-level Gherkin coverage locking the existing user-command
+  precedence, alias shadowing, fallback, and invalid-command error contract
+  (PR #4992).
+- Agent Plugins v1.0.0: consume, publish, and slugify packaged sub-agent
+  briefs, with an install/update/uninstall on-ramp in the TUI (PR #5182). A
+  plugin bundles a prompt, posture, and routing as one shareable artifact;
+  on-disk migration of the older `plugin.toml` scaffold is deliberately out
+  of scope for this train.
+- `send_later`: a model-callable one-shot delayed continuation tool, so the
+  model can schedule a single future nudge without an operator-approved
+  durable automation (PR #5138).
+- `/advisor`: an opt-in background advisor watcher for live turns (PR #5139).
+- Notification quiet mode with per-category switches and action-first copy
+  (PR #5066).
+- Automation scheduling forms — one-shot `ONCE`, five-field cron, and honest
+  watcher modes — created through the approval-gated `automation` tool
+  (PR #5183).
+- Sub-agent `resume_from` continuation chains (PR #5142), child-result
+  diff-tainting when a claimed diff is not visible to git, per-turn usage
+  receipts on the exec stream-json stream, and spawn receipts that report
+  the model each sub-agent actually ran on.
+- Transport resilience: sub-agent exec transport retries with a 600 s
+  default (PR #5210), SSE header stalls retryable instead of fatal, and
+  headless turn resume after mid-stream network drops with an `EX_TEMPFAIL`
+  exit.
+- Session durability and control: a deterministic compaction continuation
+  contract (PR #5064), persisting interrupted output (PR #5206), stop-word
+  cancellation (PR #5207), token-counter refresh (PR #5204), deny-by-default
+  approval cards (PR #5090), and the Operate completion gate (PR #5067).
+- zh-Hant promoted to a full shipped locale with complete `en.json` parity
+  (PR #5143).
+- A persistent update-available chip in the header, with the startup update
+  check throttled and naming the right command.
+- RLM static intent extraction for code blocks (`rlm_block_intent.rs`)
+  landed as groundwork for a future code-mode approval flow; it is not yet
+  wired into the turn pipeline and ships dormant by design.
+
+### Changed
+
+- `/fleet` is the familiar roster/setup face again. The operator row is the
+  Fleet leader (session model); the header names the selected saved Fleet and
+  whether it is user-global or folder-scoped. Named-Fleet switching lives under
+  `/fleet fleets` (Enter selects in the row's own scope). Session route changes
+  stay temporary until `/fleet save`, `/fleet save-as`, or `/model save-default`.
+- Waiting-for-subagents directions forbid peek/status polling and sleep-as-wait,
+  but allow independent work that does not depend on a child's result — the
+  parent no longer freezes mid-turn with useful non-conflicting work available.
+- `workflow run` no longer requires `--fleet`; a saved Fleet is an optional pin
+  layer over roles + the session route.
+- Homepage and getting-started copy is shorter and scannable across locales,
+  with dictionary key and `{brand}` token parity preserved.
+
+- Tool results now render as ordinary bounded previews with real expansion;
+  storage, retention-ledger, and internal evidence language no longer leak into
+  normal transcripts.
+- Prose wrapping, goal state, modal questions, composer-tail behavior, and
+  ambient motion now follow one deterministic interface contract across narrow
+  terminals and fast streams.
+- Scout and reviewer Fleet roles gain network access and the bounded
+  verification surface for real reconnaissance while retaining the no-write,
+  no-raw-shell security floor.
+- Workflow runs may describe up to 1,000 tasks while admitting at most 16 live
+  tasks at once through the host concurrency gate. Tournament ordering now
+  supports explicit score-first selection while retaining its cost-first
+  default.
+- Runtime permission compatibility inputs resolve to one live
+  `permission_posture`. Auto-Review can proceed without approval or structured
+  question modals, unresolved holds fail closed, and a call planned under stale
+  authority is retried after a posture change (PR #5025).
+- Duplicate and drifting per-turn metadata has been removed in favor of
+  runtime-owned authority, and large inline account and skill tests now live in
+  owned test seams.
+- Pinned Ratatui to 0.30.0 and ratatui-core to 0.1.0. ratatui-core 0.1.1+
+  makes `Terminal::clear()` issue a blocking cursor-position report that
+  raced the TUI input loop and could kill first launch; both pins are
+  load-bearing, because 0.30.0 declares `ratatui-core ^0.1` and would
+  otherwise resolve forward on its own (PR #5192 by @bistack; upstream
+  ratatui/ratatui#2640).
+- Updated globset to 0.4.19, clap-complete to 4.6.8,
+  futures-util to 0.3.33, libc to 0.2.189, actions/stale to 11.0.0, and
+  docker/login-action to 4.5.2. The locked graph also includes the
+  event-listener 5.4.2 fix for RUSTSEC-2026-0221.
+- The progress surface now speaks plainly everywhere: the last user-visible
+  "Work update is pending" notices say "To-do list", the tool constructor and
+  the docs name `todo_write` as the single canonical progress tool, and
+  `work_update`, `TodoWrite`, and `todo` stay registered as hidden
+  compatibility aliases so saved transcripts keep replaying.
+- Sub-agent and `agents/wait` waits stay short by default and by cap:
+  blocking waits default to 30 s and refuse to block past 120 s, because a
+  blocked wait deafens the session to typed input and settled children
+  already report back as `<ghosty:subagent.done>` sentinels.
+- `Bash` `action=wait` honors `timeout_secs` (seconds) and bare `timeout`
+  (milliseconds) alongside canonical `timeout_ms`, and `block` as an alias
+  for `wait`, so a habit formed on other wait tools gets the duration it
+  asked for instead of silently falling back to the 30 s default; the result
+  metadata reports the real `wait_timeout_ms` applied.
+
+### Fixed
+
+- The memory journal is no longer indexed as memory. It is Markdown in the
+  memory tree, so the source walk collected it and every retired note
+  re-entered the searchable set under its `before:` line — putting the
+  exact facts a revision had just removed back into the prompt.
+- `memory_path` pointed at an already-native store no longer derives a
+  second store nested inside it, which silently wrote somewhere other than
+  the file the user named.
+- `muse` and `muse-spark` resolved to `muse-spark-1.1` in the agent
+  registry while config had defaulted to `muse-spark-1.2`, so the CLI and
+  app-server routed those aliases somewhere the configured default never
+  pointed. The registry now carries 1.2 and the contributor variant.
+
+- An explicit `type=builder` (or its `implementer` alias) plus
+  `write_authority=read_only` now fails closed at spawn instead of launching a
+  labeled write role that silently had only read-only tools and then self-BLOCKED
+  after burning a turn (#5123). The check is deliberately narrow, because two
+  neighbouring combinations are legitimate and stay legal:
+  - `type=worker` + `read_only` — worker is the unnamed default (it renders as
+    `general`) and takes its capability from authority, not from its name, so a
+    read-only worker is an ordinary general-purpose child. Worker, scout,
+    reviewer, and verifier remain the four canonical read-only Fleet roles.
+  - any `role` + `read_only` — `role` is an identity for roster resolution, not
+    a capability claim, so an acceptance Workflow can still resolve
+    `implementer` to its saved profile while scoping that child to verification.
+
+  Callers that spelled a read-only narrowing as `type: "implementer"` should
+  move it to `role: "implementer"`.
+- User-global credentials survive an explicit workspace `GHOSTY_CONFIG_PATH`
+  that selects a route with no local key — readiness probes the user-global
+  provider table before concluding a key is missing.
+- Sub-agent token figures on the work bar accumulate input+output (the same
+  total the worker budget uses) instead of completion tokens alone; elapsed
+  time still freezes when the child settles.
+- Live work-bar rows for sub-agents show how many to-dos they still have
+  left (`N left`) when the child's own list has unsettled items — never a
+  fabricated zero when no list exists.
+
+- Surfaces no longer claim an OS sandbox on platforms that cannot enforce one.
+  The policy resolver takes no platform input, so on default Linux (bubblewrap
+  is opt-in) and on all Windows the header chip read `files: workspace` and
+  `/status` read `sandbox workspace-write` while nothing was restricted. Both
+  now resolve the real backend and say `(unenforced)`.
+- `tool_category` hook conditions matched only retired tool names, so a
+  `category = "shell"` **deny** hook — the security control `docs/HOOKS.md`
+  documents — silently never fired. Categories now use the registered names,
+  and multi-action tools classify by action.
+- A `Retry-After` header of `-5`, `nan`, or `1e300` crashed the request task
+  (`Duration::from_secs_f64` panics on a negative). Parsing is now guarded and
+  bounded to one hour.
+- Bearer tokens no longer leak into operator-visible receipts. `Authorization:
+  Bearer <jwt>` split into two tokens and the JWT matched no redaction rule;
+  prefix matching was also case-sensitive, so `SK-live-…` survived.
+- `prune_older_than` destroyed the NEWEST rollback snapshots and kept the old
+  ones — on every boot, for any workspace with snapshots spanning the retention
+  window. Both prune paths now share one orphan-chain rebuild and preserve each
+  survivor's real timestamp.
+- An absolute or relative command path no longer defeats every execpolicy deny
+  rule (`/bin/rm -rf /` did not match a `rm -rf /` rule), and a typed `Allow`
+  rule no longer auto-approves a chained suffix such as `git log ; curl … | sh`.
+- Wrong types on `File` read range params and `Bash` stdin/cwd/task_id are now
+  errors instead of silent defaults — a `start_line:"1200"` string used to
+  return the head of the file, and a non-string `stdin` ran the command with no
+  stdin and reported success.
+- Multibyte tool ids no longer panic the context inspector, wide (CJK) text no
+  longer overflows the decision card, and a hostname like `127.evil.example.com`
+  is no longer treated as loopback.
+- Refusals name calls the model can actually make (`rlm action='open'` rather
+  than a retired `rlm_open`; `Bash` rather than `exec_shell`).
+
+- Sub-agent dispatch no longer aborts the process. The Tokio runtime was built
+  by `#[tokio::main]`, leaving every worker thread on the 2 MiB default while
+  only the owner thread received the explicit 16 MiB stack — and the engine runs
+  on a worker. A debug-build `agent` dispatch exceeded that stack and raised
+  SIGABRT, which is not a panic and so could not be caught; the process died
+  mid-spawn with no child request ever issued. Release builds were unaffected.
+- Fleet profiles that pin a provider no longer leak a bare model id onto the
+  session route. `model_overrides` exported each role's model while dropping its
+  provider, so a scout pinned to another provider's model was dispatched against
+  the active client and denied at the wire — visible as an instant auth failure
+  on the first sub-agent of a fan-out.
+- The rail's Pinned panel no longer spends four rows saying "No active work".
+  An empty panel now collapses like the Tasks panel always has, and the settings
+  migration no longer folds the default `sidebar_focus = "auto"` into a pinned
+  always-on strip, which had silently handed that panel to every user who had a
+  settings file at all. (An *empty* panel collapses; a panel holding settled
+  to-dos or finished workers is not empty — see the standing-register entry
+  below.)
+- The work bar keeps settled to-dos and an honest Subagents header, while
+  completed/cancelled workers collapse out of the Top strip so fan-outs do not
+  permanently eat the transcript. Failed or interrupted workers stay visible
+  (they still need attention). Settled agents remain reachable through the
+  Agents panel and catalog. To-do rows say their state in words (pending /
+  in progress / completed / cancelled), and sub-agent rows carry type,
+  objective, elapsed, and input+output tokens. Every work row is a door in
+  every rail panel and placement: click and Enter open the row's world
+  (work inspector / agent details — finished agents included) instead of
+  doing nothing. A click after the detail pager closed itself reopens the
+  detail rather than being swallowed by a stale toggle.
+- The rail strip yields its rows to the transcript when the terminal cannot
+  seat both, so the idle ocean survives at 24 rows instead of being evicted.
+- `code_execution` and `js_execution` no longer describe themselves to the model
+  as sandboxed. Both are ordinary local subprocesses with no seccomp, jail, or
+  container (PR #5221 by @h3c-hexin and @asto18089).
+- Model Studio reasoning controls now fail closed on the host rather than on the
+  provider enum, so a custom `base_url` no longer receives Alibaba-specific
+  `enable_thinking` fields, and `qwen3.8-max` is no longer sent a thinking
+  switch it does not accept (PR #5233 by @Inference1, closing #5203).
+- `config.example.toml` no longer claims Shift+Tab cycles the reasoning tier.
+  Shift+Tab cycles the permission posture; Ctrl+T cycles reasoning
+  (found by @vFONGv, PR #5229).
+
+- Alibaba Model Studio reasoning controls are now route- and model-scoped
+  instead of provider-wide (#5203, harvested from #5233 by
+  [@Inference1](https://github.com/Inference1)). Ghosty sends
+  `enable_thinking` / `preserve_thinking` / `reasoning_effort` only when the
+  configured `base_url` is a verified Alibaba Chat Completions host, so
+  pointing a `modelstudio-*` provider ID at a custom gateway no longer injects
+  DashScope's dialect into it. `qwen3.8-max` and `qwen3.8-max-preview` are
+  thinking-only and no longer receive an `enable_thinking: false` they cannot
+  honor; `preserve_thinking` is sent for the models documented to accept it, so
+  their reasoning trace survives into the next turn; and `deepseek-v4*` /
+  `glm-5.x` map the reasoning tier onto the documented `high` / `max` ladder.
+
+- xAI device login now recovers from a config that points at a missing
+  Ghosty-owned credential generation instead of failing every attempt
+  with a generic activation error, and finalize failures report the full
+  error chain (#5032).
+- API keys saved to the secret store no longer read as unconfigured for
+  providers that are not currently active; a configured Kimi/Moonshot key
+  survives provider switches and restarts without re-entry (#5033).
+- Switching to the Codex provider with no saved model now lands on the live
+  roster's flagship model instead of a stale static default (#5034).
+- Worktree-isolated Fleet builders no longer contend on the per-workspace
+  delegated-coordination lock, and a failed lock acquisition is retried on
+  use instead of being memoized for the life of the process (#5036).
+- Fleet dispatch now rebinds the child client when the resolved profile
+  model requires a different wire protocol (DeepSeek flash on Responses),
+  instead of failing deterministically on the worker's first request
+  (#5042).
+- DeepSeek Responses now sends `reasoning.effort: "none"` for the Off tier,
+  shows a truthful notice instead of silently discarding server-side
+  `web_search_call` items, and parses cache-hit, cache-miss, cache-write, and
+  pricing telemetry while retaining the OpenAI-style nested fallback.
+- File edits now explain no-op and missing-search failures, reject newly
+  unbalanced C/C++ preprocessor replacements, handle the reported
+  CRLF/non-ASCII cases, and safely relocate stale unified-diff hunks only when
+  whole-file context is unique (PRs #5008 and #5030).
+- Circled digits, enclosed alphanumerics, and keycap graphemes use consistent
+  two-column measurement in Ghosty, Ratatui, and CJK terminals, preventing
+  missing-character and phantom-space corruption (PR #5001).
+- SQLite connections install their busy timeout before locking setup and avoid
+  rewriting persistent WAL mode on every open, removing the concurrent-open
+  release-gate failure.
+- The Windows installer preserves long current-user `PATH` values, their
+  registry type, and unrelated entries across install and uninstall (PR #5006).
+- Provider configuration no longer contains user-reachable panic paths when
+  metadata or prior credential state is missing.
+- Resuming a session restores composer text only from a same-session persisted
+  draft; submitted prompts and internal background-runtime envelopes remain in
+  history instead of appearing in the composer (PR #5029).
+- Shared CI now handles bot-authored issue-link checks, provisions cargo-deny's
+  toolchain, and fetches the locked test graph before offline runtime-budget
+  validation.
+- Re-quote each linker argument in the Windows OpenHarmony clang launcher so a
+  spaced SDK path (e.g. the default `D:\DevEco Studio\...` install) keeps its
+  `--sysroot` intact through the final Rust link, and extend the no-SDK release
+  guard to keep the re-quoting contract (PR #5095).
+
+- The shell tool reports the real elapsed wait time in its result content
+  instead of echoing the requested timeout (PR #5240).
+- Transcript wheel scrolling under iTerm2: xterm alternate-scroll (DECSET
+  1007) now stays off while mouse capture is active, so wheel events arrive as
+  mouse events instead of being converted into arrow keys (#5223, PR #5234).
+- A stalled model stream no longer ends the turn as `Completed` over a
+  frozen reasoning block: a mid-stream chunk-timeout now counts toward the
+  stream-error budget, so a stall with nothing streamed retries the request
+  transparently, and a stall that exhausts the retry budget fails the turn
+  with the real reason instead of reporting success.
+- A finished background shell task now wakes the engine even when no goal is
+  active: the idle loop starts an ordinary runtime turn so the completion
+  reaches the model immediately instead of sitting unclaimed until the user
+  types (a dead provider route claims the completion once and reports where
+  the output lives instead of re-arming the same error every tick).
+- Sub-agent final reports that exceed the summary budget are now spilled to
+  a session artifact, and the truncation footer names the
+  `retrieve_tool_result` ref for the elided middle instead of telling the
+  model the bytes are unrecoverable; write failures degrade to the honest
+  no-ref footer.
+- An interactive mid-stream network drop after partial output no longer fails
+  the turn: the partial reply is preserved as a committed assistant message,
+  a runtime continuation message is appended, and the request is re-issued
+  bounded by the stream-retry budget.
+- Large pasted input is no longer sent to the model twice as inline text and
+  as a backup `.md` paste file; the submitted message now carries only the
+  `@`-mention so the model reads the file once.
+- A builder sub-agent can run ordinary shell writes again. Write claims
+  outlive the agents that register them, so a workspace accumulated one per
+  builder that ever ran — six completed agents left four standing claims in
+  testing — and the shared-checkout gate counted those long-finished children
+  as live contenders. Every later builder was refused `Bash` writes with
+  "cannot prove a bounded file target" and pushed toward worktree isolation,
+  which puts the work in a checkout the operator never looks at. The gate now
+  asks the question it meant to ask: is another *running* child writing in this
+  shared checkout. Concurrent writers are still gated; a lone builder writes in
+  the workspace you are actually watching.
+- Ctrl-C during the first moments of startup no longer kills Ghosty
+  outright. The terminating-signal handlers were registered inside the task
+  that waits on them, and a spawned task does not run until the scheduler
+  first polls it, so a SIGINT arriving in that window hit the default
+  disposition — the process died with no exit code, no terminal restore, and
+  no session record. The handlers are now installed synchronously, before
+  the telemetry notice and before arming, so the window is closed.
+- The documented tool list on the docs site named `update_plan` and
+  `work_update` as coordination tools. Neither is callable by the model —
+  `update_plan` replays older Plan artifacts and `work_update` is a hidden
+  compatibility alias — so the page listed two tools a reader cannot use and
+  omitted `todo_write`, the one they can.
+
+### Security
+
+- Bumped `nanoid` past GHSA-2v37-7h3g-55p8 (a custom generator given size
+  zero could loop indefinitely), restoring a zero-advisory `npm audit` for
+  the website.
+
+- Google Gemini is its own backend (`/provider google`) on the official
+  OpenAI-compatible route with thought-signature capture/replay and
+  fail-closed replay for thinking models. Antigravity (`agy` 1.1.13) joins
+  as a separate credential-plane provider: consent-gated read-only import
+  of the official CLI's login with `ANTIGRAVITY_API_KEY`/`AGY_ADC_AUTH`
+  precedence; requests fail closed until the cloud-code wire protocol is
+  implemented.
+
+### Removed
+
+- The default model-facing SlopLedger implementation, its storage-oriented
+  transcript language, and the `/debt`, `/cleanup`, `/slop`, and `/canzha`
+  command surface.
+
+### Contributors
+
+- [Sh1Zuku](https://github.com/SparkofSpike) (`@SparkofSpike`) contributed
+  LaTeX rendering in PR #4981, completed circled-digit/keycap width handling in
+  PR #5001, and delivered actionable File-edit recovery in PR #5008; for this
+  train he resumed interrupted sub-agents from checkpoints in PR #5242,
+  surfaced real shell wait elapsed time in PR #5240, and kept alternate-scroll
+  off while mouse capture is active in PR #5234.
+- [XhesicaFrost](https://github.com/XhesicaFrost) (`@XhesicaFrost`) fixed long
+  Windows user-PATH preservation in PR #5006.
+- [Paulo Aboim Pinto](https://github.com/aboimpinto) (`@aboimpinto`) added the
+  user-command dispatch acceptance contract in PR #4992.
+- [DracheTek](https://github.com/DracheTek) (`@DracheTek`) provided the
+  multilingual, CRLF-heavy File-edit failure report in issue #5003.
+- [An Ziwu](https://github.com/MuRongMoQing) (`@MuRongMoQing`) reported the
+  Windows PATH-overwrite defect in issue #4685.
+- [shenjackyuanjie](https://github.com/shenjackyuanjie) (`@shenjackyuanjie`)
+  fixed the Windows OpenHarmony linker re-quoting for spaced SDK paths in
+  PR #5095.
+- [bistack](https://github.com/bistack) (`@bistack`) contributed MCP Registry
+  discovery with Registry-first tool selection in PR #5238.
+- [vFONGv](https://github.com/vFONGv) (`@vFONGv`) wrote the zh-CN Windows
+  beginner guide with screenshots in PR #5229, harvested after its base branch
+  was accidentally deleted during maintainer cleanup.
+- [mky](https://github.com/mky) (`@mky`) fixed the FreeBSD build (PR #5254, `rquickjs` `bindgen` on FreeBSD).
+- [cacdcaecawae](https://github.com/cacdcaecawae) (`@cacdcaecawae`) contributed embedder-owned sub-agent state roots (PR #5252).
+
+## [0.9.3] - 2026-07-31
+
+This is the Ghosty v0.9.3 source candidate. It is not a published release
+until the matching tag, packages, checksums, and release assets exist.
+
+DeepSeek V4 Flash is now a first-class Ghosty route, and the agent-facing
+tool surface has been reduced to the canonical action tools that current
+models actually need. This release also hardens credential, authorization,
+durability, compaction, and macOS File Provider boundaries while deleting
+stale runtime and dependency surface.
+
+### Added
+
+- Native `deepseek-v4-flash` support over DeepSeek's Responses API, including
+  stateless reasoning-item replay, semantic SSE terminal events, structured
+  function calls and outputs, `apply_patch`, and model-aware wire-format
+  selection. Exact current Flash IDs use Responses; future direct
+  `deepseek-vN-*` model IDs inherit that route conservatively, while custom
+  DeepSeek-compatible endpoints retain Chat Completions unless configured
+  otherwise.
+- A pipe-only `ghosty auth print-api-key` handoff for explicitly selected
+  providers. It shares Ghosty's home-scoped credential authority, refuses
+  terminal output, and prevents sentinel placeholders from becoming live
+  credentials.
+- Per-turn `max_tool_calls` enforcement at the engine admission gate, plus a
+  named-file write scope with a separate read seam. The runtime now rejects
+  over-budget calls before execution and keeps the operator's write boundary
+  explicit (#4415).
+- Runtime-contract, source-structure, and persistence-backlog ratchets that
+  name drift instead of allowing large ownership surfaces to grow silently
+  (#3921, #4785).
+
+### Changed
+
+- Model-visible built-ins now use the canonical `Bash`, `File`, and `Run`
+  action schemas. `apply_patch` remains available as the one direct custom
+  edit tool supported by DeepSeek Responses. The bundled stop-ship workflow,
+  Fleet fixtures, shell shortcut, and engine tests use the same canonical
+  vocabulary.
+- Canonical `File { action: "write" }` requests now pass through the same
+  semantic repo-law checks as the former write path. Approval, Full Access,
+  and workflow execution cannot bypass the repository safety floor by choosing
+  the canonical schema.
+- Ghosty home resolution is shared across the CLI, TUI, state, and secret
+  stores. `doctor` is offline by default, distinguishes credential source from
+  availability, and reports one consistent path snapshot.
+- Durable runtime event writes are serialized across simultaneous processes,
+  blocking history waits move off async workers, and provider quota exhaustion
+  remains typed and retryable through compaction (#4522).
+- Skill discovery caches the merged catalog behind watched-mtime validation;
+  large skill, engine, subagent, UI, and ambient-ocean test blocks now live in
+  owned test seams.
+- Reasoning summaries stay in the user's language, complete jellyfish
+  silhouettes relocate around transcript text, and cached ocean frames include
+  their palette identity (#4807).
+- The authorization-order contract now documents and tests how modes, hooks,
+  permission rules, safety floors, repo law, approvals, and sandboxing compose
+  (PR #4980).
+
+### Fixed
+
+- macOS sandbox extensions cover CloudStorage/File Provider workspaces without
+  broadening unrelated paths; thanks @Watcher24 for the #4085 report and
+  reproduction.
+- Foreground shell state detaches before steering, so an interrupted command
+  cannot keep owning the composer (PR #4979).
+- MCP application-level failures and malformed error envelopes fail closed
+  instead of looking like successful tool output.
+- Optional PDF failures are truthful and PDF classification no longer misses
+  supported inputs.
+- Bracketed-paste contents are redacted from traces, and credential diagnostics
+  never treat placeholder sentinels as usable keys.
+
+- Google Gemini is its own backend (`/provider google`) on the official
+  OpenAI-compatible route with thought-signature capture/replay and
+  fail-closed replay for thinking models. Antigravity (`agy` 1.1.13) joins
+  as a separate credential-plane provider: consent-gated read-only import
+  of the official CLI's login with `ANTIGRAVITY_API_KEY`/`AGY_ADC_AUTH`
+  precedence; requests fail closed until the cloud-code wire protocol is
+  implemented.
+
+### Removed
+
+- The legacy callable aliases `exec_shell`, `run_shell_command`, `read_file`,
+  `write_file`, `list_dir`, `grep_files`, `file_search`, and the duplicate
+  Work/RLM registrations. Historical transcript and policy semantics remain
+  readable, but new model turns receive only the canonical action surface.
+- The bundled PDF parser dependency chain, replacing it with the smaller
+  optional extraction boundary tracked by #4382.
+
+### Contributors
+
+- [Turisla](https://github.com/greyfreedom) (`@greyfreedom`) documented and
+  locked the authorization-order contract in PR #4980.
+- [Nightt](https://github.com/nightt5879) (`@nightt5879`) fixed foreground
+  shell detachment before steering in PR #4979.
+- [Watcher24](https://github.com/Watcher24) (`@Watcher24`) provided the macOS
+  File Provider report and reproduction for #4085.
+- [Fred Leitz](https://github.com/fleitz) (`@fleitz`) retains required
+  source-candidate credit for the canonical `Bash` workspace fix from PR #4673
+  and issue #4674.
+
+## [0.9.2] - 2026-07-29
+
+This is the Ghosty v0.9.2 source candidate. It is not a published release
+until the matching tag, packages, checksums, and release assets exist.
+
+### Changed — behavior
+
+- **Legacy `model = auto` no longer elects a network classifier on its own.**
+  Holding a DeepSeek API key used to silently select `deepseek-v4-flash` as the
+  classifier for every Auto turn — a per-turn cost on a route nobody asked for,
+  and one provider privileged over the rest. Auto now stays local and free
+  unless an explicit `[auto.router]` block names a provider and model.
+
+  **If you relied on the implicit default**, restore it explicitly:
+
+  ```toml
+  [auto.router]
+  provider = "deepseek"
+  model = "deepseek-v4-flash"
+  ```
+
+  `[auto.router]` remains legacy `model = auto` configuration. It is unrelated
+  to a Fleet's Adaptive Reasoning Router, which is a saved service referenced by
+  name from a Fleet file and decides only how hard an already-frozen route
+  thinks.
+
+Landed since v0.9.1, not yet released. A cluster of defects found by a
+read-through audit of the policy engine, the MCP proxy, the session index,
+and the app-server bridge — several of them cases where the wrong outcome
+was reached silently, behind a response or a log line that looked fine. The
+release also adds opt-in session, reasoning, localization, and inspectability
+surfaces; existing defaults remain stable unless an entry below explicitly
+says otherwise.
+
+### Added
+
+- `/permissions` now lists the active user permission-rule source, each rule's
+  effective matcher and global/repository scope, and whether that scope applies
+  in the current workspace. `/permissions remove <number>` previews deletion
+  and requires a snapshot-bound confirmation token, so a concurrent edit
+  cannot move a different rule under the confirmed index. Appends and removals
+  share one adjacent lock, preserve unrelated TOML formatting and comments,
+  atomically replace `permissions.toml`, and reload the live user ruleset
+  without clearing session-only approvals. `/config ask-rules` remains a
+  compatibility entry; rule creation, glob/directory rules, and deny
+  persistence remain out of scope (#1186, PR #4960 by @greyfreedom).
+
+- `/preview-request` (aliases `/dryrun` and `/preview_request`) is a human-only,
+  provider-free inspection of the next primary turn. Production dispatch and
+  preview share one prepared-request seam across Chat Completions, Anthropic
+  Messages, and OpenAI Responses, so the manifest reads the final wire model,
+  reasoning controls, tool choice, tool schemas, and body hash from the same
+  value production sends. Route, tool, or body facts that require Auto's
+  provider classifier, an MCP connection, mutable hooks, compaction, or queued
+  runtime injections remain typed unavailable. The manifest reports exact
+  primary role/lane identity, upstream route-source provenance, requested and
+  effective reasoning, canonical JSON sizes, conservative offline estimates,
+  and provider-reported usage as unavailable because no request ran. It never
+  adds a model-visible tool, sends a provider call, or prints prompt, message,
+  credential, endpoint-path, or workspace-path content. The explicit
+  `/preview-request base-prompt` mode prints only the exact effective base
+  prompt; effective system text remains protected behind its final hash. The
+  exact body includes the same authoritative transient Work/To-do tail used by
+  production, including graph-backed state newer than the legacy projection.
+  Preflight preserves production's separately framed base-plus-Work estimate,
+  and fails closed when the authoritative projection is unavailable. An
+  exhausted active goal token budget also produces a typed unavailable result
+  before any outbound request is built.
+  (#1004, #3928; dry-run concept harvested from PR #1099 by @GTC2080 / TaoMu.)
+
+- Slash commands, hotbar actions, and CLI entrypoints for the same Lane/Fleet
+  lifecycle operation now share one typed control-plane contract
+  (`ghosty-lane::control`): a stable `<domain>.<verb>` id, read-vs-write
+  authority, persistence scope, exact-identity target selection, retryability,
+  lifecycle outcome, and one bounded, sanitized receipt. `docs/COMMAND_CONTROL_PLANE.md`
+  documents it (#1888).
+
+- `/lane [list|status|interrupt|restart|resume]` — durable Lane control from the
+  composer, backed by the same executor `ghosty lane …` calls. `ghosty
+  lane interrupt|restart|resume` are the matching CLI verbs; `lane stop` stays as
+  a compatibility spelling of `lane interrupt`. Appending `@<lifecycle-seq>` to a
+  lane id fences a write to the exact durable generation you observed, so a
+  concurrent transition is rejected as a conflict rather than acted on (#1888).
+
+- `ghosty fleet list` and `/fleet [list|status|interrupt|resume]` — durable
+  Fleet run inspection and control from either surface, through shared DTOs that
+  carry the exact provider, provider-table id, model, effective reasoning tier,
+  and route source when the ledger records them, and a typed `not_recorded` /
+  `not_applicable` / `redacted` reason when it does not. Requested-vs-effective
+  reasoning is never back-filled: the ledger persists the effective tier only, so
+  the requested tier reports `not_recorded` (#4022).
+
+- The bundled skill pack now ships a `help` skill (catalog generation 7). It is
+  `invocation: explicit-only`, so it never enters the model's ambient catalogue
+  and costs no prompt budget. Its body is a routing card that points at the
+  surfaces this build actually exposes — `/help` and `/help <command>`,
+  `/skills` and `/skills inspect`, `/config`, `doctor`, and the `docs/` tree
+  when the workspace is a Ghosty checkout — and explicitly forbids pasting a
+  command list or settings table into context (#4698).
+
+- `crates/tui/assets/skills-catalog-matrix.json`: an authored, provider-free
+  expectation matrix covering every bundled skill (tier, invocation, aliases,
+  ambient-catalogue eligibility, shadowed aliases). Contract tests in
+  `crates/tui/src/skills/catalog_matrix.rs` assert a bijection between the
+  fixture and the shipped bundle, so the starter pack cannot change without an
+  explicit fixture update. The matrix covers positive eligibility and explicit
+  load, non-activation negatives, alias resolution, explicit-only exclusion,
+  alias-vs-canonical collision precedence, and prompt-budget invariants (no
+  duplicate catalogue entries, no aliases as extra entries, and the shipped
+  pack fitting inside the 12 000-char budget with no omitted-skills line). These
+  are deterministic registry/catalog/resolver assertions and make no claim about
+  semantic model routing (#4698).
+
+- Locale-routing coverage for the complete bundled catalog across every shipped
+  locale (`en`, `ja`, `zh-Hans`, `zh-Hant`, `pt-BR`, `es-419`, `vi`, `ko`). No
+  bundled skill ships a localized routing description and none was invented;
+  the tested contract is deterministic fallback to the canonical English
+  description, with the rendered catalogue byte-identical across locales.
+  Exact-tag match, primary-subtag fallback, and English fallback are covered
+  against a synthetic authored fixture, and the parity test fails if a bundled
+  skill ever gains localized metadata without source-backed coverage (#4698).
+
+- `docs/LIVE_SMOKE.md`: copy-pasteable, opt-in live-smoke instructions for Kimi
+  K3 and a second provider/model (DeepSeek). The runs are manual only — nothing
+  in CI, tests, or skills invokes them. They use `env -i` plus a throwaway
+  `GHOSTY_HOME`; `HOME` is left unset rather than repurposed, and ambient
+  provider variables are not forwarded. The operator names the credential
+  variable explicitly, and the isolated child reads its value with echo off,
+  restores the prior terminal state on exit or interruption, and never persists
+  the value or puts it in a command argument. The page states the expected
+  route/model/reasoning/tool receipt fields while treating provider errors as
+  unclassified until provider configuration, authentication/entitlement, and
+  harness behavior have been corroborated independently (#4698).
+
+- Approval cards can now remember eligible safe shell and file-write approvals
+  as exact `allow` rules scoped to the current repository. Remembered shell
+  commands use complete-command matching, validated file and patch paths remain
+  workspace-relative, and dangerous, critical, or repo-law-held requests stay
+  ineligible and continue to require review.
+
+- `tui.header_items` (array of strings, optional, default `[]`): an opt-in
+  header chip showing cumulative session token usage as input / cache-hit /
+  output. Set `header_items = ["tokens"]` under `[tui]` to enable it. The
+  chip is the only elidable element of the header — the git label, context
+  meter, and version stamp keep their space, and narrow terminals drop the
+  chip rather than the baseline chrome. Unknown entries are warned about and
+  skipped so configs written by newer builds stay loadable by older ones
+  (#4520 requested by @eugenicum; PR #4610 by @XhesicaFrost, harvested with
+  co-authorship).
+
+- `thinking_default_expanded` lets reasoning blocks start open while keeping
+  Space as the per-block toggle. The setting is persisted, available through
+  native and runtime configuration, and documented for SSH/tmux accessibility
+  (issue #4925 and PR #4928 by @M-Maciej).
+
+- The transcript renders a conservative subset of LaTeX math as readable
+  Unicode without rewriting fenced/inline code, ordinary currency, escaped
+  dollars, or unknown commands. The contribution from PR #4973 by
+  @SparkofSpike was hardened and landed through PR #4974; reported by
+  @antarikshraya in #4957.
+
+- Session control now includes a sessions rail, shared archive projection,
+  picker archive controls, and opt-in interactive auto-resume with explicit
+  handoff behavior. The work closes the remaining session-browsing direction
+  from #2934; thanks @cy2311 for the original report.
+
+- The bundled contributor-onboarding skill can sync contribution context,
+  select the appropriate gate, and prepare a digest without inflating the
+  ambient skill catalog. It follows the contributor-navigation request in
+  #4227 by @JayBeest.
+
+- Bahasa Indonesia now has a complete repository documentation suite and a
+  registered website dictionary alongside the shipped TUI locale (PRs #4962
+  and #4972 by @atmosuwiryo, closing #4789).
+
+- Reasoning content can keep its rail, italics, cursor, and expansion controls
+  while disabling only the warm background highlight. The independent setting
+  is persisted and localized (#4089; reported by @elijahchan2019).
+
+- StepFun setup now asks whether a key belongs to PAYG or Step Plan, keeps the
+  two endpoint/billing routes distinct, and localizes the choice across the
+  complete packs (#4526; reported by @whp233).
+
+- OpenCode Zen is a separate model-aware API-key provider. Its curated catalog
+  selects Responses, Anthropic Messages, or Chat Completions per model;
+  unsupported Gemini and unknown models fail closed, and missing Zen
+  credentials never fall through to ChatGPT/Codex OAuth guidance. The
+  implementation from closed PR #4467 by @snail-vs (snailoniu) is preserved in
+  the candidate.
+
+- Markdown exports correlate prompts with stable workspace restore-point ids
+  and say when correlation is unavailable or ambiguous, completing the
+  remaining restoration/export direction from #2494 by @wywsoor.
+
+### Fixed
+
+- Permission setup now consistently presents the product postures Ask,
+  Auto-Review, and Full Access instead of leaking the internal `never` token.
+  The same resolved sandbox policy now drives execution and UI receipts: Plan
+  stays read-only, Ask and Auto-Review stay workspace-scoped, and Full Access
+  is actually unsandboxed unless a stricter effective configuration wins.
+
+- Fleet setup no longer stalls when a user explicitly selects a configured
+  Codex or Grok external-consent route. The selected route is activated and
+  validated before saving, roster roles open directly on their Model step,
+  Review saves on the first Enter, and new profiles default to the personal
+  profile directory that the roster loads on the next session.
+
+- Provider credential dialogs now share one wrapping, secret-safe API-key
+  surface across every non-OAuth provider. A key already present in durable
+  storage is reported as configured without rendering it, typing or pasting is
+  clearly framed as replacement, narrow help text remains visible, and Codex
+  and Grok OAuth flows remain token-free in this modal.
+
+- Ctrl+O again opens the complete recorded reasoning detail for the selected,
+  active, or latest reasoning block. The whole-turn Turn Inspector moved to
+  Ctrl+Alt+O and `/turn inspect`, removing the shortcut collision while keeping
+  raw leaf detail and post-flush reasoning discoverable.
+
+- Failed child agents now deliver a distinct high-priority failure receipt to
+  their owning parent with a sanitized failure class, elapsed work, and a full
+  transcript handle. Parent-to-child message, follow-up, and interrupt tools
+  now use one hierarchy-checked mailbox path, and persisted nested completion
+  envelopes remain safely restorable across instruction-text revisions.
+
+- Background-shell completion events now carry only bounded tails plus a
+  retrievable exact-evidence handle. Terminal foreground Bash results are
+  acknowledged at the direct tool-result boundary and are no longer emitted a
+  second time as background completion artifacts.
+
+- Providerless Fleet and child-agent fixed-model routes now reject only
+  high-confidence foreign-provider model ids before creating a worktree, while
+  explicit provider/model pairs, custom and local endpoints, unknown ids, and
+  aggregator wire-id resolution retain their intended behavior.
+
+- Manual compaction now preserves and reports the supplied provider failure
+  class instead of replacing it with an opaque generic error. This does not
+  infer quota exhaustion when the recorded failure does not prove it.
+
+- The ambient jellyfish keep complete, readable silhouettes while animating,
+  and the website favicon now uses the Signal Current desktop tile instead of
+  the legacy whale mark.
+
+- ACP JSON-RPC responses preserve numeric request ids for avante.nvim while
+  retaining the negotiated string-id exception for Zed (PR #4929 by
+  @atmosuwiryo).
+
+- Restored shell cells whose job no longer exists stop displaying live
+  spinners and settle into a truthful stale/no-output state across transcript,
+  phase strip, and sidebar (PR #4937 by @LI-Jialu, closing #4547).
+
+- Interrupted checkpoints and timed recovery snapshots remain checkpoints
+  instead of being promoted into orphan session files, preventing duplicate
+  `/resume` entries (PR #4963 by @SparkofSpike).
+
+- Every shipped locale is admitted by the typed settings schema and native
+  chooser, with complete/partial status kept independent and tested (PR #4856
+  by @nightt5879, closing #4786). Context-menu hover hit-testing also accounts
+  for its title row (PR #4897 by @XhesicaFrost; reported by @SparkofSpike in
+  #4803).
+
+- OSC 52 and SSH/tmux clipboard transport run on one bounded background worker
+  rather than blocking input and rendering on the TUI loop; late transport
+  failures still surface through the status path (PR #4896 by @nightt5879,
+  closing #4159).
+
+- Non-streaming model calls receive a generation-length response budget rather
+  than the SSE header-open timeout, while actual SSE opens share the bounded
+  cross-provider transport seam. The equivalent fix direction came from
+  closed PR #4743 by @vibecoding-skills.
+
+- Resumed sessions diagnose a deleted inherited workspace before shell launch
+  instead of failing as an opaque Windows process error (report #4100 by
+  @redjade75723). DeepSeek native tool-call wrapper tokens are also scrubbed
+  from visible streaming and completed output as a grounded fail-soft follow-up
+  to report #3880 by @hardy922; that report's exact emitted marker remained
+  unconfirmed.
+
+- Auto model routing now preserves the user's requested reasoning effort
+  through startup, provider/model changes, session restore, the picker,
+  Ctrl+T, and Hotbar actions. The tier is normalized only after the concrete
+  provider route is known instead of being silently replaced by Auto
+  (#4941, PR #4961 by @nightt5879).
+
+- Auto-compaction now defaults on for every known model context window,
+  including Kimi K3's 1,048,576-token routes. Persisting only an
+  `auto_compact_threshold` or `auto_compact_threshold_percent` now counts as
+  opt-in intent, while an explicit `auto_compact = false` remains authoritative.
+  `/config` reports the effective state, percentage, and computed token trigger.
+
+- Per-provider `context_window` overrides are now documented and visible in
+  `/config`, provider setup help, diagnostics, and the example configuration.
+  The effective override consistently drives preflight budgeting, the context
+  meter, and compaction; this lets a user cap a 1M Kimi route to 256K when their
+  Coding Plan tier has the smaller window.
+
+- Agent Details now projects status, model, elapsed time, and step counts from
+  the same row snapshot as the primary agents list, eliminating contradictory
+  worker state between the two surfaces.
+
+- Composer submission and its hints now share one state machine. Portable
+  terminals use Enter to queue during a running turn and Enter again to steer;
+  Ctrl/Cmd+Enter is accepted only when an enhanced terminal reports it and is
+  no longer advertised as universally available.
+
+- `edit_file` now matches LF-only model search text against CRLF files,
+  preserves the file's line-ending style for replacement text, and still
+  rejects newline-normalized duplicate matches as non-unique (#4764).
+  Implemented in PR #4942 by @nightt5879; reported and root-caused by
+  @LmeSzinc.
+
+- `/fleet status` read the current TUI session's sub-agents while `ghosty
+  fleet status` read the durable `.ghosty/fleet.jsonl` ledger — two different
+  things wearing one name, so a run started by `ghosty fleet run` never
+  appeared in the TUI. `/fleet status` now reads the durable ledger through the
+  same code path as the CLI; the session view keeps its own name as
+  `/fleet workers` (`/subagents` and `n` still work). When a workspace has no
+  ledger, both surfaces report a typed `no_fleet_ledger` reason instead of an
+  empty-looking "all clear", and neither creates the ledger as a side effect of
+  reading it (#4022).
+
+- `ghosty fleet status` (and `list`/`interrupt`/`resume`) created
+  `.ghosty/fleet.jsonl` as a side effect of opening the manager, then
+  reported `no_fleet_ledger` for the file it had just made — so the second
+  invocation showed an empty Fleet where none existed. The CLI now refuses
+  those verbs before the manager is constructed, matching `/fleet` (#4022).
+
+- `fleet resume <run-id>` accepted any string. An id absent from the ledger
+  reconciled nothing but still wrote a run-status record keyed by whatever was
+  typed, and reported `no_change`. Unknown ids are now refused as `not_found`
+  before any durable write (#4022).
+
+- `lane interrupt` reported `transitioned` even when it changed nothing —
+  another process's stop looked like our own. The Runtime backend now reports
+  whether *this* call performed the transition, and a no-op is `no_change`.
+  The `@<lifecycle-seq>` fence is also evaluated inside the registry's per-Lane
+  lock rather than before it, so a stale fence refuses without running Runtime
+  teardown instead of racing between the check and the stop (#1888).
+
+- `/lane` no longer runs Runtime teardown on the TUI composer thread. Reads on
+  the slash surface skip reconciliation (which probes tmux and takes a lock)
+  and say so on the receipt instead of implying freshness; `lane interrupt` is
+  CLI-only until that work runs off-thread, and reports
+  `surface_not_supported` naming `ghosty lane interrupt` (#4022).
+
+- The hotbar is no longer modelled as a third control surface. A slot binds a
+  slash command and fires it with no argument, so it runs *as* the slash
+  surface; the contract now declares which verb a bare press actually reaches
+  (`hotbar_bare_dispatch`, true only for `lane.list`) instead of advertising
+  target-taking verbs as hotbar-reachable (#1888).
+
+- `ghosty lane list --json` and `lane status --json` keep emitting the
+  `LaneRecord` shape they always have — the receipt did not replace it. The
+  human `lane status` output also regained `branch`, `session`, `socket`,
+  `attach`, and `log`, which the first cut of the shared DTO had dropped
+  (#1888).
+
+- No surface advertises a backend it does not have. `lane restart` and
+  `lane resume` have no implementation — a Lane is re-created by
+  `ghosty lane start`, and a stopped Lane's Runtime session is gone — so all
+  three surfaces refuse them with `backend_not_implemented` and say why.
+  `fleet restart` drives the manager loop to completion, which only the CLI
+  runs, so `/fleet restart` reports `surface_not_supported` and names the CLI
+  command rather than quietly doing a smaller thing (#1888).
+
+- Deny rules in `permissions.toml` no longer miss a command because of an
+  intervening flag: deny matching is token-based with flag-skipping and
+  backtracking, so a `git push` rule still catches
+  `git -c foo=bar push`. Path matching folds case only on platforms whose
+  filesystems are case-insensitive, and the default approval branch no
+  longer proposes the working directory as a network host.
+
+- MCP tool calls run once. A failed call is no longer retried as if it
+  were a failed lookup, qualified-name resolution collects every match and
+  reports an ambiguity instead of taking whichever the hash map yielded
+  first, and registering a server whose name collides with an existing one
+  after sanitization is now an error rather than a silent overwrite.
+  The equivalent call-once fix direction came from closed PR #4756 by
+  @adity982.
+
+- The session index survives a torn line: an unparseable entry is skipped
+  rather than aborting the whole read, appends carry their data through to
+  disk, and appends and compaction share a lock so a compaction can no
+  longer race an append into a lost record.
+
+- `Edit` counts as a write tool for workflow elevation, and the TUI's
+  write/shell classification now delegates to one shared allowlist rather
+  than keeping a second copy that could drift.
+
+- A rejected `app/config/set` stays a no-op. Previously an invalid value
+  still tore down the cached runtime bridge, killing the child runtime and
+  orphaning every other in-flight stdio thread behind a response that
+  correctly reported failure.
+
+- A malformed project `config.toml` is no longer indistinguishable from
+  having no project config. Because a project config may only *tighten*
+  approval and sandbox policy, silently discarding a broken one dropped a
+  repository's restrictions back to the looser user defaults; the setup
+  wizard now says so, naming the file but never quoting its contents.
+
+- An expired lane worktree no longer leaves its branch behind, which made
+  reusing the same lane name fail with "branch already exists". A branch
+  still carrying unmerged commits is kept — a TTL lapsing is not consent
+  to delete someone's work.
+
+- An in-flight `thread/message` turn can be stopped. The stdio loop keeps
+  reading while a turn streams, so the new `thread/interrupt` request (and
+  `shutdown`) can reach a runaway turn instead of waiting on the very turn
+  they were meant to stop.
+
+- Precedence is stated only in the constitution's "Whose word wins" section.
+  Memory hygiene no longer ships an inverted Tier list that put the
+  constitution above the user's current request; approval, compaction, and
+  personality overlays describe behavior without rank vocabulary; and the
+  authority recap points at the single source rather than restating a second
+  ladder.
+
+- `<turn_meta>` carries facts (mode, posture, model, workspace), not mode
+  doctrine or permission-question essays re-asserted every user message.
+
+- The project context pack (pretty-printed workspace tree) is off by default
+  and opt-in via `[context] project_pack = true`. Language law is compressed
+  while keeping the English-constitution / user-language-reply contract.
+
+- Modal lists and config pickers wrap selection at both ends (Down past the
+  last row returns to the top). Home-directory resolution prefers
+  `HOME`/`USERPROFILE` via `effective_home_dir` across remaining call sites so
+  Windows tests that fake the home env vars match production paths. The
+  equivalent home-directory sweep came from closed PR #4760 by
+  @EvanProgramming.
+
+### Changed
+
+- Prefix-cache tool catalog entries store only the SHA-256 digest, not the
+  joined catalog string. Unused plan-transition validation helpers are removed.
+
+- Settings sections now hold only what they claim (#4751). Fleet keeps
+  Fleet/member concerns; `/goal` moved to a **Session** section and Workflow
+  orchestration to its own **Workflow** section. The inert DeepSeek-only
+  `default_model` fallback moved out of Model settings into an explicit
+  **Legacy** section — exact-Fleet users switch Fleets, not fallback models;
+  the config field is retained because the runtime still reads it. This is
+  presentation only: the persisted keys (`goal_command`, `workflow`,
+  `default_model`), their values, scopes, and runtime behavior are unchanged.
+
+- Auto model routing is scoped to the active provider. The classifier
+  inventory no longer discloses other providers' runnable routes (or the fact
+  that their credentials exist), a classifier reply naming another provider is
+  refused, the local heuristic no longer falls back to a different provider
+  when the active one is unusable, and the implicit DeepSeek-flash classifier
+  is skipped for non-DeepSeek sessions. Auto receipts and the model picker
+  hint report the active-provider-only scope instead of "runnable providers".
+  Cross-provider Auto is available only through the persisted `[auto]
+  cross_provider = true` opt-in (an explicit `[auto.router]` route remains its
+  own opt-in for the classifier call). Same-provider strong/fast selection and
+  `[auto] cost_saving` are unchanged.
+
+- The QA pseudo-terminal acceptance harness now parses frames with `rio-vt`
+  behind its existing neutral frame/color surface, retaining the assertions
+  while removing the `vt100` dependency (PR #4931 by @raphamorim).
+
+- Anthropic Messages and OpenAI Responses stream opening now share the
+  `client/stream_entry.rs` seam already used by Chat Completions: one bounded
+  response-header wait, shared dual/HTTP-1.1 policy selection, at most one
+  HTTP/1.1 fallback on a classified HTTP/2 header stall, and common idle-timeout
+  diagnostics. Wire-specific authentication, headers, endpoints, decoding, and
+  rate-limit behavior remain at each adapter edge. The timeout-placement
+  diagnosis and fix direction came from closed PR #4743 by
+  @vibecoding-skills.
+
+### Security
+
+- Release containers now publish an SBOM attestation and pin maximum-mode
+  provenance explicitly so supply-chain metadata cannot silently weaken with a
+  builder-default change (PR #4958 by @kobihikri).
+
+### Contributors
+
+Thank you to the contributors whose code, reports, and reviews shaped v0.9.2:
+
+- [@greyfreedom](https://github.com/greyfreedom) — exact repository-scoped
+  allow grants and cross-platform path semantics (PR #4761), plus safe
+  permission-rule listing and snapshot-bound removal (PR #4960).
+- [@nightt5879](https://github.com/nightt5879) — off-event-loop clipboard
+  writes (PR #4896), complete locale exposure in settings (PR #4856), CRLF-safe
+  edits (PR #4942), and reasoning-effort preservation across automatic model
+  routing (PR #4961).
+- [@XhesicaFrost](https://github.com/XhesicaFrost) — the configurable
+  session-token header (PR #4610) and context-menu hover alignment (PR #4897).
+- [@cyq1017](https://github.com/cyq1017) — the hooks configuration/executor
+  split from PR #4087.
+- [@snail-vs](https://github.com/snail-vs) (snailoniu) — OpenCode Zen's
+  model-aware routes, authentication, documentation, and test isolation from
+  closed PR #4467, whose contributor commits are preserved in the candidate.
+- [@SparkofSpike](https://github.com/SparkofSpike) — the zh-Hans translation
+  quality review harvested from PR #4908, duplicate-session fix in PR #4963,
+  LaTeX implementation from PR #4973 landed through #4974, and the context-menu
+  reproduction in #4803.
+- [@GTC2080](https://github.com/GTC2080) — the request-preview concept from
+  PR #1099.
+- [@h3c-hexin](https://github.com/h3c-hexin) — non-UTF-8 `fetch_url`
+  decoding direction from PR #4909.
+- [@fleitz](https://github.com/fleitz) — required source-candidate credit for
+  the canonical `Bash` no-`cwd` workspace fix and regression in PR #4673
+  (issue #4674).
+- [@LmeSzinc](https://github.com/LmeSzinc) — the Windows CRLF `edit_file`
+  reproduction, root-cause analysis, and affected-code anchors in issue #4764.
+- [@atmosuwiryo](https://github.com/atmosuwiryo) — ACP numeric-id compatibility
+  (PR #4929) and the Indonesian documentation and website locale (PRs #4962
+  and #4972).
+- [@M-Maciej](https://github.com/M-Maciej) — the expanded-by-default reasoning
+  setting and its original report (PR #4928, issue #4925).
+- [@raphamorim](https://github.com/raphamorim) — migration of the QA PTY frame
+  parser to `rio-vt` (PR #4931).
+- [@LI-Jialu](https://github.com/LI-Jialu) — truthful finalization of restored
+  stale shell cells (PR #4937).
+- [@kobihikri](https://github.com/kobihikri) — release-container SBOM and
+  explicit provenance mode (PR #4958).
+- [@EvanProgramming](https://github.com/EvanProgramming),
+  [@adity982](https://github.com/adity982), and
+  [@vibecoding-skills](https://github.com/vibecoding-skills) — equivalent fix
+  direction for the effective-home sweep (#4760), MCP call-once behavior
+  (#4756), and streaming/non-streaming timeout split (#4743).
+- [@antarikshraya](https://github.com/antarikshraya) — the LaTeX transcript
+  rendering report in #4957.
+- [@eugenicum](https://github.com/eugenicum) — the token-header request and
+  output-presentation measurements in #4520 and #4468.
+- [@whp233](https://github.com/whp233) — the StepFun/OpenCode subscription-route
+  request in #4526.
+- [@redjade75723](https://github.com/redjade75723),
+  [@hardy922](https://github.com/hardy922),
+  [@JayBeest](https://github.com/JayBeest),
+  [@elijahchan2019](https://github.com/elijahchan2019),
+  [@cy2311](https://github.com/cy2311), and
+  [@wywsoor](https://github.com/wywsoor) — reports and product direction behind
+  the stale-workspace diagnosis (#4100), native-tool-token filtering (#3880),
+  contributor onboarding (#4227), optional reasoning highlight (#4089),
+  session control (#2934), and export/restore correlation (#2494).
+
+## [0.9.1] - 2026-07-24
+
+### Dogfood follow-ups (2026-07-24)
+
+### Added
+
+- `/compact [focus]`: the manual compaction command now accepts an
+  optional focus argument that is injected into the summary prompt, and
+  the compaction summary itself becomes a structured nine-section
+  successor briefing (primary intent, key concepts, files and code,
+  errors and fixes, problem solving, user messages, pending tasks,
+  current work, next step) that carries earlier compaction summaries
+  forward and explicitly forbids tool use — replacing the free-form
+  "under N words" instruction. Ghosty's pin/working-set and
+  V4 prefix-cache-aligned machinery are unchanged.
+
+- Saved workflows become slash commands: `*.workflow.js` files under
+  `<workspace>/.ghosty/workflows/` and `~/.ghosty/workflows/` are
+  discovered as `/name` commands that accept custom arguments (forwarded
+  to the run's `args`), launch through the `workflow` tool in the
+  background, and report their run id. Hand-written `.md` commands with
+  the same name always win. The workflow tool's `source_path` now also
+  accepts the user-global `~/.ghosty/workflows/` store, and every
+  settled run leaves a durable synthesized report under
+  `.ghosty/reports/<run_id>.md` (status, goal, gates, progress,
+  result, verification).
+
+### Fixed
+
+- Disambiguate the two Kimi K3 model-picker rows, which read as an
+  unexplained duplicate: bare `k3` is now labeled "Kimi Code plan route"
+  with its default 262K window annotated as the plan-tier floor (raisable
+  via the provider `context_window` setting for plans that include 1M),
+  and `kimi-k3` is labeled "Moonshot direct route" with its 1M window.
+  Both remain distinct, valid routes for the same underlying model.
+- Close the model-facing `agent` tool role schema: the `type` property now
+  publishes the canonical JSON Schema enum `["worker", "scout", "planner",
+  "reviewer", "builder", "verifier", "custom"]` instead of describing the
+  accepted values in prose. Legacy aliases are no longer advertised to
+  models; they remain accepted only at replay/deserialization boundaries.
+  Provider schema sanitizers (Chat Completions, strict mode, Anthropic
+  Messages / OpenAI Responses, Moonshot/Kimi) are pinned by test to
+  preserve the closed enum.
+
+### Changed
+
+- Rework the ambient idle ocean: the water now holds exactly one loose
+  wedge school of fish, jellyfish, bubbles, and the rare whale cameo —
+  seaweed and bio-dust are removed. Fish swim on a wrap-around path and
+  always face the way they move (direction can only change while the
+  school is off-screen); the lead fish carries an eye (`><o>`).
+  Jellyfish become a pulsing bell with a lagging swaying tentacle. All
+  ambient marks now glow via background→ink color lerp: a travelling
+  sin² wave through the school, a floor-bounded pulse for jellyfish,
+  and occasional raised-cosine glints on bubbles, with deliberately
+  non-matching periods so nothing strobes in sync.
+
+- Rename the internal delegated-worker role type from `SubAgentType` to
+  `FleetRole` with canonical variants (`Worker`, `Scout`, `Planner`,
+  `Reviewer`, `Builder`, `Verifier`, `Custom`) matching the public Fleet
+  vocabulary one-to-one. Wire behavior is unchanged: serialization emits
+  canonical Fleet values only, and persisted `agent_type` fields plus
+  documented legacy spellings (`general`, `explore`, `plan`, `review`,
+  `implementer`, …) continue to load at deserialization/parse boundaries;
+  unknown role tokens still fail closed with the canonical vocabulary in
+  the error.
+
+
+The Ghosty v0.9.1 source candidate includes a first-class local web client over the Runtime API,
+first-class OpenCode Go and TelecomJS TokenHub providers and restored xAI device login,
+calendar-correct hourly automations, a buildable OpenHarmony workflow-js
+target, and hardening for Auto routing, remote-terminal clipboard transport,
+restart recovery, and a coherent TUI, Work, evidence, and public release
+surface.
+
+### Added
+
+- Add `ghosty web [--port 7878]`, a first-class loopback-only browser
+  client over the canonical Runtime API. The dependency-free embedded shell
+  supports thread lifecycle, snapshot-then-SSE transcripts, turn start/steer/
+  interrupt, approvals, and user questions, including pending-request recovery
+  across tab reloads, while leaving unsupported managed,
+  files, PTY, model-selection, and Fleet controls absent. Browser auth uses a
+  short-lived one-time loopback capability exchanged for an opaque, bounded,
+  process-local HttpOnly, SameSite=Strict session cookie with a same-origin
+  mutation guard; Runtime tokens never enter URLs, HTML, browser storage, logs,
+  or browser-launch arguments (#4423).
+- Add OpenCode Go as a first-class, subscription-backed Chat Completions
+  provider with `[providers.opencode_go]`, `OPENCODE_GO_API_KEY`, and the eight
+  models currently documented on its `/v1/chat/completions` endpoint. Models
+  served only through OpenCode Go's Anthropic `/messages` endpoint remain out
+  of this narrow route until Ghosty supports per-model wire selection
+  (#1481 by @seanthefuturegorilla; implementation harvested from PR #773 by
+  @zhangweiii and PR #1050 by @sternelee).
+- Add TelecomJS TokenHub as a first-class Chat Completions provider with
+  `[providers.telecomjs]`, `TELECOMJS_API_KEY`, and a key-scoped live
+  `/v1/models` refresh. Models.dev and provider-specific catalogs remain in
+  separate source partitions so either refresh order preserves both; refreshes
+  do not delete the other source's rows, matching model ids from unrelated
+  providers do not fabricate metadata, and chat requests omit unsupported
+  reasoning fields (PR #4370 by @baendlorel; harvested with co-authorship).
+- Prepare native Windows ARM64 `ghosty`, `ghosty-tui`, and `ghosty-tui`
+  binaries, npm selection, updater support, and standard/portable release
+  archives. Build and smoke them on GitHub's native Windows 11 ARM runner,
+  and move Linux ARM64 release builds to the native Ubuntu ARM runner to
+  remove the slower multi-arch cross-link setup (#4267 by @w1w218).
+- `load_skill` tool now supports listing: omit `name` or pass `"list"` to
+  see all available skills without loading one (#4651).
+- Add a unified `/skills` manager with one precedence-aware root catalog,
+  bounded duplicate/shadow/conflict auditing, package provenance, and
+  validated install, update, remove, and trust mutations (PR #4679 by
+  @SamhandsomeLee).
+- Add a safe Agent Details view and bounded, structured `current_activity` to
+  the single Work projection, sourced from worker events instead of renderer
+  string inference. Rows stay compact, exact evidence is opt-in, and raw child
+  output never enters the parent transcript (#2889 and #4636; design direction
+  by @aboimpinto, preserved from #2694).
+- Make exact results and delegated coordination durable: non-inline tool output
+  becomes immutable session-owned evidence behind bounded receipts; File
+  mutations add configurable success-only diffs; and decisions and write
+  contention survive restart with typed neutral-fan-in records (#4619, #4636,
+  #4647).
+- Runtime API provider registry and atomic provider-switch endpoints
+  (`GET /v1/providers`, `GET /v1/providers/{id}/models`,
+  `POST /v1/providers/{id}/switch`) so the web GUI renders a dynamic
+  provider/model picker without the setConfig+reload clobber (#4658).
+- Typed filter (`/`) in the Fleet setup wizard's Model step: substring
+  match over provider id, display label, and model id keeps
+  OpenRouter-scale catalogs navigable (#4639).
+- `[auto.router]` config: explicit provider/model/thinking for the Auto
+  mode classifier route; unset keeps the DeepSeek flash default, and
+  missing credentials fall back to the local heuristic.
+
+### Changed
+
+- Keep the top activity bar literal and actionable: active To-dos appear first,
+  followed by Sub-agents, while generic operations and coordination stay in
+  the detail surface. Completed-only bars auto-hide, and top/side layouts can
+  be resized by dragging their divider and retain the chosen size (#4700,
+  #4702).
+- Use each theme's semantic colors for composer mode and permission rails, and
+  show a larger inline reasoning preview with clearer local/full expansion
+  affordances (#4699, #4701).
+- Simplify the model-facing runtime around stable action tools (`File`, `Git`,
+  `Run`, deferred `Web`, and durable task and automation families), with legacy
+  spellings hidden for replay. Fresh sessions no longer reserve a Work surface
+  before real work exists (PR #4675).
+- Give the terminal shell one deliberate visual language: cool Plan → Act →
+  Operate and warm Ask → Auto-Review → Full Access ramps match between header
+  and split composer edges; transcript rhythm groups related activity; a
+  refined whale keeps the empty state calm; and one-cell live motion with
+  truthful labels distinguishes reasoning, reading, tool use, and verification
+  without exposing private reasoning text. Reduced-motion and animation-off
+  settings freeze it, while ASCII-safe terminals retain the signal (#4676,
+  #4677).
+- Unified shell tool: the model now sees a single `Bash` tool with an `action`
+  parameter (run/wait/interact/cancel). Legacy `exec_shell*` names remain as
+  hidden compat aliases for transcript replay, and the tool-search catalog
+  keeps `Bash` active by default (#4625).
+- Tool output inline preview increased from 6 to 12 lines (4 head + 4 tail)
+  before the fold indicator; full pager (`v` key) unchanged (#4603).
+- Mode changes (`/mode agent|plan|operate`) now persist to `settings.toml`
+  and restore across sessions (#4628).
+- Billing provenance: every outgoing API request carries an
+  `x-ghosty-provenance` header with client version and provider (#4324).
+- The `/model` picker's typed search now ranks results: provider-name
+  matches first (drill-down), then exact id, then id-prefix, then the
+  active provider's rows (#4639).
+- System prompt text consolidated into a single `prompts/text.rs`
+  module (byte-exact constants replacing 17 layered files);
+  composition order, constitution-first binding, and locale/personality
+  variants unchanged.
+- Ask, Auto-Review, Full Access, and Never resolve through one permission
+  contract: `resolve_tool_permission` in the engine and
+  `resolve_approval_request_disposition` in the UI share one truth table for
+  session grants/denials, non-bypassable policy holds, and modal prompts
+  (#4412).
+- Collapsed multi-struct tool families into single action-dispatched tools
+  (`AutomationTool`, `TasksTool`, `GithubTool`, `RlmTool`) while keeping
+  legacy tool names as hidden compatibility aliases for transcript replay.
+- Operate-mode children default to leaf depth (`max_depth=0`) unless the
+  caller explicitly grants a deeper budget (#4598).
+
+### Fixed
+
+- Restore `uwu` theme config round-tripping and keep header permission colors
+  and authored idle-whale geometry aligned with the selected theme (#4696).
+- Default canonical `Bash` runs with no explicit `cwd` to the active
+  `ToolContext.workspace`, including an isolated sub-agent worktree, instead of
+  falling through to the shared shell manager's parent workspace. The regression
+  test detects the selected workspace through marker files so it remains
+  meaningful across PowerShell path spellings (#4674, PR #4673 by @fleitz).
+- Generate QuickJS bindings for `aarch64-unknown-linux-ohos` with the native
+  SDK's libclang and sysroot, carry the OHOS target and sysroot through final
+  linking, and keep unsupported persistent PTY dependencies out of the target
+  while retaining non-PTY `exec_shell` support (#4470 by @shenjackyuanjie;
+  original bindgen approach in #4384 by @shenyongqing).
+- Honor `[auto] cost_saving = true` in provider-aware heuristic and classifier
+  routing, using only validated same-provider fast siblings and deriving
+  fallback candidates from their actual provider so Auto cannot invent a
+  cross-provider model. Providers without a known fast sibling stay on the
+  active model (#4486; partial #4405).
+- Make terminal-client clipboard behavior truthful over SSH: use OSC 52
+  outside tmux, stock `tmux load-buffer -w` inside tmux, and bracketed paste
+  for client-to-remote text. Graphical text and image access now requires
+  credible forwarding or an explicit override, transport failures no longer
+  claim success, and help distinguishes terminal text paste from graphical
+  image attachment (#4484).
+- Keep a fresh TUI Work surface from rendering prior-session worker snapshots
+  or durable-task terminal receipts whose creation or completion predates the
+  current app start. Active durable tasks remain visible, and shared history
+  stays available through `/tasks` and archived agent views (#4488; partial
+  #4416).
+- Make doctor and setup output distinguish static configuration, command
+  availability, MCP protocol readiness, and backend health instead of
+  presenting configured routes as live-healthy. Ordinary doctor runs no
+  longer wake loopback/self-hosted providers unless `--probe-local` is
+  explicitly requested (#4485; partial #4406).
+- Serialize test-only configuration-path readers with temporary environment
+  redirects so the Windows provider-persistence matrix cannot observe another
+  test's transient `GHOSTY_HOME` or config path (#4483, closing #4463).
+- Restore direct Moonshot `kimi-k3` to its documented 1,048,576-token
+  context window and 131,072-token output limit instead of treating the live
+  model as an unknown legacy 128K route. The existing Kimi Code tiered `k3`
+  route and credential reuse remain unchanged (#4481).
+- Keep read-before-edit snapshots in the engine session so a file read remains
+  valid across turns and context compaction, while a new session still starts
+  with an empty tracker (#4475 by @Angel-Hair).
+- Make `apply_patch` expose the canonical `replace` operation while continuing
+  to accept deprecated `changes` payloads through one validation path. Mixed
+  patch, replace, and compatibility modes now fail before any write (#4476 by
+  @Angel-Hair).
+- Show the prompt-cache hit rate in the phase strip when the Cache status item
+  is enabled, using overflow-safe rounded integer math and leaving compact or
+  disabled status layouts unchanged (#4474 by @dmitri-0).
+- Preserve Solarized Light's canonical Base3 (`#fdf6e3`) shell background
+  instead of tinting it green-grey through the default underwater Ombre
+  treatment, while retaining foreground ambient life (#4457 by
+  @AiurArtanis; PR #4471 by @nightt5879).
+- Register `/slop` and `/canzha` as compatibility aliases of `/debt`, while
+  keeping user-command ownership truthful across dispatch, help, slash
+  completion, alias copy, and typo suggestions (PR #4680 by @nightt5879).
+- Fail closed on legacy Kimi CLI credential imports: remove Ghosty's
+  hard-coded first-party-client impersonation and refresh request, never
+  auto-enable or rewrite imported credentials, and label the compatibility
+  route as a read-only imported token. An explicitly configured, still-valid
+  access token remains usable until expiry; missing, malformed, and expired
+  imports recover through the supported Kimi Code API-key route while
+  first-class OAuth awaits Ghosty's own vendor registration (#4417,
+  partially addressed).
+- Restore xAI/Grok device-code OAuth login against the live xAI OIDC
+  contract: discovery with issuer/endpoint validation and documented
+  fallbacks, user-principal scope set, RFC 8628 `slow_down` backoff capped at
+  code expiry, bounded, sanitized error reporting for denial, expiry, and
+  malformed responses, and a shared blocking-worker boundary for both CLI and
+  TUI login so reqwest's blocking client never creates or drops its private
+  runtime inside Ghosty's Tokio runtime (#4410).
+- Anchor `FREQ=HOURLY` automations with `BYHOUR`/`BYMINUTE` to persisted
+  local-calendar slots so intervals keep their wall-clock phase across DST,
+  restart, resume, RRULE updates, duplicate-slot recovery, and post-run
+  advancement. Nonexistent clock slots are skipped and ambiguous slots run at
+  their first occurrence (#4381 by @h3c-hexin).
+- Give content-watch drafts canonical identities: the link and semantic-drift
+  watchers now write and dedup through one canonical draft-storage key with
+  deterministic hash-suffixed IDs, validate and bound model drift output
+  before any KV writes, and show truthful admin draft labels, so unchanged
+  findings dedup and changed findings re-draft instead of colliding (#4453).
+- Make model-policy JSON repair consider object and array payloads in source
+  order, matching nested delimiters across quoted strings and escapes and
+  returning the earliest balanced candidate that parses, instead of letting
+  an unmatched opening delimiter or object-first preference corrupt array
+  payloads (#4430).
+- Convert persisted sub-agent completion and still-running control events into
+  concise, non-authoritative resume checkpoints, keeping their raw runtime
+  envelopes, sentinels, and retry instructions out of restored model and TUI
+  conversation state (#4409).
+- Deliver failed, stopped, and stale sub-agent outcomes exactly once to the
+  awaiting parent, lifecycle mailbox, and TUI before closing their runtime
+  state. Restart now reconciles orphaned queued/model/tool-wait worker records
+  to interrupted while preserving checkpoints, and cancelled workers no
+  longer read as completed in the TUI (#4408).
+- Give host applications a cancellation boundary for MCP OAuth login so a
+  stalled or abandoned provider login no longer hangs the calling session
+  (#4380).
+- Avoid blocked reader joins after Windows process kills so terminated shell
+  sessions cannot hang their readers (#4383).
+- Give stdin-less observer hooks immediate EOF and contain timed-out hook
+  process trees so descendants and pipe readers cannot leak after the parent
+  shell exits (#4489 by @luismateusvargas).
+- Preserve the full unsigned Windows PTY process status instead of collapsing
+  every high-bit exception or NTSTATUS to `2147483647`, including decimal and
+  hexadecimal diagnostic metadata for device retests (#4100 by
+  @redjade75723).
+- Keep the Hotbar Setup action list synchronized with keyboard focus when the
+  selection moves beyond the visible rows, including Down past `/export`
+  (#4418).
+- Route Windows OpenHarmony Cargo links through the repository's target-aware
+  clang launcher so the final Rust link keeps its target, sysroot, and MUSL
+  flags, and extend the no-SDK release guard to protect that contract. This
+  completes [@shenjackyuanjie](https://github.com/shenjackyuanjie)'s PR #4470
+  setup alongside [@shenyongqing](https://github.com/shenyongqing)'s original
+  bindgen approach in PR #4384.
+- Reconcile the website roadmap with reality: the retired share-link
+  direction is now an explicit non-goal, Workrooms is the considered
+  direction, and the local web client appears as underway, in English and
+  Chinese (#3418).
+- System-prompt skills block and skill-load warnings no longer embed absolute
+  home/workspace paths; entries render workspace-relative or `~/…` so the
+  byte-stable prompt prefix never leaks private paths. A new invariant test
+  guards absolute paths, API keys, and workspace paths in the prefix (#4632).
+- Mode/permission baseline unit tests no longer read the developer's live
+  `settings.toml`; they isolate config I/O to a temp directory (#4628).
+- Enter no longer freezes the composer on send: dispatch splits into a
+  sync prepare phase (instant history + spinner) and a spawned async
+  phase (auto-route, preflight, engine send), with submits gated while
+  a dispatch is in flight (#4605).
+- Self-hosted routes keep explicit per-model output limits for unknown
+  wire aliases instead of the generic 4K fallback (#4655 by @h3c-hexin;
+  PR #4656).
+- Chat Completions idle-timeout errors now include received-byte and
+  timing telemetry, distinguishing prefill stalls from mid-stream
+  stalls with truncated tool-call arguments (#4657 by @h3c-hexin).
+- `set_config` provider writes now keep the in-memory route in step,
+  so a following model write lands in the new provider's table instead
+  of clobbering the previous provider's root default_text_model (#4658
+  by @gaord, with a follow-up route-sync fix).
+
+### Security
+
+- Restrict cross-origin Runtime API browser preflights to the documented
+  authentication and content headers, explicitly allowing `Authorization`
+  instead of relying on a wildcard (#4454).
+
+### Contributors
+
+Thank you to the contributors whose code, reports, and reviews shaped v0.9.1:
+
+- [@h3c-hexin](https://github.com/h3c-hexin) — calendar-anchored hourly
+  automation recurrence (PR #4381), the MCP OAuth cancellation report
+  (#4380), explicit limits for unknown local models (PR #4656 / #4655),
+  and idle-timeout progress telemetry (PR #4657).
+- [@gaord](https://github.com/gaord) — Runtime API provider registry and
+  atomic provider-switch endpoints (PR #4658).
+- [@SamhandsomeLee](https://github.com/SamhandsomeLee) — the unified `/skills`
+  root catalog, audit/provenance model, validated mutations, manager UI, and
+  acceptance coverage (PR #4679), plus Enter-send lag diagnosis and fix
+  direction for #4605 (PR #4654; landed via the release-lane async-dispatch
+  split).
+- [@aboimpinto](https://github.com/aboimpinto) — the Layer 5.1 user-command
+  registry boundary from PR #3278; the exact authored evidence commit from PR
+  #4046, preserved intact in the integration graph; and the #2870 follow-up
+  audit whose metadata and malformed-sibling gaps shaped the final corrections.
+  Paulo also provided the structured, redacted Agent Details and
+  `current_activity` direction preserved from #2694/#2889 and the real-PTY
+  lifecycle acceptance direction from #2886.
+- [@baendlorel](https://github.com/baendlorel) — TelecomJS TokenHub provider
+  support and key-scoped live-catalog direction from PR #4370, harvested into
+  the current provider architecture with co-authorship preserved.
+- [@zhangweiii](https://github.com/zhangweiii) and
+  [@sternelee](https://github.com/sternelee) — the original first-class
+  OpenCode Go implementations (PRs #773 and #1050), harvested into the
+  current provider architecture.
+- [@seanthefuturegorilla](https://github.com/seanthefuturegorilla) — the
+  canonical OpenCode Go/Zen provider request and acceptance direction
+  (#1481).
+- [@nightt5879](https://github.com/nightt5879) — `/debt` compatibility aliases
+  with dispatch-consistent user-command shadowing across discovery surfaces
+  (PR #4680), plus the Solarized Light background preservation fix (PR #4471).
+- [@AiurArtanis](https://github.com/AiurArtanis) — the Solarized Light
+  regression report and reproduction (#4457).
+- [@shenjackyuanjie](https://github.com/shenjackyuanjie) — the HarmonyOS
+  workflow-js bindgen, portable-pty gating, and SDK environment work
+  (PR #4470).
+- [@shenyongqing](https://github.com/shenyongqing) — the original HarmonyOS
+  bindgen approach (PR #4384), carried into the landed implementation.
+- [@luismateusvargas](https://github.com/luismateusvargas) — the Windows hook
+  process-leak reproduction, process-tree analysis, and EOF fix direction
+  (#4489).
+- [@redjade75723](https://github.com/redjade75723) — the persistent Windows PTY
+  report that exposed lossy high-bit process-status handling (#4100).
+- [@w1w218](https://github.com/w1w218) — the Windows ARM64 release request and
+  real-device motivation (#4267).
+- [@Angel-Hair](https://github.com/Angel-Hair) — session-owned read-before-edit
+  tracking and the explicit, backwards-compatible `apply_patch` replacement
+  contract (PRs #4475 and #4476).
+- [@dmitri-0](https://github.com/dmitri-0) — configurable cache-hit visibility
+  in the phase strip (PR #4474).
+- [@fleitz](https://github.com/fleitz) — the canonical `Bash` no-`cwd`
+  workspace fix and regression test that keep isolated sub-agent commands in
+  their own worktree (PR #4673, closing #4674).
+- [@SparkofSpike](https://github.com/SparkofSpike) — the Windows Ctrl+O
+  reproduction that exposed pre-pager result truncation and conflicting composer
+  shortcut routing (#4482), and the exact Vim-space regression reproduction
+  verifying the v0.9.1 input path already contains the needed global binding
+  (PR #4477).
+
+### Security
+
+- Harden the public community-site boundary: scheduled review drafts now use
+  one canonical freshness namespace, admin discard is restricted to validated
+  draft objects, public feed requests cannot spend the server-held GitHub
+  token, and maintainer login bodies are type- and size-bounded before parsing.
+
+## [0.9.0] - 2026-07-16
+
+Ghosty v0.9.0 replaces the default terminal shell with the underwater
+interaction system, makes Operate message-first, and hardens the Fleet,
+Workflow, routing, accounting, and release surfaces that support day-to-day
+agent work. The release also expands localization and gives the public site a
+quieter, docs-first community foundation. Its provider work replaces the old
+hand-maintained picker boundary with live ProviderLake discovery and adds the
+largest curated model-and-pricing expansion in the project so far.
+
+### Fixed — final integration
+
+- Redact configured, environment, file-backed, and bare active credentials
+  from every tool result before it crosses any model-provider wire protocol;
+  retrieved spillover content is sanitized again at that boundary. The
+  `read_file` tool also refuses GhostyCode configuration, backup, and
+  credential-store paths, preventing routine tool use from exposing those
+  local files.
+- Keep immediate TUI submit failures inside the shell: custom-provider route
+  preflight and closed-mailbox errors now restore the exact composer draft and
+  selected skill for retry, with a sticky visible error instead of exiting.
+- Anchor automatic compaction thresholds to the route's spendable input
+  budget after output reservation and safety headroom, so large-output and
+  tight self-hosted routes compact before provider context rejection. The TUI
+  pre-send gate and warning copy now use the same token threshold as the
+  engine. Preserve the 262K Kimi route's usable input budget and use the
+  documented 32K default generation budget instead of mirroring the context
+  window as output (#4293 by @SamhandsomeLee, #4368 by @bruce6135, and #4378
+  by @mvanhorn).
+- Fail closed instead of reporting base-rate dollar estimates for direct OpenAI
+  GPT-5.4/5.4 Pro, GPT-5.5 (including dated snapshots), and GPT-5.6
+  Sol/Terra/Luna requests above 272K input tokens. Exact tiered accounting
+  remains deferred to the generalized pricing schema; smaller 5.4 variants,
+  GPT-5.5 Pro, Codex subscription, and foreign-provider routes are unchanged
+  (#4317).
+- Retire `deepseek-chat` and `deepseek-reasoner` before they reach DeepSeek's
+  first-party OpenAI or Anthropic wire APIs, migrating both to the documented
+  `deepseek-v4-flash` replacement while preserving legacy non-thinking /
+  thinking intent when no explicit reasoning tier is set. Aggregator, Wanjie
+  Ark, self-hosted, and custom endpoint model ids remain provider-owned (#4320).
+- Make Operate a message-first multitask surface: ordinary prompts work without
+  a Workflow, direct parent tools follow the same approval, sandbox, shell,
+  ask-rule, and repository protections as Act, and follow-ups can queue while
+  work is active. Bounded background workers remain preferred for independent,
+  parallel, isolated, or long-running work; child handoffs cannot inherit
+  standing Full Access, and each dispatch produces one durable completion
+  receipt.
+- Let personal Fleet profiles in `GHOSTY_HOME/agents` travel across
+  repositories while project profiles in `.ghosty/agents` override them.
+  Saving refreshes the live roster, and the UI now says explicitly that profile
+  availability does not expand workspace, trust, or filesystem authority.
+- Move file-mention discovery onto one bounded, generation-safe background
+  worker so a slow filesystem read cannot freeze composer input. Exact paths
+  resolve on send; fuzzy matches stay in the completion popup instead of
+  silently attaching an arbitrary same-name file (#4365 by @WavesMan, with the
+  initial bounded-walk approach from #4367 by @LeoLin990405).
+- Keep the opt-in `remember` tool in the model-visible first-turn catalog so
+  durable preference capture works without requiring a model to discover a
+  tool it cannot yet know exists (#4373 by @Angel-Hair and #4377 by
+  @mvanhorn).
+- Make `review` handle a staged snapshot relative to a base ref by comparing
+  the branch merge-base tree with the index. This preserves committed and
+  staged branch work, excludes unstaged edits, and avoids the invalid
+  `git diff --cached <base>...HEAD` form.
+- Honor each MCP server's advertised discovery capabilities before calling
+  optional tools, resources, templates, or prompts; keep optional probes
+  independently bounded and fail-soft (#4308 by @nsfoxer).
+- Make offline `scorecard` pricing provider-aware: `turn_end` records carry the
+  effective route and a non-secret billing surface, runtime exports and
+  supported aliases ingest cleanly, legacy/unknown routes remain explicitly
+  unpriced, and route-scoped cache and recorded-time pricing replace model-only
+  guesses. Historical runtime aggregates use each turn's recorded time;
+  costless catalog routes fail closed while exact provider-owned hand-price
+  rows remain available. StepFun PAYG and Step Plan usage now stay distinct
+  without persisting raw endpoint URLs, so subscription quota is never reported
+  as token spend (#4335). Completion-only shell, manual-compaction, and purge
+  events remain visible to `turn_end` observers as explicitly non-model
+  lifecycle records. This builds on the scorecard introduced by @findshan in
+  #3388.
+- Preserve named custom-provider identity across TUI sessions, `exec --resume`,
+  runtime threads, exports, cache and Workflow receipts. Restores resolve the
+  saved provider against live configuration before creating a client, never
+  infer a provider from the model ID, and fail closed when the named route was
+  removed, invalid, or ambiguous (#4334).
+- Bind credentials to the endpoint that owns them. Environment-selected custom
+  hosts can no longer inherit saved provider keys, keyring entries, OAuth, or
+  ambient provider variables; only an explicitly source-marked CLI key may
+  follow an explicit CLI endpoint override. `auth_mode = "none"` also strips
+  credential-shaped custom headers consistently in the TUI and app server,
+  while keyless loopback routes remain usable as local runtimes.
+- Make hosted runtime threads deterministic and provider-exact: serialize
+  thread, turn, and event mutation; keep cancellation ownership with the host;
+  preserve the selected provider through every durable turn; terminalize
+  exceptional streams once; and prevent the runtime manager from silently
+  dispatching unclaimed goal continuations or child turns.
+- Treat required user confirmation as a real goal blocker instead of a failed
+  goal, and explain how to recover when a previously cached approval is denied.
+  Cached-denial recovery is also committed as a settled transcript receipt, so
+  tool completion or a later status update cannot erase it from scrollback or
+  accessibility output. The notice now describes matching, process-scoped
+  denials truthfully across all shipped locales; approval audits honor
+  `GHOSTY_HOME`, and expired status toasts cannot remain trapped behind a
+  persistent entry. Both states remain visible and actionable instead of
+  looking like unexplained model or tool failure (#4374 and #4375 by
+  @Angel-Hair, with the final hardening in #4385 by @nightt5879).
+- Make Fleet launch and teardown deterministic: route flags are placed before
+  `exec`, workers are contained in owned Unix sessions or Windows Job Objects,
+  and cancellation reaps surviving descendants with bounded escalation before
+  manager state settles. Fence progress, terminal status, verification
+  receipts, and evidence by durable attempt generation so a stale process can
+  never complete or overwrite a restarted attempt; terminal state and receipt
+  now commit atomically, stale-heartbeat decisions use a full lease CAS,
+  exhausted-retry alerts are exactly once, and crash-truncated ledger tails are
+  quarantined before the next append. Standalone CLI and Runtime API restart
+  controls now drive the replacement attempt through a real executor to its
+  terminal receipt, while per-run manager ownership prevents concurrent
+  controllers from launching the same attempt twice.
+- Keep the stopship Workflow fixture bounded to measured 24k-per-turn role
+  budgets and a 360k aggregate. Authored child step and wall-time limits now
+  reach the live runtime, including launch-queue wait; promoted evidence stays
+  intact between roles, tool-free handoff consumers omit tool fields on the
+  provider wire, and a terminal `BLOCK` fails the Workflow instead of producing
+  a successful Lane receipt. Free-form descriptions no longer fabricate write,
+  shell, or network risk; unknown structured risk remains fail-closed.
+- Keep repository trust affirmative and explicit: only `1`/`Y` are advertised
+  as acceptance keys, while Enter remains non-affirmative and explains the
+  required choice.
+- Replace literal legal and doctrinal metaphors in Simplified Chinese setup and
+  `/constitution` copy with direct collaboration terminology reviewed by a
+  native speaker (#4369 by @hmr-BH).
+- Keep the transcript reviewable while an inline approval card is active:
+  Page Up/Down, modified arrows, Home/End, and the mouse wheel now move through
+  the visible evidence without changing or dismissing the pending decision
+  (#4371 by @amuthantamil).
+- Match generated worker names to the active UI language while preserving
+  explicit user names, and tighten the 89x50 shell rhythm across Fleet rows,
+  choice dialogs, transcript boundaries, and the idle composer.
+- Put docs content and search before the full index on small screens, reduce
+  mobile dead space, and keep the public community copy focused on issues,
+  pull requests, and international contributors.
+
+### Changed — the underwater shell
+
+- Replace the default TUI shell with the underwater interaction system: one
+  renderer owns the header, top work strip, transcript ledger, composer, and
+  footer, with explicit compact/normal/wide tiers and no legacy sidebar or
+  dashboard in the default path. The legacy composition survives only behind
+  the internal `classic` treatment.
+- Add a distinct pre-session launch screen — new session, new worktree (with
+  inline naming and real lane provisioning), scoped resume count, changelog,
+  quit — with reliable non-colliding keys and row/keyboard parity.
+- Render turns as a ledger: user message, short narration, settled tool
+  receipts, and exactly one live row. Fast tool bursts land directly as
+  batch receipts (no spinner churn), completed receipts stay inspectable,
+  failures hold a coral receipt with stderr one `v` away, and one shared
+  tool rail replaces nested card borders.
+- Make completion a one-shot exhale: `working -> finishing -> done` in the
+  footer only, with no transcript repaint, no lingering loop, and no stale
+  cancel action in the completed state.
+- Rebuild the secondary rooms on one hairline grammar — config, setup,
+  sessions, help, context, theme, model/route, Fleet, file attach — each
+  with a title hairline, row objects with focus/selection/mouse parity,
+  one panel-owned scroll rail, and wrapped action footers.
+- Make `/model` a model-first atomic route picker across configured
+  providers: provider and model switch together on apply, and every row
+  prints the resolved model. `/theme` gains a live preview with truthful
+  Esc revert across all 12 shipped themes.
+- Add a live context inspector (Alt+C) backed by the current route: exact
+  system/messages/free token buckets, a proportional map, drill-down into
+  the detail pager, and no frozen session while it is open.
+- Project Workflow runs as an in-stream run map: a collapsed one-line card
+  that unfolds into per-lane rows with role, resolved model, worktree,
+  elapsed track, and per-member running/waiting/failed/cancelled/done
+  states, plus gates and a debrief built only from real run data. Child
+  transcripts never flood the parent shell.
+- Unify Fleet into roster/setup/workers rooms: the operator is pinned first
+  with the live session route, members show resolved route truth (inherit /
+  fast lane / pinned), and the workers tab is a control surface with
+  row-local open/stop and real lifecycle counts.
+- Distinguish repository-law approvals from ordinary approvals: the
+  constitution prompt names its authority, source, matched rule, and target,
+  and Full Access never bypasses it. Ordinary approvals render as a still
+  coral band above the visible transcript.
+- Keep streaming honest and cheap: provider-unit deltas replace per-grapheme
+  queueing, the transcript is top-anchored so appended lines stop shifting
+  settled rows, ambient animation stops during real work, and ordinary
+  completion no longer triggers full-screen clears (verified by render-diff
+  logs: suffix updates of tens of cells while streaming, zero periodic
+  full repaints).
+- Give every underwater treatment ambient life: ombre breathes its water
+  column while flat and Terminal-owned keep the idle fish and bubble
+  (foreground-only for Terminal), a typed treatment setting replaces string
+  comparisons, reduced motion freezes life legibly, `fancy_animations =
+  false` stills the chrome, and typing scatters the fish immediately. Fish
+  keep a one-cell gap from occupied text; the whale remains the single brand
+  mark and returns to stillness between caustic sweeps.
+- Bring the whale mark to life with a soft diagonal caustic sweep, then let it
+  genuinely rest. Active markers now share a smoother 8 Hz clock after the
+  existing earned-motion delay, while reduced motion, hidden/off-screen views,
+  modal ownership, and compact-terminal redraw budgets remain authoritative.
+  The motion is adapted from the Apache-2.0 Grok Build interaction language,
+  not copied as a global pulse or high-frequency receipt cascade.
+- Keep compact terminals operable: `/config` and `/resume` collapse
+  secondary chrome before sacrificing their selectable rows at 40x12 and
+  60x16, bodies budget for the footer's real wrapped height, and the
+  selection stays visible through resizes.
+- Route footer notices through the classified toast system so informational
+  acknowledgements (for example "Auto-compaction enabled") expire instead of
+  becoming permanent idle chrome, while warnings and errors hold as sticky
+  notices until their window passes.
+- Complete the `GHOSTY_ASCII_SAFE=1` decorative tier: the whale mark,
+  context meter, braille state markers (mapped by dot density so the working
+  bubble still reads as a rising fill), bubbles, rails, and role/lane glyphs
+  all narrow to semantic ASCII while user, model, and CJK text passes
+  through untouched. Verified by whole-surface rendered-buffer sweeps.
+- Repair the Help catalog to match handler truth (`Alt+G`, `Alt+Shift+G`,
+  `Alt+[`, `Alt+]`, `Alt+L`, `Alt+?`), and give theme, Help, model, and
+  config rows direct mouse paths with the same activation as Enter.
+
+### Changed — integrated runtime and TUI
+
+- Make worker delegation route-aware and identity-safe: workers receive a
+  small role-scoped system prompt instead of stale parent/model boilerplate,
+  faster routes resolve through the configured provider, and opening a worker
+  shows its complete available transcript. Remove `token_budget` from the
+  ordinary model-facing Agent schema so agents do not micromanage ad-hoc
+  launches; explicit legacy calls remain readable for compatibility.
+- Mature `/config` interaction for enumerated and boolean settings with
+  pickers/toggles, mouse-wheel scrolling, stable focus, and configured-provider
+  selection. Startup mode is now only Agent or Plan; legacy `operate`/`yolo`
+  settings migrate to Agent with permission posture represented separately.
+- Show where effective permission policy comes from and keep profile,
+  environment, project, managed, and requirements-controlled posture read-only
+  in the in-session editor. Runtime presets edit only proven user-owned root
+  settings and no longer persist temporary environment overlays.
+- Restore the original four-line whale mark and make ambient ocean motion
+  coherent across the full scroll surface: one continuous ombre, eased fish
+  that face their direction of travel, fish in otherwise blank scrollback, and
+  explicit reduced-motion and animation controls.
+- Keep model reasoning in the transcript rather than the Tasks strip, retain
+  the live header status indicator, separate worker and success colors, and use
+  the same rail grammar for both work-strip and transcript scrollbars.
+- Present the default Z.AI Coding Plan route, including child routes, as
+  subscription quota instead of estimated per-token dollars. No undocumented
+  account endpoint is called by this change.
+
+### Added
+
+- Thinking Machines Lab's Inkling through Together using the exact wire model
+  `thinkingmachines/inkling`, with `inkling` and `together-inkling` aliases and
+  exact `none` / `minimal` / `low` / `medium` / `high` / `max` reasoning
+  values. Ghosty does not invent a context window, price, or offline picker
+  claim while the provider's public catalog metadata remains inconsistent.
+- Expand the verified offline catalog with Claude Sonnet 5, Claude Fable 5,
+  GPT-5.3 Codex, and Qwen3.7 Plus, including time-aware Sonnet 5 introductory
+  pricing and explicit cache rates. Refresh stale GLM-5.1, Kimi K2.6, Trinity,
+  Qwen3.6, Nemotron, Anthropic, GLM-5.2, Kimi K2.7 Code, GLM-5 Turbo, and
+  GPT-5 Codex price or limit rows; keep Xiaomi MiMo explicitly unpriced where
+  the provider's token plan and pay-as-you-go surfaces cannot be distinguished.
+- MiniMax Messages provider support for MiniMax-M3 and MiniMax-M2.7, with
+  OpenAI-compatible and Messages routes, regional endpoint guidance, request
+  coverage, catalog limits, and tier-aware pricing (PR #4354 by @octo-patch).
+- Dynamic MCP server infrastructure and an approval-gated tool that lets the
+  model start a configured MCP server from chat context. Harvested from
+  #3869 and #3866 by @bistack with authorship preserved.
+- Parent `--disallowed-tools` restrictions now flow into sub-agents and Fleet
+  workers by default, including deny-wins, wildcard, catalog-filtering, and
+  multi-generation inheritance coverage. Harvested from #4096 by @JayBeest
+  (#4042).
+- Korean (ko) UI locale with full key parity and onboarding/setup wiring
+  (PR #4347 by @moduvoice).
+- Localize the entire underwater layer: 104 new UI strings — launch menu,
+  phase words, mode/permission chips, footer hints, session picker, context
+  inspector, route and theme pickers, Fleet roster, workflow status, sidebar
+  work strip, repository-law approval copy, and file-attach titles — wired
+  through MessageIds and translated into ja, zh-Hans, es-419, pt-BR, vi,
+  and ko. Every complete pack now holds exact raw key parity with English
+  (856 keys), enforced by new tests that the old English-fallback gate could
+  not perform. The permission chip maps from typed state, so localization
+  can never silently collapse it. Machine-authored translations follow each
+  pack's existing terminology and are flagged for native review.
+- Anthropic adapter: sanitize top-level `oneOf`/`anyOf`/`allOf` in tool
+  input schemas so affected tools no longer fail the whole request with
+  HTTP 400 (PR #4346 by @qinlinwang).
+- Anthropic pricing: bill cache-write tokens at published rates
+  (PR #4348 by @knqiufan, #4318).
+- NetBSD: generate QuickJS bindings at build time so `ghosty-workflow-js`
+  compiles (PR #4349 by @ci4ic4).
+- Real-PTY release gates for six-worker fan-out liveness with Esc cancel,
+  multi-terminal route isolation, queued steering via terminal-safe Ctrl+G
+  (with Ctrl+S retained where the terminal forwards it), the one-shot
+  completion footer, and per-theme ANSI output for every shipped palette.
+
+### Fixed
+
+- Make release publication complete and source-anchored: every build checks out
+  the resolved tag commit, tag movement is rejected before GHCR, GitHub
+  Release, Homebrew, Cargo, or npm writes, and registry helpers require a clean
+  checkout exactly matching the remote tag. Manual recovery runs are
+  exact-tag-only and execute the same parity gate as automatic tag pushes.
+- Publish a coherent distribution set: both checksum manifests now contain
+  usable public basenames and cover the full 29-asset matrix; GHCR, Homebrew,
+  GitHub archives, and the Linux x64 CNB mirror carry `ghosty`, `ghosty-tui`, and
+  `ghosty-tui`. The CNB shortcut now fails clearly outside Linux/OpenHarmony
+  x64 instead of promising assets that the mirror does not build.
+- Preserve task text when a skill is invoked through dollar, unified-slash, or
+  explicit skill syntax, while keeping bare skill invocations and management
+  subcommands intact (PR #4372 by @nightt5879, co-authored by @CCChisato;
+  #3915).
+- Honor MCP server discovery capabilities: require advertised or legacy
+  `tools/list`, keep optional resource/template/prompt probes independently
+  bounded and fail-soft, and format descriptions Unicode-safely (#4308,
+  harvested with co-authorship from @nsfoxer).
+- Age-evict terminal sub-agent worker records from the state ledger so
+  long-lived, high-fan-out sessions do not keep rewriting multi-megabyte
+  terminal history (#4217; root-cause and fix direction from @yekern).
+- Resolve the sub-agent completion/cancellation race with one terminal-state
+  claim: cancellation suppresses late mailbox/parent/UI delivery, while a
+  completed result remains publicly running until its notification is safely
+  delivered.
+- Keep Workflow panel controls from stealing ordinary composer letters. Enter,
+  Delete, Up/Down, and Esc own panel actions; typed characters return focus to
+  the composer and start the message normally.
+- Preserve the composer prompt gutter from the first typed character through
+  wrapping, scrolling, cursor placement, and mouse hit-testing so the `>` does
+  not disappear or make input appear to jump.
+- Emit terminal-native OSC 8 metadata for rendered URLs without placing escape
+  payload bytes in the measured text, keeping long links visible, selectable,
+  and clickable in supporting terminals.
+
+- Keep headless structured output terminal-clean: `ghosty exec` engines
+  no longer emit interactive terminal-title/taskbar OSC sequences, so
+  `--output-format stream-json` stdout stays parseable, escape-free JSONL.
+  Interactive TUI sessions keep their terminal chrome.
+- Localization honesty: the parity gate was blinded by its own English
+  fallback — two keybinding rows (`KbCyclePermissions`, `KbCycleThinking`)
+  were missing from all five "complete" packs and now ship translated; the
+  Operate-mode copy that drifted in English was retranslated in every pack
+  (including zh-Hant's slice); three MessageIds absent from
+  ALL_MESSAGE_IDS are visible to tests again; and the `/config`
+  theme/locale hints and the invalid-locale error derive from the shipped
+  registries instead of stale hand lists that advertised 4 of 12 themes
+  and 4 of 8 locales.
+- The setup wizard's constitution step no longer claims a "55-line core"
+  in any language (the bundled core is larger today); the guided draft says
+  "the bundled core stays active" instead.
+- In-app selection copy is rail-clean and now regression-tested: copied
+  transcript text excludes the `▎ ╎ │ ●` decorations via cache metadata
+  (#4208 — thanks @eugenicum for the report and code-aware fix direction;
+  terminal-native selection with mouse capture off remains a product
+  decision on the proposed `rail_style` option).
+
+### Docs
+
+- Stamp every 0.9-era roadmap document with an explicit status (current,
+  historical, superseded, principle-only, or future RFC), correct trackers
+  that recorded unshipped work as done, and describe what remains after
+  v0.9.0 in `docs/AGENT_RUNTIME.md`.
+- Add `docs/rfcs/UNIFIED_PROVIDER_LOGIN.md`: one `ghosty auth login`
+  surface for Anthropic, OpenAI Codex, and xAI, with the Anthropic adapter
+  gated on verifying flow permissions before any constants are adopted.
+- Refresh `docs/ACCESSIBILITY.md` for treatment-independent ambient life
+  and the completed ASCII tier.
+
+### Changed — runtime foundations
+
+- Make the advertised Android/Termux release target buildable by generating
+  QuickJS bindings against the Android NDK instead of expecting an upstream
+  pre-generated `aarch64-linux-android` binding file, and give Android CLI/TUI
+  HTTP clients a preconfigured rustls root store (Mozilla WebPKI roots) so
+  standalone Termux processes stop panicking inside
+  `rustls-platform-verifier`'s JVM expectations (#4236, #4242).
+- Rebalance the bundled Constitution after the v0.8.67 prompt ablation: keep
+  the procedural policy tail in mode-specific layers, while restoring concise
+  behavioral guidance for momentum, causal investigation, constraint-first
+  decisions, mechanism-backed guarantees, and clean continuity.
+- Wire live catalog cache into provider/model pickers without dropping stale or
+  prior rows after TTL expiry / refresh failure (#4139). Remove the dead
+  `OFFERING_SEEDS` hand table so the bundled Models.dev catalog is the sole
+  seed source; pickers show a compact `stale` / `cache failed` chrome chip when
+  the Models.dev layer is past TTL or last refresh failed.
+- Make `work_update` the sole model-facing To-do / Work progress tool (#4132).
+  `checklist_*` and `todo_*` remain registered as hidden compat aliases for
+  transcript replay; `update_plan` stays Strategy metadata/context/route, not
+  a second checklist. Mode/approval prompts nudge the single surface.
+- Demote the bundled Models.dev snapshot to an offline/stale fallback after
+  live catalog refresh (#4188). ProviderLake precedence is live Models.dev >
+  bundled seed > legacy hardcoded completion names; pickers, inventory, and
+  subagent validation stay catalog-backed, and Ghosty-only providers keep
+  defaults when Models.dev has no rows.
+
+### Added
+- Wire xAI device-code OAuth into `ghosty auth xai-device`, the TUI
+  `/auth xai-device` command, and guided provider setup, with comment-preserving
+  auth-mode persistence and loopback exchange coverage (#4257).
+- Add GPT-5.6 Sol, Terra, and Luna to the OpenAI API route, including their
+  1.05M context metadata, 128K output limits, pricing, and `max` reasoning
+  effort. Add Meta Model API as a first-class OpenAI-compatible provider for
+  Muse Spark 1.1 with 1M context, tool/reasoning metadata, provider aliases,
+  and both `META_MODEL_API_KEY` and Meta's `MODEL_API_KEY` credential names.
+- Catalog automation: `scripts/catalog_models_dev.py` refreshes secret-free
+  Models.dev / OpenRouter listings and validates the offline seed snapshot
+  (`snapshot --check`) without ever persisting API keys (#4117).
+- `/model` picker cycles six catalog views with `A` (Configured → Catalog →
+  Recent → Coding → Cheap → Long context) and richer row metadata from the
+  live/bundled catalog (context, max output, tools, reasoning, price/M,
+  freshness). Discoverability views do not auto-apply a surprising route
+  (#4115).
+
+- Workflow runs are now durable: every run appends to a
+  `.ghosty/workflow-runs.jsonl` journal and hydrates on startup, so
+  `workflow status` survives restarts; runs left `running` by a dead process
+  are recovered as failed (#4011). The transcript renders workflow tool
+  output as a run card (status, goal, children, progress, verification)
+  instead of a generic one-liner (#4038), and `workflow` accepts a `verify`
+  flag that runs post-completion verification gates and fails the run when
+  gates fail (#4013).
+- Hotbar sources for MCP tools and skills: MCP tool slots prefill the
+  composer (execution stays behind the normal tool-approval flow) and skill
+  slots activate through the existing `$skill` alias (#2068, #2069).
+- Mode & permission surface: Tab cycles Plan → Act → Operate; Shift+Tab
+  cycles the Agent permission posture (Ask / Auto-Review / Full Access) with
+  a footer permission chip; Ctrl+T cycles reasoning effort and Ctrl+Shift+T
+  opens the live transcript overlay. Operate is the orchestration mode
+  (delegate, wait, inspect, dispatch) and raises sub-agent fan-out while
+  focusing the Agents sidebar.
+- Provider lake facade: the provider/model pickers, hotbar, and model
+  inventory now enumerate configured providers' models from the bundled
+  catalog (with an `A` toggle to browse the full catalog), replacing the
+  hardcoded per-provider model table (#3830 follow-up).
+- Added Cursor-integrated-terminal dogfood evidence for the published v0.8.67
+  release, covering installed binary provenance, release/publication checks,
+  headless runtime smoke, setup QA, and remaining manual visual TUI checks.
+- README and README.zh-CN now point users to the community-maintained
+  GhostyCode for VS Code GUI frontend while clarifying that this repository's
+  `extensions/vscode/` scaffold remains the read-only Phase 0 viewer (#4035).
+
+### Fixed
+
+- Sub-agent waiting no longer peek→sleep polls: `agent(action="wait")` joins
+  children, unchanged peeks are throttled (~30s) with an anti-polling nudge,
+  and mode prompts teach the join primitive (#4097). Harvested from PR #4098
+  by [@Mr-Moon121](https://github.com/Mr-Moon121) (Jeffrey Luna).
+- `/provider` picker remembers catalog/configured view and highlighted row
+  across reopen, matching `/model` picker memory.
+- Mode picker roster is exactly Act / Plan / Operate (no Multitask, no
+  numeric `4`/`5` gaps). Legacy `yolo`/`4` remain invisible one-way
+  permission shorthand for Act + Bypass.
+
+- Fleet setup is a role/profile roster editor, not a provider-scoped model
+  picker: the Model step lists routes from every configured provider (not
+  only the active one), a picked route's provider is persisted explicitly in
+  the saved profile TOML (`provider = "..."`, never inferred from the model
+  id), and the loader/route resolver read that field back out verbatim. The
+  draft-preview save keypress no longer competes with a separate pager's
+  `g`/`G` scroll bindings — the exact TOML preview now renders inline on the
+  same Review step that saves it (#4093).
+- `ghosty fleet run` and interactive in-process Fleet launches now honor a
+  profile-pinned provider/model route instead of merely recording it on the
+  receipt. Headless workers receive the non-secret `--provider` and `--model`
+  pair; TUI workers resolve the same explicit route in process. Credentials
+  still come from the worker's environment, provider is never inferred from a
+  model id, and unpinned workers continue to inherit the run route (#4093,
+  #4193).
+- The Fleet setup `m` model-assisted redraft no longer drops a picked
+  cross-provider route: the provider/model the operator chose are re-pinned
+  onto the drafted profile (a model draft is always `provider: None`), so
+  saving it keeps the explicit route instead of persisting an ambiguous,
+  provider-scoped profile (#4093).
+- Saving a Fleet profile now fails with a clear message when it pins a
+  provider that has no configured credentials, using the same
+  configured-provider check the model picker uses (#4093).
+- Workflow correctness: completion polling fails closed instead of
+  fabricating success when a sub-agent reports no terminal status; cancel
+  interrupts the JS VM (cancel handle + abort) and blocks further spawns;
+  and `budget.spent()` reports real manager-scope usage instead of always 0.
+- Sub-agent spawns validate the model↔provider pair before dispatch:
+  inherited/faster routes remap foreign models to the provider's catalog
+  default, and explicit pins fail fast with a diagnostic instead of an
+  upstream model-not-found error.
+- TUI stability: engine event drains break every 8–16 events / 8 ms to keep
+  input live (#1830, #2317, #1198); the terminal input pump restarts after
+  stall recovery on macOS/Linux too; the startup raw-mode probe no longer
+  leaks raw mode on timeout; recovery snapshots persist every 45 s during
+  long turns and the offline queue persists on every push (#1830);
+  queue/steer paths surface toasts while streaming (#2317, #1338); and
+  modal submit errors re-open the modal instead of being swallowed (#1198).
+- Core/state: paused jobs persist as paused across restarts; unarchive
+  updates the in-memory cache; tool dispatch has a timeout; MCP
+  notifications no longer receive responses; corrupted checkpoints surface
+  errors instead of loading empty state; the session index compacts instead
+  of growing unbounded; and recording thread-goal usage no longer
+  self-deadlocks the state store.
+- Runtime compaction summaries are now persisted into `/v1` thread records so
+  engine reloads and restarts preserve compacted context. Contributed by
+  MXAntian (@MXAntian) (#4091).
+- The TUI leaves xterm alternate-scroll mode off when mouse capture is disabled,
+  preserving native terminal text selection in light-theme/no-mouse-capture
+  sessions. Contributed by Nightt (@nightt5879) (#4088, #4026).
+- The public `/api/github/feed` endpoint is now forced dynamic on Cloudflare so
+  it returns live GitHub activity instead of a build-time empty feed.
+
+### Security
+
+- Require bearer authentication for `/v1/chat/completions`, compare tokens in
+  constant time, return accurate 4xx/5xx statuses, bound request bodies and SSE
+  frames, redact secrets from stdio `config get`, and reliably reap the runtime
+  child during shutdown.
+- Keep trust precedence and secret persistence fail-closed: user ExecPolicy
+  rules outrank agent-layer rules, chained commands cannot propose unsafe
+  trusted-prefix amendments, and config and secret writes are atomic with
+  filesystem synchronization on every supported platform.
+
+### Changed
+
+- Tool-hang watchdog trimmed from 15 minutes to 10 (#1862); approval modal
+  footer hints use a higher-contrast tier (#3380); status/mode copy is
+  disclosed once across header, footer, cards, and sidebar instead of
+  repeated per layer.
+- Removed the unused `tui::whale_routes` taxonomy module and its tests.
+  Contributed by Darrell Thomas (@DarrellThomas) (#4041, #3852).
 
 ### Deprecated
 
-- The `deepseek` and `deepseek-tui` binary names continue to ship as
-  tiny shims that print a one-line warning and forward argv to the
-  renamed binaries. They will be removed in v0.9.0.
-- The `deepseek-tui` npm package continues to publish for one release
-  cycle as a no-`bin` deprecation shim whose postinstall directs users
-  to `npm install -g ghosty`. It will be removed in v0.9.0.
-
-### Fixed
-
-- **Windows CI spillover tests are isolated.** Tool-result deduplication
-  tests now use a temporary spillover root guarded by the existing global
-  spillover mutex, removing the shared-state race that made Windows CI fail
-  unrelated PRs (#1943).
-- **Terminated sub-agents keep `agent_eval` recoverable.** Evaluating a
-  completed child session now returns the available transcript result instead
-  of losing the final output (#1738, #1928).
-- **Bare `@/` completions no longer freeze the TUI.** File-mention
-  completion skips bare separator and dot tokens so Windows/WSL2 workspaces
-  do not trigger an eager 4096-entry filesystem walk on the UI thread
-  (#1921, #1929).
-- **Enter paths avoid synchronous UI-thread waits.** Composer history writes,
-  offline queue persistence, feedback URL launching, and clipboard fallback
-  helpers now run off the hot Enter path where appropriate (#1927, #1931,
-  #1940, #1941, #1944).
-- **tmux and screen sessions stop idling as terminal activity.** Terminal
-  multiplexers now force low-motion behavior and pin the fallback footer label
-  so passive animations do not trip activity monitors (#1925, #1942).
-- **Composer sanitization catches OSC 8 and Kitty fragments.** The input
-  sanitizer now strips common hyperlink and keyboard-protocol fragments that
-  leaked into drafts while preserving ordinary prose (#1915, #1933).
-- **The Work sidebar hides stale completed tasks.** Terminal task records older
-  than the current session and outside the recent-completion window no longer
-  crowd active Work sidebar rows (#1913, #1930).
-- **V4 Pro pricing docs reflect permanent rates.** The English, Simplified
-  Chinese, and Japanese READMEs now describe the V4 Pro pricing change as
-  permanent instead of temporary (#1923, #1932).
-
-### Thanks
-
-Thanks to **OpenWarp ([@zerx-lab](https://github.com/zerx-lab))** for
-prioritizing ghosty support and collaborating on terminal-agent UX.
-Thanks to **[@leo119](https://github.com/leo119)** for the update-command
-documentation lineage now preserved through the rename.
-
-## [0.8.40] - 2026-05-21
-
-### Added
-
-- **Configurable sub-agent per-step API timeout.** A new
-  `[subagents] api_timeout_secs` setting in `~/.deepseek/config.toml`
-  controls how long each sub-agent step will wait on a DeepSeek
-  `create_message` response before falling back. The value is clamped to
-  `1..=1800`; `0` or unset preserves the legacy 120-second default, so
-  existing installs see no behavior change. Long-thinking children (e.g.
-  heavy plan or review work behind `agent_open`) can extend the timeout
-  without recompiling (#1806, #1808).
-- **Delegated file-write permissions for write-capable sub-agent roles.**
-  `implementer` and `custom` sub-agents may now run `Suggest`-level write
-  tools (`write_file`, `edit_file`, `apply_patch`) without the parent
-  runtime being auto-approved. Read-only stances (`explore`, `plan`,
-  `review`, `verifier`) and the default `general` role still bounce
-  approval-gated tools so they can't quietly mutate the workspace, and
-  `Required`-level tools (shell, etc.) still need parent auto-approve
-  regardless of role. Pick `implementer` (or pass an explicit `custom`
-  allowlist) when the delegated task needs to land file changes
-  (#1828, #1833).
-- **Experimental Fin fast-lane tool agents.** `tool_agent` opens a durable
-  child session on DeepSeek V4 Flash with thinking forced off for simple
-  tool-bound work such as OCR, file/search lookups, fetches, and command
-  probes. It uses the existing `agent_eval` / `agent_close` lifecycle and
-  mailbox token-usage stream, so sub-agent cost accounting stays on the same
-  path as normal `agent_open` sessions.
-
-### Fixed
-
-- **WSL2 and headless Linux startup no longer blocks on clipboard init.** The
-  TUI now defers clipboard initialization so machines without an X server can
-  reach the first frame instead of hanging on a blank screen (#1773, #1772).
-- **Windows alt-screen output stays clean when `RUST_LOG` is set.** Runtime
-  tracing is routed away from the interactive buffer so logs no longer leak
-  into the TUI display (#1774, #1776).
-- **OpenAI-compatible custom model names are preserved.** Non-DeepSeek
-  providers now pass explicit model names through instead of rewriting them to
-  a DeepSeek default (#1714, #1740).
-- **Wanjie Ark is a first-class provider.** `--provider wanjie-ark`, the TUI
-  provider picker, `deepseek auth`, doctor, and config files now target
-  Wanjie's OpenAI-compatible MaaS endpoint with pass-through model IDs and
-  Wanjie-specific env vars.
-- **DeepSeek reasoning replay works through OpenAI-compatible endpoints.**
-  DeepSeek models selected under the generic `openai` provider now replay
-  prior `reasoning_content` consistently and classify streamed reasoning the
-  same way the replay path does (#1694, #1739, #1743).
-- **Thinking-only turns no longer disappear.** If a clean turn ends with
-  thinking but no final answer text, the UI now surfaces a clear status instead
-  of silently ending the turn (#1727, #1742).
-- **Windows `cmd /C` preserves quoted shell arguments.** Commands such as
-  `git commit -m "feat: complete sub-pages"` now round-trip through the Windows
-  shell wrapper without losing the quoted message (#1691, #1744).
-- **Home/End are line-local inside multiline composer drafts.** The keys now
-  jump to the current input line boundary before falling back to transcript
-  navigation (#1748, #1749).
-- **Ctrl+C restores the canceled prompt reliably.** Canceling a streaming turn
-  puts the submitted prompt back in the composer and suppresses late stream
-  events from drawing stale output (#1757, #1764).
-- **Compaction recovers from cache-aligned summary context overflow.** When a
-  cache-preserving summary request itself exceeds the provider context window,
-  compaction retries with the bounded formatted summary path instead of failing
-  with a 400 "compression command failed" style error.
-- **Terminal sub-agent sessions expose full transcript handles.** Completed
-  and canceled child agents now store the full child message transcript behind
-  `transcript_handle`, so the parent can inspect details with `handle_read`
-  instead of relying only on a lossy summary (#1738).
-- **Forked saved sessions now keep visible lineage.** `deepseek fork` records
-  the parent session id and fork-time message count in additive metadata, and
-  session listings mark forked paths with their source id. This gives users a
-  bounded branchable-conversation workflow while the larger visual tree browser
-  stays scoped for a future release.
-- **Repeated shell wait rows collapse in the Tasks sidebar.** Multiple live
-  `task_shell_wait` polls for the same background job now render as one row
-  with an explicit collapsed-wait count, reducing the stuck-task appearance
-  tracked for v0.8.40 (#1737).
-- **Leaked mouse scroll reports no longer erase composer draft suffixes.** If
-  a terminal delivers raw SGR mouse bytes into the input stream, the sanitizer
-  now strips only the mouse report and adjacent coordinate fragments instead
-  of deleting legitimate draft text such as `commit -m` or numeric prompts
-  (#1778).
-- **TUI runtime logs are separated per process and pruned on startup.** Each
-  session now writes `~/.deepseek/logs/tui-YYYY-MM-DD-PID.log`, and startup
-  removes stale TUI logs older than seven days by default. Set
-  `DEEPSEEK_LOG_RETENTION_DAYS` to a positive day count to adjust retention
-  (#1782, #1784).
-- **The offline eval harness preserves quoted Windows shell payloads.** Its
-  `exec_shell` step now uses the same single-payload shape as the runtime shell
-  path, with raw `cmd /C` arguments on Windows so quoted commands remain intact
-  (#1779).
-- **The Feishu/Lark bridge recovers better after restarts.** It now reattaches
-  to persisted active turns after the long-connection client starts, and text
-  chunking no longer splits emoji or other multi-code-unit characters.
-- **RLM survives non-UTF-8 stdout.** `rlm_eval` now decodes REPL stdout
-  lossily instead of treating a single invalid byte as a fatal crash, so
-  binary-adjacent diagnostics can still return a bounded result (#1815,
-  #1819).
-- **Small UI/review reliability fixes landed with the stability branch.**
-  `/clear` now resets all displayed cost state, grayscale theme previews avoid
-  luma overflow, `/theme` picker arrow navigation wraps at the list edges, and
-  encoded JSON review output is parsed before display.
-- **New-file writes execute on the first Agent-mode call.** `write_file` now
-  stays preloaded in Agent mode, so creating a file no longer stops at the
-  deferred-tool schema hydration message before the normal approval/execution
-  path (#1825, #1841).
-- **Saved sessions keep the selected model mode.** Changing from `auto` to a
-  concrete model now updates existing session metadata, and resumed sessions
-  recompute the `auto` flag from the saved model instead of falling back to the
-  startup default.
-- **The `/model` picker persists thinking effort across restarts.** Selecting
-  Pro/Flash plus `high`/`max`/`auto` now writes both `default_model` and
-  `reasoning_effort` to `settings.toml`, and startup restores the saved effort
-  before falling back to `config.toml`.
-- **The footer water strip is visible by default again.** `fancy_animations`
-  now defaults to `true`, while `NO_ANIMATIONS`, SSH/Termius, VS Code, Ghostty,
-  and legacy terminal overrides still disable the animated strip where it is
-  known to flicker.
-- **Screenshots are readable without extra setup on macOS.** `image_ocr` now
-  uses the native Vision framework on macOS when Tesseract is absent, and
-  `read_file` routes screenshot/image reads through the same OCR path. Pasted
-  clipboard screenshots saved under `~/.deepseek/clipboard-images` are trusted
-  automatically for read-only tools.
-- **Auto-routing context no longer leaks hidden thinking.** The model/router
-  context summary now excludes `ContentBlock::Thinking`, so prior internal
-  reasoning is not reintroduced as if it were visible user or assistant text.
-
-### Changed
-
-- **Slash-command autocomplete ranks exact alias matches first.** Typing
-  `/q` now surfaces `/exit` (whose alias `q` is an exact match) above
-  `/clear` (which only matches by the longer pinyin alias `qingping`).
-  Within each rank tier the menu still falls back to alphabetical name
-  order for deterministic display (#1811).
-- **CNB mirror preflight covers stability-release branches.** The CNB sync
-  path now recognizes the v0.8.40 stability branch shape before release tags
-  exist, making the Tencent Lighthouse/Lark deployment path easier to verify
-  before publishing.
-
-### Thanks
-
-Thanks to **jayzhu ([@zlh124](https://github.com/zlh124))** for the WSL2
-startup report and clipboard-init fix in #1772/#1773. Thanks to **Paulo Aboim
-Pinto ([@aboimpinto](https://github.com/aboimpinto))** for the Windows
-alt-screen logging report and fix in #1774/#1776, and for the Home/End
-composer work in #1748/#1749, plus the per-process log filename follow-up in
-#1782/#1783. Thanks to **Zhongyue Lin
-([@LeoLin990405](https://github.com/LeoLin990405))** for the provider model
-passthrough, reasoning replay, thinking-only turn, and Windows quoting fixes
-in #1740, #1743, #1742, and #1744. Thanks to **Nightt
-([@nightt5879](https://github.com/nightt5879))** for the Ctrl+C prompt restore
-fix in #1764. Thanks to **Ling ([@LING71671](https://github.com/LING71671);
-commits as `www17 <ivonrust@gmail.com>`)** for the configurable sub-agent API
-timeout in #1808 and the Agent-mode `write_file` preload fix in #1841,
-harvested with `1..=1800` clamping and a fail-fast guard so a stray
-`api_timeout_secs = 0` keeps the legacy 120-second default.
-Thanks to **[@knqiufan](https://github.com/knqiufan)** for the sub-agent
-file-write delegation work in #1833, harvested with structured approval-
-gate semantics (`Implementer` and `Custom` only, never `Required`-level
-tools) so write-capable children can actually land code without bypassing
-the `Required` approval class. Thanks to **[@IIzzaya](https://github.com/IIzzaya)**
-for the exact-alias-first slash-completion ordering idea in #1811, landed
-with a focused regression test. Thanks to **Bevis** and the community reports
-that surfaced the compaction failure mode addressed in this release. Thanks to
-**Reid ([@reidliu41](https://github.com/reidliu41))** for the grayscale theme
-overflow report and `/theme` picker edge-wrapping patch in #1814.
-
-## [0.8.39] - 2026-05-17
-
-### Fixed
-
-- **Feishu/Lark bridge startup order is guarded.** The bridge now keeps
-  `ThreadStore` initialized before startup opens persisted thread state, with a
-  regression test to prevent moving it below its first use.
-- **`/model` picker opens instantly with the curated list again.** Reverted
-  the v0.8.38 live-catalog rework: the picker no longer makes a blocking
-  network call on open and once again shows the curated `auto` /
-  `deepseek-v4-pro` / `deepseek-v4-flash` rows. The `/models` command still
-  lists the live provider catalog.
-- **"Approve for session" groups by command family again.** Session approvals
-  are keyed by a lossy, arity-aware fingerprint once more, so approving
-  `cargo build` also covers `cargo build --release`. Denials keep the exact
-  per-call fingerprint from #1617, so denying one call no longer over-blocks
-  later, different calls to the same tool.
-- **Docker first-run state directories are writable.** The image now
-  pre-creates `/home/deepseek/.deepseek` with `deepseek` ownership so the
-  documented named-volume launch can create runtime thread state on first use
-  (#1684).
-- **Runtime API system prompt overrides survive the first turn.** Threads
-  created with a `system_prompt` override now keep that prompt through
-  mode/context refreshes before the model request is built (#1688).
-- **Compaction keeps a user text query in tool-heavy histories.** Automatic
-  compaction now pins the latest user text message when the retained tail only
-  contains tool calls/results, avoiding OpenAI-compatible Jinja template
-  failures on the next request (#1704).
-- **Pager jumps land at the visible bottom.** Pressing `G` or End in the pager
-  no longer overshoots the render clamp, so `k`/Up scrolls upward immediately
-  afterward, and mouse wheels now scroll pager overlays directly (#1706,
-  #1716).
-- **Mouse-wheel-as-arrow scrolling preserves composer drafts.** When
-  `composer_arrows_scroll` is enabled, Up/Down now scroll the transcript even
-  with text in the composer instead of replacing the draft with input history
-  (#1677).
-- **Multiline composer arrows move between input lines.** Plain Up/Down now
-  move the cursor within multiline drafts before falling back to input history,
-  while single-line mouse-wheel-as-arrow scrolling remains unchanged (#1721).
-- **Third-party `reasoning_content` streams no longer corrupt text output.**
-  Generic OpenAI-compatible providers that stream answer text in
-  `reasoning_content` now render it as normal text unless the selected provider
-  is one whose reasoning-content semantics are supported (#1673).
-- **macOS system theme detection recognizes Light mode.** When `COLORFGBG` is
-  missing or unusable, `theme = "system"` now falls back to macOS appearance
-  detection and treats a missing `AppleInterfaceStyle` key as Light mode
-  (#1670).
-- **`rlm_open` accepts schema-filled blank source fields.** Empty `file_path`,
-  `content`, and `url` strings now count as absent, so calls that provide one
-  real source no longer fail the exactly-one-source validator (#1712).
-- **Resize keeps transcript paging usable immediately.** After a terminal
-  resize, PageUp/PageDown now use the resized viewport height instead of
-  falling back to one-line jumps before the next render (#1724).
-- **ACP responses stringify JSON-RPC ids.** `serve --acp` now returns string
-  ids even when clients send numeric ids, matching Zed's stricter ACP client
-  expectations (#1696).
-
-### Thanks
-
-Thanks to **Matt Van Horn ([@mvanhorn](https://github.com/mvanhorn))** for the
-Docker first-run permission fix in #1699 and the runtime system-prompt
-regression tests harvested from #1702. Thanks to **Kristopher Clark
-([@krisclarkdev](https://github.com/krisclarkdev))** for the compaction
-user-query preservation fix in #1704. Thanks to **Stephen Xu
-([@wlon](https://github.com/wlon))** for the pager jump-bottom fix in #1706.
-Thanks to **tdccccc ([@tdccccc](https://github.com/tdccccc))** for the
-composer scroll fix in #1715 and pager mouse-wheel support in #1716.
-Thanks to **Paulo Aboim Pinto
-([@aboimpinto](https://github.com/aboimpinto))** for the multiline composer
-arrow navigation tests harvested from #1719. Thanks to **LittleBlacky
-([@LittleBlacky](https://github.com/LittleBlacky))** for the provider-gated
-`reasoning_content` stream fix in #1680.
-Thanks to **Eosin Ai ([@Aitensa](https://github.com/Aitensa))** for the macOS
-system appearance fallback in #1674.
-Thanks to **Anaheim ([@AnaheimEX](https://github.com/AnaheimEX))** for the
-`rlm_open` schema validation report in #1712.
-Thanks to **THatch26 ([@THatch26](https://github.com/THatch26))** for the
-terminal resize paging fix in #1724.
-Thanks to **Alvin ([@alvin1](https://github.com/alvin1))** for the Zed ACP id
-compatibility report in #1696.
-
-## [0.8.38] - 2026-05-15
-
-### Changed
-
-- **Update guidance is clearer on the website.** The homepage and install page
-  now surface `deepseek update` while keeping package-manager update paths
-  visible for Homebrew, npm, and Cargo installs.
-- **README setup docs are current again.** The English, Simplified Chinese,
-  and Japanese READMEs now use the current Docker volume/workspace invocation,
-  document update paths, list the current provider/model switching surface, and
-  send release-specific feature notes back to the changelog.
-
-### Fixed
-
-- **OpenAI-compatible providers receive stricter request bodies.** Fireworks
-  requests now use `reasoning_effort` without the DeepSeek/Anthropic-style
-  top-level `thinking` field, and chat tool schemas no longer include
-  Anthropic-only metadata such as `allowed_callers`, `defer_loading`, or
-  `input_examples` (#1592).
-- **pnpm global installs no longer hang in optional postinstall.** pnpm
-  postinstall now skips install-time binary downloads and leaves the existing
-  runtime downloader to verify or fetch binaries on first run (#1637).
-- **Terminal modes are restored on early TUI exits.** A cleanup guard now
-  restores raw mode, alternate screen, focus events, mouse capture, bracketed
-  paste, keyboard flags, and cursor visibility if startup returns early after
-  terminal initialization (#1593, #1582).
-- **Wrapped OSC 8 links keep their full target.** Long clickable URLs now
-  reopen the original full link target on each wrapped visual chunk instead of
-  exposing truncated hyperlink targets (#1577).
-- **Provider-selected models survive startup and picker reselects.** The
-  `/model` picker now uses live provider model catalogs when available, saved
-  default providers sync into the runtime config before the first request, and
-  reselecting the active provider from the picker keeps the current model
-  instead of falling back to the provider default (#1632).
-- **OpenAI-compatible batch tool calls keep all start events.** Streaming
-  responses with multiple `tool_calls` in one assistant message now preserve
-  every tool-use block instead of pairing many tool results with only the last
-  tool start event (#1686).
-- **Diagnostics tool schemas include an empty `required` list.** The built-in
-  `diagnostics` tool now sends `required: []` with its empty object schema so
-  DeepSeek no longer rejects it as a null required array (#1685).
-- **Windows wheel-as-arrow scrolling works with mouse capture enabled.**
-  `composer_arrows_scroll` now defaults on for Windows terminals even when
-  mouse capture is enabled, so wheel events that arrive as arrow keys scroll the
-  transcript instead of cycling composer history (#1578).
-- **Plain Windows PowerShell / ConHost uses calmer rendering.** Unmarked
-  legacy Windows console hosts now automatically enable low-motion rendering,
-  disable fancy animations, and resolve `synchronized_output = "auto"` to off
-  so streaming redraws do not overlap or visibly flicker (#1590).
-- **LoopGuard blocks now count as failed tool calls.** Identical tool-call
-  blocks now return a failed tool result instead of a success, so repeated
-  blocked checklist/tool retries can trip the existing failure warning and halt
-  path instead of spinning indefinitely (#1574).
-- **Denied tool approvals are scoped to the exact call.** Denying one
-  write/shell approval now caches the canonical argument fingerprint instead of
-  a lossy tool/prefix key, so later calls to the same tool with different
-  arguments can still be reviewed and approved (#1617).
-
-### Thanks
-
-Thanks to **DC ([@duanchao-lab](https://github.com/duanchao-lab))** for the
-terminal cleanup-guard idea harvested from #1630, and **imkingjh999
-([@imkingjh999](https://github.com/imkingjh999))** for the provider/model
-switching fixes harvested from #1642. Thanks to **Photo
-([@eng2007](https://github.com/eng2007))** for the provider-aware `/model`
-picker catalog work harvested from #1201. Thanks to **hexin
-([@h3c-hexin](https://github.com/h3c-hexin))** for the OpenAI batch tool-call
-streaming fix in #1686. Thanks to **chennest
-([@chennest](https://github.com/chennest))** for the diagnostics schema report
-in #1685. Thanks to
-**[@kunpeng-ai-lab](https://github.com/kunpeng-ai-lab)** for the Windows
-composer scroll fix harvested from #1578, and **WuMing
-([@asdfg314284230](https://github.com/asdfg314284230))** for the Windows
-PowerShell flicker fix harvested from #1591. Thanks to
-**[@maker316](https://github.com/maker316)** for the LoopGuard/checklist loop
-report in #1574. Thanks to **lalala
-([@lalala-233](https://github.com/lalala-233))** for the approval denial
-regression report in #1617, and **Nightt
-([@nightt5879](https://github.com/nightt5879))** for the exact-call approval
-key work harvested from #1624.
-
-## [0.8.37] - 2026-05-14
-
-### Added
-
-- **Tencent Lighthouse + Feishu/Lark bridge setup.** Added a `/opt/whalebro`
-  Lighthouse runbook, systemd deploy assets, a long-connection Feishu/Lark
-  bridge, a bridge config validator, and a VPS doctor for runtime, Node,
-  binaries, env, systemd, and localhost health checks.
-- **Tencent Cloud remote-first onboarding.** Documented the CNB + Lighthouse +
-  Feishu/Lark + optional EdgeOne teaching path and added non-active CNB deploy
-  templates for a future Lighthouse deploy button. Feishu/Lighthouse branches
-  are now mirrored to CNB for Tencent-first bootstrap.
-- **Homebrew tap automation is release-gated.** The release workflow can update
-  `blissito/homebrew-ghosty` from the checksum manifest when a tap token is
-  configured, and skips cleanly before downloading release assets when no tap
-  token exists.
-
-### Changed
-
-- **Bing is the default `web_search` backend.** DuckDuckGo remains selectable
-  with `[search] provider = "duckduckgo"` and keeps its Bing fallback path.
-
-### Fixed
-
-- **First-run onboarding stays usable without an API key.** Missing-key startup
-  no longer aborts the TUI before onboarding can collect provider settings.
-- **Streamable HTTP MCP sessions keep their server-issued session ID.** Custom
-  headers also apply to GET preflight requests, fixing authenticated MCP
-  servers that require both.
-- **DeepSeek model completions use canonical IDs.** Alias completions now
-  resolve to stable DeepSeek model names before being written to config.
-- **Terminal and child-process reliability is tighter.** Signal shutdown now
-  restores the terminal, child tasks preserve proxy environment variables, and
-  Windows Enter / CSI-u input handling avoids the prior event mismatch.
-- **Long terminal text wraps instead of overflowing.** Streaming output, diff
-  rendering, and the pager now hard-wrap overlong no-whitespace and CJK runs.
-- **Release and platform edges are safer.** The TUI no longer trips the Windows
-  Instant-underflow test path, unsupported desktop targets compile the external
-  URL opener, and legacy DeepSeek CN provider aliases deserialize to the
-  canonical DeepSeek provider.
-- **Footer diagnostics are less cryptic.** Prefix-cache stability is no longer
-  shown in the default footer, and the opt-in `/statusline` chip now says
-  `cache prefix 100%` instead of the ambiguous `P 100%`.
-- **Feishu/Lark bridge dependency installs are locked and audited.** The
-  bridge now ships a package lock, installs with `npm ci` on Lighthouse when
-  available, and overrides the Lark SDK's transitive `axios` dependency to a
-  patched line.
-- **China-friendly update fallback.** `deepseek update` now supports mirrored
-  release assets through `DEEPSEEK_TUI_RELEASE_BASE_URL` plus
-  `DEEPSEEK_TUI_VERSION`, and its network-failure hints point users behind
-  GitHub-blocking networks to the CNB `cargo install --git` path for both
-  shipped binaries.
-- **CNB is the default Tencent release-candidate mirror.** The CNB sync
-  workflow now mirrors Feishu/Lighthouse release branches, so Tencent
-  Lighthouse bootstrap can use CNB before the release branch merges.
-
-### Thanks
-
-Thanks to **ZzzPL ([@Oliver-ZPLiu](https://github.com/Oliver-ZPLiu))** for
-the MCP Streamable HTTP and Homebrew automation fixes (#1643, #1631),
-**Reid ([@reidliu41](https://github.com/reidliu41))** for CI, streaming wrap,
-and model-completion fixes (#1603, #1628, #1601), **MidoriKurage
-([@mdrkrg](https://github.com/mdrkrg))** for the onboarding crash fix (#1598),
-**Gordon ([@gordonlu](https://github.com/gordonlu))** for the Windows Enter /
-CSI-u fix (#1612), **Aitensa ([@Aitensa](https://github.com/Aitensa))** for
-the CJK diff/pager wrap fix (#1622), **qiyan233
-([@qiyan233](https://github.com/qiyan233))** for legacy DeepSeek CN provider
-aliases (#1645), **jieshu666 ([@jieshu666](https://github.com/jieshu666))**
-for the repaint-flicker reduction (#1563), **Vishnu
-([@Vishnu1837](https://github.com/Vishnu1837))** for terminal restoration on
-signals (#1586), and **axobase001
-([@axobase001](https://github.com/axobase001))** for proxy environment
-preservation in child tasks (#1608).
-
-## [0.8.36] - 2026-05-14
-
-### Added
-
-- **The right sidebar can be hidden for copy-friendly terminals.**
-  `sidebar_focus = "hidden"` (or `Ctrl+Alt+0` for the current session) removes
-  the Work/Tasks/Agents/Context rail so raw terminal selection cannot copy
-  sidebar borders alongside transcript text.
-
-### Changed
-
-- **Sub-agent completion handoffs are leaner and more cache-friendly.**
-  Internal `<deepseek:subagent.done>` sentinels now point to the preceding
-  human summary line instead of duplicating the summary, elapsed time, and
-  step count inside JSON sent to the parent model.
-- **Prefix stability is visible beside cache telemetry by default.** The
-  footer now includes the prefix-stability chip in the default status layout,
-  and low last-request cache hit rates are no longer colored as hard errors
-  when the system/tool prefix itself is stable.
-- **RLM batch helpers now require an explicit independence assertion.**
-  `sub_query_batch`, `sub_query_map`, and low-level `*_batched` helpers refuse
-  dependency-unsafe parallel fanout unless callers pass
-  `dependency_mode="independent"`, and RLM now exposes `sub_query_sequence`
-  for A-to-B dependent work.
-
-## [0.8.35] - 2026-05-13
-
-A post-0.8.34 cleanup release focused on prompt hygiene, context-pressure
-guidance, and keeping the next release branch clearly separated from the
-already-published v0.8.34 tag.
-
-> **Note on v0.8.34 contributor credits:** Horace Liu ([@liuhq](https://github.com/liuhq))
-> contributed Nix package support and install documentation in the v0.8.34
-> cycle but was inadvertently omitted from that release's changelog. The
-> README contributor list and this note correct the record.
-
-### Changed
-
-- **First-turn prompt context is leaner and easier to audit.** The
-  generated project context pack now ignores hidden tool/cache state,
-  balances top-level directories before descending, and `/context`
-  shows named prompt layers instead of a single opaque system blob.
-- **Model-visible prompt policy de-conflicted.** The base and mode
-  prompts no longer forbid useful `deepseek` CLI diagnostics, no
-  longer require checklists for simple one-step work, and align
-  long-session compaction guidance around the 60% suggestion threshold.
-- **Context-pressure guidance now has one split rule.** Manual
-  `/compact` suggestions start around 60% during sustained work, while
-  automatic replacement compaction remains an opt-in hard guardrail near
-  80% so DeepSeek V4 prefix-cache economics stay intact.
-- **The Tasks sidebar now ages out stale live-tool noise.** Completed
-  active tool rows linger briefly and then leave the right rail; very old
-  running shell rows collapse to a single row instead of occupying the
-  whole Tasks panel.
-
-### Fixed
-
-- **`auto_compact` settings help now reports the real default**, which
-  has been off since v0.8.11 to avoid unnecessary cache-prefix rewrites.
-
-## [0.8.34] - 2026-05-13
-
-A polish, terminal-protocol, and internal-cleanup release. The model-facing
-surface is stable; this cycle focused on prefix-cache stability metrics,
-broader terminal protocol coverage, bundled skills, and shrinking the
-mega-files that had grown around the agent loop and TUI.
-
-### Added
-
-- **Prefix-cache stability tracking.** A footer chip surfaces how stable
-  the cached prefix has been across recent turns (inspired by Reasonix),
-  so users can spot cache-busting edits before cost climbs.
-- **Bundled DeepSeek-native workflow skills.** A starter set of skills
-  ships in-binary so a fresh install has a usable `/skills` catalog
-  without external assets.
-- **Native Kitty + Ghostty notification protocols.** `OSC 99` (Kitty)
-  and `OSC 777` (Ghostty) are now first-class alongside the existing
-  desktop notification fallback.
-- **Theme picker with more presets.** Catppuccin, Tokyo Night, Dracula,
-  and Gruvbox join the built-in palette set; `/theme` now shows a
-  live picker.
-- **Chunked parallel-safe tool execution.** The engine batches
-  side-effect-free tool calls into a chunked dispatch so independent
-  reads/searches finish in one turn instead of serialising round-trip
-  by round-trip.
-- **Cancel-all shell jobs.** A single action stops every running
-  background shell command instead of cancelling them one-by-one.
-- **`edit_file` tolerates typographic punctuation drift.** When the
-  exact-match and leading-whitespace-fuzzy passes both fail and
-  `fuzz: true` is set, the tool retries with smart quotes (`"`/`"` →
-  `"`, `'`/`'` → `'`), en/em-dashes (`–`/`—` → `-`), and non-breaking
-  spaces (U+00A0 → space) normalized to ASCII. Catches the copy-paste
-  failure mode where a browser or chat client substituted Unicode
-  punctuation for the ASCII the file actually contains.
-
-### Changed
-
-- **`crates/tui/src/tui/ui.rs` split into focused modules.** The
-  former 10k-line single-file TUI dispatcher is decomposed into smaller
-  modules with clearer responsibilities so reviewing a UI change does
-  not require holding the entire surface in head.
-- **`crates/tui/src/core/engine.rs` reduced.** Helper clusters moved
-  into the existing `core/engine/` submodule directory next to the
-  turn loop and tool execution code, making the agent-loop core
-  easier to read end-to-end.
-- **Structured tracing on tool dispatch.** Tool entry, exit, duration,
-  and result/error are emitted through `tracing` events so
-  `RUST_LOG=engine.tool_execution=debug` produces a coherent timeline
-  instead of scattered ad-hoc prints.
-- **`/init` updates `AGENTS.md` in place** instead of refusing when
-  the file already exists, so adding new project guidance does not
-  require manual stitching.
-- **Reasoning tokens included in cost calculations**, and the cost
-  display auto-switches to CNY when the session locale is `zh-Hans`.
-- **Stale repo-root development docs removed.** `TAKEOVER_PROMPT.md`
-  (v0.8.6 era), `PROMPT_ANALYSIS.md`, and the redundant
-  `DEPENDENCY_GRAPH.md` no longer ship in releases; `docs/ARCHITECTURE.md`
-  remains the canonical crate-layout reference.
-
-### Fixed
-
-- **Auth keys checked against the saved provider on startup**, so a
-  stored DeepSeek key is no longer rejected after switching providers
-  mid-session.
-- **Auto router skipped for decisive local routes**, removing an
-  extra model round-trip on prompts the dispatcher can route directly.
-- **Reasoning content stripped for generic providers** that do not
-  understand the `reasoning_content` field, preventing HTTP 400s when
-  pointing at an OpenAI-compatible gateway that lacks DeepSeek
-  thinking semantics.
-- **`FocusGained` debounced** so terminals (Tabby) that emit rapid
-  focus events no longer trigger a repaint flicker loop.
-- **MCP HTTP transport defaults `Accept: application/json,
-  text/event-stream`** and persists `Mcp-Session-Id` across requests,
-  matching the spec for resumable streams.
-- **Shell output tail preserved when truncating**, so the last lines
-  of a long command output (usually the error trailer) survive the
-  in-transcript summary.
-- **Prefix cache preserved while pruning tool results.** Old
-  side-effect tool payloads no longer invalidate the prefix that
-  the next turn would otherwise reuse.
-- **Review sub-agents prevented from spawning further sub-agents**
-  (#1489), keeping recursive depth bounded.
-- **Help overlay closes cleanly** and repaints without a stale frame.
-- **Pinyin `/skills` alias dispatched correctly** so Chinese-locale
-  users reach the same surface.
-- **VTE flicker terminals get reduced motion** by default to avoid
-  thrashing on terminals that mishandle frequent partial redraws.
-- **Composer border no longer shows the derived session title**, keeping
-  the composer chrome reserved for editor and mode state.
-
-## [0.8.33] - 2026-05-12
-
-A sub-agent and RLM renovation release. The model-facing delegation
-surface is now session-oriented instead of one-shot: RLM work happens
-through `rlm_open` / `rlm_eval` / `rlm_configure` / `rlm_close`,
-sub-agent work happens through `agent_open` / `agent_eval` /
-`agent_close`, and large outputs can be parked behind typed handles
-that the model reads back explicitly with `handle_read`.
-
-### Added
-
-- **Persistent RLM sessions with bounded REPL helpers.** RLM prompts now
-  use `peek`, `search`, `chunk`, `context_meta`, `sub_query`,
-  `sub_query_batch`, `sub_query_map`, `sub_rlm`, and
-  `finalize(value, confidence)` instead of exposing the full parent
-  context as an ambient variable.
-- **Fork-aware sub-agent sessions.** `agent_open` supports named
-  sessions, `fork_context`, and bounded recursive depth so the parent can
-  ask for multiple perspectives while preserving prompt-cache-friendly
-  prefix context where available.
-- **Shared `handle_read` storage.** RLM finals, sub-agent transcripts,
-  and other large structured results can return `var_handle` references
-  with slice, range, count, and JSONPath projections.
-- **Slash-command routing for the new surface.** `/rlm [N] ...` and
-  `/agent [N] ...` now prompt the assistant to use the persistent tools
-  instead of the removed foreground RLM operation.
-- **Harness-friendly non-interactive exec sessions.** `deepseek exec`
-  now supports `--resume`, `--session-id`, `--continue`, and
-  `--output-format stream-json` so backend wrappers such as ClawBench can
-  keep conversation state and parse one JSON event per line without running
-  a long-lived server.
-- **`/relay` slash command with CJK aliases** (`/接力`). Hands the
-  assistant a structured handoff prompt for coordinated multi-turn
-  continuation across sessions.
-- **`checklist_write` sidebar rename.** The sidebar focus tab formerly
-  known as "Plan" / "Todos" is now "Work" — one panel for the active
-  checklist and optional plan, consistent across all three modes.
-- **Grayscale theme.** `/theme grayscale` and
-  `/set theme grayscale --save` provide a low-opinion black/white palette
-  for users who want less brand color in the terminal.
-
-### Changed
-
-- **Prompts and docs now teach only the new tool names.** Legacy
-  RLM/sub-agent helpers remain internally where needed for durable
-  transcript compatibility, but the registry exposes the session tools.
-- **Large or noisy tool results are easier to keep out of context.**
-  Tool output summaries, sub-agent results, and transcript snapshots now
-  point the model toward `handle_read` when it needs raw detail.
-- **Tool-surface smoke guidance is explicit.** Release checks now document
-  the exact version commands and registry-name searches for `handle_read`,
-  persistent RLM tools, and persistent sub-agent tools.
-- **README acknowledgements expanded.** The project thanks OpenWarp and
-  Open Design for support and collaboration around terminal-agent and
-  design-forward workflows.
-- **Light theme tuned for calmer contrast.** The canvas, panel, elevated,
-  border, and selection tokens now separate surfaces without the washed-out
-  white-on-white feel.
-- **Session picker is history-first.** `/sessions` and `Ctrl+R` now show
-  the full selected session history on the left with the session list on
-  the right; number keys `1`-`9` open visible session histories, `PgUp` /
-  `PgDn` scroll that history, and `Enter` still resumes.
-- **Foreground RLM operation removed.** The old `Op::Rlm` path and its
-  `handle_rlm` engine method are gone; all RLM work now flows through
-  the persistent-session tools.
-- **Stale competitive-analysis doc removed.** The old cross-agent matrix
-  had become an unreliable inventory of tool names rather than useful
-  release guidance.
-
-### Fixed
-
-- **Local/custom endpoints stay prompt-free when auth is optional.**
-  The dispatcher no longer reads the secret store for SGLang, vLLM,
-  Ollama, or loopback custom URLs unless API-key auth is explicitly
-  requested, and the direct TUI treats loopback model endpoints as
-  no-key by default. This avoids macOS Keychain prompts and stale
-  DeepSeek keys when users point the app at local OpenAI-compatible
-  servers.
-- **Transcript browsing stays put across resizes.** If the user is reading
-  older chat history, terminal resize events preserve the current transcript
-  position instead of jumping back to the live tail; the scrollbar and
-  jump-to-latest affordance now follow the active theme.
-- **Backtrack preview opens near the selected turn.** Pressing Esc twice no
-  longer opens the live transcript preview at the oldest conversation line;
-  the highlighted recent user turn is pinned into view, and changing the
-  backtrack target re-pins only that selection.
-- **Completed thinking no longer masquerades as prompt text.** Collapsed
-  completed reasoning now shows only explicit `Summary:` content inline; raw
-  reasoning remains available through Ctrl+O/transcript instead of appearing
-  as assistant self-talk in the main flow. When Ctrl+O starts from a reasoning
-  block, it opens a full-session reasoning timeline instead of a single
-  isolated chunk.
-- **Transcript selection keeps working while the agent is streaming.**
-  The loading-state mouse filter now drops inert move events but allows
-  active transcript and scrollbar drags to continue (reported as a known
-  issue in v0.8.32).
-- **Empty-composer arrow scrolling feels less twitchy.** When configured to
-  scroll the transcript, plain Up/Down now move by a small wheel-like step
-  instead of a single-line flick.
-- **Mouse and trackpad scrolling feel less sticky in long logs.** Rapid
-  same-direction transcript scrolls now get bounded acceleration while
-  direction changes reset to precise single-line movement.
-- **RLM smoke-test papercuts fixed.** `rlm_eval` now binds `content` as a
-  convenience alias for `_context`, tolerates common `timeout_secs` keyword
-  guesses on child-query helpers while preserving session-level timeout
-  policy, and stores JSON-serializable `finalize(...)` values as JSON handles
-  so `handle_read` can project them directly.
-- **RLM REPL uses the shared Python resolver.** RLM startup now tries
-  `python3`, `python`, and `py -3`, matching the dependency resolver used by
-  code execution and avoiding Windows failures where `python3` is absent
-  (harvested from PR #1540).
-- **Session titles and history previews hide metadata noise.** Saved
-  session titles and the picker history strip leading `<turn_meta>` envelopes
-  and thinking-tag blocks so historical conversations read like user-visible
-  chat rather than prompt plumbing (harvested from PR #1510).
-- **Companion binary version smoke is unambiguous.** `deepseek-tui --version`
-  now reports the `deepseek-tui` binary name instead of the dispatcher label.
-- **Vision path boundary test is platform-native.** The absolute-path
-  rejection smoke uses a Windows absolute path on Windows and `/etc/hosts`
-  elsewhere (harvested from PR #1526).
-- **Tool papercuts:** `file_search` has safer default excludes and an
-  explicit `exclude` option; `grep_files` returns single-line context as
-  strings; `fetch_url` can project JSON fields and returns headers;
-  `edit_file` can opt into leading-indentation fuzz; `exec_shell` can
-  merge stdout/stderr in chronological order; `revert_turn` rejects
-  no-op snapshot boundaries.
-- **CLI reasoning-effort honoured on non-auto exec routes** (PR #1511
-  from **@h3c-hexin**). `deepseek -p "..." --reasoning-effort high` now
-  applies the flag correctly instead of falling back to the config-file
-  default.
-- **Edit-file replacement boundaries clarified** (PR #1516). The tool
-  description and error messages now make it unambiguous that
-  `edit_file` is for one clear replacement in one file.
-- **Pandoc output validated before probing** (PR #1523). Binary-format
-  conversions that produce empty or invalid output now surface a clear
-  error instead of a confusing pandoc stack trace.
-- **Running turns can be steered and repainted** (PR #1533, #1537).
-  Composer input during an active turn no longer stalls; the TUI
-  redraws the transcript as the agent streams.
-- **Tasks and Activity Detail are calmer under load.** The Tasks panel now
-  keeps live/background/recent activity from double-counting the same shell
-  or RLM work, groups repeated read/search/checklist noise, and keeps
-  failures, status, command summaries, and durations visible. Ctrl+O now
-  opens Activity Detail for selected/live/recent tool work and the reasoning
-  timeline for thinking blocks, while Alt+V remains the direct tool-detail
-  pager; the idle footer now advertises that split for the visible activity.
-- **npm retry shows timeout hint on first failure** (PR #1538).
-  Installations behind slow proxies now see a clear "retrying" message
-  instead of a silent hang.
-- **Issue templates improved** (PR #1525 from **@reidliu41**). Bug and
-  feature-request templates are clearer and easier for new contributors.
-
-### Credits
-
-Thanks to **@reidliu41** (#1525/#1526), **@h3c-hexin** (#1511),
-**@xulongzhe** (#1530/#1544), **@tyouter** (#1510), and
-**@Duducoco** (#1540) for community contributions in this release.
-
-## [0.8.32] - 2026-05-12
-
-A "more useful tools" release. v0.8.31 made the tool surface
-reliable on every host; v0.8.32 expands it. Anchor is the question
-every new contributor asks: "what does the model actually have to
-work with?" — and the answer is now closer to "everything you'd
-reach for from a shell, including the document formats the real
-world uses." Five new tools (`pdf-extract` swap, `js_execution`,
-`pandoc_convert`, `image_ocr`, `image_analyze`), ten community PR
-harvests targeting model-protocol bugs (vLLM thinking) and UX
-papercuts (Shift+Enter on Windows VSCode, mention truncation
-splitting CJK codepoints, approval modal hiding the transcript),
-and a snapshot-self-disable on workspaces over 2 GB of
-non-excluded content so first-turn `git add -A` no longer hangs
-the TUI on multi-hundred-GB project directories.
-
-### Performance
-
-- **Move `instructions = [...]`, user memory, and session goal
-  below the prompt's volatile-content boundary so DeepSeek's KV
-  prefix cache survives mid-session edits** (harvested from PR
-  #1345 by **@Duducoco**). Before this change, the per-workspace
-  `instructions` block, the user memory file (`/memory`), and the
-  current session goal (`/goal`) were rendered at position 2.5
-  in the system prompt — inside the static prefix layer that the
-  cache hits. Any edit to those files (or any `# foo`
-  quick-add to memory) busted the cached prefix from that byte
-  onwards, forcing the next turn to re-tokenize the rest of the
-  static layer. Relocating them to position 6 (immediately above
-  the previous-session handoff block) means the cache hit covers
-  the entire static prefix — mode, project context, env, skills,
-  context management, compact template — regardless of how often
-  the user edits their memory file. Skills, context management,
-  and the compact template stay always-cacheable in the static
-  layer where they belong.
+- YOLO mode: `--yolo`, `default_mode = "yolo"`, and the hotbar YOLO action
+  now map to Act + Full Access permissions via a compatibility shim and
+  show a one-shot deprecation notice. Removal is deferred beyond v0.9.0 so
+  this release does not break existing scripts without a dedicated cutover.
+
+- Google Gemini is its own backend (`/provider google`) on the official
+  OpenAI-compatible route with thought-signature capture/replay and
+  fail-closed replay for thinking models. Antigravity (`agy` 1.1.13) joins
+  as a separate credential-plane provider: consent-gated read-only import
+  of the official CLI's login with `ANTIGRAVITY_API_KEY`/`AGY_ADC_AUTH`
+  precedence; requests fail closed until the cloud-code wire protocol is
+  implemented.
 
 ### Removed
 
-- **Shift-to-bypass-mouse-capture is gone.** The #376 escape-hatch
-  feature (hold Shift while moving the mouse → temporarily disable
-  alt-screen mouse capture so terminal-native text selection works,
-  then re-enable on release) was causing visible scroll/redraw
-  thrash: every Shift transition flipped the mouse-capture mode AND
-  pushed a status toast ("Native selection — release Shift to
-  return" / "Mouse capture restored"). On modern terminals that
-  honor `xterm-modifyOtherKeys` the toast cycle fired on stray
-  Shift events and produced what users described as a "scroll
-  demon." Removing the bypass path entirely: text selection in
-  alt-screen sessions now goes through the same path as any other
-  TUI (your terminal's modifier-bypass — typically Option/Alt on
-  macOS, Shift in some Linux terminals — still works at the
-  terminal level, this just stops us from second-guessing it).
-
-### Fixed
-
-- **Tool-result spillover and wire-dedup now share a retrieval
-  namespace, so `retrieve_tool_result` finds what the model was
-  pointed at.** Two systems used to mint reference blocks
-  independently — disk spillover keyed by tool-call id
-  (`~/.deepseek/tool_outputs/<id>.txt`, only above 100 KB) and the
-  Chat-Completions wire compactor that replaced repeated tool
-  results with `<TOOL_RESULT_REF sha="…"/>` (any size, keyed by
-  SHA256 of the content). The SHA refs were impossible to
-  retrieve: `retrieve_tool_result ref=<sha>` looked in the
-  tool-call-id directory and 404'd. Worse, the wire dedup fired
-  on tiny outputs (a 65-byte `gh run view --json` could turn into
-  a ref the model then chased through three guesses), and the
-  `[artifact: …]` block emitted by `apply_spillover_with_artifact`
-  showed `id:` (with `art_` prefix), `path:` (with a slash), and
-  `tool_call_id:` separately with no indication of which one
-  `retrieve_tool_result` accepted. Reported by users hitting
-  "spilled tool result was not found" 4–5 times per session while
-  polling CI runs.
-  - The wire compactor now persists deduped content to
-    `~/.deepseek/tool_outputs/sha_<sha>.txt` on first sighting,
-    and only dedupes outputs ≥ 1 KiB — tiny results stay inline
-    on both occurrences instead of becoming a ref the model has
-    to chase. The `<TOOL_RESULT_REF>` block grew a
-    literal `retrieve: retrieve_tool_result ref=sha:<sha>` line.
-  - `retrieve_tool_result` learns five new ref shapes:
-    `sha:<64-hex>`, bare 64-hex, `art_<tool_call_id>`,
-    `artifacts/art_<id>.txt`, and absolute paths anywhere under
-    the session-artifact root. The lookup tries the legacy
-    spillover dir, the current session's artifact dir, and the
-    `art_` → legacy fallback in one call. When everything misses,
-    the error enumerates every candidate path tried and lists
-    every accepted ref form so the model can correct on the next
-    attempt instead of guessing blind.
-  - The `[artifact: …]` block emitted alongside spilled outputs
-    now includes a literal `retrieve:     retrieve_tool_result
-    ref=art_<id>` line so the model never has to guess between
-    `id:`, `path:`, and `tool_call_id:`.
-- **`<TURN_META_REF sha="…" original_chars="…" />` is gone.** The
-  legacy wire-level dedup for identical per-turn metadata blocks
-  emitted an opaque SHA-tagged reference that periodically leaked
-  into model reasoning and user-visible debug dumps with no
-  retrieval mechanism — the SHA was an artifact of the cache
-  optimization, not a content address the model could resolve.
-  The compactor now emits a self-explanatory
-  `<turn_meta_unchanged />` marker instead. Same KV-cache
-  friendliness (bytes in the same prompt position when nothing
-  changed), zero ambiguity if the marker ever surfaces.
-- **"Request cancelled while awaiting approval" now says
-  *why*.** The approval and user-input handlers used to emit the
-  same opaque string regardless of source — user Esc, runtime-API
-  DELETE, parent-agent cancel, or a torn-down channel all
-  produced an identical error. A new `CancelReason` enum is
-  latched alongside the `CancellationToken` and surfaced as a
-  `(reason: …)` suffix: `user cancelled the request`, `request
-  cancelled by external caller`, `request was preempted by a new
-  turn`, `engine torn down before approval resolved`. A closed
-  approval channel reports the teardown race explicitly instead
-  of just "Approval channel closed." Remaining non-user
-  cancellation call sites are tracked in #1541.
-- **`pandoc_convert` validates binary-output requests before
-  resolving the `pandoc` binary** (harvested from PR #1523 by
-  **@muyuliyan**). Hosts without pandoc installed now still get
-  the intended validation error for `target_format = "docx"`
-  without `output_path`, which keeps the CI test independent of
-  runner packages.
-- **Mouse movement no longer leaks xterm tracking bytes into the
-  composer while the model is streaming** (harvested from PR #1533
-  by **@Oliver-ZPLiu**, fixes #1529). When mouse capture is
-  enabled, move/drag events can arrive faster than the TUI needs
-  them during a streaming turn; those stale movement events are now
-  discarded while loading, while click/scroll handling remains
-  active when the TUI is idle.
-- **Resize and successful turn completion avoid blank-frame
-  flicker** (harvested from PR #1537 by **@czf0718**, addresses
-  #1515 and #1539). Resize now performs the viewport reset, clear,
-  and redraw inside a single synchronized-output batch. Successful
-  `TurnComplete` events use the incremental renderer instead of
-  forcing a clear+redraw every time; full repaint remains reserved
-  for interrupted/failed turns and periodic resyncs.
-- **The npm wrapper shows binary-download remediation on the first
-  retryable timeout** (harvested from PR #1538 by **@jieshu666**,
-  addresses #1532). Users behind networks that time out when
-  fetching GitHub Release assets now see the mirror/proxy/Cargo
-  alternatives immediately, and the installer points at the fixed
-  `docs/INSTALL.md#npm-binary-download-times-out` anchor.
-- **`edit_file` states its exact-replacement boundary and warns on
-  multi-match replacements** (from #1516). The tool description and
-  base prompt now steer structural or intertwined edits toward
-  `apply_patch` / `write_file`, while keeping legitimate repeated
-  replacements compatible with an advisory "verify with read_file"
-  hint.
-- **Shift+Enter explicitly steers a running turn.** Plain Enter
-  while busy continues to queue (the agreed default since
-  #1331). Pressing **Shift+Enter** during an in-flight turn
-  routes the draft directly through `engine.steer()` — the same
-  path Ctrl+Enter already drove — without going through the
-  queue at all. When the agent is idle, Shift+Enter still inserts
-  a composer newline as before. Ctrl+Enter remains bound for
-  terminals that swallow the Shift modifier on Enter at the
-  protocol level. (Pattern cross-checked against pi-agent's
-  `streamingBehavior: "steer"` API: see `agent-session.ts:156` —
-  same `Shift+Enter → steer / Plain Enter → queue` split, just
-  surfaced as a keypress instead of a programmatic flag.)
-- **`exec_shell_wait` default timeout raised from 5 s → 30 s.**
-  The 5 s default was fine for "did the command exit yet?" polls
-  but forced models into hand-rolled `while true; do
-  exec_shell_wait …; sleep 30; done` loops for `gh run watch`,
-  long `cargo build`s, and `cargo login`-style interactives. 30 s
-  covers the common case in a single tool call without burning a
-  whole turn on the timeout boundary; the model can still pass
-  any value up to 600 s.
-- **Snapshots no longer try to index a multi-hundred-GB workspace
-  on first turn.** Reported by users running `deepseek-tui` inside
-  project directories with hundreds of GB of content — datasets,
-  model weights (`.safetensors`, `.gguf`, `.pt`), Docker image
-  dumps, parquet / arrow caches — where the side-git snapshot
-  initialization would hang the TUI for minutes or hours while
-  `git add -A` walked the workspace. v0.8.32 adds a default
-  2 GB ceiling on non-excluded workspace content (measured before
-  any git work, walking the same excludes the snapshot path
-  already honors). When the cap is exceeded the side repo isn't
-  initialized; subsequent snapshots are skipped with a clear
-  WARN-level log line referencing the new
-  `[snapshots] max_workspace_gb` config knob users can raise (or
-  set to `0` to disable the cap entirely and restore v0.8.31
-  behaviour). The bounded estimator also early-exits past 200k
-  file entries, so a workspace full of tiny files trips the cap
-  before paying for a full walk. Pre-existing v0.8.27 fixes for
-  the growth-over-time angle (#1112: retention cap, mid-session
-  prune, expanded built-in excludes) continue to apply; this
-  closes the orthogonal "snapshots-too-big-to-start" path.
-- **Toast stack overlay no longer renders on top of the composer
-  input** (harvested from PR #1485 by **@MeAiRobot**). When a
-  deferred tool's schema auto-loaded after the model requested
-  it, the resulting status toast ("Auto-loaded deferred tool
-  'edit_file' after model request.") could render at
-  `footer_area.y - 1` — which on tight layouts is the bottom row
-  of the composer area, visibly overwriting the start of the
-  user's typed text. `render_toast_stack_overlay` now clamps
-  `max_above` to the gap between `composer_area.y +
-  composer_area.height` and `footer_area.y`, so when the composer
-  and footer are adjacent the overlay collapses to zero rows and
-  the toast is suppressed rather than drawn on top.
-- **`/sessions` picker highlights the selected row more strongly
-  in dark terminals** (harvested from PR #1493 by **@reidliu41**).
-  Previously the selection background was subtle enough to lose
-  in low-contrast dark themes; keyboard navigation up/down didn't
-  obviously change which row was active. The selected row now
-  uses a bolded label on a stronger background so the focused row
-  reads cleanly across the dark palettes the TUI ships with.
-- **TUI input no longer freezes while long-running shell jobs
-  flood stdout** (#1299, harvested from PR #1494 by
-  **@CrepuscularIRIS / autoghclaw**). The job-panel refresh path
-  was calling `full_output()` from inside the `ShellManager`
-  mutex, which cloned the entire accumulated stdout/stderr buffer
-  every 2.5 seconds. For browser-automation or large-build jobs
-  the buffer grew unboundedly; cloning held the mutex for
-  O(total_bytes) time, starving the `crossterm::event::poll` loop
-  and dropping keystrokes. The refresh now reads only the last
-  `max_tail_chars * 4` bytes under the lock (lock hold time is
-  O(1) regardless of total output volume) and decodes those into
-  a tail string for display. `stdout_len` / `stderr_len` still
-  report the true total byte counts so no caller invariant
-  breaks. Also tightens `take_delta_from_buffer` to slice
-  `[cursor..total]` inside the lock guard instead of cloning the
-  whole buffer first, and skips UTF-8 continuation bytes at
-  `tail_start` so `from_utf8_lossy` never emits a leading U+FFFD
-  in the job panel.
-- **`@`-mention truncation no longer splits multi-byte UTF-8
-  sequences** (#1441, harvested from PR #1495 by
-  **@CrepuscularIRIS / autoghclaw**). When `@`-mentioning a file
-  larger than 128 KB the composer truncated the buffer at exactly
-  `MAX_MENTION_FILE_BYTES`, which on CJK / emoji content landed
-  mid-codepoint and produced a stray U+FFFD at the cut point. The
-  truncator now uses `str::from_utf8(...).error_len()` to detect
-  the incomplete-tail case and rounds down to the last valid
-  codepoint boundary before decoding. Genuinely invalid UTF-8
-  files still surface the "file is not UTF-8" error (the rounding
-  is only applied when the error is an incomplete tail, not a
-  real decoding failure mid-buffer).
-- **vLLM provider: `reasoning_effort = "off"` now actually
-  disables thinking on Qwen3 / DeepSeek-R1 servers, cutting
-  TTFT from ~13s to ~270ms** (harvested from PR #1480 by
-  **@h3c-hexin**). The vLLM branch of `apply_reasoning_effort`
-  was injecting `thinking: {type: "disabled"}` at the top of
-  the request body — but vLLM speaks OpenAI's chat-completions
-  protocol, not Anthropic-native fields, and silently ignored
-  the directive. The model then emitted a full hidden reasoning
-  trace into the non-standard `reasoning` field (which this
-  client doesn't surface), so users saw a multi-second freeze
-  before any content token arrived. The vLLM branch now emits
-  the OpenAI extension `chat_template_kwargs.enable_thinking`
-  (which vLLM forwards into the model's chat template — the
-  canonical way to toggle Qwen3's `<think>...</think>` mode).
-  Measurement against vLLM + Qwen3.6-35B-A3B-FP8: TTFT
-  13039ms → 274ms, total LLM call 13s → 5.7s. The `high` /
-  `max` effort levels likewise switch to the OpenAI extension.
-  No change for non-vLLM providers.
-- **`/sessions` picker no longer shows `<turn_meta>` as the
-  session title** (harvested from PR #1498 by **@wdw8276**).
-  `session_manager::create_saved_session_with_id_and_mode`
-  picked the first text content block off the user message via
-  `find_map`; the engine prepends an internal `<turn_meta>` block
-  ahead of the real user text, so the picker rendered that
-  metadata blob as the session name. Guard added so titles fall
-  through to the actual user input. Existing sessions without
-  the prefix block are unaffected.
-- **Kitty keyboard protocol now activates on Windows (VSCode +
-  Windows Terminal), so `Shift+Enter` inserts a newline instead
-  of submitting** (#1359, harvested from PR #1483 by
-  **@CrepuscularIRIS / autoghclaw**). Root cause: crossterm's
-  `PushKeyboardEnhancementFlags` gates the escape sequence on
-  `is_ansi_code_supported()`, which on Windows queries the
-  console mode rather than the VT capability and unconditionally
-  returns false — so the Kitty push (`\x1b[>1u`) was never
-  written, leaving xterm.js in legacy mode where `Shift+Enter`
-  and `Enter` both produce `\r` and are indistinguishable.
-  `Alt+Enter` / `Ctrl+J` were affected the same way. The fix
-  writes the push and pop escapes directly under `#[cfg(windows)]`,
-  bypassing the capability gate; terminals that don't speak the
-  protocol silently discard the sequences. Also extends the
-  pop-on-exit path to two missed call sites (the `main.rs` panic
-  hook and `external_editor.rs::spawn_editor_for_input`) so a
-  crash or `$EDITOR` invocation can no longer leave the parent
-  shell's keyboard state corrupted.
-- **Approval modal can be collapsed to a one-line banner with
-  Tab** (harvested from PR #1455 by **@tiger-dog**). Previously the
-  approval prompt rendered as a full-screen takeover that hid the
-  transcript behind it, so users had to dismiss the modal just to
-  remember which tool call they were being asked to approve. Tab
-  now toggles between the takeover card and a single-line bottom
-  banner — the rest of the conversation stays visible while the
-  decision is pending. Tab again restores the full card; the
-  selection state is preserved across the toggle.
-- **Markdown renderer no longer eats underscores inside
-  identifiers** (harvested from PR #1455 by **@tiger-dog**). The
-  inline parser was matching `_italic_` against the underscore in
-  `deepseek_tui` / `foo_bar_baz` and rendering the second half of
-  the identifier in italic, which made transcript snippets that
-  named code symbols read as garbled prose. Both `_italic_` and
-  `*italic*` now apply a CommonMark-style boundary check on the
-  closing delimiter — when the next character is a letter, digit,
-  or underscore, the delimiter is treated as literal text instead
-  of markup. Regression-pinned with cases like `crate deepseek_tui
-  handles approvals` and `look at *not_emphasised*tail`.
-
-### Added
-
-- **npm wrapper installs cleanly on OpenHarmony / HarmonyPC**
-  (#1072, harvested from PR #1499 by **@CrepuscularIRIS /
-  autoghclaw**). `os.platform()` returns `openharmony` on
-  HarmonyPC and on OpenHarmony's Linux ABI-compatible userspace,
-  but the npm wrapper's platform-asset matrix only covered
-  `linux` / `darwin` / `win32`, so `npm i -g deepseek-tui` would
-  abort with `Unsupported platform: openharmony` even though the
-  Linux x64 / arm64 binaries run unchanged on that environment.
-  Added a `PLATFORM_ALIASES` mapping that resolves `openharmony`
-  to the `linux` asset family before lookup so install succeeds
-  on those hosts. The error message for genuinely unsupported
-  platforms still reports the raw platform name (`freebsd`,
-  etc.) so OS-mismatch reports stay diagnostic.
-- **Startup empty-state shows useful context instead of
-  repeating the header** (harvested from PR #1444 by
-  **@reidliu41**). The center of the welcome view used to repeat
-  information already displayed in the header and footer. It now
-  shows the build version, the active model with a `/model`
-  hint, and the current working directory so first-time users
-  have somewhere to look while they decide what to type.
-- **Opt-in `v4-best-practices` bundled skill** (harvested from
-  PR #1448 by **@SamhandsomeLee**). A single 50-line `SKILL.md`
-  encoding three V4-specific workflow rules for multi-step
-  thinking-mode tasks. Each rule maps to a concrete observable
-  failure class. Discovered through the existing
-  `crates/tui/assets/skills/...` mechanism alongside the
-  `skill-creator` skill — not enabled by default; users opt in
-  via the standard `/skills` UI.
-- **`image_analyze` tool — vision-model image understanding**
-  (harvested from PR #1467 by **@MMMarcinho**). Sends an image
-  file to an OpenAI-compatible vision endpoint and returns the
-  model's natural-language description. Complements `image_ocr`:
-  use `image_ocr` for "what text is on this image", `image_analyze`
-  for "what is this image about". **Opt-in only** — gated by both
-  the `[features] vision_model = true` flag and a `[vision_model]`
-  config block specifying `model` (and optionally `api_key` /
-  `base_url`). Default configuration ships the feature flag at
-  `false`, so no install sees vision API calls fire without an
-  explicit two-step opt-in. **Billing**: each call hits the
-  configured vision endpoint (OpenAI by default), so usage is
-  billed by the third-party provider; calls are stateless (no
-  conversation context attached). Workspace-boundary check: the
-  tool rejects absolute paths and any `..` parent-dir traversal
-  before any base64 encoding or API call. To disable later: set
-  `[features] vision_model = false` (or omit `[vision_model]`).
-  Supports PNG, JPEG, GIF, WebP, and BMP inputs.
-- **`image_ocr` tool — extract text from images via local
-  tesseract.** Lets the model OCR a screenshot, scanned receipt,
-  whiteboard photo, or image-only PDF the user drops into the
-  workspace, without bouncing through `exec_shell`. Spawns
-  `tesseract <image> -` and returns the recognised text inline;
-  no file is written. PNG / JPEG / TIFF inputs supported.
-  Registration is gated on `dependencies::resolve_tesseract()`;
-  when tesseract is missing the tool isn't advertised, so the
-  model never tries to call an OCR engine the host can't run.
-  `deepseek doctor` reports tesseract status alongside the other
-  external-binary dependencies with platform-aware install hints
-  (`brew install tesseract` / `apt install tesseract-ocr` /
-  `winget install UB-Mannheim.TesseractOCR`). For non-default
-  language packs or PSM modes, users can still drop into
-  `exec_shell` with the full tesseract CLI surface.
-- **`pandoc_convert` tool — convert documents between formats via
-  the local pandoc binary.** Pandoc is the Swiss Army knife the
-  real world uses for moving prose around — Markdown to HTML,
-  HTML to Markdown, reST to anything, anything to DOCX / EPUB /
-  LaTeX — and surfacing it as a model-callable tool unblocks
-  "rewrite this report as ..." / "publish this changelog as ..."
-  workflows that previously needed the user to drop into a
-  terminal between turns. Curated target whitelist of 11 formats
-  (markdown, gfm, commonmark, html, rst, latex, docx, odt, epub,
-  plain, asciidoc) so the model can't ask for `pdf` (would need
-  LaTeX) or typos like `markown`. Binary targets (docx, odt,
-  epub) require an `output_path`; text targets can return the
-  converted text inline. Approval routes through the WritesFiles
-  / Suggest tier on every call. Registration is gated on
-  `dependencies::resolve_pandoc()`; `deepseek doctor` surfaces
-  the binary's status with platform-aware install hints.
-- **`js_execution` tool — execute model-provided JavaScript via a
-  local Node.js runtime.** Mirrors `code_execution` (Python) so
-  the model has a single consistent surface for "run this snippet
-  locally and tell me what it printed" across both interpreters.
-  Same tempfile-spawn pattern, same 120-second timeout, same
-  stdout/stderr/return_code result shape — so prompt-cache
-  layouts that cover one tool also cover the other. Registration
-  is gated on `crate::dependencies::resolve_node()`: when Node is
-  missing the tool is simply not advertised, so the model never
-  sees a runtime it can't actually use. `deepseek doctor` reports
-  Node availability under "Tool Dependencies" with platform-aware
-  install hints (`brew install node` / `apt install nodejs` /
-  `winget install OpenJS.NodeJS`). Approval routes through the
-  same Suggest tier as `code_execution`.
-- **`/translate` opt-in: respond in the user's UI locale, with a
-  post-hoc fallback for English that leaks through** (harvested
-  from PR #1462 by **@YaYII**). Two-layer design: when the user
-  enables translation via the `/translate` slash command, a
-  `## Language Output Requirement` block is appended to the
-  system prompt instructing the model to reply in the resolved
-  session locale (Simplified Chinese, Traditional Chinese,
-  Japanese, or Brazilian Portuguese — code identifiers and
-  user-requested English code blocks are exempt). For replies
-  that still surface English despite the directive, a heuristic
-  in `tui::translation` (Latin-vs-CJK character ratio with
-  weighting for CJK information density) detects the leak and
-  invokes a focused per-message translation API call to render
-  the localised version before display. Both layers are off by
-  default and have no effect on installs that don't enable them.
-  Trust-boundary scope: opt-in only, system prompt addition is
-  conditional on the runtime flag, no model behaviour change for
-  English-locale users.
-- **AtlasCloud is now a first-class provider** (harvested from
-  PR #1436 by **@lucaszhu-hue**). AtlasCloud hosts the V4 family
-  (and other DeepSeek-compatible models) on its own endpoint at
-  `https://api.atlascloud.ai/v1`, and several contributors had
-  been running it through the OpenAI-compatible passthrough with
-  manual `base_url` / model overrides. Selecting
-  `provider = "atlascloud"` in `~/.deepseek/config.toml` (or via
-  `DEEPSEEK_PROVIDER=atlascloud`) now wires up the documented
-  defaults, a `[providers.atlascloud]` config block for per-user
-  api_key / base_url / model / http_headers overrides, the
-  `ATLASCLOUD_API_KEY` env var path, and the
-  provider-picker / `/provider` slash command entries — same
-  shape as the existing NVIDIA NIM / Fireworks / OpenAI provider
-  rows. Default remains DeepSeek; nothing changes for installs
-  that don't opt in.
-- **`web_search` supports Tavily and Bocha as configurable
-  backends** (harvested from PR #1294 by **@sandofree**). DuckDuckGo
-  with Bing fallback remains the default — no API key required —
-  but users in regions where those scrapers are unreliable can now
-  set `[search] provider = "tavily" | "bocha"` plus
-  `api_key = "..."` in `config.toml` (or via the
-  `DEEPSEEK_SEARCH_PROVIDER` / `DEEPSEEK_SEARCH_API_KEY` env vars)
-  to route every `web_search` call through the chosen API. Tavily
-  is an AI-search API targeted at general use; Bocha is the
-  mainland-China-friendly equivalent. Trust-boundary pins: an
-  unset `api_key` on an opted-in provider surfaces a clear
-  `ToolError` naming the missing key rather than silently falling
-  through to a different provider, the network policy gate
-  (`[network]`) is consulted for the provider host on every call,
-  and the default path is unchanged so no install sees provider
-  behaviour change unless they explicitly opt in.
-- **`/change` slash command** displays the most recent
-  CHANGELOG.md version section from inside the TUI, so users can
-  see what they just upgraded into without leaving the chat
-  (harvested from PR #1416 by **@zhuangbiaowei**). The command
-  works against the bundled release-notes copy when no workspace
-  CHANGELOG is available, and on non-English locales it requests
-  a model-side translation of the section so localised users see
-  the changelog in their UI language. Pure offline fallback when
-  no API key is configured.
-
-### Fixed
-
-- **`deepseek update` now refreshes the companion TUI binary
-  alongside the dispatcher** (harvested from PR #1492 by
-  **@NorethSea**). Closes the documented two-binary footgun:
-  `~/.cargo/bin/deepseek` would update to the latest dispatcher,
-  but `~/.cargo/bin/deepseek-tui` would stay at the previously
-  installed version, so users saw the dispatcher report a new
-  release while the TUI runtime they actually interacted with
-  reported the old version. Most painful for Volta-managed npm
-  installs and any maintainer flow that calls `update` instead of
-  re-running both `cargo install --path crates/{cli,tui}`. The
-  updater now enumerates colocated binaries up front, downloads
-  and verifies every release asset before replacing anything,
-  then swaps the sibling first and the running dispatcher last so
-  a partial network failure cannot leave the launcher updated
-  while the TUI remains stale.
-
-### Changed
-
-- **`read_file` now extracts PDFs in pure Rust by default — no
-  Poppler install required.** Before v0.8.32 the PDF path shelled
-  out to `pdftotext` (Poppler), so first-time users on hosts without
-  it saw `read_file` return a `binary_unavailable` sentinel and had
-  to `brew install poppler` / `apt install poppler-utils` before
-  the model could open a PDF. The bundled `pdf-extract` crate
-  (which already powered URL-fetched PDFs in `web_run`) now drives
-  the local `read_file` path too. The `pages` parameter still
-  filters by 1-indexed inclusive page range; both the whole-file
-  and per-page variants run with no system dependency. Users with
-  column-heavy or complex-table PDFs (academic papers, financial
-  filings) where `pdftotext -layout` still wins can opt into the
-  external path with `prefer_external_pdftotext = true` in
-  `~/.config/deepseek/settings.toml` — when set, the previous
-  Poppler dispatch (and the `binary_unavailable` install hint when
-  the binary is missing) returns. `deepseek doctor` now reports
-  `pdftotext` as optional and explains how to opt in instead of
-  framing it as a missing dependency.
+- Remove the deprecated `deepseek` and `deepseek-tui` binary shims in this
+  breaking release. `ghosty`, `ghosty-tui`, and `ghosty-tui` are the supported
+  entry points; existing DeepSeek provider support and legacy config/session
+  migration remain intact.
 
 ### Known issues
 
-- **Terminal-native text selection can still be blocked while the
-  agent is thinking or streaming a response.** v0.8.32 removed the
-  noisy Shift-to-bypass-mouse-capture path that caused visible
-  scroll/redraw thrash, but the replacement selection path is not
-  complete yet. v0.8.33 is planned to ship the text-selection fix
-  alongside the sub-agent and RLM renovation.
-
-## [0.8.31] - 2026-05-12
-
-A "tools that actually work" release. `code_execution` no longer
-fails on Windows hosts where `python3` isn't on `PATH` — we probe
-for the interpreter at catalog-build time and only advertise the
-tool when one resolves, so the model never sees a runtime it can't
-actually use. The new `deepseek doctor` "Tool Dependencies" and
-"Terminal Quirks" sections surface external-binary status and
-active env-driven overrides so flicker / motion / missing-tool
-puzzles answer themselves before a bug report gets filed. Ptyxis
-50.x users on Ubuntu 26.04 get a manual `synchronized_output = off`
-knob plus auto-detection that opts them out of the DEC 2026
-synchronized-output wrap their VTE 0.84 mishandles. The CNB Cool
-mirror workflow is rewritten with concurrency and scoped pushes so
-release tags reliably reach `cnb.cool/deepseek-tui.com/DeepSeek-TUI`
-for users behind GitHub-blocking networks. Plus a new auto-close
-workflow that closes contributor PRs whose code has been harvested
-into `main`, so credit lands at the same moment the fix does.
-
-### Fixed
-
-- **Windows `exec_shell` preserves MSVC toolchain env** (harvested
-  from PR #1487 by **@Jianfengwu2024**). When the parent shell has
-  already loaded `VsDevCmd` / `vcvars` (Developer Command Prompt,
-  the standard way to run Rust + MSVC on Windows), `exec_shell` was
-  stripping `LIB` / `LIBPATH` / `INCLUDE` and the related VS / SDK /
-  CRT root variables on its way to the child. That made
-  model-driven `cargo build` calls fail to resolve `kernel32.lib`
-  even though `link.exe` was reachable via `PATH`. The allowlist
-  in `child_env.rs` now preserves the 13 MSVC env vars so the
-  toolchain context survives the sanitisation pass.
-- **`code_execution` no longer fails with "program not found" on
-  Windows** (and any other host without `python3` on `PATH`). Before
-  v0.8.31 the tool hardcoded `python3` and was unconditionally
-  advertised in Agent / YOLO modes — so the model would call it,
-  spawn would fail, and the error surfaced as a generic tool failure
-  with no upstream hint. The fix probes for a Python interpreter
-  (`python3` → `python` → `py -3`) at catalog-build time, caches the
-  resolved interpreter, and only advertises `code_execution` when one
-  resolves. On hosts with no Python the tool is not registered at all
-  — the model never sees a tool it can't actually run. Reported by a
-  Windows contributor; resolver lives at
-  `crates/tui/src/dependencies.rs` and is also surfaced by
-  `deepseek doctor`. Folds in the contributor's "write code to a
-  tempfile and run the file" suggestion at the same time, so multiline
-  code with quote nesting no longer round-trips through `python3 -c`.
-- **Termius and every SSH session auto-enable low-motion**
-  (#1433, harvested from PR #1479 by **@CrepuscularIRIS / autoghclaw**).
-  Termius desktop sets `TERM_PROGRAM=Termius`; sshd exports
-  `SSH_CLIENT` for every TCP session and `SSH_TTY` for interactive
-  PTY logins. Any of those signals now flips `low_motion` and
-  `fancy_animations` like the existing VS Code / Ghostty path, so
-  the 120 FPS cursor-repositioning that races the SSH round-trip
-  no longer flickers a remote TUI. Disk-loaded `fancy_animations =
-  true` is unconditionally overridden under these signals,
-  matching the existing env-precedence contract.
-- **DEC 2026 synchronized output is auto-disabled on Ptyxis** (the new
-  default terminal on Ubuntu 26.04 and an increasingly common Linux
-  TUI host). Ptyxis 50.x ships on VTE 0.84.x, which parses the
-  `\x1b[?2026h` / `\x1b[?2026l` begin/end pair but still flashes the
-  entire viewport on every wrapped frame instead of deferring
-  rendering — so a TUI that uses DEC 2026 to avoid tearing
-  experiences visible flicker on every redraw. gnome-terminal 3.58
-  on the same VTE renders cleanly, so the heuristic must stay narrow:
-  we trigger only on `TERM_PROGRAM` matching `ptyxis`
-  case-insensitively, or `PTYXIS_VERSION` set to any non-empty value.
-  Either signal flips the new `synchronized_output` setting from
-  `auto` to `off`; the renderer then skips the begin/end pair on
-  every draw, in `reset_terminal_viewport`, and in `resume_terminal`.
-  Users on Ptyxis who upgrade past the upstream fix (or who want to
-  confirm a fix landed) can override with
-  `/set synchronized_output on` or by adding
-  `synchronized_output = "on"` to `~/.config/deepseek/settings.toml`.
-
-### Added
-
-- **`deepseek doctor` now reports tool-dependency status.** A new
-  "Tool Dependencies" section lists which external binaries the
-  registered tools rely on, with ✓ when present and ✗ + an
-  install hint when missing. Today this covers the Python
-  interpreter (`code_execution`) and `pdftotext` (`read_file` PDF
-  path). A separate "Terminal Quirks" section shows which env-driven
-  auto-overrides (VS Code / Ghostty / Termius / SSH / Ptyxis) are
-  currently active so users can see at a glance why a particular
-  rendering compromise is in effect. Foundation for surfacing future
-  tool dependencies as the toolset grows.
-- **New `synchronized_output` setting** controls whether the renderer
-  wraps each frame in DEC mode 2026 synchronized output. Accepts
-  `auto` (default; respect the Ptyxis env opt-out), `on` (always emit
-  DEC 2026, override the heuristic), or `off` (never emit DEC 2026).
-  The cost of `off` is brief tearing on terminals that handle DEC
-  2026 cleanly; it is purely a rendering-quality knob, not a
-  correctness one. Set via `/set synchronized_output <auto|on|off>`
-  or in `~/.config/deepseek/settings.toml`.
-- **`read_file` accepts `start_line` and `max_lines`** for chunked,
-  bounded reads of large files (#1450, harvested from PR #1451 by
-  **@Oliver-ZPLiu**). Default window is 200 lines / ~16 KB; the hard
-  cap is 500 lines. Small files (≤ 200 lines AND ≤ 16 KB) still
-  return their contents unchanged, so existing prompts that read
-  config files / single source files see no behavior change. Large
-  files now return a `<file …>`-wrapped, line-numbered window with
-  `shown_lines`, `truncated`, and `next_start_line` attributes plus
-  a `[TRUNCATED]` continuation hint — so the model can page through
-  a 50 KB file in 16 KB slices instead of dragging the whole thing
-  into the conversation context on every turn. PDFs continue to use
-  `pages`; `start_line` / `max_lines` apply to text files only.
-- **`web/` dependency security updates.** Bumps:
-  - `next` 15.5.16 → 15.5.18 (GHSA-26hh-7cqf-hhc6 — App Router
-    middleware/proxy bypass via segment-prefetch routes; high
-    severity).
-  - `mermaid` 11.14.0 → 11.15.0 (GHSA family: Gantt-chart infinite-
-    loop DoS, `classDef` HTML injection, `classDefs` /
-    configuration CSS injection; all medium severity).
-  - `eslint-config-next` 15.5.16 → 15.5.18 (matches Next.js).
-  `npm run build` confirmed clean on the bumped lockfile. None of
-  these affect the Rust TUI binary; the bumps are for the
-  separately-deployed `deepseek-tui.com` site.
-- **MCP HTTP servers accept custom headers** for authentication
-  (#1454, harvested from PR #1456 by **@Oliver-ZPLiu**). Mirrors the
-  `headers` field that Claude Code, Codex, and OpenCode already
-  accept in their MCP config — add e.g.
-  `"headers": { "Authorization": "Bearer ${HF_TOKEN}" }` under any
-  HTTP server entry in `~/.deepseek/mcp.json` and the headers are
-  sent on every Streamable HTTP request. Headers are sent
-  literally — env-var interpolation is a follow-up, so tokens
-  pasted directly into mcp.json live there as plain text. The
-  Streamable HTTP transport filters out empty keys, framing
-  overrides (`Accept`, `Content-Type`), and CR/LF in values
-  (response-splitting defense) so a single bad entry can't break
-  protocol negotiation or smuggle a header through a misbehaving
-  proxy. Stdio servers (`command`-based) and the legacy SSE
-  transport ignore the field; SSE coverage is a follow-up.
-
-## [0.8.30] - 2026-05-11
-
-A "tighten what we shipped" release. Bare single-letter keystrokes
-(`g`, `G`, `[`, `]`, `?`, `l`, `v`) no longer get eaten as transcript-
-nav shortcuts when the composer is empty — every one of them is now
-freely usable as the first character of a message. The water-spout
-animation in the footer is decoupled from `low_motion` so typewriter
-mode no longer hides the wave, and the v0.3.5-era 🐳→🐋 cycling
-indicator is back next to the effort chip after a long detour through
-geometric dots. Plus a handful of provider, shell, and config fixes
-that surfaced during v0.8.29 testing.
-
-### Added
-
-- **The whale is back.** Restored the `🐳 → 🐳. → 🐳.. → 🐳... → 🐋 → 🐋.
-  → 🐋.. → 🐋... → 🐋.. → 🐋. → 🐳..` cycling status indicator that
-  originally shipped in v0.3.5 and silently disappeared in commit
-  `1a04659a9` (the "smoother TUI streaming" pass, which swapped the
-  12-frame whale sequence for a 6-frame geometric `◍ ◉ ◌` ring) and then
-  was deleted outright in `f4dbf828c` (footer-polish commit). The chip
-  renders in the header status cluster, immediately before the
-  reasoning-effort chip — exactly where long-time users remember it.
-  Idle frame is a steady 🐳; the cycle advances every 420 ms keyed off
-  `App::turn_started_at`, so the breaching whale shows up halfway
-  through any active turn.
-
-  Configurable via the new `status_indicator` setting:
-  - `whale` (default) — the historical cycling whale.
-  - `dots` — the geometric `◍ ◉ ◌` frames from the dots era.
-  - `off` — hide the chip entirely.
-
-  Set via `/config status_indicator <whale|dots|off>` or in
-  `settings.toml`.
-
-### Changed
-
-- **Transcript-nav single-letter shortcuts now require `Alt`.** Before
-  v0.8.30, pressing a bare `g`, `G`, `[`, `]`, `?`, `l`, or `v` with an
-  empty composer hijacked the keystroke for transcript navigation — so
-  typing "good morning" produced "ood morning" with no warning, and the
-  v0.8.29 spot-fix at `c13ddb04d` (gg double-tap) only suppressed the
-  scroll, not the lost character. The bindings are now uniformly
-  `Alt+<key>`, mirroring `Alt+R` (history search) and `Alt+V` (tool
-  details) which already followed this pattern:
-
-  | Old (bare) | New (`Alt+…`) | What it does |
-  |---|---|---|
-  | `gg` (double-tap) | `Alt+G` | scroll transcript to top |
-  | `G` or `Shift+G` | `Alt+Shift+G` | scroll transcript to bottom |
-  | `[` | `Alt+[` | jump to previous tool output |
-  | `]` | `Alt+]` | jump to next tool output |
-  | `?` | `Alt+?` | open the searchable help overlay (F1 / `Ctrl+/` also bound) |
-  | `l` | `Alt+L` | open pager for last message |
-  | `v` / `V` | `Alt+V` | open tool-details pager |
-
-  Plain letters are now always inserted into the composer as text. The
-  `App::transcript_pending_g` field from the v0.8.29 half-fix is removed;
-  the unified `alt_nav_modifiers` predicate replaces the per-key
-  `is_empty()` checks.
-
-### Fixed
-
-- **`low_motion = true` no longer hides the footer water-spout** when
-  `fancy_animations = true`. The spout-strip animation in the footer was
-  hard-gated on `!low_motion`, collapsing two unrelated concerns —
-  streaming pacing and footer animation — onto one flag. The two are now
-  orthogonal: `low_motion` governs only streaming pacing (typewriter vs.
-  upstream cadence), and `fancy_animations` alone decides whether the
-  water-spout strip renders. The wave itself is unchanged from prior
-  releases (wall-clock-driven sine, same cadence as v0.8.29).
-- **Custom-base-URL providers preserve the user's model name** (#857
-  class). Only OpenRouter was previously whitelisted; Sglang, Novita,
-  Fireworks, Vllm, Ollama, and NvidiaNim users hitting custom gateways
-  with a bare model name were getting HTTP 400s because the dispatcher
-  rewrote the model identifier. Now any provider with a user-set
-  `base_url` is treated as a custom endpoint and passes the model name
-  through unchanged.
-- **`exec_shell` no longer freezes the TUI when a background subprocess
-  outlives its parent shell** (#828, cherry-picked from PR #1475 by
-  **@CrepuscularIRIS / autoghclaw**). Orphaned children that kept the
-  pipe write-end open made `handle.join()` in `collect_output` block
-  indefinitely; every transcript-rendering tick that called
-  `list_jobs()` then hung the UI. The collector now kills the process
-  group before joining the reader threads, and the previously dead
-  `cleanup()` is now wired to drop completed jobs older than an hour.
-
-## [0.8.29] - 2026-05-11
-
-A maintenance release anchored by a regression fix for the
-"scroll demon" (#1085 class, re-introduced by v0.8.27's flicker
-patch) and a wrong-project session-restore bug (#1395). Plus 25
-community PRs covering MCP transport, prompt steering, auto-routing
-language coverage, web-search SERP filtering, and broad test
-coverage additions.
-
-### Fixed
-
-- **Scroll demon — alt-screen no longer drifts under parallel
-  sub-agent load** (#1085 regression). The v0.8.27 flicker fix
-  dropped the `\x1b[2J\x1b[3J` deep-clear from the viewport-reset
-  path, which had been silently masking three `eprintln!` sites
-  inside the sub-agent and network-policy modules. Each leak
-  scrolled the alt-screen up by one row while ratatui's diff
-  renderer remained convinced its model matched reality. Three
-  layers of defence now ship together: a `tracing-subscriber`
-  writing to `~/.deepseek/logs/tui-YYYY-MM-DD.log`, an fd-level
-  `dup2` stderr redirect for the alt-screen lifetime (Unix only;
-  Windows follow-up tracked), and module-level
-  `#![deny(clippy::print_stdout, clippy::print_stderr)]` on
-  `tools/`, `core/`, `tui/`, `runtime_threads.rs`, and
-  `network_policy.rs`. The three known leak sites
-  (`subagent::persist_state_best_effort`,
-  `subagent::new_shared_subagent_manager`, `network_policy::record`)
-  now route through `tracing::warn!` with structured fields.
-- **`Ctrl+R` session-restore picker is workspace-scoped** (#1395,
-  PR #1397 from **@linzhiqin2003**). `SessionPickerView::new`
-  previously listed every saved session on disk sorted globally —
-  so opening DeepSeek-TUI in Project B and pressing `Ctrl+R` could
-  hand back Project A's last conversation. The picker now filters
-  by current workspace, with a fallback hint when no in-workspace
-  sessions exist.
-- **MCP discovery survives malformed items** (PR #1410 from
-  **@Liu-Vince**). The `tools/list`, `resources/list`,
-  `resources/templates/list`, and `prompts/list` walks previously
-  did `serde_json::from_value::<Vec<…>>(…).unwrap_or_default()`,
-  which silently discarded the entire page when any single entry
-  was misshapen. Each list now iterates per-item, skipping
-  malformed entries with a `tracing::debug!` instead of dropping
-  the rest of the catalogue. Composes with the v0.8.x pagination
-  loop landed for #1256.
-- **MCP SSE transport accepts CRLF-framed endpoint events** (#1309,
-  PR #1358 from **@reidliu41**). FastMCP / uvicorn-style SSE
-  streams using `\r\n\r\n` separators now discover the endpoint and
-  send initialization requests instead of timing out while waiting
-  for an LF-only event boundary.
-- **Composer ignores leaked SGR mouse-report bursts** (#1418,
-  PR #1421 from **@reidliu41**). Some SSH / IDE terminal chains
-  leak fragments like `[<35;44;18M` into stdin while mouse capture
-  is enabled; the composer now filters those bursts at the insertion
-  boundary without stripping ordinary coordinate-like typed text.
-- **Footer right-cluster chips can no longer crowd the left status
-  line** (#1357, PR #1417 from **@Wenjunyun123**). The footer now
-  reserves visible space for the left status before selecting cache /
-  aux chips, dropping oversized right-side chips instead of pushing
-  the row over the available terminal width.
-- **Web search drops spam-stuffed SERPs** (#964, PR #1396 from
-  **@linzhiqin2003**). The Bing / DDG fallback paths now filter
-  the SEO-farm domains that were poisoning quick lookups.
-- **Language directive: `reasoning_content` follows the user's
-  message language** (#1118, PR #1398 from **@linzhiqin2003**) —
-  previously the project context's inferred `lang` could override
-  the latest user message, leading to English thinking for a
-  Chinese turn.
-- **Deferred tools hydrate their schema before first execution**
-  (#1419, PR #1429 from **@SamhandsomeLee**). When the model asks
-  for a deferred tool such as `edit_file` before seeing its schema,
-  the engine now loads the tool, returns a non-executed hydration
-  result with the expected fields, and requires a retry instead of
-  executing guessed argument names. Common `edit_file` aliases such
-  as `old_string -> search` and `new_string -> replace` are called
-  out in the retry hint.
-- **DeepSeek public aliases replay thinking-mode tool turns**
-  (PR #1428 from **@Beltran12138**). `deepseek-chat` and
-  `deepseek-reasoner` now classify as V4 reasoning models for
-  `reasoning_content` replay, preventing second-turn HTTP 400s
-  after tool calls when users keep the onboarding default model
-  alias.
-- **`Ctrl+O` expands thinking blocks still in flight.**
-  Two compounding bugs were making the "thinking collapsed; press
-  Ctrl+O for full text" affordance a lie. (1) `open_thinking_pager`
-  only searched `app.history`, but after `ThinkingComplete` the
-  finalized thinking entry sits in `app.active_cell` with
-  `streaming = false` until the active cell flushes at end-of-turn;
-  during that window the handler surfaced "No thinking blocks to
-  expand" while the affordance pointed at the live entry. Routed
-  through the existing `cell_at_virtual_index` / `virtual_cell_count`
-  resolver that `open_tool_details_pager` already uses, so
-  selection-based and most-recent lookups both reach in-flight
-  entries. (2) The keybinding guard required `key.modifiers ==
-  KeyModifiers::CONTROL` (exact match), so any extra modifier bit
-  set by the terminal — Shift while a native-selection bypass was
-  active, Caps Lock indicator on some keyboard layouts — silently
-  fell through to the `$EDITOR` arm and did nothing visible on an
-  empty composer. Relaxed to `contains(KeyModifiers::CONTROL)` to
-  match the existing Ctrl+P / Ctrl+B pattern. Regression-guarded by
-  `open_thinking_pager_finds_thinking_in_active_cell`.
-- **Skill completions no longer flood the top-level slash menu**
-  (#1437, PR #1442 from **@reidliu41**). Installed skills now
-  complete under `/skill <name>` while the root `/` menu stays
-  focused on built-in commands.
-- **`edit_file` rejects no-op replacements** (PR #1460 from
-  **@xiluoduyu**). Identical `search` / `replace` arguments now
-  fail fast with a clear validation error instead of producing an
-  empty diff that can trap the model in retry loops.
-- **Windows-terminal glyph widths are stable** (#1314, PR #1465
-  from **@CrepuscularIRIS**). SMP emoji in the header and file tree
-  were replaced with BMP-width-safe symbols / text so cmd,
-  PowerShell, WezTerm, and Alacritty do not mismeasure rows.
-- **Ghostty defaults to low-motion rendering** (#1445, PR #1468
-  from **@CrepuscularIRIS**). `TERM_PROGRAM=ghostty` now receives
-  the same animation cap as VS Code terminals to avoid redraw
-  flicker on affected setups.
-- **Docker buildx provenance permission failures get an actionable
-  hint** (#1449, PR #1469 from **@CrepuscularIRIS**). macOS shell
-  outputs matching the restricted provenance metadata failure now
-  include guidance to disable provenance for that build.
-- **Windows CMD mouse-wheel fallback scrolls the transcript**
-  (#1443, PR #1471 from **@CrepuscularIRIS**). When mouse capture is
-  off, composer arrow-scroll defaults on so terminal wheel events
-  mapped to Up / Down do not cycle composer history.
-
-### Added
-
-- **MCP HTTP transport honors `HTTP(S)_PROXY` / `NO_PROXY`** (#1408
-  from **@hlx98007**). Reqwest 0.13 does not auto-detect proxy env
-  vars by default, so MCP HTTP connections were bypassing the
-  proxy that every other tool on the box (curl, npm, git, …) was
-  using. Connections behind corporate egress proxies and
-  China-mainland Clash / Shadowsocks tunnels now work transparently.
-  Malformed `HTTPS_PROXY` values log a `tracing::warn!` and the
-  connection proceeds without a proxy rather than failing the MCP
-  attach.
-- **Note management slash commands** (PR #1407 from
-  **@reidliu41**). `/note add`, `/note list`, and friends for
-  persistent maintainer-style notes inside the TUI, backed by
-  `~/.deepseek/notes/`.
-- **Header surfaces the runtime version chip.** A `v0.8.29` tag
-  sits in the header's right cluster after the provider / effort /
-  Live / context chips. Styled with `palette::TEXT_HINT` so it
-  reads behind the streaming indicators. Drops first under tight
-  terminal width.
-- **Global `~/.deepseek/AGENTS.md` now merges with project
-  AGENTS.md** (#1157, PR #1399 from **@linzhiqin2003**) instead of
-  being shadowed when a workspace ships its own.
-- **Auto-routing recognises CJK debug / search keywords** (PRs
-  #1401 and #1402 from **@linzhiqin2003**) — `--model auto` and
-  the reasoning-effort picker correctly route Chinese / Japanese
-  technical queries that previously fell through to the generic
-  baseline.
-
-### Security
-
-- **`sync-cnb.yml` workflow hardened** (CodeQL finding from
-  v0.8.28). Adds explicit `permissions: contents: read`
-  (least-privilege), bumps `actions/checkout` v3 → v4, and
-  narrows the trigger from `on: [push]` to `on: push.branches:
-  [main]` + `tags: ['v*']`. Feature branches no longer mirror to
-  CNB; only `main` and tagged releases do.
-- **Post-exit resume hint avoids session-id taint.** The TUI now
-  checks whether a session exists separately from the constant
-  resume-hint text it prints after leaving the alt-screen, resolving
-  the `rust/cleartext-logging` CodeQL alert without reintroducing
-  scroll-demon stdout writes.
-
-### Internal
-
-- **+438 LOC of new test coverage** across four PRs from
-  **@linzhiqin2003**: `error_taxonomy::classify_error_message`
-  and Display impls (#1403), `parse_pages_arg` edge cases (#1404),
-  `optional_search_max_results` precedence (#1405), and
-  `sanitize_stream_chunk` control-byte filtering (#1406).
-- **`runtime_log` module** ships with a regression test pinning
-  the `HOME` / `USERPROFILE` / `dirs::home_dir()` resolution
-  order, holding the process-wide `test_support::lock_test_env()`
-  lock for env-mutation safety.
-- **Header rendering** gains two regression tests
-  (`header_renders_version_chip_when_width_allows` and
-  `narrow_header_drops_version_chip_before_dropping_mode`)
-  pinning the version chip's cascade priority.
-- **Workspace/session test isolation** tightened (PR #1431 from
-  **@reidliu41**). Git-root detection ignores invalid parent `.git`
-  markers, env-mutating tests share the crate-wide test lock, and
-  the streamable HTTP MCP mock server stays alive for the full test.
-- **Config-mutating smoke tests now isolate `DEEPSEEK_CONFIG_PATH`.**
-  The command registry and web-config commit tests no longer rewrite
-  the developer's real `~/.deepseek/config.toml` while validating
-  release candidates locally.
-
-## [0.8.28] - 2026-05-10
-
-A maintenance release bundling four streaming / approvals / cache
-bug-fix cherry-picks, six smaller community fixes, a Cmux
-notification probe, GPU-terminal flicker hardening via DEC 2026
-synchronized output, VS Code low-motion auto-detection, a CNB
-mirror workflow, V4-steered tool descriptions, and test-suite
-stabilization for parallel-test environment races.
-
-### Added
-
-- **CNB mirror workflow** (PR #1373 from **@Anyexyz**) — a
-  GitHub Actions workflow (`sync-cnb.yml`) mirrors every push to
-  the `cnb.cool/deepseek-tui.com/DeepSeek-TUI` repository,
-  closing out the long-standing China-mirror request. Requires the
-  `CNB_GIT_TOKEN` repo secret.
-- **Cmux desktop notification support via `LC_TERMINAL`** (#1281,
-  PR #1340 from **@CrepuscularIRIS**) — Cmux sets
-  `LC_TERMINAL=Cmux` rather than `TERM_PROGRAM`, so the previous
-  notification probe fell back to `BEL` instead of using OSC 9.
-  `resolve_method()` now checks `LC_TERMINAL` as a secondary probe
-  and adds Cmux to the OSC 9 allowlist. Terminals that set
-  neither env var can still force OSC 9 via
-  `[notifications].method = "osc9"`. Two regression tests pin the
-  Cmux and WezTerm `LC_TERMINAL` paths; the existing
-  unknown-terminal-on-Unix test now clears `LC_TERMINAL` before
-  asserting fallback so it doesn't flake on CI hosts that set it.
-- **DEC 2026 synchronized output around terminal repaints** (PR
-  #1361 from **@xuezhaoyu**) — the viewport-reset path now wraps
-  `terminal.clear()` in `\x1b[?2026h` / `\x1b[?2026l` so
-  GPU-accelerated terminals (Ghostty, VSCode Terminal, Kitty,
-  WezTerm) defer rendering until the whole frame is staged,
-  eliminating mid-frame flicker on resize / focus / TurnComplete.
-  The earlier "drop destructive 2J/3J" fix from v0.8.27 stays;
-  this PR is complementary, batching the same lighter reset
-  sequence into a single synchronized frame. Terminals without
-  DEC 2026 support silently ignore the sequence.
-- **`low_motion` auto-enables under VS Code integrated terminal**
-  (PR #1365 from **@CrepuscularIRIS**) — `apply_env_overrides()`
-  now treats `TERM_PROGRAM=vscode` the same way it treats
-  `NO_ANIMATIONS=1`: force `low_motion = true` and
-  `fancy_animations = false`. The VS Code terminal compositor
-  cannot keep up with 120 fps redraws and produces rapid flicker
-  (#1356); the 30 fps low-motion cap is the right default there.
-  Env overlays always win over the disk-loaded value, matching
-  the existing precedence for `NO_ANIMATIONS`.
-
-### Fixed
-
-- **Cache usage shows 0 when API omits cache data** (#1391, PR #1392
-  from **@Oliver-ZPLiu**) — `SessionUsage.cache_creation_input_tokens` /
-  `cache_read_input_tokens` are now `Option<u64>` instead of `u64`
-  defaulting to 0. When the upstream API doesn't report cache
-  hit/miss, the model sees `null` instead of misleading zeros, and
-  reasoning about cache utilization is accurate.
-- **Deny of one tool call no longer blocks all future calls of the
-  same tool** (#1377, PR #1388 from **@Oliver-ZPLiu**) — denying a
-  tool call now only caches the per-call `approval_key`, not the
-  tool type. Subsequent invocations of the same tool prompt for
-  approval again instead of being silently auto-denied.
-- **Streaming thinking blocks no longer drop their tail on
-  MessageComplete** (#861 RC3, PR #1389 from **@linzhiqin2003**) —
-  the active streaming entry is now drained into the finalized
-  cell on `MessageComplete`, eliminating a data-loss path where
-  the last chunk(s) of a streaming "thinking" reply could be
-  discarded when `MessageComplete` arrived ahead of
-  `ThinkingComplete` in a bursty event stream. Also closes a
-  related HTTP 400 on the next turn (DeepSeek V4 requires
-  `reasoning_content` replay for assistant messages that carry
-  tool calls).
-- **Streaming thinking renders live in collapsed view** (#861 RC4,
-  #1324, PR #1390 from **@linzhiqin2003**) — collapsed thinking
-  cells now stream their content as it arrives instead of staying
-  at a static "thinking..." placeholder until streaming ends. When
-  the live body exceeds the collapsed budget, the truncation
-  affordance ("thinking continues; press Ctrl+O for full text")
-  now fires during streaming with head lines dropped so the
-  visible window tracks the live cursor at the bottom.
-- **First-turn latency bounded on large workspaces** (#697, PR #1386
-  from **@linzhiqin2003**) — the working-set file walker now caps
-  the number of entries it visits during initial indexing, so
-  starting a session in a workspace with a deep `node_modules`,
-  `target`, or `.venv` no longer stalls the first response on
-  filesystem traversal.
-- **Duplicate error toast on transcript-rendered turn errors** (PR
-  #1368 from **@douglarek**) — when a turn error is already in the
-  transcript as a system/error cell, the status-line toast is
-  suppressed so the user doesn't see the same failure twice.
-- **Clearer continue tip on idle prompts** (PR #1370 from
-  **@nightfallsad**) — the "press Tab to continue" affordance now
-  uses concrete language instead of a vague hint.
-- **Ctrl+Enter content lost when engine is idle** (#1331, PR #1347
-  from **@Oliver-ZPLiu**) — when no turn was active, `Ctrl+Enter`
-  routed the message to `rx_steer` (only monitored inside
-  `handle_deepseek_turn`), so the user saw their message in the
-  transcript via the local mirror but the LLM never received it —
-  the next regular Enter would drain it as a "stale steer". The
-  idle path now sends through the standard `handle_send_message`
-  flow so the submission reaches the engine.
-- **Explicit hidden / ignored `@`-mention completions work**
-  (#1270 follow-up) — PR #1270 from **@SamhandsomeLee** landed
-  the `add_local_reference_completions` helper and tests in
-  v0.8.27 but never wired it into `Workspace::completions()` or
-  `build_file_index`. The two regression tests were ignored with
-  a "v0.8.28 follow-up" marker. This release wires the helper
-  into both entry points so `@.deepseek/commands/start-task.md`
-  and `@.generated/specs/device-layout.md` (and the basename
-  fuzzy-resolve equivalent) now surface from gitignored
-  user-folders while `.deepseekignore` entries stay blocked.
-  Both tests un-ignored.
-
-### Changed
-
-- **Prompt-side reliability guidance** (PR #1393 from
-  **@Oliver-ZPLiu**) — `prompts/base.md` gains three Verification
-  Principle bullets steering the model to verify before reporting
-  complete, preserve only key facts from tool results, and
-  inspect errors before retrying. Combined with the truthful-
-  reporting addition from #1392, the model is less likely to claim
-  unverified successes or repeat the identical failing tool call.
-- **V4-steered tool descriptions** (#711, PR #1379 from
-  **@linzhiqin2003**) — every model-visible tool description
-  (`read_file`, `write_file`, `edit_file`, `list_dir`,
-  `grep_files`, `file_search`, `web_search`, `apply_patch`,
-  `fetch_url`) now opens with a short *"use this instead of X
-  in exec_shell"* steering line, the return shape, and the
-  limits. Routes V4 toward our typed tools and away from
-  shell footguns. All description strings stay under 1024
-  chars (max: 350) with no embedded newlines so the cached
-  tool catalogue stays prefix-stable for V4's KV cache.
-  Removes the unused legacy `normal.txt` / `plan.txt` /
-  `yolo.txt` prompt templates (referenced only by their own
-  self-tests).
-
-### Internal
-
-- Test-suite parallelism stabilization (commit
-  `test: stabilize parallel test execution`). Folds three local
-  test-mutex implementations into the process-wide
-  `test_support::lock_test_env`, eliminating a class of
-  intermittent failures (`refresh_system_prompt_is_noop_when_unchanged`,
-  `save_api_key_for_openrouter_writes_provider_table`,
-  `list_archives_sorts_by_cycle_number`) observed during the
-  v0.8.27 release cycle.
-- Windows `task_manager` timeout bumped 3s → 10s on four tests
-  exercising durable task recovery, addressing an intermittent
-  CI timeout on Windows under file-I/O load.
-- `provider_switch_clears_turn_cache_history` now isolates
-  `HOME` / `USERPROFILE` to a tempdir for its lifetime. The test
-  was silently writing `default_provider = "ollama"` to the
-  developer's real `~/Library/Application Support/deepseek/settings.toml`
-  on every run, which then contaminated parallel-running picker
-  tests because Ollama is a pass-through provider that hides the
-  DeepSeek model rows.
-- `settings::tests::no_animations_test_guard` and
-  `term_program_test_guard` both now return
-  `crate::test_support::lock_test_env()` instead of their own
-  module-local mutexes — folding them into the same
-  process-wide test env lock the v0.8.27 EnvGuard family was
-  migrated to. Without this, a `NO_ANIMATIONS=1` write from one
-  test family could race a `TERM_PROGRAM=iTerm.app` write from
-  the other through the shared `apply_env_overrides` path and
-  flip `low_motion` to `true` on the assertion side.
-
-## [0.8.27] - 2026-05-10
-
-A polish release bundling 17 community PRs plus a focused user-issue
-sweep over the 24–48 hours after v0.8.26 shipped. Headline fixes:
-cross-terminal flicker on Ghostty / VSCode / Win10 conhost (most-
-reported v0.8.26 regression), long-text right-edge overflow, an
-in-app pager copy-out, context-sensitive Ctrl+C, an MCP pool that
-auto-reloads on config changes, and a model-callable `notify` tool.
-Big thanks to every contributor below.
-
-### Added
-
-- **Unified `/mode` command** (#1247) — `/mode [agent|plan|yolo|1|2|3]`
-  replaces the separate `/agent`, `/plan`, and `/yolo` commands. Running
-  `/mode` without arguments opens a picker modal. The legacy aliases
-  (`/yolo`, `/agent`, `/plan`) are kept as compatibility shorthands.
-  Thanks **@reidliu41**.
-- **`/status` runtime diagnostics** (#1223) — shows version, provider,
-  model, workspace, mode, permissions, context-window usage, cache
-  hit/miss, and session cost. Previously `/status` was an alias for
-  `/statusline` (footer config); that alias is now `/statusline` only.
-  Thanks **@reidliu41**.
-- **`/feedback` command** (#1185) — opens the matching GitHub issue
-  template (bug report, feature request) in the browser. Security
-  vulnerability reports route through the project's security policy
-  page first. Thanks **@reidliu41**.
-- **Session artifact metadata** (#1220) — large tool outputs spilled to
-  the session artifacts directory are now tracked in a durable metadata
-  index, so saved sessions retain references across save/restore cycles.
-  Thanks **@THINKER-ONLY**.
-- **Subagent results are self-reports** (#1140) — the compacted result
-  summary now notes that child-agent outputs are unverified self-reports.
-  The parent model should verify side effects with tools like `read_file`
-  or `list_dir` before claiming success. Thanks **@THINKER-ONLY**.
-- **Global AGENTS.md fallback** (#1197) — when the workspace and its
-  parents don't provide project instructions, the TUI now loads
-  `~/.deepseek/AGENTS.md` before falling back to auto-generated
-  instructions. Repo-local context still takes priority.
-  Thanks **@manaskarra**.
-- **`--yolo` forwarded from CLI to TUI** (#1233) — the `deepseek --yolo`
-  flag now propagates through the dispatcher to the TUI binary via
-  `DEEPSEEK_YOLO=true`. Previously the flag set `yolo` in the CLI
-  process but the TUI session started in its default mode.
-  Thanks **@fuleinist**.
-- **`composer_arrows_scroll` config** (#1211) — a new
-  `tui.composer_arrows_scroll` option (default `false`) makes plain
-  Up/Down arrow keys scroll the transcript when the composer is empty,
-  instead of navigating input history. Helpful for terminals that map
-  trackpad gestures to arrow keys. Thanks **@lbcheng888**.
-- **Session cost persistence** (#1192) — accumulated costs (session +
-  sub-agents, both USD and CNY) and the displayed-cost high-water mark
-  now survive session save/restore, so the monotonic cost guarantee
-  (#244) holds across restarts. Thanks **@lbcheng888**.
-- **Provider-aware model picker and provider persistence** (#1320) —
-  switching providers now persists the choice to
-  `~/.deepseek/settings.toml` so it survives restarts. The model
-  picker hides DeepSeek-specific models when a non-DeepSeek provider
-  is active. `OPENAI_MODEL` env var now overrides the per-provider
-  model rather than the global `default_text_model`. Bailian / ZhiPu
-  Coding Plan endpoints are now supported.
-  Thanks **@imkingjh999**.
-- **HTTP User-Agent header** (#1320) — all outbound API requests now
-  carry `deepseek-tui/{version}` in the User-Agent, matching the format
-  `fetch_url` already uses. Thanks **@imkingjh999**.
-
-### Fixed
-
-- **Cross-terminal flicker on TurnComplete / focus / resize** (#1119,
-  #1260, #1295, #1352, #1356, #1363, #1366) — the viewport-reset
-  sequence emitted before each forced repaint no longer includes
-  `\x1b[2J\x1b[3J`. Combined with the immediately-following ratatui
-  `terminal.clear()`, the destructive pair produced a double-clear that
-  Ghostty, the VSCode integrated terminal, and Win10 conhost rendered
-  as a visible blank-then-repaint flicker. The lighter sequence
-  (`\x1b[r\x1b[?6l\x1b[H`) plus the alt-screen buffer's double-buffering
-  handles viewport correctness without flicker. macOS Terminal.app /
-  iTerm2 / alacritty users were already unaffected and remain so.
-- **`/skills --remote` and `/skills sync` diagnostics** (#1329) — the
-  underlying anyhow chain has always been formatted with `{err:#}`, but
-  the chain alone is often opaque (e.g. "error sending request"). The
-  error message now appends a one-line hint when the chain matches a
-  common failure pattern: DNS / connection refused / TLS / 4xx / 429 /
-  timeout. Each hint points at the most likely cause and a concrete
-  next step.
-
-### Added
-
-- **Pager copy-out** (#1354) — full-screen pagers (`Alt+V` tool details,
-  `Ctrl+O` thinking content, shell-job / task / MCP-manager pagers, and
-  the selection pager) now accept `c` or `y` to copy the entire body to
-  the system clipboard. The pager intercepts mouse capture so terminal-
-  native selection isn't available inside it; this restores the
-  copy-out path that users on macOS / Windows / WSL expect. The footer
-  hint now reads `…  / search  c copy  q/Esc close`. A status toast
-  confirms success ("Pager content copied"), empty-body, or failure.
-- **`notify` tool** (#1322) — model-callable desktop notification.
-  Always-loaded (no ToolSearch round-trip). Routes through the existing
-  `tui::notifications` infrastructure: OSC 9 on iTerm2 / Ghostty /
-  WezTerm, BEL fallback on macOS / Linux, `MessageBeep` on Windows when
-  explicitly opted in. Honours the user's `[notifications].method`
-  config — when set to `off`, the tool is a silent no-op. Title and
-  body are length-capped (80 / 200 chars) on character (not byte)
-  boundaries to keep the OSC 9 escape clean and avoid mid-grapheme
-  truncation. The tool description steers the model away from chatter:
-  use only when a long-running task completes or genuinely needs the
-  user's attention.
-
-### Fixed (cont.)
-
-- **Long output text overflowed the right edge** (#1344, #1351) —
-  paragraph rendering (`render_line_with_links`) and code-block
-  wrapping (`wrap_text` for `Block::Code`) were word-based: a single
-  word wider than the available column was placed alone on a line and
-  silently overflowed. Long URLs, paths, hashes, and no-whitespace CJK
-  runs all hit this. Both paths now hard-break overlong words at the
-  character level, matching the v0.8.25 fix for table cells. The
-  rendered width is capped at the budget for every line; full content
-  is preserved across wrapped segments. Snapshot-style tests pin the
-  invariant at widths 40, 60, 80, and 120.
-
-### Changed
-
-- **`Ctrl+C` now copies an active transcript selection** (#1337) — on
-  Windows, plain `Ctrl+C` is the OS-wide copy chord, and treating it
-  as "exit" stole work whenever a user copy-pasted from the
-  transcript. `Ctrl+C` is now a four-stage decision: 1) selection
-  active → copy + clear (matches the OS convention); 2) turn in
-  flight → cancel (unchanged); 3) quit-armed within 2s → exit cleanly
-  (unchanged); 4) idle, no selection → arm the 2-second
-  "press Ctrl+C again to quit" prompt (unchanged). The decision is
-  factored into a `CtrlCDisposition` helper with a unit-tested
-  priority table. `Cmd+C` (macOS) and `Ctrl+Shift+C` continue to copy
-  unchanged.
-- **Cancel-key discoverability hint on turn start** (#1367) — when a
-  turn begins, the status-message slot now surfaces "Press Esc or
-  Ctrl+C to cancel" if the slot is otherwise empty. Real transient
-  status messages still take precedence; the hint clears as soon as
-  any other update fires. Closes the loop on users who didn't know
-  how to interrupt a long-running turn.
-- **Lazy auto-reload of MCP pool on config-file change** (#1267 part 2) —
-  v0.8.26 surfaced the underlying spawn errors; v0.8.27 closes the
-  loop on the second half of the report (manual `/mcp reload` after
-  `~/.deepseek/mcp.json` edits). `McpPool::get_or_connect` now does a
-  cheap `stat` + content-hash check before each connection lookup. If
-  the on-disk file's mtime moved AND its content hash changed since
-  the pool was loaded, all live connections are dropped so the next
-  `get_or_connect` reattaches under the new config. Pool-construction
-  via `McpPool::new` (tests, ad-hoc snapshots) is unaffected — only
-  pools built with `from_config_path` watch the source file. No file
-  watcher; no long-lived task. mtime-only churn (touched but
-  byte-unchanged content) does not trigger a reload, so networked
-  filesystems with coarse mtime granularity won't churn the pool.
-- **Paste consolidation now happens at paste time, not submit time** —
-  large bracketed pastes that exceed the 16 000-char safety cap are
-  now folded into a workspace `.deepseek/pastes/paste-…md` file and
-  swapped for an `@`-mention immediately on paste, instead of waiting
-  until the user presses Enter. The user sees the `@`-mention in the
-  composer (and the "consolidated → @mention" toast) before deciding
-  whether to send, eliminating the "I pressed Enter and an `@`-mention
-  appeared in the chat I didn't authorise" surprise. The submit-time
-  consolidation remains as a safety net for any other code path that
-  fills the buffer above the cap, so the cap is still enforced exactly
-  once.
-- **Auto-disable paste-burst once bracketed paste verified** — the
-  rapid-keystroke paste-burst heuristic (default-on for terminals
-  without bracketed paste) used to keep running on every session.
-  Once a real `Event::Paste` arrives in a session, paste-burst now
-  short-circuits — bracketed paste is verified working, and running
-  the heuristic alongside it just creates false positives on fast
-  typing / IME commits / autocomplete bursts. Terminals that never
-  deliver bracketed paste (the original target audience) are
-  unaffected; the heuristic still fires there.
-- **Short CJK multi-line paste no longer auto-submits first line**
-  (#1302) — pasting `请联网搜索：\nSTM32 …` (short non-ASCII first line
-  followed by a newline) used to fail the paste-burst detection
-  heuristic because the first line had no whitespace and was under
-  the 16-char threshold; the trailing pasted newline then fell
-  through as a real Enter and submitted the first line on its own.
-  The heuristic now treats any non-ASCII run as paste-like, so the
-  Enter is absorbed into the burst buffer. Thanks **@reidliu41**
-  (PR #1342).
-- **Onboarding screens render in the selected language** — when a
-  user picked 简体中文 / 日本語 / Português (Brasil) at the language
-  step, every subsequent screen (API key entry, workspace trust
-  prompt, final tips) used to remain in English. The
-  `set_locale_from_onboarding` path now drives the title, body
-  copy, hints, and footer of each onboarding screen through the
-  localization table, so once you pick your language the rest of
-  the flow is in that language. Particularly nice for users on
-  CJK input methods who want to avoid IME juggling during setup.
-- **`/skills <prefix>` filters the local skills list** (#1318) — on
-  top of the v0.8.26 inter-row spacing (#1328 from @reidliu41), the
-  list now narrows to skills whose names start with the typed
-  prefix. Case-insensitive. The header reflects matched count vs
-  registry total; an empty match set says so explicitly and points
-  back at unfiltered `/skills`. `--remote` and `sync` stay
-  reserved as subcommands; any `--`-prefixed argument is rejected
-  rather than being silently treated as a no-match prefix.
-- **HTTP 400 quota errors retried** (#1203) — some OpenAI-compatible
-  gateways return quota/rate-limit errors as HTTP 400 instead of 429.
-  These are now classified as retryable `RateLimited` errors.
-  Thanks **@dst1213**.
-- **Explicit hidden/ignored file completions** (#1270) — when the user
-  types an explicit path starting with `.` (e.g., `.deepseek/commands/`),
-  the file-completion system now surfaces hidden and gitignored entries
-  while still respecting `.deepseekignore`. Thanks **@SamhandsomeLee**.
-
-### Changed
-
-- **Windows mouse capture docs** (#1181) — the `--mouse-capture` help
-  text and the configuration docs now mention scrollbar dragging and
-  note that raw terminal selection on Windows may cross the sidebar.
-  Thanks **@Oliver-ZPLiu**.
-- **README zh-CN sync** (#1235) — the Chinese README's quickstart section
-  now shows `deepseek run pr <N>` instead of the outdated
-  `deepseek pr <N>`. Thanks **@whtis**.
-- **Tool output render perf** (#1098) — tool output summaries and the
-  "is this a diff?" check are now pre-computed once at cell creation
-  instead of re-parsed every frame. Tool output cells also got a visual
-  card-rail (`╭ │ ╰`) for clearer grouping. Thanks **@lbcheng888**.
-
-### Internal
-
-- Test coverage for approval decision branches (@tuohai666, #1316)
-- Test coverage for hook event dispatch paths (@tuohai666, #1317)
-
-## [0.8.26] - 2026-05-09
-
-A security + polish release. Two responsibly-disclosed issues were
-patched, plus a small batch of internal release-pipeline fixes. Big
-thanks to **@JafarAkhondali** and **@47Cid** for the disclosures.
-
-### Security
-
-- Hardened the `fetch_url` tool's network-target validation
-  (GHSA-88gh-2526-gfrr). Thanks to **@JafarAkhondali**.
-- Tightened the default privileges of sub-agents created through
-  `task_create` (GHSA-72w5-pf8h-xfp4). Thanks to **@47Cid**.
-
-Both items will have full advisory text once the GHSA entries are
-published.
-
-### Fixed
-
-- **Hint when root `base_url` is set with a non-DeepSeek provider
-  (#1308)** — config load now logs a warning telling the user to
-  move the URL under the matching `[providers.<name>]` table or use
-  the `*_BASE_URL` env var. Closes the silent-ignore footgun for
-  Ollama / vLLM / OpenAI-compatible setups.
-- **Insecure base-URL error message is more discoverable (#1303)** —
-  the rejection now spells out which env var to set (with underscores
-  visible), notes that loopback hosts are auto-allowed, and shows a
-  one-line `DEEPSEEK_ALLOW_INSECURE_HTTP=1 deepseek` example.
-- **Workspace skills survive prompt truncation** — when the skill
-  catalog needs trimming to fit the prompt budget, workspace-local
-  skills now keep precedence over global ones rather than being
-  truncated indiscriminately. Thanks **@hhhaiai**.
-- **`/skills` listing has visual spacing** between entries so long
-  skill descriptions don't run together. Thanks **@reidliu41**.
-- **Provider base-URL overrides reach the active provider** — the
-  per-provider `*_BASE_URL` env vars (e.g. `OPENAI_BASE_URL`,
-  `OPENROUTER_BASE_URL`) now propagate into the active provider's
-  config entry consistently. Closes a gap where the override was
-  parsed but never applied. Thanks **@reidliu41**.
-- **WSL2 turn-start timeout** — `TurnStarted` is now emitted before the
-  snapshot step so a slow snapshot on WSL2's `/mnt/*` volumes doesn't
-  push past the runtime watchdog and surface a spurious "engine may
-  have stopped" error. Thanks **@michaeltse321**.
-- **`/init` auto-adds `.deepseek/` to `.gitignore` (#1326)** when the
-  workspace is a git repo, so workspace-local snapshots, instructions,
-  and pastes don't get accidentally committed. Idempotent on repeated
-  runs. Thanks **@Giggitycountless**.
-- **MCP tool ordering is deterministic** — discovered tools and the
-  resulting API tool block are now sorted by name so the prompt
-  prefix the model sees is stable across runs, regardless of
-  server-side pagination order. Improves prompt-cache hit rates with
-  multi-server MCP setups. Thanks **@hxy91819**.
-- **Error cells render as plain text** so env-var names (`API_KEY_FOO`)
-  in error messages keep their underscores instead of being parsed as
-  markdown emphasis. Thanks **@douglarek**.
-- **`/clear` resets the Todos sidebar (#1258)** — previously `/clear`
-  only reset the Plan panel; the Todos checklist persisted across
-  clears. Thanks **@Giggitycountless**.
-- **Drag-select past the viewport edge auto-scrolls (#1163, #1255,
-  #1292, #1298)** — when the mouse drag reaches the top or bottom of
-  the transcript area the viewport now scrolls to follow the
-  selection, the way text editors do. **Copy strips every visual-only
-  decoration glyph** — tool-card rails (`╭│╰`), transcript rails
-  (`▏`), reasoning rails (`╎`), tool-status symbols (`·•◦`), and
-  tool-family glyphs no longer leak into clipboard output. Thanks
-  **@Oliver-ZPLiu**.
-- MCP stdio servers no longer discard stderr. The spawn site now pipes
-  stderr through a bounded ring buffer; when a server crashes
-  mid-session, the transport-closed error includes the captured stderr
-  tail instead of disappearing into `Stdio::null`. Useful for debugging
-  Node/Python MCP servers that fail well after `initialize`.
-- Mouse capture now defaults on inside Windows Terminal (#1169, #1298,
-  #1331). When `WT_SESSION` is set, in-app text selection is enabled
-  by default and the wheel scrolls the transcript again (rather than
-  the terminal interpreting wheel events as input-history keys).
-  Legacy conhost stays opt-in via `--mouse-capture` or `[tui]
-  mouse_capture = true` to preserve the protections from #878 / #898.
-  Selection now clamps to the transcript region instead of the
-  terminal painting native selection across the sidebar.
-- The build script now invalidates its cache on `.git/HEAD` changes, so
-  the embedded short-SHA in `deepseek --version` stays current after
-  commits and branch switches without needing `cargo clean`. Both
-  regular checkouts and `git worktree` layouts are handled.
-- The release-time `changelog_entry_exists_for_current_package_version`
-  gate walks up from the crate manifest to find `CHANGELOG.md` instead
-  of assuming a fixed `../../CHANGELOG.md` layout. The workspace path
-  still resolves; running the suite from a packaged crate skips the
-  gate quietly instead of panicking.
-
-## [0.8.25] - 2026-05-09
-
-A stabilization + drift-fixes release. Headline work hardens the
-self-update path (no more `curl` shellout, real SHA-256 verification),
-fixes long-cell truncation in markdown tables, centralizes the MCP
-JSON-RPC framing, and unifies terminal-mode recovery on focus events.
-Big thanks to **Reid Liu (@reidliu41)** (Streamable HTTP MCP transport,
-`/config` column alignment), **Duducoco (@Duducoco)** (cache-stable
-`reasoning_content` replay), **jinpengxuan (@jinpengxuan)** (provider
-credentials during onboarding), **heloanc (@heloanc)** (Home/End cursor
-keys), **Wenjunyun123 (@Wenjunyun123)** (docs anchor scroll), and
-**Liu-Vince (@Liu-Vince)** (zh-Hans approval-dialog wording) for the
-contributions below.
-
-### Added
-
-- **Streamable HTTP MCP endpoints with SSE fallback (#1300)** — adds
-  the third MCP transport alongside stdio and SSE. The new transport
-  posts JSON-RPC over plain HTTP with optional SSE upgrade for servers
-  that prefer streaming responses. Thanks **Reid Liu (@reidliu41)**.
-- **`recall_archive` exposed in the parent agent registry** — the
-  read-only BM25 archive search tool was previously only available to
-  sub-agents; it is now callable from Plan, Agent, and YOLO parent
-  registries. Plan mode's read-only contract is preserved (the existing
-  registry test was updated to assert membership while still rejecting
-  write/exec tools).
-
-### Changed
-
-- **Markdown tables wrap long cells instead of truncating (#1163-adjacent)**
-  — long cell content is word-wrapped within the column instead of
-  collapsing to `…`. Column separators are preserved on every wrapped
-  line so the table grid stays readable.
-- **MCP JSON-RPC framing centralized** — request/response correlation,
-  timeout handling, and message framing now live above the byte-level
-  transports. Stdio, SSE, and the new Streamable HTTP transport share a
-  single protocol layer instead of each maintaining its own copy of the
-  framing code.
-- **Self-update is curl-free and verifies SHA-256** — `deepseek update`
-  no longer shells out to system `curl` (and no longer needs the
-  Schannel `--ssl-no-revoke` Windows hack from v0.8.23). Downloads now
-  use `reqwest::blocking` with rustls, and the aggregated
-  `deepseek-artifacts-sha256.txt` manifest is parsed and checked
-  against each downloaded asset before it is installed. Verification
-  status is surfaced in the update output.
-- **Terminal-mode recovery unified in `recover_terminal_modes()`** —
-  startup, `FocusGained`, and `resume_terminal` all route through one
-  idempotent helper that re-establishes keyboard enhancement flags,
-  mouse capture, bracketed paste, and focus events. Adding a new mode
-  flag now only has to happen in one place.
-
-### Fixed
-
-- **`reasoning_content` replay stable for prompt cache (#1297)** —
-  reasoning text replayed from saved sessions now hashes consistently
-  across turns so the cache-aware prompt builder's static-prefix
-  stability isn't broken by replays. Thanks **Duducoco (@Duducoco)**.
-- **Active provider credentials respected during onboarding (#1265)**
-  — the onboarding flow now reads credentials from the active provider
-  instead of falling back to the default DeepSeek path when another
-  provider is selected. Thanks **jinpengxuan (@jinpengxuan)**.
-- **Home/End keys move the input cursor (#1246)** — Home and End now
-  jump the composer cursor to line start/end instead of being
-  swallowed. Thanks **heloanc (@heloanc)**.
-- **Docs anchor scroll-margin overrideable (#1282)** — the
-  scroll-margin offset on docs anchors is now overrideable so embedded
-  contexts can adjust it without forking the stylesheet. Thanks
-  **Wenjunyun123 (@Wenjunyun123)**.
-- **`/config` view columns aligned (#1290)** — the `/config` table now
-  sizes the key column from the actual data instead of a fixed width,
-  so long keys no longer overflow into the value column. Thanks
-  **Reid Liu (@reidliu41)**.
-- **zh-Hans approval dialog wording (#1274)** — uses 终止 (terminate)
-  instead of 中止 (abort) in the Chinese approval dialog, matching the
-  English semantics. Thanks **Liu-Vince (@Liu-Vince)**.
-
-### Removed
-
-- **Unwired `[context.per_model]` config field** — the field had no
-  runtime consumer and was only present in the config schema. Removed
-  to keep the schema honest. Existing configs that still contain a
-  `[context.per_model.*]` table continue to load (serde ignores
-  unknown keys; covered by a regression test).
-- **Stale aspirational `[cycle.per_model]` comments** — reference to a
-  config table that was never wired. No behavior change.
-
-### Documentation
-
-- **`.claude/CODEMAP_v0.8.25_dead_code.md`** — committed the
-  cycle/seam/coherence/capacity codemap with a softened
-  `cycle_manager` classification: live by code trace, design
-  load-bearing, practical load-bearing unproven. Use this to decide
-  the v0.8.26+ product direction for the cycle/seam/capacity
-  subsystems.
-
-### Known issues
-
-- **Windows 10 conhost flicker regression (#1260, #1251)** —
-  v0.8.22-and-later content flickering on Windows 10 is still present.
-  The viewport-reset escape sequence added in v0.8.22 needs a Windows
-  guard. Deferred to v0.8.26.
-- **Snapshot system still snapshots every turn** — the v0.8.24 500 MB
-  hard cap protects against blowups, but the underlying design still
-  snapshots on every turn regardless of whether the workspace changed.
-  A write-aware skip is planned for v0.8.26.
-- **`▏` glyph leak in code blocks (#1212)**, **mouse selection
-  crossing the sidebar (#1169)**, **drag-select edge auto-scroll
-  (#1163)**, **mid-run MCP server stderr capture** — all deferred to
-  v0.8.26.
-
-## [0.8.24] - 2026-05-09
-
-A bugfix + refactor release picking up the backlog after the v0.8.23 security
-release. Big thanks to **wplll** (cache-aware prompt + `/cache inspect`),
-**Liu-Vince** (MCP pagination diagnosis), **@Giggitycountless** (snapshot cap
-proposal), and to issue reporters **@SamhandsomeLee**,
-**@barjatiyasaurabh**, **@tyculw**, **@hongyuatcufe**, and **@ljlbit** for
-the bugs fixed below.
-
-### Fixed
-
-- **Mouse-wheel scroll survives focus toggles** — on macOS, switching away
-  (Cmd+Tab, opening the screenshot tool, etc.) and back can drop the
-  terminal's mouse-tracking mode, leaving wheel scroll dead until restart.
-  The TUI now re-arms `EnableMouseCapture` on `FocusGained` alongside the
-  existing keyboard-mode recapture, so wheel events keep flowing after a
-  focus round-trip.
-- **Workspace-local slash commands are now loaded (#1259)** — user command
-  files placed in `<workspace>/.deepseek/commands/`,
-  `<workspace>/.claude/commands/`, and `<workspace>/.cursor/commands/` are
-  now discovered alongside the existing global `~/.deepseek/commands/`.
-  Workspace-local commands shadow global by name, matching the precedence
-  model already used for skills. Reported by **@SamhandsomeLee**.
-- **`@`-mention completion finds AI-tool dot-directories** — files inside
-  `.deepseek/`, `.cursor/`, `.claude/`, and `.agents/` are now discoverable
-  in `@`-mention Tab-completion even when those directories are excluded by
-  `.gitignore`. The fix also applies to the Ctrl+P file picker and fuzzy
-  file resolution.
-- **MCP paginated discovery (#1250, #1256)** — tools, resources, resource
-  templates, and prompts from MCP servers that paginate their responses
-  (e.g., gbrain at 5 items per page) are now fully discovered by following
-  the MCP spec's `nextCursor` across all pages. Reported by
-  **@hongyuatcufe**; thanks to **Liu-Vince** for the diagnosis and PR
-  #1256 with the same fix shape.
-- **Snapshot storage has a disk-space cap (#1112)** — the snapshot side repo
-  now enforces a 500 MB hard limit. When the limit is exceeded at snapshot
-  time, the oldest snapshots are pruned aggressively to stay under a 400 MB
-  target. Guards against the reported 1.2 TB snapshot blowup during
-  high-churn sessions. Reported by **@tyculw**; thanks to
-  **@Giggitycountless** for the PR #1131 proposal that informed the
-  hard-cap approach.
-- **`/clear` now resets the Todos sidebar (#1258)** — previously `/clear`
-  only reset the Plan panel; the Todos checklist persisted across clears
-  until app restart. The fix ensures `clear_todos()` clears the
-  `SharedTodoList` inner state. Reported by **@barjatiyasaurabh**.
-
-### Added
-
-- **Cache-aware prompt diagnostics + payload optimization (#1196)** — adds
-  a `PromptBuilder` that classifies the system prompt into `static` /
-  `history` / `dynamic` layers for cache-prefix stability, plus:
-  - `/cache inspect` — shows SHA-256 hashes per layer, base static prefix
-    hash vs full request prefix hash, static-prefix stability across
-    turns, and first-divergence tracking. Does not print prompt text.
-  - `/cache warmup` — prefetches the stable prefix to seed the DeepSeek
-    context cache.
-  - **Project Context Pack injected into the stable prefix by default**
-    — a structured workspace summary (directory listing up to 4 levels /
-    400 entries, README excerpt up to 4 KB, config + key source file
-    lists). Adds **~1–10 KB to every prompt depending on repo size**, in
-    exchange for a much more cacheable prefix. **Default ON**; disable
-    with `[context] project_pack = false` in `~/.deepseek/config.toml`
-    if you'd rather keep prompts minimal.
-  - Wire-payload optimization: large tool outputs are budgeted, repeated
-    identical tool outputs and `<turn_meta>` blocks are deduplicated
-    with stable refs (wire-only — local session messages stay intact).
-  - Footer cache-hit % chip from `prompt_cache_hit_tokens` /
-    `prompt_cache_miss_tokens` in the API response.
-  
-  Thanks **wplll** for the design and implementation.
-
-### Changed
-
-- **Language directive strengthened against project-context bias (#1118)**
-  — the system prompt now explicitly instructs the model that project
-  context (AGENTS.md, auto-generated instructions, file trees) is NOT a
-  language signal. Chinese filenames in a repo no longer bias the model
-  toward Chinese replies when the user writes in English. Reported by
-  **@ljlbit**.
-
-### Known issues
-
-- **Windows flicker/shake regression (#1260, #1251)** — v0.8.22 and v0.8.23
-  exhibit content flickering on Windows 10 (v0.8.20 works correctly). The
-  issue is likely caused by the viewport-reset escape sequence
-  (`\x1b[r\x1b[?6l\x1b[H\x1b[2J\x1b[3J`) added in v0.8.22 to fix viewport
-  drift. On Windows conhost, this sequence may trigger a full screen clear
-  on every repaint. A platform guard or less aggressive sequence is needed.
-
-## [0.8.23] - 2026-05-08
-
-A security-focused follow-up to v0.8.22. The bulk of the diff is hardening of
-the child-process surface — shells, MCP stdio servers, and other spawned
-subprocesses — plus a related set of MCP, secret-store, and tool-policy
-fixes uncovered during follow-up review.
-
-### Security
-
-- **Sanitized child-process environments** - shells, MCP stdio servers, hooks,
-  and other child processes spawned from the TUI now start from an explicit
-  allowlist of parent environment variables rather than inheriting every
-  parent var. The base allowlist covers `PATH`, `HOME`, `USER`, `LANG`/`LC_*`,
-  `TERM`/`COLORTERM`, `SHELL`, `TMPDIR`/`TMP`/`TEMP`, and the corresponding
-  Windows variables. Stops casual exfiltration of `*_API_KEY`, `AWS_*`,
-  `GITHUB_TOKEN`, and similar through a spawned subprocess.
-- **Tighter shell safety classification** - the `exec_shell` deny-list was
-  reviewed and broadened to cover additional dangerous command patterns.
-- **Plan mode tool surface narrowed** - planning sub-agents see a smaller,
-  read-only tool surface so a plan-mode call can no longer mutate workspace
-  state.
-- **Sub-agent approval boundaries preserved** - sub-agents inherit the
-  parent's approval policy and cannot escalate beyond it.
-- **Symlinked workspace walks no longer followed** - workspace-relative
-  walkers (file-search, project context) now refuse to traverse symlinks
-  pointing outside the workspace root.
-- **Path and output handling tightened** - several tools that build paths
-  from model output now reject `..` segments and absolute paths outside the
-  workspace.
-- **Runtime API requires authentication by default** - `deepseek serve --http`
-  no longer accepts unauthenticated requests in its default configuration.
-- **Security-sensitive dependencies bumped** - routine bump pass for crates
-  with recent advisories.
-- **MCP config paths reject traversal** - `load_config`/`save_config` now
-  refuse paths containing `..` components.
-- **Hardened `run_tests` approval policy.** Thanks to **@47Cid** for the
-  responsible disclosure.
-
-### Fixed
-
-- **macOS Keychain prompt at startup** - the file-backed secret store is now
-  the default. The OS keyring is opt-in via
-  `DEEPSEEK_SECRET_BACKEND=system|keyring`, and the auth status surface
-  refers to "secret store" rather than "keyring" where appropriate.
-- **MCP stdio spawn errors are now visible (#1244)** - when spawning a stdio
-  MCP server fails (e.g., `npx` not on `PATH`), the underlying OS error is
-  now shown ("No such file or directory (os error 2)") instead of the opaque
-  wrapper "MCP stdio spawn failed (...)". The fix applies to the snapshot,
-  the `mcp connect` / `mcp validate` CLI commands, and the in-TUI status
-  events.
-- **MCP servers no longer break under env scrub (#1244)** - MCP stdio launches
-  now inherit a wider env allowlist than arbitrary shell tools, so common
-  `npx ...`, `uvx ...`, `python -m mcp_server_*`, and proxy-bound corporate
-  setups keep working under the new child-env scrub. Pass-through includes
-  `NVM_DIR`, `NODE_OPTIONS`, `NODE_PATH`, `NODE_EXTRA_CA_CERTS`,
-  `NPM_CONFIG_*`, `VOLTA_HOME`, `COREPACK_HOME`, `PYTHONPATH`, `PYTHONHOME`,
-  `VIRTUAL_ENV`, `PIPX_*`, `POETRY_HOME`, `UV_*`, `GEM_*`, `BUNDLE_*`,
-  `JAVA_HOME`, `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` / `ALL_PROXY` /
-  `FTP_PROXY` (case-insensitive), `SSL_CERT_FILE`, `SSL_CERT_DIR`,
-  `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`. Secret-bearing parent env stays
-  scrubbed.
-
-### Changed
-
-- **Live thinking is compact by default** - the streaming "thinking" panel
-  collapses by default; expand via the existing details toggle.
-
-### Added
-
-- **`docs/RELEASE_CHECKLIST.md`** - explicit pre-tag checklist (CHANGELOG,
-  versions, preflight, npm wrapper smoke) so the v0.8.21/v0.8.22 CHANGELOG
-  gap does not recur.
-
-### Known issues
-
-- **Mid-run MCP server stderr is still suppressed** - if a stdio MCP server
-  spawns successfully but exits later (e.g., crashes during `initialize`),
-  its stderr is not yet captured. Spawn-time OS errors (the most common
-  case from #1244) are visible. Full mid-run stderr capture is planned for
-  v0.8.24.
-
-## [0.8.22] - 2026-05-08
-
-A focused security release.
-
-### Security
-
-- **Hardened `fetch_url` redirect handling.** Thanks to **@47Cid** for the
-  responsible disclosure.
-
-## [0.8.21] - 2026-05-08
-
-A community-heavy release rolling up two weeks of contributor PRs across the
-TUI, runtime, and docs. Big thanks to **Reid (@reidliu41)**,
-**jiaren wang (@JiarenWang)**, **Friende (@pengyou200902)**,
-**ZzzPL (@Oliver-ZPLiu)**, **Sun**, **Liu-Vince**, **kitty**, and
-**Aqil Aziz** for the contributions below.
-
-### Added
-
-- **Distinct user-message body color** (#1168) - user turns now render in a
-  green body color so the conversation flow is easier to scan at a glance.
-
-### Fixed
-
-- **Plan mode enforces read-only tool boundaries** (#1114) - planning calls
-  can no longer reach into write-side tools. Thanks **jiaren wang**.
-- **Composer arrow keys navigate input history** (#1117) - up/down in the
-  composer cycles through prior prompts when the cursor is on the first/last
-  line. Thanks **Reid**.
-- **RLM preserves prompt cache usage** (#1127) - the RLM batch path no longer
-  resets prompt-cache hits between calls. Thanks **Sun**.
-- **`fetch_url` proxy DNS opt-in** (#1103) - the proxy DNS path is now opt-in
-  rather than always forced, fixing breakage in environments where the proxy
-  cannot resolve the target host. Thanks **Sun**.
-- **Undo syncs session context after snapshot restore** (#1150, fixes #1139) -
-  rolling back a turn now correctly resyncs the in-memory session so a
-  follow-up turn doesn't see stale context. Thanks **jiaren wang**.
-- **Stale busy-state watchdog** (#1170) - the TUI now recovers if the busy
-  indicator gets stuck after an aborted turn. Thanks **ZzzPL**.
-- **`gh` discovered across common install paths** - the `gh` tool is found
-  whether installed via Homebrew, apt, the Windows MSI, or the GitHub CLI
-  installer. Thanks **kitty**.
-- **Code block indentation preserved in transcript** - leading whitespace
-  inside fenced code blocks is no longer collapsed during rendering.
-  Thanks **Liu-Vince**.
-- **Stream pacing preserves upstream cadence** - long streaming responses
-  no longer chunk together when the upstream is bursty.
-  Thanks **Sun**.
-- **Task list output gets headers** - the long-form `/tasks` output now has
-  group headers so it scans cleanly. Thanks **Reid**.
-- **macOS option-V details shortcut** - the details toggle now works correctly
-  on US Mac keyboards where Option+V produces `√`.
-- **Uppercase approval shortcuts accepted** - `[A]/[D]/[V]` work in either
-  case in the approval dialog.
-- **Transcript scrollbar inert** - the transcript scrollbar no longer captures
-  clicks intended for content below it.
-- **Hide transcript rail before code blocks** - the rail glyph no longer
-  bleeds onto the line just above a fenced code block.
-- **Pager exit hint prominent** - the "press q to exit" hint is now visible
-  on the pager footer.
-- **Empty tool call names fall back to a placeholder** - a model that returns
-  an empty `function.name` in a tool call no longer hangs the turn.
-- **MCP SSE waits for endpoint before connect returns** (#1225) - the SSE
-  transport no longer reports "connected" before the endpoint event has been
-  received, fixing a race where the first request was lost.
-- **Git branch status item renders** (#1226, fixes #1217) - the
-  `StatusItem::GitBranch` toggle now produces a footer entry instead of a
-  blank slot.
-- **Beta endpoint routes non-beta paths to v1** (#1174) - paths that aren't
-  available on the DeepSeek beta host are transparently redirected to the v1
-  host instead of failing.
-- **Skill packs accept workflow-pack archive layouts** (#1164) - skill
-  archives produced by the workflow pack tool now install correctly.
-- **Interactive sessions stay in alternate screen** (#1158) - returning from
-  a sub-process no longer kicks the TUI back to the primary screen mid-turn.
-- **Slash-menu arrow navigation wraps** (#1152) - up at the top / down at the
-  bottom of the slash menu wraps to the other end.
-- **CLI preserves split prompt words from Windows shims** (#1160) - prompt
-  arguments forwarded by the npm wrapper on Windows are no longer joined into
-  one giant token.
-- **`libc` extended to all Unix targets** (#1173) - improves FreeBSD build
-  compatibility.
-- **Memory truncation marker reports omitted bytes** - the `[…N bytes
-  omitted]` marker now shows an accurate count. Thanks **Friende**.
-
-### Docs
-
-- **Memory skill link** (#1096) - corrected. Thanks **Aqil Aziz**.
-- **Help keybinding reference** (#1095) - corrected. Thanks **Friende**.
-- **Additional environment variables** documented in the config reference.
-  Thanks **Liu-Vince**.
-- **Docker volume guidance** - the install snippet now uses a writable named
-  data volume rather than a bind mount that may be read-only on some hosts.
-- **Competitive analysis reflects LSP diagnostics** (#1171) - the doc now
-  matches the shipping LSP diagnostics implementation.
-- **Dispatcher path for `/run-pr`** (#1227) - the README now points at the
-  dispatcher binary.
-
-## [0.8.20] - 2026-05-08
-
-### Added
-- **Global AGENTS.md fallback** - when a workspace and its parents do not
-  provide project instructions, DeepSeek TUI now loads `~/.deepseek/AGENTS.md`
-  before falling back to auto-generated `.deepseek/instructions.md`, keeping
-  repo-local instructions higher priority while supporting shared defaults.
-
-### Fixed
-- **Chinese reasoning stays Chinese** - restore the #588 language contract after
-  the deterministic environment prompt regressed it. The latest user message now
-  chooses the natural language for both `reasoning_content` and the final reply;
-  the resolved `lang` field is only a fallback when the user turn is ambiguous.
-
-## [0.8.19] - 2026-05-08
-
-### Fixed
-- **DeepSeek beta endpoint stays default for Chinese locales** - the legacy
-  `deepseek-cn` runtime path no longer routes users to the non-beta
-  `https://api.deepseek.com` base URL. It is now a backwards-compatible alias
-  for the normal `deepseek` provider default, `https://api.deepseek.com/beta`,
-  so strict tool mode and other beta-gated features stay available worldwide.
-- **Provider docs stop advertising `deepseek-cn` as a separate provider** -
-  runtime docs now describe it only as a legacy config alias. DeepSeek uses the
-  same official host worldwide; users with private mirrors should set
-  `base_url` explicitly.
-
-## [0.8.18] - 2026-05-07
-
-This is the v0.8.17 follow-up release: a tighter TUI/runtime/install pass with
-safer session startup semantics, Docker images promoted to a supported install
-path, and several community PRs harvested into the release branch. VS Code and
-Feishu/Lark/mobile companion work remain out of scope for this release.
-
-### Added
-- **Prebuilt Docker images on GHCR** - release builds now publish
-  `ghcr.io/hmbown/deepseek-tui` with `latest`, semver, and `vX.Y.Z` tags, and
-  the GitHub release notes include a Docker install snippet. Docker publishing
-  is now a release gate rather than a best-effort check.
-- **Draggable transcript scrollbar** (#1075, #1076) - when mouse capture is
-  enabled, drag the transcript scrollbar thumb to move through long sessions.
-  The implementation also clears stale drag state on resize and new left-clicks.
-  Thanks @Oliver-ZPLiu.
-- **PTY regression for viewport drift** (#1085) - the QA harness now covers the
-  blank-top-rows failure after a failed/long turn so future layout changes catch
-  terminal viewport drift.
-
-### Changed
-- **Plain `deepseek` starts a fresh session** - opening a second `deepseek` in
-  the same folder no longer silently attaches to the same in-flight checkpoint.
-  Crash/interrupted checkpoints are preserved as saved sessions and recovered
-  explicitly through `deepseek --continue`.
-- **npm postinstall is recoverable for transient download failures** (#1059) -
-  install-time GitHub download/extract failures are non-blocking and documented,
-  while unsupported platforms, checksum mismatches, glibc preflight failures,
-  and runtime wrapper failures remain fatal. Thanks @Fire-dtx.
-- **Docker Buildx cargo caches are platform-isolated and locked** - registry,
-  git, and target caches now use platform-specific cache IDs plus locked
-  sharing to avoid the `.cargo-ok File exists` unpack race in release checks.
-- **Long-session palette is easier to read** (#1070, #936 partial) - default
-  body text is slightly softer, reasoning/thinking text uses a warmer accent,
-  and `/theme` now updates the terminal color adapter so light mode keeps those
-  contrasts coherent after an in-session toggle. Thanks @bevis-wong and
-  @oooyuy92 for the readability reports.
-- **Install docs add a second rustup mirror fallback** (#1011) - `rsproxy.cn`
-  is documented as an alternate rustup mirror, and old Debian/Ubuntu Cargo
-  `edition2024` failures now point users to rustup stable. Thanks @wuwuzhijing.
-
-### Fixed
-- **Chinese destructive approval dialogs keep explicit risk wording** (#1087,
-  #1091) - zh-Hans destructive approval copy now localizes the operation label,
-  title, prompt, and destructive-risk warning without changing English default
-  behavior. Thanks @qinxianyuzou and @axobase001.
-- **Terminal viewport is reset before repaint** (#1085) - the TUI now clears
-  scroll margins/origin mode before key repaints after resume, resize, and turn
-  completion, preventing alt-screen content from drifting downward and leaving
-  blank rows at the top.
-- **Interactive subprocesses wait for terminal release** (#1085) - shell/editor
-  handoff now waits until the UI has actually left alt-screen/raw mode before
-  launching the child process, preventing the TUI from repainting into host
-  scrollback after interactive tool use.
-- **Light theme reasoning blocks stay light** (#1070, #936 partial) -
-  thinking/reasoning background tints now map to the light reasoning surface
-  instead of keeping the dark-mode tint after `/theme light`.
-- **FreeBSD can compile the secrets crate** (#1089) - platforms without a native
-  `keyring` dependency now fail the OS-keyring probe cleanly and fall back to
-  the file-backed secret store instead of referencing a missing crate. Thanks
-  @avysk for the FreeBSD report.
-- **Windows sandbox docs no longer overstate guarantees** (#1015, #1058) - the
-  docs and code comments now describe the future Windows helper as
-  process-tree containment only until filesystem, network, registry, or
-  AppContainer isolation is actually implemented. Thanks @axobase001.
-
-## [0.8.17] - 2026-05-07
-
-A focused reliability release built almost entirely from community contributions.
-Fixes Plan-mode safety, paste-Enter auto-submit, slash-menu skills coverage, the
-`deepseek-cn` endpoint preset, and a handful of platform / streaming /
-gateway-compatibility issues. Also lands a small PTY-driven QA harness so the
-next round of TUI fixes can be verified against real terminal behaviour.
-
-### Added
-- **`/theme` command** (#1057) — toggle between dark and light themes inline,
-  without round-tripping through `/config`. Thanks @MengZ-super.
-- **PTY/frame-capture TUI QA harness** — new
-  `crates/tui/tests/support/qa_harness/` lets integration tests spawn
-  `deepseek-tui` in a real pseudo-terminal, send scripted keys / paste /
-  resize, and assert on the parsed terminal frame plus the workspace
-  filesystem. Initial scenarios cover boot smoke and the #1073 paste regression.
-  Adding-a-scenario walkthrough lives in `crates/tui/tests/support/qa_harness/README.md`.
-- **Whalescale desktop runtime bridge** — the local runtime API now exposes
-  `POST /v1/approvals/{id}`, `GET /v1/runtime/info`, `enabled` flags on
-  `GET /v1/skills`, and `POST /v1/skills/{name}` toggles. Runtime thread
-  events also carry `agent_reasoning` items so desktop clients can render
-  thinking separately from assistant text.
-
-### Changed
-- **`deepseek-cn` provider preset now defaults to the official
-  `https://api.deepseek.com` host** (#1079, #1084) — matches
-  [api-docs.deepseek.com](https://api-docs.deepseek.com/). The legacy typo
-  host `api.deepseeki.com` is still recognized in URL heuristics and chat-client
-  normalization so existing user configs keep working. Thanks @Jefsky.
-- **Plan mode runs shell commands in a read-only sandbox** (#1077) — was
-  `WorkspaceWrite` with the workspace as a writable root, which let
-  `python -c "open('f','w').write('x')"` mutate files inside the workspace.
-  Now `SandboxPolicy::ReadOnly`: no writes anywhere on the filesystem, no
-  network. Read-only inspection commands (`ls`, `git log`, `grep`,
-  `cargo metadata`, …) keep working through the per-platform sandbox; for
-  anything that creates or modifies files, switch to Agent mode (`/agent`).
-  Thanks @DI-HUO-MING-YI.
-
-### Fixed
-- **Pasting multi-line text with a trailing newline no longer auto-submits**
-  (#1073) — the composer's Enter handler now consults the paste-burst
-  suppression state and either appends `\n` to the in-flight burst buffer or
-  inserts it into the composer text directly, instead of falling through to
-  `submit_input()`. Reproduced from the original Windows / PowerShell
-  symptom; fix covers both the bracketed-paste and rapid-keystroke detection
-  paths. Thanks @bevis-wong for the precise reproducer.
-- **Slash menu, `/skills`, and `/skill <name>` show project-local AND global
-  skills** (#1068, #1083) — switched the cache to `discover_in_workspace`, so
-  the UI surfaces stay in sync with the system-prompt skills block. Bonus
-  fix: `SKILL.md` frontmatter values are now stripped of surrounding YAML
-  quotes, so `name: "hud"` registers as `hud` and matches prefix lookup.
-  Thanks @AlphaGogoo / @Duducoco.
-- **Windows shell output is decoded as UTF-8 even on non-UTF-8 system code
-  pages** (#982, #1018) — Windows shell commands are now wrapped with
-  `chcp 65001 >NUL & ` so subprocesses output UTF-8 instead of GBK / other
-  ANSI code pages. `display_command` strips the prefix so transcripts and
-  approval prompts stay clean. Thanks @chnjames.
-- **Stale snapshot `tmp_pack_*` files are cleaned up on startup** (#975,
-  #1055) — interrupted side-repo git pack operations no longer leak orphaned
-  temp files; `prune_unreachable_objects` runs during the regular prune
-  cycle to drop loose objects from rolled-back snapshots. Closes the
-  ~30 GB+ disk-usage report. Thanks @axobase001.
-- **Window-resize artifacts on macOS Terminal.app and Windows ConHost are
-  gone** (#993) — forces the resize-event size during the post-resize draw
-  so ratatui's internal `autoresize()` cannot shrink the viewport back to a
-  stale dimension and leave the newly-expanded area filled with stale
-  content. Same class as #582 for additional emulator families. Thanks
-  @ArronAI007.
-- **Streaming thinking blocks finalize cleanly on stream errors and
-  restarts** (#861 partial, #1078) — the engine-error handler now drains
-  the in-flight thinking block into the transcript instead of leaving the
-  partial reasoning orphaned in `StreamingState`. Refactor extracts the
-  thinking lifecycle into named helpers (`start_streaming_thinking_block`,
-  `finalize_current_streaming_thinking`, `stash_reasoning_buffer_into_last_reasoning`).
-  Thanks @reidliu41.
-- **OpenRouter and other custom-endpoint providers preserve explicit model
-  IDs** (#1066) — when a provider has an explicit model AND a custom
-  `base_url` (different from the provider default), the model name is no
-  longer rewritten by provider-specific normalization. Lets OpenAI-compatible
-  gateways accept bare IDs like `deepseek/deepseek-v4-pro`,
-  `accounts/fireworks/models/...`, or `glm-5`. Thanks @THINKER-ONLY.
-- **Auto-generated `.deepseek/instructions.md` stabilizes the KV prefix
-  cache** (#1080) — replaces the per-turn filesystem-scan fallback in
-  `prompts.rs` with a real on-disk artifact when no context file exists, so
-  the system prompt's prefix stays byte-stable across turns and prefix-cache
-  hit-rate improves. The auto-generated file is plainly labelled and the
-  user can edit or delete it freely. Thanks @lloydzhou.
-- **SSE responses behind compressing gateways decode correctly** (#1061) —
-  enables reqwest's `gzip` and `brotli` features so streams through proxies
-  that compress the response come through clean instead of as protocol
-  corruption. Quiets one of the failure modes behind some "stuck working"
-  reports. Thanks @MengZ-super.
-- **NVIDIA NIM provider configs use their own API key even when a legacy
-  root DeepSeek key is present** (#1081) — `[providers.nvidia_nim] api_key`
-  now wins for NIM requests, avoiding 401s caused by accidentally sending the
-  top-level DeepSeek credential to NVIDIA. Thanks @wlon for the focused
-  diagnosis.
-- **npm installs explain the release-mirror escape hatch when GitHub Releases
-  are blocked** (#1051, #1056) — network/DNS failures now point at the
-  existing `DEEPSEEK_TUI_RELEASE_BASE_URL` override and the required checksum
-  manifest / binary layout instead of stopping at a raw `ENOTFOUND github.com`.
-  Thanks @axobase001.
-
-### Notes for contributors
-
-This release shifts the project's PR-handling philosophy: every contribution
-has value somewhere; the maintainer's job is to find it, use it, and credit
-the contributor — never to close a PR with nothing taken. If a PR is too
-large or scope-mixed to merge whole, useful commits / files / ideas are
-harvested directly rather than asking the contributor to split it. Trust
-boundary on credentials, sandbox, providers, publishing, telemetry,
-sponsorship, branding, and global prompts still requires explicit
-maintainer sign-off, but the burden of getting there is on us. See
-`AGENTS.md` for the full text.
-
-## [0.8.16] - 2026-05-07
-
-A focused hotfix for v0.8.15 regressions in RLM, sub-agent visibility, and
-terminal ownership. This release keeps the v0.8.15 feature set intact while
-making long-running delegated work easier to inspect and safer to run.
-
-### Changed
-- **RLM has no fixed 180s wall-clock timeout** (#955) — RLM turns can continue
-  past the old hard limit when the long-input REPL is still making progress.
-- **RLM output is easier to audit** (#955) — final reports now include compact
-  execution metadata: input size, iteration count, elapsed time, sub-LLM RPC
-  count, and termination state.
-- **RLM chunking guidance is stricter for exact work** (#955) — prompts now
-  tell the sub-agent to use deterministic Python over the full `context` for
-  counts/aggregation and to report chunk coverage when splitting a whole input.
-- **Tool guidance is less defensive** (#955) — the system prompt now explains
-  when to use tools instead of discouraging the model from using capabilities
-  that are actually available.
-
-### Fixed
-- **Active RLM work stays visible** (#955) — foreground RLM calls surface in the
-  active task/right-rail state instead of leaving the Tasks panel saying
-  `No active tasks`.
-- **`/subagents` no longer reports false emptiness** (#955) — the sub-agent
-  overlay now includes live progress-only agents and transcript fanout workers
-  when the manager cache has not refreshed yet.
-- **Sub-agent cards are quieter and more useful** (#955) — low-signal scheduler
-  lines such as `step 1/100: requesting model response` are hidden, while
-  compact tool activity remains visible.
-- **Sub-agent completion protocol stays internal** (#955) — completion
-  sentinels are routed as internal runtime events instead of user messages, so
-  the parent agent does not explain raw protocol XML back to the user.
-- **Sub-agents cannot take over the parent terminal** (#955) — background
-  agents reject `exec_shell` with `interactive=true`; they can still use
-  non-interactive shell, background shell, `tty=true`, and task-shell tools.
-- **Terminal scrollback ownership is restored** (#955) — the TUI re-enters
-  alternate-screen mode after foreground/sub-agent work drains, preventing the
-  host terminal scrollbar from taking over the live interface.
-
-## [0.8.15] - 2026-05-06
-
-An auth, Windows, editor-integration, and setup stabilization release. This
-release keeps the existing DeepSeek V4 architecture intact while landing small
-community fixes that make first-run setup, terminal behavior, skills, cost
-display, and recovery paths easier to trust.
-
-### Added
-- **ACP stdio adapter for Zed/custom agents** (#782) — `deepseek serve --acp`
-  starts a local Agent Client Protocol server over stdio. The first slice
-  supports new sessions and prompt responses through the user's existing
-  DeepSeek config/API key; tool-backed editing and checkpoint replay remain
-  outside the ACP surface for now.
-- **Yuan/CNY cost display** (#806) — `cost_currency = "cny"` (also accepts
-  `yuan` / `rmb`) switches footer, context panel, `/cost`, `/tokens`, and
-  long-turn notification summaries from USD to CNY.
-- **Slash autocomplete for skills** (#808) — installed skills are visible in
-  the slash-command autocomplete menu.
-- **`/rename` session titles** (#836) — sessions can be renamed without
-  editing save files manually.
-
-### Changed
-- **Current local date in turn metadata** (#893, closes #865) — real user turns
-  now include the current local date in `<turn_meta>`, without changing the
-  stable system prompt/cache prefix.
-- **Doctor endpoint diagnostics** (#823) — `deepseek doctor` shows the resolved
-  provider/API endpoint to make proxy, China endpoint, and inherited-env
-  debugging more concrete.
-- **More conservative request sizing** (#826) — API requests cap `max_tokens`
-  against the active model/context budget before dispatch.
-- **Safer config and secret file writes** (#833, #837) — generated config files
-  use restrictive permissions and improved secret redaction.
-
-### Fixed
-- **Env-only API key failure recovery** (#892) — runtime auth failures now say
-  when the rejected key came from inherited `DEEPSEEK_API_KEY` and no saved
-  config key is present, matching the clearer `deepseek doctor` guidance.
-- **Windows Unicode output** (#887, closes #872) — TUI startup now best-effort
-  switches the Windows console input/output codepages to UTF-8, improving
-  Chinese and other non-ASCII rendering.
-- **Windows resume picker** (#886, closes #866) — the dispatcher keeps the
-  resume picker path on Windows instead of bypassing it.
-- **Windows clipboard fallback** (#850) — copy operations have a fallback path
-  when the primary clipboard backend is unavailable.
-- **Workspace trust persistence** (#870) — approval/trust choices persist in
-  global config instead of surprising users on the next launch.
-- **Ctrl+E composer behavior** (#883, closes #876) — plain Ctrl+E moves to the
-  end of the composer again; file-tree toggling moved to the shifted shortcut.
-- **Plain Markdown skills** (#869) — `SKILL.md` files without frontmatter now
-  fall back to the first `# Heading` instead of being ignored.
-- **Workspace-scoped latest resume** (#830, closes #779) — `resume --last`,
-  `--continue`, and fork/resume helpers choose the latest session for the
-  current workspace/repo rather than the newest saved session globally.
-- **Npm wrapper version fallback** (#885) — `deepseek --version` / `-v` can
-  report the package version when the native binary has not been downloaded
-  yet.
-- **TUI exit resume hint** (#863, closes #682) — exiting the TUI now points
-  users toward the relevant resume command.
-- **Startup and terminal reliability** — includes bounded stream-open waits
-  (#847), cursor-lag reduction for `@` mentions (#849), OSC52 clipboard fallback
-  for SSH (#845), legacy Ctrl+V paste recognition (#786), Windows mouse capture
-  defaulting off (#785), and UTF-8-preserving ANSI stripping (#784).
-- **Install and policy reliability** — avoids unstable Rust file-locking APIs
-  (#821), enforces network policy in `web_run` (#800), fixes repeated setup
-  language prompts after API-key setup (#844), and explains dispatcher TUI spawn
-  failures (#853).
-- **Workspace safety** — refuses dangerous snapshots for `$HOME` or unsafe
-  workspaces (#798, #804), fixes path-escape false positives for double-dots in
-  names (#824), scopes snapshot built-in excludes (#854), and replaces provider
-  `unreachable!()` paths with proper errors (#835).
-- **Skills discovery** — recursively reads the skills directory (#811), ignores
-  symlinks outside the selected install root (#814), discovers global Agents
-  skills (#848), and includes `.cursor/skills` (#817).
-- **Provider/model compatibility** — restores auto model routing (#772),
-  completes vLLM provider integration (#737), accepts provider-prefixed DeepSeek
-  model IDs (#794), preserves requested model ID casing (#733), and pins RLM
-  child calls to Flash (#832).
-
-### Thanks
-- Thanks to [@reidliu41](https://github.com/reidliu41) for the resume hint and
-  workspace trust fixes (#863, #870).
-- Thanks to [@Oliver-ZPLiu](https://github.com/Oliver-ZPLiu) for the Windows
-  clipboard fallback (#850).
-- Thanks to [@xieshutao](https://github.com/xieshutao) for the plain Markdown
-  skill fallback (#869).
-- Thanks to [@GK012](https://github.com/GK012) for the npm wrapper version
-  fallback (#885).
-- Thanks to everyone filing Windows, Chinese-language setup, auth, and
-  first-run reports. Those concrete reproductions shaped the release.
-
-## [0.8.13] - 2026-05-05
-
-A stabilization release for DeepSeek V4 runtime and TUI reliability. The
-v0.8.13 milestone was narrowed to direct runtime/TUI fixes; prompt hygiene,
-trajectory logging, Anthropic-wire support, and larger UI cleanup were moved
-out of this release.
-
-### Added
-- **No-LLM tool-result prune before compaction** (#710) — old verbose tool
-  results are mechanically summarized before the paid summary pass. Duplicate
-  reads keep the freshest full body and replace older copies with one-line
-  summaries; if that gets the session back under the compaction threshold, the
-  LLM summary call is skipped entirely.
-- **Repeated-tool anti-loop guard** (#714) — the engine now tracks
-  `(tool_name, args)` pairs per user turn. On the third identical call it
-  inserts a synthetic corrective tool result instead of running the same tool
-  again unchanged; per-tool failures warn at three and halt at eight.
-- **V4 cache-hit telemetry fallback** (#721) — usage parsing now recognizes
-  `usage.prompt_tokens_details.cached_tokens`, so the existing footer cache-hit
-  chip works with DeepSeek V4's automatic prefix-cache telemetry as well as the
-  older explicit hit/miss fields.
-
-### Fixed
-- **Invalid tool-call JSON repair** (#712) — malformed streamed tool arguments
-  now pass through a deterministic repair ladder before dispatch.
-- **Hallucinated tool-name recovery** (#713) — common non-canonical tool names
-  are resolved through the registry before the engine reports a missing tool.
-- **Tool-schema sanitation** (#715) — schemas are normalized before API
-  emission so provider-strict JSON Schema handling does not reject valid tools.
-- **Case-sensitive model IDs** (#717, #729) — valid configured model IDs keep
-  caller-provided case while compact DeepSeek aliases still canonicalize.
-- **Stale `working...` state after failed dispatch** (#738) — if the UI fails
-  to send a message to the engine before a turn starts, the composer loading
-  state is cleared instead of trapping later input in pending state.
-- **Prompt-free doctor key checks** — `deepseek doctor` no longer reads the OS
-  keyring, avoiding macOS Keychain prompts during diagnostics.
-- **macOS Terminal color compatibility** — `xterm-256color` sessions now
-  receive 256-color palette indexes instead of truecolor SGR, preventing
-  Apple Terminal from misrendering whale blues as green/cyan blocks.
-- **Chat client repair after Responses cleanup** — restored the chat client
-  body and regression coverage after removing the dead experimental Responses
-  fallback path.
-- **Up/Down arrow transcript scroll when composer is empty** — bare Up/Down
-  arrows now scroll the transcript when the composer input is empty (or
-  whitespace-only); with text present they still navigate composer history.
-  Previously the gate was hardcoded to false, leaving users in virtual
-  terminals (Ghostty, Codex, Kitty-protocol) unable to scroll without
-  modifier shortcuts.
-
-## [0.8.11] - 2026-05-04
-
-### Changed
-- **Cache-maxing prompt path for DeepSeek V4** — the engine now skips
-  system-prompt reassignment when the assembled stable prompt is unchanged,
-  keeps the volatile repo working-set summary out of the system prompt, and
-  injects it as per-turn metadata on the latest user message instead.
-- **Tool catalog cache anchor** — the model-visible tool array now marks
-  the final native tool with `cache_control: ephemeral` so DeepSeek can
-  anchor the stable tool prefix explicitly.
-- **V4-scale automatic compaction defaults** — automatic compaction keeps a
-  500K-token hard floor and the fallback compaction threshold now reflects
-  the V4-scale late-trigger policy instead of the old 50K-era default.
-- **Token-only compaction trigger** — the message-count compaction trigger
-  was a 128K-era heuristic that fired on long sessions of small messages
-  — exactly the case where rewriting V4's prefix cache is most wasteful.
-  Removed `CompactionConfig::message_threshold` and the message-count
-  branch in `should_compact`; token budget is now the sole automatic
-  trigger (gated by the 500K floor). Manual `/compact` is unchanged.
-
-### Fixed
-- **Legacy 128K context naming** — the 128K fallback is now named and
-  documented as legacy DeepSeek-only behavior, reducing ambiguity with the
-  1M-token DeepSeek V4 defaults.
-- **`npm install` resilience for slow / firewalled networks** — the
-  postinstall binary fetch from GitHub Releases now retries on transient
-  errors (5 attempts, 1-16 s exponential backoff with jitter), enforces a
-  per-attempt timeout (default 5 min, configurable via
-  `DEEPSEEK_TUI_DOWNLOAD_TIMEOUT_MS`) plus a 30 s stall detector, honors
-  `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` env vars (pure-Node CONNECT
-  tunneling, no new dependencies), and prints a download-progress line
-  to stderr so users know it isn't hung. Suppressible with
-  `DEEPSEEK_TUI_QUIET_INSTALL=1`. Reported by a community user from China
-  whose install through a CN npm mirror took 18 minutes — the bottleneck
-  was the GitHub fetch, which CN npm mirrors do not proxy.
-- **YOLO sandbox dropped to DangerFullAccess** — YOLO mode was still
-  routing shell commands through the WorkspaceWrite sandbox, which
-  intercepted legitimate outside-workspace writes (package installs,
-  sub-agent workspaces, `~/.cache`, brew, `npm install -g`, pipx) and
-  forced approval round-trips — contradicting the "no guardrails"
-  contract. YOLO already auto-approves all tools and enables trust mode;
-  the sandbox was the last residual restriction. Now uses
-  DangerFullAccess (no sandbox), consistent with the full YOLO posture.
-- **Scroll position lock preserved across render resolve** — user
-  scroll-up during live streaming was being yanked back to the live tail
-  on the next chunk. The `user_scrolled_during_stream` lock was cleared
-  prematurely when content briefly fit in one screen, or when the
-  transcript shrank between renders (e.g. sub-agent card collapsed).
-  Fixed by snapshotting the prior tail state before `resolve_top` and
-  only clearing the lock when the user was deliberately at the bottom.
-- **Capacity controller disabled by default** — the capacity controller
-  was silently clearing the transcript (`messages.clear()`) based on
-  slack-based `p_fail` calculations, independent of token utilization or
-  the `auto_compact` setting. This contradicted the v0.8.11 default of
-  `auto_compact = false` — the user opted into trusting the model with
-  the full 1M-token V4 window, and the controller was auto-managing the
-  prefix on their behalf. The controller now defaults to `enabled = false`;
-  power users can opt in via `capacity.enabled = true`.
-
-### Docs
-- **README clarity pass** (#685) — title-cased section headings, an explicit
-  Node + npm prerequisites block before the `npm install -g` snippet, a
-  China-friendly `--registry=https://registry.npmmirror.com` install
-  variant, a DeepWiki badge for AI-assisted repo browsing, and a 🐳 mark
-  on the title. *Thanks to [@Agent-Skill-007](https://github.com/Agent-Skill-007)
-  for this PR.*
-
-## [0.8.12] - 2026-05-05
-
-A feature release built on the v0.8.11 cache-maxing foundation: 20 community
-PRs merged, covering reasoning-effort automation, V4 FIM edits, bash-arity
-execpolicy, skill-registry sync, vim composer mode, large-tool-output routing,
-pluggable sandbox backends, layered permission rulesets, and cache-aware
-resident sub-agents. No breaking changes.
-
-### Added
-- **Reasoning-effort auto mode** (#669) — `reasoning_effort = "auto"` inspects
-  the last user message for keywords (debug/error → Max, search/lookup → Low,
-  default → High) and resolves the tier before each API request. Sub-agents
-  always get Low.
-- **FIM edit tool for V4 /beta** (#668) — `fim_edit` tool sends
-  fill-in-the-middle requests to DeepSeek's `/beta` endpoint for surgical code
-  edits.
-- **Bash arity dictionary** (#655) — `auto_allow = ["git status"]` now matches
-  `git status -s` but NOT `git push`. The arity dictionary knows command
-  structure for git, cargo, npm, yarn, pnpm, docker, kubectl, aws, make, and
-  others. Legacy flat prefix matching still works for unlisted commands.
-- **Unified slash-command namespace** (#661) — user-defined commands in
-  `~/.deepseek/commands/` support `$1`, `$2`, `$ARGUMENTS` template
-  substitution. User commands override built-in commands.
-- **Skill registry sync** (#654) — `/skills sync` fetches the community skill
-  registry and installs/updates all listed skills. Network-gated by the
-  existing `[network]` policy.
-- **Vim modal editing in composer** (#659) — `vim.insert_mode` / `vim.normal_mode`
-  settings enable modal editing in the message composer with standard Vim
-  keybindings.
-- **Separate tui.toml** (#657) — theme colors and keybind overrides can live in
-  `~/.deepseek/tui.toml` alongside the main `config.toml`. *Note: file format
-  is defined but not yet loaded at startup — wiring deferred to v0.8.13.*
-- **Large-tool-output routing** (#658) — tool results exceeding a configurable
-  token threshold are routed through a workshop with truncated previews,
-  protecting the parent context window. Synthesis is currently truncation-only;
-  V4-Flash sub-agent synthesis deferred to follow-up.
-- **Pluggable sandbox backends** (#645) — a `SandboxBackend` trait and
-  Alibaba OpenSandbox HTTP adapter let `exec_shell` route commands to a remote
-  sandbox instead of spawning locally. Config keys: `sandbox_backend`,
-  `sandbox_url`, `sandbox_api_key`.
-- **Layered permission rulesets** (#653) — `ExecPolicyEngine` supports
-  builtin, agent, and user-priority layers for allow/deny prefix rules.
-  Deny-always-wins semantics.
-- **Cache-aware resident sub-agents** (#660) — sub-agents spawned with
-  `resident_file` prepend the file contents to their system prefix for V4
-  prefix-cache locality. A global lease table prevents two agents from holding
-  a resident lease on the same file simultaneously. Leases are released on
-  agent completion.
-- **Context-limit handoff** (#667) — engine-level support for replacing
-  routine compaction with a `.deepseek/handoff.md` file write when context
-  pressure triggers. *Note: config knob removed pending implementation.*
-- **LSP auto-attach diagnostics** (#656) — edit results now include post-edit
-  diagnostics via the engine-level LSP hooks path.
-
-### Docs
-- **README install section rewritten** (#672) — the previous lede claimed
-  "no Node.js or Python runtime" but the very next paragraph told readers to
-  install Node before continuing. Replaced with a three-path Install block
-  (npm / cargo / direct download) that makes the npm wrapper's role explicit:
-  it downloads the prebuilt binary, but `deepseek` itself does not depend on
-  Node at runtime. zh-CN README mirrored.
-- **Windows Scoop install instructions** (#696) — README and zh-CN README now
-  document `scoop install deepseek-tui` for Windows users. *Thanks to
-  [@woyxiang](https://github.com/woyxiang) for this PR.*
-- **DeepSeek Pro discount window extended** (#692) — pricing footnote updated
-  from 5 May 2026 to 31 May 2026 to match the platform-side promotion. *Thanks
-  to [@wangfeng](mailto:wangfengcsu@qq.com) for this PR.*
-- **`deepseek resume <SESSION_ID>` surfaced in Usage** — the command exists
-  since v0.7 but was undocumented. Reported via #682.
-- **SECURITY.md** (#648) — vulnerability reporting policy and supported
-  versions.
-- **CODE_OF_CONDUCT.md** (#686) — Contributor Covenant v2.1. *Thanks to
-  [@zichen0116](https://github.com/zichen0116) for this PR.*
-- **zh-Hans locale activation docs** (#652) — README.zh-CN.md and
-  config.example.toml now document `locale = "zh-Hans"`.
-
-### Fixed
-- **Cross-workspace session bleed (security)** — launching `deepseek` from
-  any directory silently auto-recovered the most recent interrupted session,
-  even if that session originated in a completely different workspace. Tools
-  then operated on the prior workspace's file paths while the status bar
-  displayed the *current* workspace name — a confusing trust-boundary
-  violation that could leak `api_messages`, `working_set` entries, and any
-  secrets the prior session had accumulated into a new terminal that was
-  never meant to see them. `try_recover_checkpoint()` now compares the saved
-  session's workspace to `std::env::current_dir()` (canonicalised, with a
-  strict-equality fallback when canonicalisation fails) and only auto-recovers
-  on a match. On a mismatch the checkpoint is persisted as a regular session
-  (so the user can find it via `deepseek sessions` / `deepseek resume <id>`)
-  and cleared, and the new launch starts fresh — no data is lost. Hotfixed
-  to `main` ahead of the v0.8.12 tag.
-- **`cargo install` on stable Rust** — the language-picker match guard at
-  `crates/tui/src/tui/ui.rs:1603` used `&& let Some(...) = ...` inside an
-  `if`-guard, which requires the nightly-only `if_let_guard` feature on Rust
-  before 1.94. Reported by an external user whose `cargo install
-  deepseek-tui` failed with E0658. Rewrote as a plain match guard with a
-  nested `if let` inside the arm body. The workspace also now declares
-  `rust-version = "1.88"` (the actual minimum for `let_chains` in
-  `if`/`while`) so users on too-old toolchains see a clear cargo error
-  instead of a confusing rustc one. AGENTS.md gains a "stable Rust only"
-  section so this doesn't regress.
-- **Resident-file lease never released after spawn** (#660) — the lease was
-  stamped as `"pending"` at spawn time because the agent id is only assigned
-  by the manager after the spawn call returns. The release-on-terminal-state
-  path (added in the original #660 commit) matched leases by agent id, so
-  it could never find these placeholder entries. Now the placeholder is
-  replaced with the real agent id immediately after spawn so existing
-  release wiring fires. Resolves the v0.8.12 caveat documented at RC time.
-- **Color::Reset across all UI widgets** (#651, #671) — replaced hardcoded
-  `Color::Black` and `Color::Rgb(18, 29, 39)` backgrounds with `Color::Reset`
-  so the TUI respects the terminal's actual background color on light-themed
-  and non-standard terminals.
-- **Windows MessageBeep** (#646) — `notify_done_to` now calls `MessageBeep` on
-  Windows when BEL method is selected.
-- **truncate_id optimization** (#649) — replaced manual string slicing with a
-  shared `truncate_id` helper across session, picker, and UI call sites.
-
-### Maintenance
-- Workspace `cargo fmt` sweep across community PRs that landed unformatted.
-- Issue-triage GitHub Actions added (#688): keyword-driven auto-labeller,
-  stale-bot for `needs-info` issues (14 d → stale → 7 d → close), and a
-  spam lockdown that auto-closes promotional issues from accounts <30 d
-  old. All pure GitHub Actions — no third-party services.
-- Annotated `TuiPrefs` (#657) and `handoff::THRESHOLDS` (#667) with
-  `#[allow(dead_code)]` so the deferred APIs don't trip CI's `-D warnings`
-  flag while their call sites are staged for v0.8.13.
-- Removed dead `prefer_handoff` field from `CompactionConfig` — config knob
-  existed but zero code paths consulted it (#667).
-- Removed dead `use_terminal_colors` field from `TuiConfig` — no rendering
-  code read the value (#671).
-- Fixed `expect()` panic risk in `OpenSandboxBackend::new()` — now returns
-  `Result` (#645).
-- Fixed broken `section_bg` test assertion after Color::Reset migration (#651).
-- Fixed `resolve_prefixes` docstring to accurately describe deny-always-wins
-  behavior (#653).
-- Wired `create_backend()` into `Engine::build_tool_context` — sandbox backend
-  was defined but never activated (#645).
-- Wired resident lease release on agent completion/cancellation/failure (#660).
+- Android/Termux arm64 remains a preview in v0.9.0. The target, asset wiring,
+  updater selection, dependency graph, and source-build path have automated or
+  static coverage, but shell/PTY/config/TUI startup and runtime behavior remain
+  unverified on a real device (#4236, #4242). Do not use a GNU/Linux arm64
+  archive in Termux.
 
 ### Contributors
 
-First-time contributor to this release: **@zichen0116** (#686). Welcome — and
-thank you.
+Thank you to the international community whose code, reports, reviews, and
+reproductions shaped v0.9.0:
 
-Bulk community contributions by [@merchloubna70-dot](https://github.com/merchloubna70-dot)
-(#645–#681, 28 PRs spanning features, fixes, and VS Code extension scaffolding).
-*Thank you for the remarkable volume and quality of work.*
+- [@amuthantamil](https://github.com/amuthantamil),
+  [@bistack](https://github.com/bistack),
+  [@bruce6135](https://github.com/bruce6135),
+  [@CCChisato](https://github.com/CCChisato),
+  [@ci4ic4](https://github.com/ci4ic4),
+  [@cyq1017](https://github.com/cyq1017), and
+  [@DarrellThomas](https://github.com/DarrellThomas).
+- [@eugenicum](https://github.com/eugenicum),
+  [@findshan](https://github.com/findshan),
+  [@gaord](https://github.com/gaord),
+  [@hmr-BH](https://github.com/hmr-BH),
+  [@hongqitai](https://github.com/hongqitai), and
+  [@idling11](https://github.com/idling11).
+- [@JayBeest](https://github.com/JayBeest),
+  [@knqiufan](https://github.com/knqiufan),
+  [@LeoLin990405](https://github.com/LeoLin990405),
+  [@moduvoice](https://github.com/moduvoice),
+  [@mvanhorn](https://github.com/mvanhorn),
+  [@Mr-Moon121](https://github.com/Mr-Moon121), and
+  [@MXAntian](https://github.com/MXAntian).
+- [@Angel-Hair](https://github.com/Angel-Hair),
+  [@nightt5879](https://github.com/nightt5879),
+  [@nsfoxer](https://github.com/nsfoxer),
+  [@octo-patch](https://github.com/octo-patch),
+  [@qinlinwang](https://github.com/qinlinwang),
+  [@SamhandsomeLee](https://github.com/SamhandsomeLee), and
+  [@taixinguo](https://github.com/taixinguo).
+- [@WavesMan](https://github.com/WavesMan),
+  [@wuisabel-gif](https://github.com/wuisabel-gif), and
+  [@yekern](https://github.com/yekern).
 
-## [0.8.10] - 2026-05-04
-
-A patch release: hotfixes, small UX polish, and four whalescale-unblocking
-runtime API additions. No breaking changes.
-
-### Added
-- **OPENCODE shell.env hook** (#456) — lifecycle hooks can now inject
-  shell environment into spawned commands without hard-coding env in
-  prompts or wrapper scripts.
-- **Stacked toast overlay** (#439) — status toasts can queue and render
-  together instead of overwriting each other.
-- **File @-mention frecency** (#441) — file mention suggestions learn
-  from recent selections via `~/.deepseek/file-frecency.jsonl`.
-- **Durable keybinding catalog** (#559) — `docs/KEYBINDINGS.md` is now
-  the source-of-truth audit for current shortcuts and the future
-  configurable-keymap registry.
-- **Runtime API quartet for whalescale-desktop integration** (#561, #562, #563,
-  #564, #567) — addresses whalescale#255/256/260/261:
-  - `[runtime_api] cors_origins` config / `--cors-origin URL` flag (repeatable) /
-    `DEEPSEEK_CORS_ORIGINS` env var, all stacking on top of the built-in
-    dev-origin defaults (#561 / whalescale#255).
-  - `PATCH /v1/threads/{id}` extended from `archived`-only to the full
-    editable field set: `allow_shell`, `trust_mode`, `auto_approve`, `model`,
-    `mode`, `title`, `system_prompt`. Empty string clears `title` /
-    `system_prompt`. New `title` field on `ThreadRecord` is additive — no
-    schema_version bump (#562 / whalescale#256).
-  - `archived_only=true` query param on `GET /v1/threads` and
-    `/v1/threads/summary`, backed by a new `ThreadListFilter` enum
-    (#563 / whalescale#260).
-  - `GET /v1/usage?since=&until=&group_by=<day|model|provider|thread>`
-    aggregates token totals + cost (via `pricing.rs`) across all
-    threads/turns. Empty time ranges yield empty `buckets` (never 404)
-    (#564 / whalescale#261).
-- **Language picker in first-run onboarding** (#566) — new step between
-  Welcome and ApiKey lists every shipped locale (`auto` / `en` / `ja` /
-  `zh-Hans` / `pt-BR`) with the native name (日本語, 简体中文, …) plus an
-  English label so the target language is reachable without already
-  speaking it. Hotkeys 1-5 select; persists immediately to
-  `~/.deepseek/settings.toml`.
-- **Windows + China install documentation** (#578) — expanded
-  `docs/INSTALL.md` with Windows source-build setup, Visual Studio Build
-  Tools / MSVC environment notes, rustup and Cargo mirror guidance, and
-  antivirus troubleshooting. *Thanks to
-  [@loongmiaow-pixel](https://github.com/loongmiaow-pixel) for this PR.*
+## [0.8.68] - 2026-07-10
 
 ### Changed
-- **Agent prompt now explicitly describes DeepSeek cache-aware behavior**
-  — long-session guidance explains why stable prompt prefixes, sub-agents,
-  RLM, and late compaction matter for V4 cache economics.
-- **Whale sub-agent nicknames now interleave Simplified Chinese with
-  English** (`Blue` / `蓝鲸` / `Humpback` / `座头鲸` / …). Pure cosmetic;
-  doubles the labeling pool size and gives a roughly even mix on each
-  new spawn.
-- **User memory docs + help polish** (#497, #569) — `/memory` is now
-  listed in slash-command help, supports `/memory help`, and the README
-  / configuration docs now point at the full `docs/MEMORY.md` guide and
-  document both `[memory].enabled` and `DEEPSEEK_MEMORY`. *Thanks to
-  [@20bytes](https://github.com/20bytes) for this PR.*
 
-### Fixed
-- **Compaction summaries are cache-aligned for DeepSeek V4** (#575, #580)
-  — when the summarized message prefix fits the large V4 context budget,
-  the summary request now reuses the original messages and appends the
-  summary instruction as a normal user message instead of rebuilding a
-  fresh `SUMMARY_PROMPT + dropped messages` input. This lets the summary
-  call benefit from DeepSeek prefix caching. *Thanks to
-  [@lloydzhou](https://github.com/lloydzhou) and
-  [@jeoor](https://github.com/jeoor) for the cost reports and concrete
-  strategy.*
-- **Windows Terminal API-key paste during onboarding** (#577) — the
-  setup wizard now handles Ctrl/Cmd+V before generic character input and
-  filters control/meta-modified keys out of the API-key text path.
-  *Thanks to [@toi500](https://github.com/toi500) for the report and
-  workaround details.*
-- **Terminal startup repaint** (#581) — the TUI clears the terminal
-  immediately after initialization so normal-screen startup no longer
-  leaves stale default-background rows above the first frame. *Thanks to
-  [@xsstomy](https://github.com/xsstomy) for the screenshot.*
-- **Markdown rendering for tables, bold/italic, and horizontal rules**
-  (#579) — transcript markdown now handles table rows, strips separator
-  rows, renders horizontal rules, applies inline bold/italic styles, and
-  avoids an infinite-loop edge case on unclosed markers. *Thanks to
-  [@WyxBUPT-22](https://github.com/WyxBUPT-22) for the PR, screenshots,
-  and tests.*
-- **Slash-prefix Enter activation** (#573) — typing a short prefix such
-  as `/mo` and pressing Enter now activates the first slash-command
-  match. *Thanks to [@melody0709](https://github.com/melody0709) for
-  the report.*
-- **macOS seatbelt blocked `~/.cargo/registry`** (#558) — `cargo publish`
-  / `cargo build` from inside the TUI's shell tool was getting
-  sandbox-denied. The seatbelt now allows read on `(param "CARGO_HOME")`
-  and write on the `registry/` and `git/` subpaths whenever the policy
-  isn't read-only. Honors `CARGO_HOME` env with a `$HOME/.cargo`
-  fallback.
-- **Stdio MCP servers now receive SIGTERM on shutdown** (#420) — instead
-  of SIGKILL via `kill_on_drop`. New `async fn shutdown` on
-  `McpTransport` overrides on `StdioTransport` to send SIGTERM and wait
-  up to 2s for graceful exit before drop fires SIGKILL as the backstop.
-  Wired into the engine's `Op::Shutdown` path so graceful exit is the
-  default. A Drop fallback still SIGTERMs on abnormal exit paths.
-- **Shell-spawned children get `PR_SET_PDEATHSIG(SIGTERM)` on Linux**
-  (#421) — the kernel sends SIGTERM the moment the parent (TUI) exits,
-  even on SIGKILL of the parent. Closes the leak window the cooperative
-  cancellation path can't cover. macOS / Windows watchdog tracked as a
-  follow-up; the existing `kill_on_drop` + process_group SIGKILL on
-  cancellation still cover normal shutdown there.
-- **npm install on older glibc now fails fast** (#555, #560, #556, #565)
-  — the prebuilt Linux x64 / arm64 binaries are now built via
-  `cargo zigbuild` targeting `x86_64-unknown-linux-gnu.2.28` /
-  `aarch64-unknown-linux-gnu.2.28`, lowering the requirement from glibc
-  ≥ 2.39 to ≥ 2.28. The npm postinstall also runs a Linux-only glibc
-  preflight that fails fast with a clear "build from source" message
-  when the host is incompatible (or musl). *Thanks to
-  [@staryxchen](https://github.com/staryxchen) (#556) and
-  [@Vishnu1837](https://github.com/Vishnu1837) (#565) for these PRs.*
-- **Shell tool `cwd` parameter now validated against the workspace
-  boundary** (#524) — the model could previously pass `cwd` paths
-  outside the workspace; now `exec_shell` runs `ToolContext::resolve_path`
-  on `cwd` like every other path-taking file tool, returning
-  `PathEscape` on violations. `trust_mode = true` still bypasses,
-  consistent with the file-tool pattern. *Thanks to
-  [@shentoumengxin](https://github.com/shentoumengxin) for this PR.*
-
-### Contributors
-
-First-time contributors to this release: **@staryxchen** (#556),
-**@shentoumengxin** (#524), **@Vishnu1837** (#565), **@20bytes**
-(#569), **@loongmiaow-pixel** (#578), and **@WyxBUPT-22** (#579).
-Welcome — and thank you.
-
-## [0.8.8] - 2026-05-03
+- Make the advertised Android/Termux release target buildable by generating
+  QuickJS bindings against the Android NDK instead of expecting an upstream
+  pre-generated `aarch64-linux-android` binding file, and give Android CLI/TUI
+  HTTP clients a preconfigured rustls root store (Mozilla WebPKI roots) so
+  standalone Termux processes stop panicking inside
+  `rustls-platform-verifier`'s JVM expectations (#4236, #4242).
+- Rebalance the bundled Constitution after the v0.8.67 prompt ablation: keep
+  the procedural policy tail in mode-specific layers, while restoring concise
+  behavioral guidance for momentum, causal investigation, constraint-first
+  decisions, mechanism-backed guarantees, and clean continuity.
+- Wire live catalog cache into provider/model pickers without dropping stale or
+  prior rows after TTL expiry / refresh failure (#4139). Remove the dead
+  `OFFERING_SEEDS` hand table so the bundled Models.dev catalog is the sole
+  seed source; pickers show a compact `stale` / `cache failed` chrome chip when
+  the Models.dev layer is past TTL or last refresh failed.
+- Make `work_update` the sole model-facing To-do / Work progress tool (#4132).
+  `checklist_*` and `todo_*` remain registered as hidden compat aliases for
+  transcript replay; `update_plan` stays Strategy metadata/context/route, not
+  a second checklist. Mode/approval prompts nudge the single surface.
+- Demote the bundled Models.dev snapshot to an offline/stale fallback after
+  live catalog refresh (#4188). ProviderLake precedence is live Models.dev >
+  bundled seed > legacy hardcoded completion names; pickers, inventory, and
+  subagent validation stay catalog-backed, and GhostyCode-only providers keep
+  defaults when Models.dev has no rows.
 
 ### Added
-- **User memory MVP** (#489–#493) — opt-in persistent note file
-  injected into the system prompt as a `<user_memory>` block.
-  - `# foo` typed in the composer appends a timestamped bullet
-    without firing a turn (#492).
-  - `/memory [show|path|clear|edit]` slash command for inline
-    inspection / editing hints (#491).
-  - `remember` model-callable tool so the agent can capture
-    durable preferences itself; auto-approved because writes are
-    scoped to the user's own file (#489).
-  - Hierarchy loader pulls `~/.deepseek/memory.md` (path
-    configurable via `memory_path` / `DEEPSEEK_MEMORY_PATH`) and
-    injects above the volatile-content boundary in the prompt
-    (#490).
-  - Default off; enable with `[memory] enabled = true` or
-    `DEEPSEEK_MEMORY=on` (#493).
-  - Full feature documentation in `docs/MEMORY.md`.
-- **Inline diff rendering for `edit_file` / `write_file`** (#505) —
-  tool results now emit a unified diff at the head of the body,
-  picked up by the existing diff-aware renderer with line numbers
-  and coloured `+`/`-` gutters. New `similar` crate dep.
-- **OSC 8 hyperlinks** (#498) — URLs in the transcript become
-  Cmd+click-openable in supporting terminals (iTerm2, Terminal.app
-  13+, Ghostty, Kitty, WezTerm, Alacritty). Clipboard path strips
-  the escapes so yanked text stays clean. Off-switch:
-  `[tui] osc8_links = false`.
-- **Retry/backoff visual countdown** (#499) — `⟳ retry N in Ms — reason`
-  banner ticks down during HTTP backoff. On exhaustion the row turns
-  red `× failed: <reason>` until the next turn starts.
-- **MCP server health chip** (#502) — colour-coded `MCP M/N` in the
-  footer's right-cluster: success / warning / error / muted by
-  reachability. Hidden when zero MCP servers are configured.
-- **Per-project config overlay** (#485) — `<workspace>/.deepseek/config.toml`
-  overlays a curated set of fields on top of the user-global config:
-  `model`, `reasoning_effort`, `approval_policy`, `sandbox_mode`,
-  `notes_path`, `max_subagents`, `allow_shell`, plus the
-  `instructions = [...]` array (#454). Pass `--no-project-config`
-  to bypass for one launch.
-- **Project-scope deny-list for credentials/redirects** (#417) —
-  `api_key`, `base_url`, `provider`, and `mcp_config_path` are
-  refused at project scope. A malicious
-  `<workspace>/.deepseek/config.toml` would otherwise be able to
-  exfiltrate prompts to an attacker-controlled endpoint by
-  swapping the user's credentials and target host with
-  project-controlled values, or redirect the MCP loader at a
-  config that spawns arbitrary stdio servers under the user's
-  identity. The denied key emits a stderr warning so a user who
-  expected the override sees the deny instead of a silent drop.
-- **Project-scope value-deny for the loosest postures** (#417
-  follow-up) — `approval_policy = "auto"` and
-  `sandbox_mode = "danger-full-access"` are pure escalation
-  values, denied unconditionally at project scope regardless
-  of the user's prior value. Sub-tightening comparisons
-  (e.g. user `"never"` → project `"on-request"` is allowed
-  even though it loosens) stay v0.8.9 follow-up because they
-  need a richer ordering check.
-- **`SSL_CERT_FILE` honored in the HTTPS client** (#418) — corporate
-  proxy / TLS-inspecting MITM users can now point at their custom
-  CA bundle and have it added alongside the platform's system
-  trust store. Tries PEM-bundle parsing first (covers single-cert
-  files too), falls back to DER. Failures log a warning and
-  continue — the existing system roots still apply, so a
-  malformed env var won't bring down the launch. Documented in
-  `docs/CONFIGURATION.md`.
-- **Execpolicy heredoc handling** (#419) — `normalize_command` now
-  strips heredoc bodies before shlex tokenization so a user's
-  `auto_allow = ["cat > file.txt"]` pattern matches the heredoc
-  form `cat <<EOF > file.txt\nbody\nEOF` cleanly. Recognises the
-  common forms (`<<DELIM`, `<<-DELIM`, `<<'DELIM'`, `<<"DELIM"`)
-  while leaving the here-string operator (`<<<`) untouched.
-  Without this fix, heredoc-form file writes would skip the
-  user's auto-approve list and route through the approval modal
-  even for explicitly-blessed commands.
-- **Sub-agent role taxonomy expansion** (#404) — adds `Implementer`
-  ("land this change with the minimum surrounding edit") and
-  `Verifier` ("run the test suite, report pass/fail with evidence")
-  to the existing `general` / `explore` / `plan` / `review` /
-  `custom` set. Each role has a distinct system prompt posture.
-  Documented in `docs/SUBAGENTS.md`.
-- **`docs/SUBAGENTS.md`** — full sub-agent reference: role taxonomy,
-  alias map, concurrency cap, lifecycle, session-boundary
-  classification, output contract.
-- **`docs/MEMORY.md`** — user-facing memory feature documentation.
-- **Competitive analysis doc** — `docs/COMPETITIVE_ANALYSIS.md`
-  catalogues capability matrix vs OpenCode and Codex CLI.
-- **Session prune helper + `/sessions prune <days>`** (#406 phase-1) —
-  drops persisted sessions older than N days from
-  `~/.deepseek/sessions/`. Skips the checkpoint subdirectory and
-  compares against metadata `updated_at` (not fs mtime, which can
-  lie after an rsync). 10 total tests cover the helper's contract
-  and the slash-command dispatch surface. Phase 2 (boot-prune +
-  retention policy) stays v0.8.9 work.
-- **`deepseek doctor --json`** now surfaces a `memory` block
-  (`enabled` / `path` / `file_present`) so operators can verify
-  memory configuration without booting the TUI.
-- **Tool-output spillover** (#422 + #423 + #500) — tool outputs over
-  100 KiB now spill to `~/.deepseek/tool_outputs/<id>.txt` from the
-  engine's tool-execution path. The model receives a 32 KiB head plus
-  a footer pointing at the spillover file (`Use read_file path=…`),
-  the tool cell renders an inline `full output: <path>` annotation in
-  live mode, and a 7-day boot prune keeps the directory bounded.
-  Spillover is skipped on error results so the model still sees the
-  failure message verbatim. The existing tool-details pager surfaces
-  the truncated head so the user can verify what the model saw.
+- Wire xAI device-code OAuth into `ghosty auth xai-device`, the TUI
+  `/auth xai-device` command, and guided provider setup, with comment-preserving
+  auth-mode persistence and loopback exchange coverage (#4257).
+- Add GPT-5.6 Sol, Terra, and Luna to the OpenAI API route, including their
+  1.05M context metadata, 128K output limits, pricing, and `max` reasoning
+  effort. Add Meta Model API as a first-class OpenAI-compatible provider for
+  Muse Spark 1.1 with 1M context, tool/reasoning metadata, provider aliases,
+  and both `META_MODEL_API_KEY` and Meta's `MODEL_API_KEY` credential names.
+- Catalog automation: `scripts/catalog_models_dev.py` refreshes secret-free
+  Models.dev / OpenRouter listings and validates the offline seed snapshot
+  (`snapshot --check`) without ever persisting API keys (#4117).
+- `/model` picker cycles six catalog views with `A` (Configured → Catalog →
+  Recent → Coding → Cheap → Long context) and richer row metadata from the
+  live/bundled catalog (context, max output, tools, reasoning, price/M,
+  freshness). Discoverability views do not auto-apply a surprising route
+  (#4115).
+
+- Workflow runs are now durable: every run appends to a
+  `.ghosty/workflow-runs.jsonl` journal and hydrates on startup, so
+  `workflow status` survives restarts; runs left `running` by a dead process
+  are recovered as failed (#4011). The transcript renders workflow tool
+  output as a run card (status, goal, children, progress, verification)
+  instead of a generic one-liner (#4038), and `workflow` accepts a `verify`
+  flag that runs post-completion verification gates and fails the run when
+  gates fail (#4013).
+- Hotbar sources for MCP tools and skills: MCP tool slots prefill the
+  composer (execution stays behind the normal tool-approval flow) and skill
+  slots activate through the existing `$skill` alias (#2068, #2069).
+- Mode & permission surface: Tab cycles Plan → Act → Operate; Shift+Tab
+  cycles the Agent permission posture (Ask / Auto-Review / Full Access) with
+  a footer permission chip; Ctrl+T cycles reasoning effort and Ctrl+Shift+T
+  opens the live transcript overlay. Operate is the orchestration mode
+  (delegate, wait, inspect, dispatch) and raises sub-agent fan-out while
+  focusing the Agents sidebar.
+- Provider lake facade: the provider/model pickers, hotbar, and model
+  inventory now enumerate configured providers' models from the bundled
+  catalog (with an `A` toggle to browse the full catalog), replacing the
+  hardcoded per-provider model table (#3830 follow-up).
+- Added Cursor-integrated-terminal dogfood evidence for the published v0.8.67
+  release, covering installed binary provenance, release/publication checks,
+  headless runtime smoke, setup QA, and remaining manual visual TUI checks.
+- README and README.zh-CN now point users to the community-maintained
+  GhostyCode for VS Code GUI frontend while clarifying that this repository's
+  `extensions/vscode/` scaffold remains the read-only Phase 0 viewer (#4035).
+
+### Fixed
+
+- Sub-agent waiting no longer peek→sleep polls: `agent(action="wait")` joins
+  children, unchanged peeks are throttled (~30s) with an anti-polling nudge,
+  and mode prompts teach the join primitive (#4097). Harvested from PR #4098
+  by [@Mr-Moon121](https://github.com/Mr-Moon121) (Jeffrey Luna).
+- `/provider` picker remembers catalog/configured view and highlighted row
+  across reopen, matching `/model` picker memory.
+- Mode picker roster is exactly Act / Plan / Operate (no Multitask, no
+  numeric `4`/`5` gaps). Legacy `yolo`/`4` remain invisible one-way
+  permission shorthand for Act + Bypass.
+
+- Fleet setup is a role/profile roster editor, not a provider-scoped model
+  picker: the Model step lists routes from every configured provider (not
+  only the active one), a picked route's provider is persisted explicitly in
+  the saved profile TOML (`provider = "..."`, never inferred from the model
+  id), and the loader/route resolver read that field back out verbatim. The
+  draft-preview ratify keypress no longer competes with a separate pager's
+  `g`/`G` scroll bindings — the exact TOML preview now renders inline on the
+  same Review step that ratifies it (#4093).
+- The headless `ghosty fleet run` CLI now launches workers on their profile-pinned route, not just records it on the receipt: `ghosty exec` gains a non-secret `--provider` flag, and a worker whose profile pins provider B is dispatched with `--provider B --model <B's model>` even when the parent session is on provider A (credentials still resolve from the worker's own environment; provider is never inferred from the model id). Workers with no profile-bound provider are unchanged — no `--provider`, run-level model. The interactive TUI spawns roster members in-process and does not yet honor the pinned provider (it uses the session provider); that remainder is tracked in #4193 (#4093).
+- The Fleet setup `m` model-assisted redraft no longer drops a picked
+  cross-provider route: the provider/model the operator chose are re-pinned
+  onto the drafted profile (a model draft is always `provider: None`), so
+  ratifying it keeps the explicit route instead of persisting an ambiguous,
+  provider-scoped profile (#4093).
+- Ratifying a Fleet profile now fails with a clear message when it pins a
+  provider that has no configured credentials, using the same
+  configured-provider check the model picker uses (#4093).
+- Workflow correctness: completion polling fails closed instead of
+  fabricating success when a sub-agent reports no terminal status; cancel
+  interrupts the JS VM (cancel handle + abort) and blocks further spawns;
+  and `budget.spent()` reports real manager-scope usage instead of always 0.
+- Sub-agent spawns validate the model↔provider pair before dispatch:
+  inherited/faster routes remap foreign models to the provider's catalog
+  default, and explicit pins fail fast with a diagnostic instead of an
+  upstream model-not-found error.
+- TUI stability: engine event drains break every 8–16 events / 8 ms to keep
+  input live (#1830, #2317, #1198); the terminal input pump restarts after
+  stall recovery on macOS/Linux too; the startup raw-mode probe no longer
+  leaks raw mode on timeout; recovery snapshots persist every 45 s during
+  long turns and the offline queue persists on every push (#1830);
+  queue/steer paths surface toasts while streaming (#2317, #1338); and
+  modal submit errors re-open the modal instead of being swallowed (#1198).
+- app-server hardening: `/v1/chat/completions` requires the bearer token;
+  errors return real 4xx/5xx statuses; request bodies and SSE frames are
+  size-limited; stdio `config get` redacts secrets and stdio shutdown reaps
+  the runtime child; graceful shutdown on SIGTERM/Ctrl+C; constant-time
+  token comparison; dropping the runtime bridge no longer blocks the
+  runtime.
+- Policy/config/secrets: user-layer ExecPolicy rules outrank agent-layer
+  rules; chained commands no longer propose trusted-prefix amendments;
+  config and secrets writes are atomic (with fsync) on all platforms; empty
+  provider chains no longer panic.
+- Core/state: paused jobs persist as paused across restarts; unarchive
+  updates the in-memory cache; tool dispatch has a timeout; MCP
+  notifications no longer receive responses; corrupted checkpoints surface
+  errors instead of loading empty state; the session index compacts instead
+  of growing unbounded; and recording thread-goal usage no longer
+  self-deadlocks the state store.
+- Runtime compaction summaries are now persisted into `/v1` thread records so
+  engine reloads and restarts preserve compacted context. Contributed by
+  MXAntian (@MXAntian) (#4091).
+- The TUI leaves xterm alternate-scroll mode off when mouse capture is disabled,
+  preserving native terminal text selection in light-theme/no-mouse-capture
+  sessions. Contributed by Nightt (@nightt5879) (#4088, #4026).
+- The public `/api/github/feed` endpoint is now forced dynamic on Cloudflare so
+  it returns live GitHub activity instead of a build-time empty feed.
 
 ### Changed
-- **Sub-agent concurrency cap raised to 10 by default** (#509) —
-  was 5; configurable via `[subagents].max_concurrent` (hard
-  ceiling 20). Running-count now ignores non-running, no-handle,
-  and finished handles so completed agents stop occupying slots.
-- **`SharedSubAgentManager` is `Arc<RwLock<...>>`** (#510) — read
-  paths take read locks, eliminating the multi-agent fan-out UI
-  freeze.
-- **Sub-agent output summarized before parent context** (#511) —
-  `compact_tool_result_for_context` now compresses
-  `agent_result` / `agent_wait` payloads instead of dumping the
-  full snapshot back into the parent's context window.
-- **`agent_list` defaults to current-session view** (#405) — each
-  manager mints a `session_boot_id` and stamps every spawn; agents
-  loaded from prior sessions are filtered unless
-  `include_archived=true` is passed. Each result carries a
-  `from_prior_session` flag.
-- **Concise todo / checklist update rendering** (#403) — repeat
-  `todo_update` / `checklist_update` calls render a one-line
-  `Todo #N: <title> → STATUS` card with full list still
-  reachable via Alt+V instead of dumping the entire item array on
-  every call.
-- **Compact `agent_spawn` rendering** (#409) — the generic tool
-  block for `agent_spawn` collapses to one header line in live
-  mode (`◐ delegate · agent-abc12 [running]`) since the
-  `DelegateCard` already owns live action progress. Transcript
-  replay keeps the full block.
-- **Plan panel role clarified** (#408) — drops the "No active
-  plan" placeholder when the panel is otherwise empty; documents
-  the panel's narrow role (`update_plan` tool output + `/goal` +
-  cycle counter, distinct from todos).
-- **Sub-agent description copy** — `agent_spawn` tool description
-  and `prompts/base.md` updated to reflect the new default cap of
-  10 (was stale "Max 5 in flight").
-- **`agent_spawn` / `agent_assign` schema descriptions** (#404
-  follow-up) — type/agent_name property descriptions now list
-  `implementer` and `verifier` so the model surfaces those roles
-  without having to discover them from `docs/SUBAGENTS.md`. Adds
-  the long-form aliases (`builder` / `validator` / `tester`) on
-  `agent_assign` for parity with the alias map.
-- **Multi-day duration formatting** (#447) — `humanize_duration`
-  now caps at two units and promotes through h/d/w boundaries.
-  Long-running sessions render as `2d 3h` instead of `188415s`,
-  and the previous "192m 30s" cycle output becomes `3h 12m`. The
-  `/goal` status line picks up the same formatter so multi-day
-  goal-elapsed times stay readable.
-- **Accessibility flag** (#450) — `NO_ANIMATIONS=1` env var now
-  forces `low_motion = true` and `fancy_animations = false` at
-  startup, regardless of the saved `settings.toml`. Recognises
-  the standard truthy spellings (`1`, `true`, `yes`, `on`).
-  Documented end-to-end in the new `docs/ACCESSIBILITY.md`,
-  including the existing `low_motion` / `calm_mode` /
-  `show_thinking` / `show_tool_details` toggles for
-  screen-reader users.
-- **Cumulative session-elapsed footer chip** (#448) — a
-  low-priority `worked 3h 12m` chip in the footer's right
-  cluster shows session age once it crosses 60s. Hidden during
-  the first minute of a launch so a fresh start doesn't flash a
-  ticker. Drops first under narrow widths so the existing chips
-  (coherence / agents / replay / cache / mcp) keep their slots.
-  Sampled at props-build time (matches the `retry` capture
-  pattern) so render stays pure for tests.
-- **`instructions = [...]` config array** (#454) — declare
-  additional instruction files (`./AGENTS.md`,
-  `~/.deepseek/global.md`, …) and they're concatenated into the
-  system prompt in declared order, above the skills block. Each
-  file is capped at 100 KiB; missing files log a warning and are
-  skipped instead of failing the launch. Project config replaces
-  the user-level array wholesale (the typical "merge" pattern is
-  for users who want both — they list `~/global.md` inside the
-  project array). Documented in `config.example.toml`.
-- **Keyboard-enhancement flags pop on suspend paths too** (#443
-  follow-up) — `pause_terminal` (Ctrl+Z / shell-suspend) and
-  `external_editor::spawn_editor_for_input` (composer `$EDITOR`
-  launch) now pop the flags before handing the terminal to the
-  child process, matching the existing shutdown and panic-hook
-  paths. Defense-in-depth: if a future code path enables the
-  flags explicitly, the suspend handlers won't leak them to a
-  Vim / less / shell child that hasn't asked for them.
-- **`load_skill` tool** (#434) — model-callable tool that takes a
-  skill id and returns the SKILL.md body plus the sibling
-  companion-file list in one call. Faster than the existing
-  `read_file` + `list_dir` dance; surfaces the skill's
-  description as a quote block at the head so a single tool
-  result is self-contained. Resolves the skills directory with
-  the same hierarchy `App::new` uses (`.agents/skills` →
-  `skills` → `~/.deepseek/skills`). Available in Plan and
-  Agent/Yolo modes.
-- **Kitty keyboard protocol opt-in** (#442) — pushes
-  `DISAMBIGUATE_ESCAPE_CODES` at startup so terminals that
-  support the protocol (Kitty, Ghostty, Alacritty 0.13+,
-  WezTerm, recent Konsole / xterm) report unambiguous events
-  for Option/Alt-modified keys, plain Esc, and multi-byte
-  sequences. Legacy terminals silently discard the escape and
-  see no change. Only the disambiguation tier is pushed —
-  release-event reporting was deliberately skipped because the
-  existing handlers would mis-route releases as duplicate
-  presses. The flags are popped on shutdown / panic / suspend
-  paths (#443).
-- **Multi-directory skill discovery** (#432) — the system
-  prompt's `## Skills` listing and the `load_skill` tool now
-  walk every candidate directory in the workspace plus the
-  global default: `<workspace>/.agents/skills` →
-  `<workspace>/skills` → `<workspace>/.opencode/skills` →
-  `<workspace>/.claude/skills` → `~/.deepseek/skills`. Skills
-  installed for any AI-tool convention show up in the same
-  catalogue. Name conflicts resolve first-match-wins per the
-  precedence order so workspace-local skills shadow user/global
-  ones. New `skills_directories()` and
-  `discover_in_workspace()` helpers in
-  `crates/tui/src/skills/mod.rs`.
-- **`tool.spillover` audit event** (#500 polish) — emit a
-  discrete audit-log entry whenever `apply_spillover` writes a
-  spillover file, so operators tailing
-  `~/.deepseek/audit.log` can correlate large-output episodes
-  with disk-usage growth in `~/.deepseek/tool_outputs/`. Fires
-  in both the sequential and parallel tool paths.
-- **Prompt stash** (#440) — Ctrl+S in the composer parks the
-  current draft to a JSONL-backed stash at
-  `~/.deepseek/composer_stash.jsonl` (no-op on empty composer).
-  `/stash list` shows parked drafts (oldest first, with one-line
-  previews and timestamps); `/stash pop` restores the most
-  recently parked draft into the composer (LIFO). Self-healing
-  parser drops malformed lines instead of poisoning the stash.
-  Capped at 200 entries; multiline drafts round-trip intact via
-  JSON's newline escaping.
-- **`deepseek pr <N>` subcommand** (#451) — fetches PR
-  title/body/diff via `gh` and launches the interactive TUI
-  with a review prompt pre-populated in the composer. The
-  diff is capped at 200 KiB (codepoint-safe truncation) so a
-  massive PR doesn't blow the context window before the user
-  hits Enter. Optional `--repo <owner/name>` and `--checkout`
-  flags; falls back gracefully with an actionable error
-  message if `gh` isn't on PATH. Adds a new
-  `TuiOptions::initial_input` plumb that any future caller can
-  reuse to drop the model into a session with text already
-  typed.
-- **`/stash clear` subcommand** (#440 polish) — wipes the
-  entire stash file and reports how many parked drafts were
-  dropped. Pairs with `/stash list` and `/stash pop` so the
-  user can fully manage the stash from inside the TUI without
-  reaching for `rm`.
-- **`/hooks` read-only listing** (#460 MVP) — slash command
-  enumerates configured lifecycle hooks grouped by event,
-  showing each hook's name, command preview, timeout, and
-  condition. Notes the global `[hooks].enabled` flag's state.
-  No more `cat ~/.deepseek/config.toml` to debug "did my hook
-  actually load". The picker / persisted enable-disable
-  surface from #460 stays as v0.8.9 follow-up. Available via
-  `/hooks` or `/hooks list`; aliased to `/hook`. Localized in
-  en/ja/zh-Hans/pt-BR.
-- **`deepseek doctor` reports cross-tool skill dirs** (#432
-  follow-up) — both the human-readable and JSON outputs now
-  surface `.opencode/skills/` and `.claude/skills/` presence /
-  count, so operators can confirm at a glance whether any
-  cross-tool skill folder is contributing to the merged
-  catalogue. Empty dirs are omitted from the human-readable
-  output to keep the report scannable; JSON always emits all
-  five slots (`global`, `agents`, `local`, `opencode`,
-  `claude`) for stable machine consumption.
-- **`deepseek doctor` reports storage surfaces** (#422 / #440 /
-  #500 follow-up) — new `Storage:` section surfaces the
-  tool-output spillover dir
-  (`~/.deepseek/tool_outputs/`) with file count and the
-  composer stash file
-  (`~/.deepseek/composer_stash.jsonl`) with parked-draft
-  count. Mirrored under `storage.{spillover,stash}` in the
-  JSON output so `deepseek doctor --json` keeps a stable
-  schema.
-- **`/hooks events` subcommand** (#460 polish) — lists every
-  supported `HookEvent` value with a short blurb so users can
-  discover which events to target in `[[hooks.hooks]]` entries
-  without reading source. Ordered lifecycle → per-tool →
-  situational, stable across releases.
-- **Structured-Markdown compaction template** (#429) —
-  `prompts/compact.md` switches from the legacy
-  Active-task/Files-touched/Key-decisions/Open-blockers
-  framing to the spec'd structure: Goal / Constraints /
-  Progress (Done / In Progress / Blocked) / Key Decisions /
-  Next step. The richer Progress sub-bullets help long
-  resumed sessions distinguish "what's verified done" from
-  "what's mid-flight" — useful when the model writes
-  `.deepseek/handoff.md` before a long break. Backwards-
-  compat: existing handoff.md files continue to render fine
-  because the loader injects them as plain markdown (the
-  template only guides what NEW handoffs look like). The
-  pinned-tool-output configurability part of #429's spec
-  stays a v0.8.9 follow-up — that requires changes to
-  `cycle_manager.rs` compaction logic itself.
-- **`tool_call_before` / `tool_call_after` / `message_submit` /
-  `on_error` hooks all fire now** (#455 observer-only slice) —
-  these events were defined in the `HookEvent` enum but never
-  fired from production code. Wired through:
-  `tool_call_before` and `tool_call_after` fire from
-  `tool_routing.rs`; `message_submit` fires from
-  `dispatch_user_message` before engine dispatch; `on_error`
-  fires from `apply_engine_error_to_app` before the error cell
-  reaches the transcript. Hook contexts populate the relevant
-  fields (`tool_name` + `tool_args` / `tool_result`,
-  `message`, `error`). Hooks remain read-only in this slice;
-  argument / result / message mutation is a v0.8.9 follow-up
-  because it needs a synchronous-gate contract that doesn't
-  exist today. Combined with the existing `session_start` /
-  `session_end` / `mode_change` events, every variant in the
-  `HookEvent` enum now has a live producer. Each fire is
-  fast-path-gated by
-  `HookExecutor::has_hooks_for_event(event)` so per-tool
-  dispatch never pays for `HookContext` allocation when the
-  user has no hooks configured (the common case).
-- **RLM tool family** (#512) — `rlm` tool cards map to
-  `ToolFamily::Rlm` and render `rlm`, not `swarm`. Stale "swarm"
-  wording cleaned out of docs / comments / tests.
-- **Foreground RLM visible in Agents sidebar** (#513 — stopgap)
-  — projection now shows foreground RLM work; full async
-  lifecycle remains v0.8.9.
 
-### Fixed
-- **`Don't auto-approve git -C ...`** (#416, shipped 2026-05-03) —
-  v0.8.8 release runtime fix; foundation for the rest of the
-  stabilization batch.
-- **Self-update arch mapping** (#503) — `update.rs` uses release
-  asset naming (`arm64`/`x64`) instead of raw Rust constants
-  (`aarch64`/`x86_64`); rejects `.sha256` siblings as primary
-  binaries.
-- **Composer Option+Backspace deletes by word** (#488) — was
-  deleting by character.
-- **Offline composer queue is session-scoped** (#487) — legacy
-  unscoped queues fail closed instead of leaking content into
-  unrelated chats.
-- **`display_path` test race + Windows separator** (#506) —
-  tests no longer mutate `$HOME`; `display_path_with_home` walks
-  components and joins with `MAIN_SEPARATOR_STR` so Windows shows
-  `~\projects\foo` not `~\projects/foo`.
-- **Footer reads statusline colours from `app.ui_theme`** (#449) —
-  was using a bespoke palette.
-- **Keyboard-enhancement flags pop on panic exit too** (#443/#444) —
-  raw-mode startup probe is now bounded by a configurable
-  timeout.
-- **CI workflow cleanup** (#507) — pruned three duplicated/dead
-  workflows (`crates-publish.yml`, `parity.yml`, `publish-npm.yml`);
-  `release.yml` `build` job now allows `parity` to be skipped on
-  manual `workflow_dispatch`; release-runbook reconciled.
-- **Slash-menu layout jitter on Windows** — typing through a
-  `/foo` autocomplete used to shrink the matched-entry count,
-  which shrank the composer height every keystroke, which forced
-  the chat area above to repaint. On Windows 10 PowerShell + WSL
-  the per-cell write cost made the jitter visible. Composer now
-  reserves its panel-max envelope for the whole slash/mention
-  session so the chat-area Rect stays stable; the menu still
-  renders only the entries that actually match.
+- Tool-hang watchdog trimmed from 15 minutes to 10 (#1862); approval modal
+  footer hints use a higher-contrast tier (#3380); status/mode copy is
+  disclosed once across header, footer, cards, and sidebar instead of
+  repeated per layer.
+- Removed the unused `tui::whale_routes` taxonomy module and its tests.
+  Contributed by Darrell Thomas (@DarrellThomas) (#4041, #3852).
 
-- **Linux ARM64 prebuilt binaries** — the release workflow now publishes
-  `deepseek-linux-arm64` and `deepseek-tui-linux-arm64` (built natively on
-  GitHub's `ubuntu-24.04-arm` runner). The npm wrapper picks them up
-  automatically on `arm64` Linux hosts, so HarmonyOS thin-and-light,
-  openEuler/Kylin, Asahi Linux, Raspberry Pi, AWS Graviton, etc. now work
-  with a plain `npm i -g deepseek-tui`.
-- **Interactive TUI hangs on `working.` at 100% CPU (#549)** — the event
-  loop's blocking terminal poll starved the tokio runtime, preventing the
-  engine task from dispatching the API request. Fixed by yielding to the
-  scheduler before each poll cycle and clamping the event-poll timeout to
-  a minimum of 1ms so a zero-timeout hot-loop can't monopolize the thread.
-- **Backspace key inserts "h" instead of deleting (#550)** — terminals
-  that send `^H` (Ctrl+H) for Backspace were not recognized. Added
-  `is_ctrl_h_backspace()` guard in both the composer and API-key input
-  handlers so Ctrl+H is treated as a delete, matching the existing
-  `KeyCode::Backspace` behavior.
+### Deprecated
+
+- YOLO mode: `--yolo`, `default_mode = "yolo"`, and the hotbar YOLO action
+  now map to Act + Full Access permissions via a compatibility shim and
+  show a one-shot deprecation notice; removal is planned for 0.9.0.
+
+## [0.8.67] - 2026-07-06
+
+### Added
+
+- The model you select in `/model` is now the operator: fleet workers whose
+  task spec and roster profile pin no model inherit the active session route
+  instead of a hardcoded `auto` sentinel, matching the pinned operator row in
+  `/fleet roster`. Task-level and profile model overrides still win, and
+  route receipts record which source applied (`task.model`,
+  `agent_profile.model`, or `run.model`).
+- Added the `/workflow` command (aliases `/workflows`, `/wf`) as the user
+  opt-in to workflow orchestration. Bare `/workflow` orchestrates the current
+  work — the model synthesizes the objective from the conversation context;
+  `/workflow <objective>` narrows the run; `/workflow status [run_id]` and
+  `/workflow cancel <run_id>` relay typed run receipts without starting new
+  runs.
+- Bare `/goal` with no active goal now declares a goal from the conversation
+  context via `create_goal` instead of printing usage; with an active goal it
+  remains the status readout, and explicit `/goal <objective>` is unchanged.
+- Added the constitution-first setup wizard: a unified `/setup` shell with
+  resume, back navigation, and skip-retry state; provider/model readiness
+  cards with a custom-provider form and provider-picker detail layout; a
+  runtime posture card with preset application and project-override warnings;
+  a setup verification report; and transactional setup persistence with
+  secret redaction and rollback (#3402, #3403, #3404, #3405, #3406, #3410,
+  #3411).
+- Added a structured user-global constitution with a deterministic renderer,
+  prompt-block injection, guided principle authoring with preview and preset
+  save, and a `/constitution` manager command as the primary constitution
+  management surface, with file state shown in setup and actions surfaced in
+  diagnostics (#3793, #3806, #3811).
+- Added model-assisted constitution and fleet-profile drafting behind an
+  explicit ratify gate, with untrusted-draft provenance recorded so
+  model-authored text is never applied silently. Updating users keep their
+  existing constitution unchanged, and a localized constitution checkpoint is
+  required after update (#3794).
+- Added the Hotbar route editor v1 with route-switch slot actions and support
+  for custom model routes, plus a configured-provider route manager for
+  `/provider` and `/model` with a missing-auth handoff into provider key
+  entry (#2066, #3830, #3831).
+- Added auto-discovery of `.ghosty/rules/` and `.claude/rules/`
+  directories as project context, with a total byte-budget cap on the
+  assembled rules block. Contributed by maple (@yekern).
+- Exposed `context_input_budget_for_route` from the engine so external
+  integrations can reuse route budget math. Contributed by hexin
+  (@h3c-hexin).
+- Added GUI config persistence to the runtime API. Contributed by @gaord.
+- Added a website localization matrix with a locale registry and drift
+  checks. Harvested from #3763 by @idling11 (#3090).
+- Added `doctor` detection of half-applied setup state, and startup milestone
+  tracing for boot-performance diagnosis.
+- Added a v0.8.67 computer-use dogfood prompt that covers the Cursor-terminal
+  QA flow, headless gates, setup, sub-agent completion, Fleet, Workflow, model
+  pricing, and release evidence collection.
+- Fleet: local worker memory usage is now reported, including retained memory
+  while a task is in Running status. Contributed by @cyq1017 (#3901).
+- Website: community hub, constitution thesis page and constitution-centered
+  homepage, models page generated from the provider registry, docs dark mode
+  and full SEO metadata/sitemap coverage, terminal player for real
+  constitution traces, and a live star badge and version.
+- Added Meituan LongCat as a first-class OpenAI-compatible provider
+  (`longcat`, with `long-cat`, `meituan-longcat`, and `meituan` aliases),
+  `LONGCAT_API_KEY` discovery, the `LongCat-2.0` default model, provider
+  picker wiring, model completions, provider docs, and web provider facts.
+- Fleet: added per-provider setup cards (Persistence, Constitution, Hotbar,
+  Tools/MCP, Remote Runtime) with a unified setup catalog and provider-specific
+  credential links. Provider setup progress is persisted transactionally with
+  rollback guards, Codex OAuth is kept out of provider key storage, and a
+  headless QA contract verifies setup readiness across providers.
+- Fleet: added Fleet starter profiles with role-aware loadouts (scout→Fast,
+  manager→Inherit, etc.), `/fleet setup` profile-authoring wizard, Fleet
+  effective-permission recording, and route intent-source tracking.
+- Fleet: added 'operator' as a built-in Fleet roster member — the preferred
+  helm Fleet slot for workflow coordination. Operator plans, routes, reviews
+  outputs, and calls other Fleet slots as needed. This is a roster role, not a
+  separate app mode. The full Operation/Operate-mode architecture is deferred
+  to 0.9.0.
+- Workflow: declarative workflows now run through the production driver, the
+  workflow tool is wired to sub-agent dispatch, public Workflow surfaces are
+  renamed, and typed workflow-run and status receipts are emitted for
+  debugging and verification.
+- Added provider-agnostic Fleet rosters and loadouts: provider-specific
+  subagent limits, launch concurrency, and admission caps are derived from
+  config without hardcoding any single provider.
+- Added Workflow runtime foundations: the internal JS authoring/runtime crates
+  compile and replay example workflows. 0.8.67 ships the `/workflow` opt-in,
+  production-driver dispatch path, sub-agent task handoff, and typed run/status
+  receipts; richer authoring UX and the full TUI run view remain tracked for
+  v0.8.68 (#2974, #4038).
 
 ### Changed
-- **npm `postinstall` failure messages** — when no prebuilt is available for
-  the host's `os.platform() / os.arch()` combo, the wrapper now prints the
-  full `cargo install` fallback recipe and a link to
-  [`docs/INSTALL.md`](docs/INSTALL.md) instead of just the bare error.
-- **`DEEPSEEK_TUI_OPTIONAL_INSTALL=1`** — new env knob that downgrades a
-  postinstall failure to a warning + `exit 0`, so CI matrices that include
-  unsupported platforms don't fail the whole `npm install`.
 
-### Docs
-- New [`docs/INSTALL.md`](docs/INSTALL.md) — every supported platform,
-  prebuilt vs. `cargo install` vs. manual download, cross-compiling x64 → ARM64
-  Linux with `cross` or `gcc-aarch64-linux-gnu`, and a troubleshooting section
-  covering the common `Unsupported architecture`, `MISSING_COMPANION_BINARY`,
-  and self-update mismatch errors.
-- README and `README.zh-CN.md` now have an explicit **Linux ARM64** quickstart
-  pointing ARM64 users at `cargo install deepseek-tui-cli deepseek-tui --locked`
-  for v0.8.7 and at `npm i -g deepseek-tui` for v0.8.8+.
-
-### Releases
-- npm wrapper publish remains manual (npm 2FA OTP requirement).
-- GitHub release automation depends on `RELEASE_TAG_PAT` secret —
-  without it `auto-tag.yml` creates the tag but `release.yml`
-  doesn't fire.
-
-## [0.8.7] - 2026-05-03
-
-### Fixed
-- **Selection across transcript cell types** — the selection-tightening from
-  v0.8.6 (#383) restricted copy/select to user and assistant message bodies
-  only, so text in system notes, thinking blocks, and tool output could not be
-  copied. v0.8.7 removes the body-start gate; the rendered transcript block is
-  fully selectable again.
-
-## [0.8.6] - 2026-05-03
-
-### Added
-- **Long-session survivability by default** (#402) — capacity control and
-  compaction defaults are enabled, transcript history is bounded, persisted
-  sessions are capped, and oversized history folds into archived context
-  placeholders instead of freezing the TUI.
-- **v0.8.6 feature batch** (#373-#402) — adds goal tracking, cache-hit chips,
-  cycle-boundary visualization, file-tree pane, `/share`, `/model auto`,
-  user-defined slash commands, `/profile`, LSP diagnostic wiring,
-  crash-recovery, self-update, `/init`, `/diff`, patch-aware `/undo`,
-  `/edit`, inline diff highlighting, smart clipboard, native-copy escape,
-  right-click context menus, clickable file:line styling, and MCP Phase A.
-
-### Fixed
-- **Lag and rendering regressions** (#399, #400) — moves git/file-tree work
-  off the UI thread where possible, bounds render history, and tightens redraw
-  behavior to avoid sidebar/chat text bleed-through.
-- **Release-hardening follow-ups** — `/share` now writes via secure temp files,
-  self-update uses secure same-directory temps with Windows-safe replacement,
-  and docs/rustfmt release gates are clean.
-
-## [0.8.4] - 2026-05-02
-
-### Added
-- **Localization expansion (Phase 1, #285)** — every slash command's help
-  description, the full `/tokens` / `/cost` / `/cache` debug output, the
-  footer state and chip text, and the help-overlay section headings are
-  now translated for all four shipped locales (`en`, `ja`, `zh-Hans`,
-  `pt-BR`). Set the language with `/config locale zh-Hans` (or
-  `LANG=zh_CN.UTF-8` / `LC_ALL=zh_CN.UTF-8` from the shell). Non-Latin
-  scripts render via the same `unicode_width` plumbing the existing 27
-  chrome strings already use; the `shipped_first_pack_has_no_missing_core_messages`
-  test enforces full coverage across all four locales for every new
-  `MessageId`. Tool descriptions sent to the model and the base system
-  prompt intentionally remain English (training-data alignment, prefix
-  cache stability).
-  - Phase 1a (#294): 44 new IDs covering slash commands.
-  - Phase 1b (#295): 13 new IDs covering `/tokens` / `/cost` / `/cache`
-    debug output. Templates use `{placeholder}` substitution so a
-    translator can re-order args freely.
-  - Phase 1c (#296): 11 new IDs covering footer state, sub-agent chip,
-    quit-confirmation toast, and help-overlay section labels.
-- **Stable cache prefix** (#263) — five companion fixes to keep the
-  DeepSeek prefix cache stable across turns: drop volatile fields from
-  the working-set summary block (#280, #287), place handoff and
-  working-set after the static prompt blocks (#288 → #292), memoise the
-  tool catalog so descriptions stay byte-stable (#289), sort
-  `project_tree` and `summarize_project` output (#290), and use a unique
-  fallback id for parallel streaming tool calls so downstream tool-result
-  routing doesn't match the first call twice (#291). The combined effect
-  is a meaningful jump in cache hit rate after the third turn.
+- Clarified the Fleet coordination hierarchy and made roles carry real
+  doctrine: the **operator** (the session's `/model` selection) runs the
+  operation and assigns managers to workflows; a **manager** is the middle
+  manager of exactly one workflow. The built-in **reviewer** is now explicitly
+  adversarial (assume the change is broken, try to refute it), and the review
+  sub-agent intro adopts the same framing. Built-in `manager`/`operator`/
+  `reviewer` roster members now ship role `instructions` that flow into worker
+  prompts on both the Fleet task-spec and agent/workflow `profile:` spawn
+  paths; custom profiles override them via the same `instructions` field.
+- Removed the decorative Fleet vocabulary that never routed differently:
+  the `tool-heavy` slot and the `strong`/`balanced`/`deep-reasoning`/`code`/
+  `review`/`tool-heavy` loadout tiers. `inherit` (the operator's route) and
+  `fast` (the provider's faster class) remain; retired names in existing
+  configs keep parsing (as custom labels) with identical auto routing, and
+  the `/fleet setup` model-class step now offers only the real choices.
+- Raised the default subagent concurrency for high-throughput fanout:
+  `max_subagents` default 20 → 64 (config ceiling 128) and the queued+running
+  admission cap 200 → 1024. Users on metered plans who want the old behavior
+  can set `max_subagents = 20` in config.toml.
+- Renamed the internal `whaleflow` subsystem to `workflow` across the
+  workspace: the `ghosty-whaleflow`/`ghosty-whaleflow-js` crates become
+  `ghosty-workflow`/`ghosty-workflow-js`, Rust identifiers and JS bridge
+  symbols are renamed, the `GHOSTY_WHALEFLOW_JS_*` environment variables
+  become `GHOSTY_WORKFLOW_JS_*`, and the authoring/RFC docs move to
+  `WORKFLOW_AUTHORING.md` and `WORKFLOW_EXTERNAL_MEMORY.md`. Historical
+  changelog and retro-ledger entries keep the old name as a record.
+- Documented the Homebrew rollout strategy and added a distribution-channel
+  check to the release checklist. Harvested from #3760 by @idling11 (#3489).
+- Paused Linux RISC-V prebuilt release and nightly artifacts because
+  `rquickjs-sys` 0.12.0 does not ship `riscv64gc-unknown-linux-gnu` bindings;
+  installers, docs, and update paths now treat RISC-V as unsupported until
+  upstream bindings or a bindgen-enabled build lands.
+- Made the approval prompt calm, compact, and honest, and centered the
+  first-run follow-up on the constitution; first-run onboarding now hands off
+  into the setup wizard, and the language picker offers every shipped locale
+  (#3929).
+- Startup performance: boot janitors and store scans no longer block the
+  first frame, `@mention` completion no longer re-walks the workspace per
+  keystroke, and idle offline-queue clones and duplicate tool-output hashing
+  were eliminated.
+- Clarified the misleading "Ctrl+B backgrounds this command" shell wording
+  (#3859) and the hotbar help shortcuts. Docs contribution by Chanhyo Jung
+  (@roian6).
+- Documented the enforced repo-law invariants, the constitution flow, and the
+  `/fleet setup` profile-authoring wizard; aligned `permissions.toml` action
+  docs. Docs contribution by @greyfreedom.
+- Bumped web dependencies: wrangler 4.103.0 → 4.107.0, mermaid 11.15.0 →
+  11.16.0, vitest 4.1.8 → 4.1.9 (@dependabot).
+- Backfilled v0.8.67 regression coverage across sub-agent completion, budget
+  exhaustion, delegate ordering, provider onboarding, setup scroll, model
+  catalog pricing, Fleet routing, and Workflow gates (#4076).
+- Split the large TUI debug command group and palette/theme internals into
+  smaller modules without changing user-visible behavior (#4078, #4081).
 
 ### Fixed
-- **Agent-mode shell exec could not reach the network** (#272) — the seatbelt
-  default policy denies all outbound network including DNS, so any
-  `exec_shell` command needing the network (`curl`, `yt-dlp`, package
-  managers, …) failed in Agent mode unless the user dropped to Yolo. The
-  engine now elevates the sandbox policy to `WorkspaceWrite { network_access:
-  true, … }` for both Agent and Yolo. Plan mode is unchanged (read-only
-  investigation never registers the shell tool). The application-level
-  `NetworkPolicy` (`crates/tui/src/network_policy.rs`) remains the only
-  outbound-traffic boundary.
-- **`/skill install <github-repo-url>` failed with `invalid gzip header`** (#269)
-  — `https://github.com/<owner>/<repo>` parsed as a raw direct URL, so the
-  installer downloaded the HTML repo page and tried to gzip-decode HTML.
-  Bare GitHub repo URLs (with or without `.git`, with or without `www.`,
-  with or without a trailing slash) now route to the `GitHubRepo` source the
-  same as `github:<owner>/<repo>`. URLs that already point at a specific
-  archive / blob / tree path still go through `DirectUrl`.
-- **V4 Pro discount expiry extended** (#267) — DeepSeek extended the V4 Pro 75%
-  promotional discount from 2026-05-05 15:59 UTC to 2026-05-31 15:59 UTC. Without
-  this update the TUI would have started showing 4× the actual billed cost on
-  May 6 onwards. Verified at https://api-docs.deepseek.com/quick_start/pricing.
 
-## [0.8.3] - 2026-05-01
-
-### Fixed
-- **Skills prompt referenced fabricated paths** — `render_available_skills_context`
-  rendered each skill's file as `<skills_dir>/<frontmatter-name>/SKILL.md`,
-  which did not exist when the directory name differed from the frontmatter
-  `name` (community installs, manually-placed skills). `Skill` now carries the
-  real path captured at discovery and renders that.
-- **Missing-companion error was hostile to direct GitHub Release downloaders**
-  (#258) — replaced "Build workspace default members to install it" wall of
-  text with a concrete three-path checklist: `npm install -g deepseek-tui`,
-  `cargo install deepseek-tui-cli deepseek-tui --locked`, or downloading both
-  `deepseek-<platform>` AND `deepseek-tui-<platform>` from the same Release
-  page. `DEEPSEEK_TUI_BIN` stays as a power-user fallback.
-
-### Added
-- **Privacy: `$HOME` contracts to `~` in viewer-visible paths** — the TUI,
-  `deepseek doctor`, `deepseek setup`, and onboarding now contract the home
-  directory to `~` in every path shown on screen, so screenshots, screencasts,
-  and pasted help output do not leak the OS account name. Persisted state,
-  audit log, session checkpoints, and LLM-bound system prompts intentionally
-  keep absolute paths for full fidelity.
-- **`crates.io` badge** alongside the CI and npm badges in both English and
-  Simplified Chinese READMEs.
-- **Engine decomposition** (#227) — `core/engine.rs` is split into focused
-  submodules (`engine/{streaming,turn_loop,dispatch,tool_setup,tool_execution,tool_catalog,context,approval,capacity_flow,lsp_hooks,tests}.rs`).
-  No behavior change; preparation for the future agent-loop work.
-
-### Tests
-- RLM bridge: `batch_guard` extracted and tested for the empty-batch and
-  oversize-batch invariants; depth-guard fallback covered (partial #231).
-- Persistence: schema-version rejection covered for `load_session`,
-  `load_offline_queue_state`, `runtime_threads::load_turn`,
-  `runtime_threads::load_item` (partial #233).
-- Command palette: `[disabled]` server description tag (closes the
-  remaining #197 acceptance gap).
-- Protocol-recovery contract tests now scan the engine submodules in
-  addition to `engine.rs` so the decomposition refactor doesn't silently
-  hide the fake-wrapper marker assertions.
-
-### Issue triage
-- 10 issues closed with verification commits cited (#247, #235, #197,
-  #250, #234, #243, #238, #236, #239, #195).
-
-## [0.8.2] - 2026-05-01
-
-### Fixed
-- **Windows release build (LNK1104)** — drop the `deepseek` shim binary in
-  `crates/tui` that 0.8.1 introduced for the bundled `cargo install`. It
-  produced a second `target/release/deepseek.exe` that collided with the
-  `deepseek-tui-cli` artifact during workspace builds; the second linker
-  invocation hit `LNK1104: cannot open file deepseek.exe` on Windows. The
-  cli crate is now the single source of `deepseek`; workspace default
-  members still produce both binaries (one per crate).
-- **npm wrapper offline robustness** — `bin/deepseek(-tui).js` no longer
-  re-fetches the GitHub-hosted SHA-256 checksum manifest on every invocation.
-  When the binary is already installed and its `.version` marker matches the
-  package version, the wrapper trusts the local file. The manifest is fetched
-  lazily on actual download (first install or `DEEPSEEK_TUI_FORCE_DOWNLOAD=1`),
-  so GitHub flakes, captive portals, corporate proxies, and offline state no
-  longer break every command.
-
-### Added
-- **Model-visible skills block** — installed skills (name, description, file
-  path) are now exposed in the agent's system prompt under a `## Skills`
-  section, with progressive disclosure: bodies stay on disk, the model opens a
-  specific `SKILL.md` only when it decides to use that skill. Capped at a 12k
-  prompt budget with 512-char per-description truncation. Threaded through
-  `EngineConfig.skills_dir` so the TUI app, exec agent, and runtime thread
-  manager all populate it from `Config::skills_dir()`.
-- **Simplified Chinese README** (`README.zh-CN.md`) with cross-link from the
-  English README.
-
-### Changed
-- **`cargo install` UX** — to install the canonical `deepseek` command,
-  `cargo install deepseek-tui-cli` (the historical path). The 0.8.1
-  one-command flow (`cargo install deepseek-tui` providing both binaries) is
-  reverted because it broke Windows release builds; install both packages
-  separately if you want the TUI binary too.
-
-## [0.8.1] - 2026-05-01
-
-### Fixed
-- **One-command Cargo install** — `cargo install deepseek-tui --locked` now
-  provides both the canonical `deepseek` dispatcher and the `deepseek-tui`
-  companion binary from the main `deepseek-tui` package, so dispatcher
-  subcommands such as `deepseek doctor --json` work without installing
-  `deepseek-tui-cli` separately.
-
-## [0.8.0] - 2026-05-01
-
-### Fixed
-- **Shell FD leak / post-send lag** — completed background shell jobs now release
-  their process, stdin, stdout, and stderr handles as soon as completion is
-  observed, while keeping the job record inspectable. This prevents long-running
-  TUI sessions from hitting `Too many open files (os error 24)`, which could
-  make checkpoint saves fail and cause shell spawning, message send, close, and
-  Esc/cancel paths to lag or fail.
-- **Windows REPL runtime CI startup** — Windows gets a longer Python bootstrap
-  readiness timeout for the REPL runtime tests, matching GitHub runner startup
-  contention without weakening bootstrap failures on other platforms.
-
-### Added
-- **China / mirror-friendly Cargo install docs** — README now documents
-  installing through the TUNA Cargo mirror and direct release assets for users
-  with slow GitHub/npm access.
-
-### Tests
-- Added a regression test proving completed background shell jobs drop their
-  live process handles after `exec_shell_wait`.
-- Re-ran the focused shell cancellation and Python REPL runtime slices.
-
-## [0.7.9] - 2026-05-02
-
-### Fixed
-- **Post-turn freeze** — the checkpoint-restart cycle boundary (`maybe_advance_cycle`) now runs *before* `TurnComplete` emission instead of after, so the terminal is immediately responsive when the UI receives the completion event. The status chip ("↻ context refreshing…") remains visible during the cycle wait. (#234)
-- **Enter during streaming no longer corrupts the turn** — a new `QueueFollowUp` submit disposition parks the draft on `queued_messages` when the model is actively streaming text. Previously, pressing Enter during streaming would forward the message as a mid-turn steer, which could interfere with the in-flight response. The message now dispatches as a normal user message after `TurnComplete`. (#234)
-- **Idempotent Esc during fanout** — `finalize_active_cell_as_interrupted` and `finalize_streaming_assistant_as_interrupted` are now guarded by `Option::take()`. When Esc cancels a turn and the engine later delivers `TurnComplete(Interrupted)`, the second call is a no-op — no double `[interrupted]` prefix, no corrupted cell state. Regression test locks in the contract. (#243)
-
-### Tests
-- 2 new tests: `submit_disposition_queue_follow_up_when_streaming` (Enter/steering fix), `turn_complete_after_esc_is_idempotent` (Esc fanout double-call hardening)
-- 1 expanded test: `submit_disposition_queue_when_offline_and_busy` now covers streaming state
-
-## [0.7.8] - 2026-05-01
-
-### Added
-- **`exec_shell_cancel` tool** — cancel a running background shell task by id, or cancel all running tasks with `all: true`. Requires approval. (#248)
-- **Foreground-to-background shell detach** — press `Ctrl+B` while a foreground command is running to open shell controls and either detach the command to the background (where it can be polled via `exec_shell_wait`) or cancel the current turn. (#248)
-- **`exec_shell_wait` turn-cancellation awareness** — canceling a turn while `exec_shell_wait` is blocking now stops the wait but leaves the background task running, with `wait_canceled: true` in metadata. (#248)
-- **`ShellControlView` modal** (Ctrl+B) — two-option dialog (Background / Cancel) rendered as a popup over the transcript. (#248)
-
-### Changed
-- **`exec_shell` foreground path** now spawns all foreground commands through the background job table, enabling the detach-to-background flow. Metadata now includes `backgrounded: true/false`. (#248)
-- **`exec_shell_interact`** poll loop now observes the turn cancel token so stalled interactive sessions don't block turn cancellation. (#248)
-- **Transcript running-tool hint** — executing shell cells now show "Ctrl+B opens shell controls" while running. (#248)
-- **Keybinding registry** now includes `Ctrl+B` (opens shell controls) next to `Ctrl+C` (cancel/exits). (#248)
-- **Deferred swarm card creation** — `agent_swarm` no longer pre-seeds an all-pending FanoutCard from `ToolCallStarted`; the card is created only when the first `SwarmProgress` event carries real worker state. Until then the sidebar uses the declared task count as a pending dispatch placeholder. (#236, #238)
-- **Swarm wording normalized** — fanout-family fallback labels now render as `swarm`, matching the canonical `agent_swarm` / `rlm` model and avoiding mixed `fanout` / `swarm` terminology in the transcript. (#236, #238)
-- **OPERATIONS_RUNBOOK** and **TOOL_SURFACE** updated with new shell control paths and `exec_shell_cancel` documentation.
-
-### Fixed
-- **Nonblocking swarm state drift** — the sidebar no longer falls back to `0` or a contradictory seeded placeholder before the first progress event arrives, which removes the visible `pending` vs `running/done` mismatch during early `agent_swarm` dispatch. (#236, #238)
-- **Unicode-safe search globbing** — search wildcard matching now iterates on UTF-8 char boundaries instead of raw byte offsets, preventing panics on filenames like `dialogue_line__冰糖.mp3`. (#249)
-
-### Tests
-- 7 new integration tests: foreground-to-background detach, wait-cancel-leaves-process, single-task cancel, bulk cancel (kill-all), foreground-cancel-kills, ShellControlView default/select states
-- Expanded swarm/sidebar regression coverage for deferred card creation and pending-count fallback before first `SwarmProgress`. (#236, #238)
-- Added a Unicode filename regression test for wildcard search matching. (#249)
-
-## [0.7.7] - 2026-04-30
-
-### Added
-- **Checklist card rendering** — `checklist_write` / `todo_*` results now render as a purpose-built card with completed/total + percent header, per-item status markers (✅ / `●` / `○`), and a collapsing affordance for long lists. Plumbed through `GenericToolCell` so no new variant threading is needed. (#241)
-- **Context menu for transcript operations** — right-click or `Ctrl+M` opens a context-sensitive menu with Copy, Copy All, and selection-aware actions. (`crates/tui/src/tui/context_menu.rs`)
-- **Windows .exe sibling lookup** — `locate_sibling_tui_binary` in the CLI dispatcher finds `deepseek-tui.exe` on Windows, honours `DEEPSEEK_TUI_BIN` override, and falls back to suffix-less lookup. Tests lock in platform-correct name resolution and env override. (#247)
-
-### Changed
-- **Swarm/sub-agent canonical data model** — `SwarmTaskOutcome` and `SwarmOutcome` are now the single source of truth. Every UI surface (sidebar, transcript FanoutCard, footer) reads from `swarm_jobs` rather than maintaining parallel projections. (#236, #238)
-- **`swarm_card_index`** binds each swarm to its own FanoutCard by `swarm_id`, so overlapping fanouts no longer have one swarm's late progress clobber another's card. (#236, #238)
-- **Fanout-class tools suppressed from footer** — `agent_swarm`, `spawn_agents_on_csv`, `rlm`, and `agent_spawn` no longer appear as active tools in the status strip; sidebar and FanoutCard show the actual worker counts. (#236, #238)
-- **Esc clears active tool entries optimistically** — the active cell is finalized immediately on cancel rather than waiting for the engine's `TurnComplete` echo. Background `block:false` swarms remain durable and tracked through `swarm_jobs`. (#243)
-- **Post-turn workspace snapshot detached** — the snapshot still runs on `spawn_blocking` but the engine no longer awaits its `JoinHandle`, so the UI accepts input immediately after `TurnComplete`. (#234)
-- **Shell output preserves Cargo/test summaries under truncation** — high-signal tail lines (`test result:`, `failures:`, `error[E…]`, `Finished`, `Compiling`, panic markers) survive truncation so the agent doesn't re-run gates. (#242)
-- **Monotonic spend display** — `displayed_session_cost` + `displayed_cost_high_water` ensure the visible session+sub-agent total never decreases across reconciliation events (cache discounts, provisional → final). (#244)
-- Clipboard module expanded with additional platform-aware copy/paste paths. (`crates/tui/src/tui/clipboard.rs`)
-- Context inspector enriched with additional metadata columns and session-scoped agent state. (`crates/tui/src/tui/context_inspector.rs`)
-- Configuration documentation updated for v0.7.7 settings. (`docs/CONFIGURATION.md`, `docs/MODES.md`)
-
-### Fixed
-- **Windows npm install path** — the npm-distributed `deepseek` dispatcher now locates the platform-correct `deepseek-tui` binary (`.exe` suffix on Windows), fixing runtime failures for Windows users. (#247)
-- **Sidebar/transcript/footer agreement** — all three surfaces now agree on agent counts and status because they share the canonical `swarm_jobs` store. (#236, #238)
-- **Fanout card clobbering** — overlapping swarms no longer overwrite each other's progress cards. (#238)
-- **Cost display regression** — negative reconciliation events (cache-hit discount applied after provisional count) no longer briefly drop the displayed cost. (#244)
-
-### Tests
-- 65+ new/expanded tests: checklist card rendering, swarm card index binding, fanout tool suppression, Esc cancel contract, monotonic spend under reconciliation, shell summary preservation, Windows sibling binary lookup, clipboard platform paths, context menu state transitions
-
-### Added
-- **UI Localization registry** — `locale` setting in `settings.toml` (`auto`, `en`, `ja`, `zh-Hans`, `pt-BR`) with `LC_ALL`/`LC_MESSAGES`/`LANG` auto-detection. Core packs shipped for English, Japanese, Chinese Simplified, and Brazilian Portuguese covering composer placeholder, history search, `/config` chrome, and help overlay. Missing/unsupported locales fall back to English. (`crates/tui/src/localization.rs`, `docs/CONFIGURATION.md`)
-- **Grouped, searchable `/config` editor** — settings organized by section (Model, Permissions, Display, Composer, Sidebar, History, MCP) with live substring filter. Typing `j`/`k` navigates when the filter is empty; otherwise they enter the filter. (`crates/tui/src/tui/views/mod.rs`)
-- **Pending input preview widget** — while a turn is running, queued messages, pending steers, rejected steers, and context chips render above the composer. Three-row-per-message truncation with ellipsis overflow. (`crates/tui/src/tui/widgets/pending_input_preview.rs`)
-- **Alt+↑ edit-last-queued** — pops the most recently queued message back into the composer for editing. No-op when the composer is dirty. (`crates/tui/src/tui/app.rs`)
-- **Composer history search and draft recovery** — `Alt+R` opens a live substring search across `input_history` and `draft_history` (max 50 entries). `Enter` accepts, `Esc` restores the pre-search draft. Unicode case-insensitive matching. (`crates/tui/src/tui/app.rs`)
-- **Paste-burst detection** — fallback rapid-key paste detection independent of terminal bracketed-paste mode. Configurable via `paste_burst_detection` setting (default on). CRLF normalization (`\r\n` → `\n`, `\r` → `\n`). (`crates/tui/src/tui/paste_burst.rs`)
-- **Composer attachment management** — `↑` at the composer start selects the attachment row; `Backspace`/`Delete` removes it without editing placeholder text. (`crates/tui/src/tui/app.rs`)
-- **Searchable help overlay** — live substring filter across slash commands and keybindings, multi-term AND matching, localized chrome. (`crates/tui/src/tui/views/help.rs`)
-- **Keyboard-binding documentation catalog** — single source of truth for help overlay rendering. Documents 38+ keyboard chords across Navigation, Editing, Submission, Modes, Sessions, Clipboard, and Help sections. (`crates/tui/src/tui/keybindings.rs`)
-- **Legacy Rust deprecation audit** — non-destructive compatibility audit covering legacy MCP sync API, prompt constants, `/compact`, `todo_*` aliases, sub-agent aliases, provider `api_key` compatibility, model alias canonicalization, and palette aliases. Tracked by #218–#221. (`docs/LEGACY_RUST_AUDIT_0_7_6.md`)
-
-### Changed
-- **Shift+Tab cycles reasoning-effort** through Off → High → Max (three behaviorally distinct tiers). Previously Tab cycled modes; Shift+Tab is now the reasoning-effort shortcut. (`crates/tui/src/tui/app.rs:1119`)
-- **Reasoning-effort `Off` now sends `"off"`** to the API (was `None`). Allows explicit thinking disable. (`crates/tui/src/tui/app.rs`)
-- **Media `@`-mentions now emit `<media-file>` hints** directing users to `/attach` instead of inlining binary bytes. Tests lock in the contract. (`crates/tui/src/tui/file_mention.rs`)
-- **`/attach` rejects non-media files** with a descriptive error pointing to `@path` for text. (`crates/tui/src/commands/attachment.rs`)
-- **Configuration reference updated** to cover all v0.7.6 settings: `locale`, `paste_burst_detection`, `reasoning_effort`, `composer_density`, `sidebar_focus`, and more. (`docs/CONFIGURATION.md`)
-
-### Fixed
-- **Unicode-safe truncation** in pending-input preview and view text — no more mid-character breaks on multi-byte UTF-8. (`crates/tui/src/tui/widgets/pending_input_preview.rs`, `crates/tui/src/tui/views/mod.rs`)
-- **CJK/emoji display-width handling** in locale tests and config view rendering. (`crates/tui/src/localization.rs`)
-- **Context preview distinguishes `@media`, `/attach`, missing, and included files** with separate kind labels and inclusion status. (`crates/tui/src/tui/file_mention.rs`)
-- **Config view filter accept `j`/`k` only when filter is empty** — typing `j` or `k` into the filter field no longer navigates away. (`crates/tui/src/tui/views/mod.rs`)
-
-### Tests
-- 7 localization tests (tag normalization, env resolution, shipped pack completeness, missing-key fallback, Unicode width truncation)
-- 11 pending-input preview tests (context buckets, truncation, URL overflow, narrow-width)
-- 13 paste tests (burst detection, CRLF normalization, clipboard images, Unicode)
-- 9 draft/history search tests (match filter, unicode, accept/cancel, recovery)
-- 93 config tests (grouping, filter, edit, j/k, localization, escape/cancel)
-- 24 workspace tests (context refresh, scroll, mention completion)
-- 7 file-mention tests (context references, media/attach distinction, removability)
-
-## [0.7.1] - 2026-04-28
-
-### Added
-- Grouped active tool-call cards with compact rails and a live working-status row while tools run. (#142, #149)
-- Selected-card-aware Alt+V details so the visible or selected tool card opens the matching detail payload. (#143)
-- Compact terminal-native session context inspector with persisted `@path` and `/attach` reference metadata for resumed transcripts. (#146, #150)
-
-### Changed
-- Polished tool cards, diff summaries, and pending context previews for denser terminal-native scanning. (#141, #144, #145, #148)
-- Ranked Ctrl+P file-picker results with working-set relevance from modified files, recent `@file` mentions, and recent tool paths while keeping fuzzy filtering in memory. (#147)
-
-## [0.7.0] - 2026-04-28
-
-### Added
-- OS keyring-backed auth storage with `deepseek auth` subcommands, migration from plaintext config, provider-aware key resolution, and doctor visibility. (#134)
-- Egress network policy with allow/deny/prompt decisions, deny-wins matching, audit logging, and enforcement hooks for network-capable tools. (#135)
-- LSP diagnostics auto-injection after edits so compile feedback can be reinjected into the next agent turn. (#136)
-- Side-git workspace snapshots, `/restore`, and `revert_turn` so agent edits can be rolled back without moving the user's repository HEAD. (#137)
-- Esc-Esc backtrack over prior user turns, desktop turn-complete notifications, Alt+V tool-details access, safer command-prefix auto-allow matching, bundled `skill-creator`, and `/skill install` management for community skills. (#131, #132, #133, #138, #139, #140)
-
-### Changed
-- Split more engine/tool primitives into focused modules and workspace crates, including shared tool result primitives and extracted turn/capacity flow. (#67, #74)
-
-### Tests
-- Added mock LLM and skill-install integration coverage for streaming turns, reasoning replay, tool-call loops, network policy, and skill validation. (#69, #140)
-
-## [0.6.5] - 2026-04-27
-
-### Added
-- **`rlm_process` tool — recursive language model as a tool call.** The previous `/rlm` slash command had a UI rendering gap (the answer never made it back to the model's view) and required the user to remember to invoke it manually. `rlm_process` exposes the full RLM loop as a structured tool the model itself can choose, the same way it reaches for `agent_spawn` or `rlm_query`. Inputs: `task` (small instruction, shown to the root LLM each iteration) plus exactly one of `file_path` (workspace-relative, preferred — keeps the long input out of the model's context entirely) or `content` (inline, capped at 200k chars). Optional `child_model` (default `deepseek-v4-flash`) and `max_depth` (default 1, paper experiments). Returns the synthesized answer with metadata (iterations, duration, tokens, termination reason). Loaded across Plan / Agent / YOLO; never deferred via ToolSearch. (`crates/tui/src/tools/rlm_process.rs`)
-- **Reference-aligned REPL surface.** Aligned the in-REPL Python helpers with the canonical reference RLM (alexzhang13/rlm). The sub-agent now sees `context` (the full input, not `PROMPT`), `llm_query`, `llm_query_batched`, `rlm_query` (was `sub_rlm`), `rlm_query_batched`, `SHOW_VARS()`, `FINAL(...)`, `FINAL_VAR(...)`, plus `repl_get`/`repl_set`. Same prompt patterns and decomposition strategies from the paper now apply verbatim. (`crates/tui/src/repl/runtime.rs`)
-- **Concurrent fanout from inside the REPL.** `llm_query_batched(prompts, model=None)` runs up to 16 child completions in parallel via a new `POST /llm_batch` sidecar endpoint — much faster than serial `[llm_query(p) for p in prompts]`. `rlm_query_batched(prompts)` does the same for recursive RLM sub-calls via `POST /rlm_batch`. (`crates/tui/src/rlm/sidecar.rs`)
-- **`SHOW_VARS()`** — returns `{name: type-name}` for every user variable in the REPL. Lets the model inspect what it has accumulated across rounds before deciding whether to call `FINAL_VAR(name)`.
-- **Auto-persistence of REPL variables across rounds.** Any top-level JSON-serializable variable the sub-agent creates in a `repl` block now persists to the next round automatically — no `repl_set` ceremony needed unless you want explicit control. Matches the in-process reference REPL semantics.
-
-### Changed
-- **Code fence is `repl`, not `python`.** Matches the reference RLM language identifier so the same prompts and few-shot examples work here. Backward-compat fallback to `python` / `py` retained for older model behaviors.
-- **`FINAL` / `FINAL_VAR` parseable from raw response text.** The reference RLM lets the model write `FINAL(value)` on its own line outside any code block to terminate the loop. Added `parse_text_final()` so that path works alongside the existing in-REPL Python sentinel mechanism. Code-fenced occurrences of `FINAL(...)` are correctly ignored to avoid false positives.
-- **Strict termination loop.** The sub-agent must emit a ```repl block (or text-level FINAL) to make progress. One fence-less round triggers a reminder; two consecutive trigger a `RlmTermination::DirectAnswer` exit so we don't loop forever.
-- **`rlm_process` separates `task` (root_prompt) from `file_path`/`content` (context).** The `task` rides along as `root_prompt` and is shown to the root LLM each iteration; the big input lives only in the REPL as `context`. Mirrors the reference's `completion(prompt, root_prompt=...)` API.
-- **System prompt rewritten** with the reference's strategy patterns (PREVIEW → CHUNK + map-reduce via `llm_query_batched` → RECURSIVE decomposition via `rlm_query` → programmatic computation + LLM interpretation).
-- The `/rlm` slash command stays for manual experimentation but is no longer the recommended path; the description in `commands/mod.rs` now points the model toward `rlm_process` for the in-agent flow.
-
-### Reference
-- Zhang, Kraska, Khattab. "Recursive Language Models." arXiv:2512.24601.
-- alexzhang13/rlm — reference implementation by the paper authors. Variable names, helper surface, and code-fence convention align with that repo so prompts and patterns transfer.
-
-
-### Fixed
-- **`/rlm` actually recurses now (Algorithm 1 substrate, paper-faithful).** The v0.6.3 RLM loop had the right *shape* but its recursive substrate was non-functional: `llm_query()` was a Python stub that returned a hardcoded string, and `child_model` was bound with an underscore prefix and silently dropped. The loop ran but the sub-LLM never fired. v0.6.4 fixes this end-to-end:
-  - **HTTP sidecar.** Each RLM turn spins up a localhost-only axum server on a kernel-assigned port for the duration of the turn. Python's `llm_query()` and `sub_rlm()` are real `urllib.request.urlopen` POSTs; Rust services them via the existing DeepSeek client and returns the completion text. No long-lived python process, no FIFOs, no two-pass replay — Python blocks on HTTP, Rust answers it. (`crates/tui/src/rlm/sidecar.rs`)
-  - **`child_model` is plumbed through.** `Op::RlmQuery` and `AppAction::RlmQuery` carry the configured child model (default `deepseek-v4-flash`) all the way to the sidecar, where every `llm_query()` call uses it. Token usage is folded into `RlmTurnResult.usage` so cost tracking works.
-  - **`sub_rlm()` is exposed as a paper-faithful recursive RLM call.** The Python REPL gets a real `sub_rlm(prompt)` function that runs another full Algorithm-1 turn at depth-1 inside the same process (different sidecar route, decremented recursion budget). Default `max_depth = 2` from the `/rlm` command — the model can recurse twice before the budget hits zero. The recursive opaque-future cycle (`run_rlm_turn_inner` → `start_sidecar` → `sub_rlm_handler` → `run_rlm_turn_inner`) is broken by returning a concrete `Pin<Box<dyn Future + Send>>` from `run_rlm_turn_inner`.
-  - **Strict termination.** The loop only ends via `FINAL(value)` (or the iteration cap). The previous "no fence = direct answer, end loop" early-exit deviated from the paper and could short-circuit on iteration 1 with a chatty model that never saw `PROMPT`. The new behavior tolerates one fence-less round (with a reminder appended), then falls back to a `RlmTermination::DirectAnswer` exit. `RlmTurnResult` now carries a `termination: RlmTermination` enum (`Final | DirectAnswer | Exhausted | Error`) so callers can tell what happened.
-  - **Richer `Metadata(state)`.** The metadata message the root LLM sees now includes paper-required *access patterns* (`repl_get`, slicing, `splitlines`, `repl_set`, `llm_query`, `sub_rlm`, `FINAL`) and a live list of variable keys currently in the REPL state file — so the model can see what it's accumulated across rounds without us shipping the values themselves.
-  - **Unicode-safe truncation.** `truncate_text` now counts Unicode codepoints (was mixing `text.len()` bytes with `chars().take(n)`), so multi-byte previews can no longer mis-count. Per-turn temp state files are cleaned up on completion. `ROOM_TEMPERATURE` typo → `ROOT_TEMPERATURE`.
-  - **End-to-end smoke test.** `rlm::turn::tests::sidecar_url_is_exported_to_python_env` stands up a stand-in axum server that always replies `{"text":"pong-from-sidecar"}`, runs `print(llm_query('hello'))` in the real `PythonRuntime`, and asserts the reply round-trips. This catches future regressions in the sidecar URL passthrough.
-
-### Reference
-- Zhang, Kraska, Khattab. "Recursive Language Models." arXiv:2512.24601 (Algorithm 1).
-
-
-### Added
-- **Sub-agents surface in the footer status strip.** When N > 0 sub-agents are in flight, the footer grows a "1 agent" / "N agents" chip in DeepSeek-sky color matching the model badge. Hides entirely at zero. (`footer_agents_chip` in `widgets/footer.rs`)
-- **`@`-mention popup is fully wired in the composer.** Previously only the App state fields existed (`mention_menu_selected`, `mention_menu_hidden`). The popup now renders below the input mirror-style with the slash menu, with `@`-prefixed entries; Up/Down navigates, Enter / Tab apply the selection, Esc hides until the next input edit. Mention takes precedence over slash because the positional check is stricter. (`visible_mention_menu_entries` + `apply_mention_menu_selection` in `file_mention.rs`)
-
-### Fixed
-- **Tool-call cells no longer flash `<command>` / `<file>` placeholders.** The engine used to emit `ToolCallStarted` from `ContentBlockStart` with `input: {}` — before any `InputJsonDelta` had streamed in — which baked the placeholder into the cell at creation time. The emission is now deferred to `ContentBlockStop` and routed through `final_tool_input`, so the cell is created with the parsed args already in hand. (engine.rs `final_tool_input`; engine/tests.rs `final_tool_input_*`)
-- **`parse_invocation_count` flake.** Two `markdown_render` tests both read the global PARSE_INVOCATIONS atomic and raced when other tests called `parse()` in parallel. Switched the counter to `thread_local!<Cell<u64>>`, so each test thread sees only its own invocations. Tested 8 sequential full-suite runs: 8/8 green (was ~40% green).
-
-### Changed
-- **System prompts redesigned with decomposition-first philosophy.** All four prompt tiers (base, agent, plan, yolo) now teach the model to decompose tasks before acting — `todo_write` first for granular task tracking, `update_plan` for high-level strategy, and sub-agents for parallelizable work. Inspired by the "mismanaged geniuses hypothesis" (Zhang et al., 2026): frontier LMs are already capable enough; the bottleneck is how we scaffold their self-management. The prompts now make work visible through the sidebar (Plan / Todos / Tasks / Agents) instead of letting the model work invisibly.
-- **Tool labels use progressive verbs.** "Read foo.rs" → "Reading foo.rs", "List X" → "Listing X", "Search pattern" → "Searching for `pattern`", "List files" → "Listing files". Past-tense labels read wrong while a tool is still in flight; the new forms match what the user actually sees.
-- **Long-running tools grow an elapsed badge.** From 3 s onward the `running` status segment becomes `running (3s)`, `running (4s)`, … so the user can tell a tool isn't stuck. The status-animation tick (360 ms) drives the redraw; below 3 s the badge stays hidden so quick reads/greps don't churn. (history.rs `running_status_label_with_elapsed`)
-- **Spinner pulse is twice as fast** — `TOOL_STATUS_SYMBOL_MS` 1800 ms → 720 ms per glyph (full 4-glyph heartbeat in ~2.88 s instead of ~7.2 s).
-- **`tools/subagent.rs` is now a folder module.** Tests live in `tools/subagent/tests.rs`; runtime + manager + tool implementations stay in `tools/subagent/mod.rs`. Public API unchanged. The runtime / tool-impl split was deferred — `SubAgentTask`, `run_subagent_task`, `build_allowed_tools`, the agent prompt constants, and `normalize_role_alias` are referenced from both layers and need a small API design pass before they cleanly separate.
-
-### Test hygiene
-- **5 regression tests pin auto-scroll churn contract.** `mark_history_updated` does not scroll; tool-cell handlers only `mark_history_updated`; `add_message` and `flush_active_cell` gate on `user_scrolled_during_stream`; the per-stream lock clears at TurnComplete and when the user returns to the live tail. (P2.4)
-
-## [0.6.1] - 2026-04-26
-
-### Changed
-- **V4 cache-hit input prices cut to 1/10th per DeepSeek's pricing update.** Pro promo 0.03625→0.003625, Pro base 0.145→0.0145, Flash 0.028→0.0028 per 1M tokens. Cache-miss and output rates unchanged.
-- **Removed the "light" theme option.** It was never tested, looked bad, and the dark/whale palettes are the supported targets. Theme validation now accepts only `default`, `dark`, and `whale`.
-- **System prompts redesigned with decomposition-first philosophy.** All five prompt tiers teach the model to `todo_write` before acting, `update_plan` for strategy, and sub-agents for parallel work. Inspired by the mismanaged-geniuses hypothesis (Zhang et al., 2026).
-
-## [0.6.0] - 2026-04-25
-
-### Added
-- **`rlm_query` tool — recursive language models as a first-class structured tool.** Inspired by [Alex Zhang's RLM work](https://github.com/alexzhang13/rlm) and Sakana AI's published novelty-search research, but trimmed to what an agent loop actually needs. The model calls `rlm_query` with one prompt or up to 16 concurrent prompts; children run on `deepseek-v4-flash` by default and can be promoted to Pro per-call. Children dispatch concurrently via `tokio::join_all` against the existing DeepSeek client — no external runtime, no fenced-block DSL, no Python sandbox. Returns plain text for one prompt, indexed `[0] ...\n\n---\n\n[1] ...` blocks for many. Available in Plan / Agent / YOLO. Cost is folded into the session's running total automatically.
-
-### Changed
-- **Scroll position survives content rewrites (#56).** `TranscriptScroll::resolve_top` and `scrolled_by` no longer teleport to bottom when the anchor cell vanishes. Three-level fallback chain: same line → same cell, line 0 → nearest surviving cell at-or-before. Previously, any rewrite of the assistant message (e.g. tool-result replacement) silently dropped the user back to the live tail mid-scroll.
-- **Looser command-safety chains (#57).** `cargo build && cargo test`, `git fetch && git rebase`, and similar chains of known-safe commands now escalate to `RequiresApproval` instead of being hard-blocked as `Dangerous`. Chains containing unknown commands still block.
-- **`GettingCrowded` no longer surfaces a footer chip.** The context-percent header already covers conversation pressure; the chip now only fires for active engine interventions (`refreshing context`, `verifying`, `resetting plan`).
-
-## [0.5.2] - 2026-04-25
-
-### Added
-- **`/model` opens a Pro/Flash + thinking-effort picker (#39).** Typing `/model` with no argument now pops a two-pane modal: model on the left (`deepseek-v4-pro` flagship, `deepseek-v4-flash` fast/cheap, plus a "current (custom)" row when the active id isn't one of the listed defaults), and thinking effort on the right. Tab/←/→ swaps panes, ↑/↓ moves within the focused pane, Enter applies both selections, Esc cancels. The effort pane intentionally exposes only **Off / High / Max** because [DeepSeek's Thinking Mode docs](https://api-docs.deepseek.com/guides/reasoning_model) state `low`/`medium` are mapped to `high` server-side and `xhigh` is mapped to `max` — the legacy variants stay valid in `~/.deepseek/settings.toml` for back-compat, the picker just doesn't surface them. Apply path persists `default_model` and `reasoning_effort` to settings, forwards `Op::SetModel` + `Op::SetCompaction` to the running engine so the next turn picks up the change without a restart, and resets the per-turn token gauges (cache, replay) so the footer numbers reflect the new model. `/model <id>` keeps working unchanged for power users.
-
-## [0.5.1] - 2026-04-25
-
-### Added
-- **`fetch_url` tool** for direct HTTP GET on a known URL — complements `web_search` for cases where the link is already known. Supports `format` (`markdown` / `text` / `raw`), `max_bytes` (default 1 MB, hard cap 10 MB), `timeout_ms` (default 15 s, max 60 s), redirect following, and structured `{url, status, content_type, content, truncated}` responses. 4xx/5xx bodies are returned (with `success: false`) so the caller can read JSON error envelopes. (#33)
-- **PDF support in `read_file`.** PDFs are auto-detected by extension or `%PDF-` magic bytes and extracted via `pdftotext -layout` (poppler) when available. New optional `pages` arg (`"5"` or `"1-10"`) reads page slices. Without `pdftotext`, returns a structured `{type: "binary_unavailable", kind: "pdf", reason, hint}` with install commands for macOS/Debian. (#34)
-- **Reasoning-content replay telemetry, end-to-end (#30).** The chat-completions sanitizer now estimates replayed `reasoning_content` tokens (~4 chars/token), threads the value through the streaming `Usage` payload, stores it on the App, and renders an `rsn N.Nk` chip in the footer next to the cache hit-rate. The chip turns warning-coloured when replay tokens exceed 50% of the input budget, so users on long thinking-mode loops can see at a glance how much of their context window is going to V4's "Interleaved Thinking" replay (paper §5.1.1). Logged at `RUST_LOG=deepseek_tui=info` for tail-friendly diagnosis.
-- **`@file` Tab-completion (#28).** Typing `@<partial>` and pressing Tab now resolves the mention against the workspace using the existing `ignore::WalkBuilder`. A unique match is spliced into the input; multiple matches with a longer common prefix extend the partial; remaining ambiguity is surfaced via the status line. The mention-expansion path that ships file contents to the model is unchanged — this is purely a discovery aid for typing the path. Inline-contents and a fuzzy popup picker are queued for v0.5.2.
-- **Per-workspace external trust list (#29).** `~/.deepseek/workspace-trust.json` now records, for each workspace, the absolute paths the user has opted into reading/writing from outside that workspace. The new `/trust` slash command supports `add <path>`, `remove <path>`, `list`, `on`, `off`, and a status read with no args; the engine consults the list when constructing every `ToolContext` so changes apply on the next tool call without restart. `/diagnostics` surfaces the list. The interactive "Allow once / Always allow / Deny" approval prompt is deferred — for now grant access ahead of the turn with `/trust add <path>`.
-
-### Fixed
-- **TUI sidebar gutter bleed regression test (#36).** Snapshot tests now lock in that long single-line tool results — including a `todo_write` echo of a multi-kilobyte JSON payload — never write any cells outside `chat_area` at the widths reported in the bug (80, 120, 165, 200 cols). A second test verifies the scrollbar coexists with content along the right edge instead of overdrawing the penultimate column.
-- **Version drift caught in CI.** New `versions` job in `.github/workflows/ci.yml` runs `scripts/release/check-versions.sh` on every push/PR, verifying every per-crate `Cargo.toml` inherits the workspace version, the npm wrapper matches the workspace version, and `Cargo.lock` is in sync. The release runbook now lists `check-versions.sh` as the first preflight step. (#31)
-- **Per-mode soft context budget for V4 compaction trigger** (#27).
-- **Phantom `web.run` references stripped** from prompts and the `web_search` tool surface (#25).
-- **Unused import + `cargo fmt` drift** that landed with `feat(#27)` and broke Build / Test / npm wrapper smoke under `-Dwarnings`.
-
-## [0.5.0] - 2026-04-25
-
-### Fixed
-- Multi-turn tool calls on thinking-mode models no longer return HTTP 400. Every assistant message in the conversation now carries `reasoning_content` when thinking is enabled — not just tool-call rounds — matching DeepSeek's actual API validation, which rejects any assistant message missing the field even though the docs describe non-tool-call reasoning as "ignored".
-- Added a final-pass wire-payload sanitizer in the chat-completions client that forces a non-empty `reasoning_content` placeholder onto any assistant message still missing one at request time. This is the last line of defense after engine-side and build-side substitution, so sessions restored from older checkpoints, sub-agents that append messages directly, and cached prefix mismatches all produce a valid request.
-- On a `reasoning_content`-related 400, the client now logs the offending message indices to make future regressions diagnosable.
-- Stripped phantom `web.run` references from prompts and the `web_search` tool surface ([#25](https://github.com/blissito/ghostycode/issues/25)).
-
-### Changed
-- Header/UI widget refactor in the TUI (`crates/tui/src/tui/ui.rs`, `widgets/header.rs`) — internal cleanup, no user-visible behavior change.
-
-## [0.4.9] - 2026-04-27
-
-### Fixed
-- DeepSeek thinking-mode tool-call rounds now always replay `reasoning_content` in all subsequent requests (including across new user turns), matching DeepSeek's documented API contract that assistant messages with tool calls must retain their reasoning content forever.
-- Missing `reasoning_content` on a tool-call assistant message now substitutes a safe placeholder (`"(reasoning omitted)"`) instead of dropping the tool calls and their matching tool results, preventing orphaned conversation chains and API 400 errors.
-- Session checkpoint now persists a Thinking-block placeholder for tool-call turns that produced no streamed reasoning text, keeping on-disk sessions structurally correct so subsequent requests avoid HTTP 400 rejections.
-- Token estimation for compaction now counts thinking tokens across all tool-call rounds (not just the current user turn), aligning with the updated reasoning_content replay rule.
-
-## [0.4.8] - 2026-04-25
-
-### Fixed
-- DeepSeek V4 Pro cost estimates now use DeepSeek's current limited-time 75% discount until 2026-05-05 15:59 UTC, then automatically fall back to the base Pro rates.
-
-## [0.4.5] - 2026-04-24
-
-### Fixed
-- Alternate-screen TUI sessions now capture mouse input by default so wheel scrolling moves the transcript instead of exposing terminal scrollback from before the TUI started. Use `--no-mouse-capture` or `tui.mouse_capture = false` when terminal-native drag selection is preferred.
-
-## [0.4.2] - 2026-04-24
-
-### Fixed
-- DeepSeek V4 thinking-mode tool turns now checkpoint the engine's authoritative API transcript, including assistant `reasoning_content` on reasoning-to-tool-call turns with no visible assistant text.
-- Chat Completions request building now drops stale V4 tool-call rounds that are missing required `reasoning_content`, preventing old corrupted checkpoints from triggering DeepSeek HTTP 400 replay errors.
-- Web search now falls back to Bing HTML results when DuckDuckGo returns a bot challenge or otherwise yields no parseable results.
-
-## [0.4.1] - 2026-04-24
-
-### Fixed
-- DeepSeek V4 tool-result context now preserves large file reads and command outputs instead of compacting noisy tools to a 900-character snippet after 2k characters.
-- Capacity guardrail refresh no longer performs destructive summary compaction unless the normal model-aware compaction thresholds are actually crossed.
-- V4 compaction summaries retain larger tool-result excerpts and summary input when compaction is genuinely needed.
-- The transcript now follows the bottom again when sending a new message, shows an in-app scrollbar when internally scrolled, and leaves mouse capture off in `--no-alt-screen` mode so terminal-native scrolling can work.
-
-## [0.4.0] - 2026-04-23
-
-### Added
-- **DeepSeek V4 support**: `deepseek-v4-pro` (flagship) and `deepseek-v4-flash` (fast/cheap) are now first-class model IDs with 1M context windows.
-- **Reasoning-effort tier**: new `reasoning_effort` config field (`off | low | medium | high | max`) mapped to DeepSeek's `reasoning_effort` + `thinking` request fields. Defaults to `max`.
-- **Shift+Tab cycles reasoning-effort** through the three behaviorally distinct tiers (`off → high → max`). The current tier is shown as a ⚡ chip in the header.
-- Per-model pricing table: `deepseek-v4-pro` priced at $0.145/$1.74/$3.48 per 1M tokens (cache-hit/miss/output); `deepseek-v4-flash` and legacy aliases at $0.028/$0.14/$0.28.
-
-### Changed
-- **Default model flipped to `deepseek-v4-pro`** (from `deepseek-reasoner`).
-- `deepseek-chat` / `deepseek-reasoner` remain as silent aliases of `deepseek-v4-flash` for API compatibility; priced identically.
-- **Context compaction**: 1M-context V4 models now compact at 800k input tokens or 2,000 messages, so short/tool-heavy sessions do not compact as if they were 128k-context runs.
-- Cycling modes is now Tab-only; Shift+Tab is repurposed for reasoning-effort (reverse-mode cycle was low-value with only three modes).
-- Updated help/hint strings, validator error messages, and the model picker to reference V4 IDs.
-
-### Fixed
-- `requires_reasoning_content` now recognizes `deepseek-v4*` so thinking streams render correctly on V4 models.
-- DeepSeek V4 thinking-mode tool calls now preserve prior assistant `reasoning_content` whenever a tool call is replayed, matching DeepSeek's multi-turn contract and avoiding HTTP 400 rejections on later turns.
-- Raw Chat Completions requests now send DeepSeek's top-level `thinking` parameter instead of the OpenAI SDK-only `extra_body` wrapper.
-- Config, env, and UI model selection now normalize legacy DeepSeek aliases to `deepseek-v4-flash` instead of preserving old model labels.
-- npm wrapper first-run downloads now use process-unique temp files so concurrent `deepseek` / `deepseek-tui` invocations do not race on `*.download` files.
-
-## [0.3.33] - 2026-04-11
-
-### Changed
-- Footer polish: simplified footer rendering, removed footer clock label, updated status line layout
-- Palette cleanup: removed `FOOTER_HINT` color constant
+- Fixed the goal sidebar elapsed timer so completed and blocked goals freeze
+  their "completed in {elapsed}" readout instead of ticking forever. Goal state
+  now records a `finished_at` instant that both sidebar render paths and the
+  engine snapshot clamp elapsed against; `/goal resume` clears the freeze and
+  the timer ticks again.
+- Fixed paused goals silently un-freezing their sidebar timer: usage keeps
+  accruing while paused, and the next goal snapshot used to clear the frozen
+  instant. Paused goals now stay frozen until an explicit resume.
+- Fixed durable `/goal` progress accounting so usage and continuation updates
+  release the shared SQLite connection before re-reading the updated goal,
+  unblocking resumed goal loops and full workspace release tests.
+- Fixed a scheduled-automation race where deleting an automation while its
+  run was being enqueued left the already-created task running untracked;
+  the run record is now persisted unconditionally.
+- Removed `panic = "abort"` from the release profile: it disabled unwinding
+  and broke the panic supervision that keeps one failing tool call from
+  taking down the whole session. The `lto`/`strip`/`codegen-units` size and
+  speed tuning is unchanged.
+- Fixed session save/load to persist and restore the active model provider
+  across restarts. Previously sessions created under one provider (e.g.
+  DeepSeek) would silently load under a different active provider. Provider,
+  subagent limits, fallback chain, context window, and reasoning effort are now
+  restored from saved session metadata, with `"deepseek"` as the default for
+  legacy sessions.
+- Raised the streamed model-response idle timeout and matched the TUI stall
+  watchdog to the configured stream budget so long reasoning pauses are not
+  recovered as stalled turns (#2487, #3998).
+- Fixed Codex OAuth/sub-agent release diagnostics so `auth list` reports an
+  active Codex OAuth file, Responses API child requests encode inherited tool
+  names safely, rate-limited child requests checkpoint as resumable provider
+  interruptions, and failure records surface the real Responses API error
+  (#3884).
+- Fixed fresh launch/setup testing with an explicit `GHOSTY_HOME` so
+  config, settings, theme prefs, and doctor legacy-state diagnostics do not
+  inherit unrelated ambient `~/.deepseek` files (#4001, #4002).
+- Sub-agent state now persists to `.ghosty/` instead of the lingering
+  pre-rebrand `.deepseek/` path (#3864). Contributed by Stime (@yekern).
+- `/plugin enable|disable` now persists across restarts (#3918), and the
+  plugin command is hidden from the root slash menu and kept canonical after
+  the scanner merge. Contributed by Nightt (@nightt5879).
+- `/config ask-rules` now shows ask rule actions with improved diagnostics,
+  with file-rule action precedence under test. Contributed by @greyfreedom.
+- Fleet/sub-agents: enforced an absolute recursion-depth ceiling and widened
+  task-id entropy, gave each atomic state write a unique temp path, kept
+  sub-agent tool catalogs in parent parity (#3836), and made the Agents
+  sidebar reconcile sub-agent completion and cancellation live (#3837).
+- Fixed apply_patch mangling newlines, defaulted fuzz to 3, and made writes
+  atomic; fixed compaction to preserve pins on emergency compaction, harden
+  the summary fallback, and count image tokens; corrected backtrack boundary,
+  checkpoint clear ordering, prune guard, and durable rename.
+- Fixed the SSE client to flush the final frame, join multi-line data fields,
+  and stop corrupting multibyte UTF-8 split across network reads.
+- Kept review-only turns read-only, aliased `auto` mode to the agent policy,
+  showed the mode-derived safety policy in status (contributed by @cyq1017),
+  and stopped the durable-review floor from holding routine YOLO work
+  (#3883).
+- Fixed self-update to prefer exact binary release assets. Contributed by
+  @LI-Jialu.
+- UI polish: stopped constitution and fleet-profile model drafts from
+  freezing the event loop, scoped the context-menu backdrop to the popup
+  rect, stacked model-picker panes on narrow modals, unified display-width
+  helpers on one contract (#3924), removed misleading success toasts,
+  issue-number leaks, and dead-end empty states, and repaired the onboarding
+  trust and api-key keys.
+- Fixed the onboarding Trust step so plain Enter no longer silently grants
+  workspace trust; users must choose the explicit trust or exit keys.
+- Fixed same-root skill-name collisions being silently shadowed; duplicate
+  normalized skill names now warn while keeping discovery deterministic
+  (#3919).
+- Normalized discovered skill names, removed unenforced trust copy, and
+  surfaced the gated constitution override in prompts.
+- Fixed a parallel `subagent::` suite flake where one test's process-wide
+  `Retry-After` pause could strand unrelated budget-capped workers for the
+  full stale window; requests now re-poll the global pause in bounded slices
+  and the rate-limit test clears the window on drop.
+- Sub-agent and Fleet reliability now fail empty, step-limited, and
+  budget-exhausted children with explicit diagnostics instead of silent
+  `Completed (no output)` success; budget exhaustion preserves partial output,
+  `worktree: true` discovers one-level nested repos from harness directories,
+  and completion-before-start delegate events recover into named rows instead
+  of ellipsis-only identities (#4050, #4051, #4052, #4053).
+- Goal-mode writing and research tasks can complete with
+  `verification.status = "not_applicable"` without triggering continuation
+  loops (#4054).
+- First-run onboarding routes API keys through the selected provider, setup
+  wizard bodies scroll with PageUp/PageDown, shipped locale packs are back to
+  `en.json` parity with zh-Hant explicitly partial, stable feature flags stay
+  out of Experimental, and model/provider rows include current LongCat and
+  sourced-pricing hints (#4056, #4057, #4058, #4062, #4063).
+- Running tool rows animate while a lone foreground tool is active, and
+  workflow receipts render run/status/failure cards instead of one-line or
+  null-success output (#4059).
+- Model-facing turn metadata now includes a compact git workspace snapshot and
+  escalates context pressure at the same thresholds as the TUI, helping agents
+  narrow scope or compact before truncation (#4071, #4073).
+- Successful child sub-agent completions inline the child's `EVIDENCE` block
+  before the completion sentinel, so parents can cite child findings without
+  re-running tools (#4072).
+- Deferred tools hydrate and execute in the same batch when the original
+  arguments are valid, and `[tools].always_load` now keeps configured MCP tools
+  active instead of forcing the first-call retry. Thanks @SparkofSpike for the
+  hot-path MCP report (#4074, #4027).
+- New commit-range co-author checks reject bot/tool trailers on newly pushed
+  commits; historical release-range cleanup remains a separate maintenance
+  concern (#4075).
+- Fixed fuzzy `edit_file` matching so matches that begin with multibyte UTF-8
+  characters, including CJK text, advance on character boundaries instead of
+  panicking. Contributed by Nightt (@nightt5879), reported by Taixin Guo
+  (@taixinguo) (#3971, #4045).
+- Fixed Unix dispatcher/TUI output under early-closing pipes such as
+  `ghosty doctor | head` by restoring the default `SIGPIPE` handler before
+  printing and propagating signal exits quietly. Contributed by @aznikline,
+  reported by @BrathonBai (#4030, #4043).
+- Suppressed dead_code warnings in the unused plugin registry module and
+  fixed formatting across the command-group files. Contributed by Paulo Aboim
+  Pinto (@aboimpinto).
+- Pointed the website Community nav link at the community hub.
+
+### Security
+
+- MCP client hardening: closed an SSE-endpoint SSRF, bounded the HTTP
+  response body via Content-Length instead of a streaming read, bounded stdio
+  line reads to prevent OOM denial of service, fixed a dead timeout, and
+  removed an unbounded buffer.
+- Made execpolicy deny/trust rules segment-aware, closing a command-chaining
+  bypass.
+- Closed repo-law and safety-floor bypasses found by adversarial review:
+  protected invariants are now enforced as mechanism, the destroyer gap in
+  the safety floor is closed, a catalog-present tool with no execution path
+  now fails closed, `web_run` open/click is classified as destructive, and
+  the allow-list gained wildcard and case handling.
+- Refused symlinked rules directories to prevent workspace escape via
+  discovered rules. Contributed by maple (@yekern).
+- Bounded Fleet sub-agent worker output so fanout cannot exhaust TUI memory
+  (#3882), and preserved event headroom for progress. Contributed in part by
+  @cyq1017.
+- Added an untrusted constitution-draft gate with authoring provenance so
+  model-drafted constitutions require explicit human ratification.
+
+- Google Gemini is its own backend (`/provider google`) on the official
+  OpenAI-compatible route with thought-signature capture/replay and
+  fail-closed replay for thinking models. Antigravity (`agy` 1.1.13) joins
+  as a separate credential-plane provider: consent-gated read-only import
+  of the official CLI's login with `ANTIGRAVITY_API_KEY`/`AGY_ADC_AUTH`
+  precedence; requests fail closed until the cloud-code wire protocol is
+  implemented.
 
 ### Removed
-- `FOOTER_HINT` color constant from palette (use `TEXT_MUTED` or `TEXT_HINT` instead)
 
-### Fixed
-- Test updates to align with simplified footer logic
-- Empty state placeholder text removed for cleaner UI
-
-## [0.3.32] - 2026-04-11
-
-### Added
-- Finance tool: Yahoo Finance v8 quote endpoint with chart fallback, supporting stocks, ETFs, indices, forex, and crypto lookups.
-- Header widget redesign: proportional truncation, context-usage bar with gradient fill, streaming indicator, and graceful narrow-terminal degradation.
-- Expanded test coverage: 680+ tests including footer state, context spans, plan prompt lifecycle, workspace context refresh, header rendering, and finance tool integration tests with wiremock.
-- Workspace context refresh with configurable TTL and deferred initial fetch.
-- Config command additions for runtime settings management.
-
-### Changed
-- Redesigned footer status strip with mode/model/status layout, context bar, and narrow-terminal fallback.
-- Plan prompt now uses numeric selection (1-4) instead of keyword input; old aliases are sent as regular messages.
-- Archived outdated docs (`workspace_migration_status.md` -> `docs/archive/`).
-- Trimmed AGENTS.md boilerplate and updated task counts.
-- Clarified release-surface documentation: crates.io publication may lag the workspace/npm wrapper.
-
-### Fixed
-- Header `metadata_spans` now uses `saturating_sub` to prevent underflow on narrow terminals.
-- Finance tool reuses a single HTTP client instead of rebuilding per request.
-- Finance tool tests no longer leak temp directories.
-
-## [0.3.31] - 2026-03-08
-
-### Added
-- Replaced the finance tool backend with Yahoo Finance v8 + CoinGecko fallback for reliable real-time market data (stocks, ETFs, indices, forex, crypto).
-- Added compaction UX: status strip shows animated COMPACTING indicator during context summarization, footer reflects compaction state, and CompactionCompleted events now include message count statistics.
-- Added send flash: brief tinted background highlight on the last user message after sending.
-- Added braille typing indicator with smooth 10-frame animation cycle.
-
-### Changed
-- Redesigned the footer status strip with mode/model/token/cost layout, quadrant separators, and a context-usage bar.
-- Added Unicode prefix indicators (▸ You, ◆ Answer, ● System) to chat history cells for visual distinction.
-- Improved thinking token delineation with labeled delimiters in transcript rendering.
-- Refactored source code into workspace crates for better modularity and dependency management.
-
-### Fixed
-- Fixed Plan mode ESC key dismissing the prompt without clearing `plan_prompt_pending`, which prevented the prompt from reappearing on subsequent plan completions.
-- Fixed clippy lint (collapsible_if) in web browsing session management.
-
-## [0.3.30] - 2026-03-06
-
-### Added
-- Added a release-ready local npm smoke path that builds binaries, serves release assets locally, packs the wrapper, installs the tarball, and checks both entrypoints before publish.
-- Added an opt-in full-matrix local release-asset fixture so `npm run release:check` can be exercised before GitHub release assets exist.
-
-### Changed
-- Bumped the Rust workspace crates and npm wrapper to `0.3.30`.
-- Pointed the npm wrapper's default `deepseekBinaryVersion` at `0.3.30` for the next coordinated Rust + npm release.
-- Updated the crates dry-run helper to work from a dirty workspace and to preflight dependent workspace crates without requiring unpublished versions to already exist on crates.io.
-
-## [0.3.29] - 2026-03-03
-
-### Added
-- Added npm publish-time release asset verification for the `deepseek-tui` package to fail fast when expected GitHub binaries are missing.
-- Added checksum manifests to GitHub release assets and checksum verification in the npm installer.
-- Added `npm pack` install-and-smoke CI coverage for the `deepseek-tui` wrapper package.
-- Added an end-to-end release runbook covering crates.io, GitHub Releases, and npm publication.
-
-### Changed
-- Updated npm package documentation for clearer install modes, environment overrides, and release integrity behavior.
-- Improved installer support-matrix error messaging for unsupported platform/architecture combinations.
-- Decoupled npm package version from default binary artifact version via `deepseekBinaryVersion`, enabling packaging-only npm releases.
-- Moved the `deepseek-tui` binary target inside `crates/tui` so `cargo publish --dry-run -p deepseek-tui` works from the workspace package layout.
-- Replaced the root-level crates publish workflow with an ordered workspace publish flow.
-- Reworked first-run onboarding and README copy around primary workflows instead of shortcut memorization.
-- Relaxed onboarding API-key format heuristics so unusual keys warn instead of blocking setup.
-
-## [0.3.28] - 2026-03-02
-
-### Added
-- Converted the project to a modular Cargo workspace using a `crates/` layout.
-- Added new crate boundaries mirroring a deepseek architecture (`agent`, `config`, `core`, `execpolicy`, `hooks`, `mcp`, `protocol`, `state`, `tools`, `tui-core`, `tui`, and `app-server`).
-
-### Changed
-- Added parity CI coverage with protocol/state/snapshot checks.
-- Updated release workflow to build both `deepseek` and `deepseek-tui` binaries.
-
-## [0.3.26] - 2026-03-02
-
-### Fixed
-- Resolved SSE stream corruption caused by byte/string position mismatch in streaming parse flow.
-- Hardened base URL validation to reject non-HTTP/HTTPS schemes.
-- Prevented multi-byte UTF-8 truncation panics in common-prefix and runtime thread summary paths.
-- Corrected context usage alert thresholds by separating warning and critical trigger levels.
-
-### Changed
-- Removed non-code utility tools from the runtime tool registry (`calculator`, `weather`, `sports`, `finance`, `time`) and related wiring.
-- Consolidated duplicate URL encoding helpers by delegating to shared `crate::utils::url_encode`.
-- Replaced broad crate-level lint suppressions with targeted `#[allow(...)]` annotations where justified.
-- Cleaned up dead APIs, unused struct fields, unused builder helpers, and non-integrated modules.
-- Addressed clippy findings across the codebase (collapsible conditionals, defaults, indexing helpers, and API signature cleanup).
-
-## [0.3.24] - 2026-02-25
-
-### Fixed
-- Preserve reasoning-only assistant turns for DeepSeek reasoning models (`deepseek-reasoner`, R-series markers) when rebuilding chat history.
-- Align SSE tool streaming indices so each tool block start/delta/stop uses the same block index.
-- Prevent transcript auto-scroll-to-bottom when a non-empty transcript selection is active.
-- Allow session picker search mode to accept the current selection with a single `Enter` press.
-- Preserve tool output whitespace/indentation while still wrapping long unbroken tokens.
-- Make transcript selection copy/highlighting display-width aware (wide chars and tabs).
-- Gate execpolicy behavior on the `exec_policy` feature flag across CLI/tool execution paths.
-- Run doctor API connectivity checks using the effective loaded config/profile (instead of reloading defaults).
-- Parse DeepSeek model context-window suffix hints such as `-32k` and `-256k`.
-- Update README config docs with key environment overrides and a direct link to full configuration docs.
-
-## [0.3.23] - 2026-02-24
-
-### Changed
-- Updated project copy to describe the app as a terminal-native TUI/CLI for DeepSeek models (not pinned to a specific model generation).
-
-### Fixed
-- Model selection and config validation now accept any valid `deepseek-*` model ID (including future releases), while still normalizing common aliases like `deepseek-v3.2` and `deepseek-r1`.
-- Tool-call recovery now auto-loads deferred tools when the model requests them directly, instead of failing with manual `tool_search_*` instructions.
-- YOLO mode now preloads tools by default (including deferred MCP tools), so model tool calls can run immediately without discovery indirection.
-- Unknown tool-call failures now include discovery guidance and nearest tool-name suggestions instead of generic availability errors.
-- Slash-command errors now suggest the closest known command (for example `/modle` -> `/model`) instead of only returning a generic unknown-command message.
-
-## [0.3.22] - 2026-02-19
-
-### Added
-- Interactive `/config` editing modal for runtime settings updates.
-
-### Changed
-- Retired user-facing `/set` command path (no longer reachable/discoverable).
-- Replaced `/deepseek` command behavior with `/links` (aliases: `dashboard`, `api`).
-
-### Fixed
-- Legacy `/set` and `/deepseek` inputs now return migration guidance instead of generic unknown-command errors.
-
-## [0.3.21] - 2026-02-19
-
-### Added
-- Parallel tool execution in `multi_tool_use.parallel` for independent task workflows.
-- Session resume-thread coverage in tests.
-
-### Changed
-- Desktop and web parity polish across the TUI and runtime surfaces.
-- Onboarding and approval UX refinement from prior phase 3 iteration.
-
-### Fixed
-- Runtime pre-release startup issues and config-path edge cases.
-- Clippy lint regressions introduced by the last parity pass.
-
-### Security/Hardening
-- General pre-release hardening for runtime app behavior.
-
-## [0.3.17] - 2026-02-16
-
-### Fixed
-- Config loading now expands `~` in `DEEPSEEK_CONFIG_PATH` and `--config` paths.
-- When `DEEPSEEK_CONFIG_PATH` points to a missing file, config loading now falls back to `~/.deepseek/config.toml` if it exists.
-
-### Changed
-- Removed committed transient runtime artifacts (`session_*.json`, `.deepseek/trusted`) and added ignore rules to prevent re-commit.
-
-## [0.3.16] - 2026-02-15
-
-### Added
-- `deepseek models` CLI command to fetch and list models from the configured `/v1/models` endpoint (with `--json` output mode).
-- `/models` slash command to fetch and display live model IDs in the TUI.
-- Slash-command autocomplete hints in the composer plus `Tab` completion for `/` commands.
-- Command palette modal (`Ctrl+K`) for quick insertion of slash commands and skills.
-- Persistent right sidebar in wide terminals showing live plan/todo/sub-agent state.
-- Expandable tool payload views (`v` in transcript, `v` in approval modal) for full params/output inspection.
-- Runtime HTTP/SSE API (`deepseek serve --http`) with durable thread/turn/item lifecycle, interrupt/steer, and replayable event timeline.
-- Background task queue (`/task add|list|show|cancel` and `POST /v1/tasks`) with persistent storage, bounded worker pool, and timeline/artifact tracking.
-
-### Changed
-- Centralized the default text model (`DEFAULT_TEXT_MODEL`) and shared common model list to reduce drift across runtime/config paths.
-- `/model` now clarifies that any valid DeepSeek model ID is accepted (including future releases), while still showing common model IDs.
-
-### Fixed
-- Expanded reasoning-model detection for chat history reconstruction (supports R-series and reasoner-style naming without hardcoding single versions).
-- Aligned docs/config examples with the then-current runtime default model.
-
-## [0.3.14] - 2026-02-05
-
-### Added
-- `web.run` now supports `image_query` (DuckDuckGo image search)
-- `multi_tool_use.parallel` now supports safe MCP meta tools (`list_mcp_resources`, `mcp_read_resource`, etc.)
-
-### Fixed
-- Encode tool-call function names when rebuilding Chat Completions history (keeps dotted tool names API-safe)
-
-### Changed
-- Prompts: stronger `web.run` citation placement and quote-limit guidance
-
-## [0.3.13] - 2026-02-04
-
-### Fixed
-- Restore an in-app scrollbar for the transcript view
-
-## [0.3.12] - 2026-02-04
-
-### Fixed
-- Map dotted tool names to API-safe identifiers for DeepSeek tool calls
-- Encode any invalid tool names for API tool lists while preserving internal names
-
-## [0.3.11] - 2026-02-04
-
-### Fixed
-- Fix tool name mapping for DeepSeek API
-
-## [0.3.10] - 2026-02-04
-
-### Fixed
-- Always enable mouse wheel scrolling in the TUI (even without alt screen)
-
-## [0.3.9] - 2026-02-04
-
-### Removed
-- RLM mode, tools, and documentation pending a faithful implementation of the MIT RLM design
-- Duo mode tools and prompts pending a citable research spec
-
-### Fixed
-- Footer context usage bar remains visible while status toasts are shown
-
-### Changed
-- Updated prompts and docs to reflect the simplified mode/tool surface
-
-## [0.3.8] - 2026-02-03
-
-### Fixed
-- Resolve clippy warnings (CI `-D warnings`) in new tool implementations
-
-## [0.3.7] - 2026-02-03
-
-### Added
-- Tooling parity updates: `weather`, `finance`, `sports`, `time`, `calculator`, `request_user_input`, `multi_tool_use.parallel`, `web.run`
-- Shell streaming helpers: `exec_shell_wait` and `exec_shell_interact`
-- Sub-agent controls: `send_input` and `wait` (with aliases)
-- MCP resource helpers: `list_mcp_resources`, `list_mcp_resource_templates`, and `read_mcp_resource` alias
-
-### Changed
-- Skills directory selection now prefers workspace `.agents/skills`, then `./skills`, then global
-- Docs and prompts updated to reflect new tool surface and parity notes
-
-## [0.3.6] - 2026-02-02
-
-### Added
-- New welcome banner on startup showing "Welcome to DeepSeek TUI!" with directory, session ID, and model info
-- Visual context progress bar in footer showing usage with block characters [████░░░░░░] and percentage
-
-### Changed
-- Removed custom block-character scrollbar from chat area - now uses terminal's native scroll
-- Simplified header bar: removed context percentage indicator (moved to footer as progress bar)
-
-## [0.3.5] - 2026-01-30
-
-### Added
-- Intelligent context offloading: large tool results (>15k chars) are automatically moved to RLM memory to preserve the context window
-- Persistent history context: compacted messages are offloaded to RLM `history` variable for recall
-- Full MCP protocol support: SSE transport, Resources (`resources/list`, `resources/read`), and Prompts (`prompts/list`, `prompts/get`)
-- `mcp_read_resource` and `mcp_get_prompt` virtual tools exposed to the model
-- Dialectical Duo mode with specialized TUI rendering (`Player` / `Coach` history cells)
-- Dynamic system prompt refreshing at each turn for up-to-date RLM/Duo/working-set context
-- `project_map` tool for automatic codebase structure discovery
-- `delegate_to_agent` alias for streamlined sub-agent delegation
-
-### Changed
-- Default theme changed to 'Whale' with updated color palette
-- `with_agent_tools` now includes `project_map`, `test_runner`, and conditionally RLM tools for all agent modes
-- MCP `McpServerConfig.command` is now `Option<String>` to support URL-only (SSE) servers
-
-### Fixed
-- MCP test compilation errors for updated `McpServerConfig` struct shape
-
-## [0.3.4] - 2026-01-29
-
-### Changed
-- Updated Cargo.lock dependencies
-
-### Fixed
-- Compaction tool-call pairing: enforce bidirectional tool-call/tool-result integrity with fixpoint convergence
-- Safety net scanning to drop orphan tool results in the request builder
-- Double-dispatch race in parallel tool execution
-
-## [0.3.3] - 2026-01-28
-
-### Added
-- TUI polish: Kimi-style footer with mode/model/token display
-- Streaming thinking blocks with dedicated rendering
-- Loading animation improvements
-
-## [0.3.2] - 2026-01-28
-
-### Fixed
-- Preserve tool-call + tool-result pairing during compaction to avoid invalid tool message sequences
-- Drop orphan tool results in request builder as a safety net to prevent API 400s
-
-## [0.3.1] - 2026-01-27
-
-### Added
-- `deepseek setup` to bootstrap MCP config and skills directories
-- `deepseek mcp init` to generate a template `mcp.json` at the configured path
-
-### Changed
-- `deepseek doctor` now follows the resolved config path and config-derived MCP/skills locations
-
-### Fixed
-- Doctor no longer reports missing MCP/skills when paths are overridden via config or env
-
-## [0.3.0] - 2026-01-27
-
-### Added
-- Repo-aware working set tracking with prompt injection for active paths
-- Working set signals now pin relevant messages during auto-compaction
-- Offline eval harness (`deepseek eval`) with CI coverage in the test job
-- Shell tool now emits stdout/stderr summaries and truncation metadata
-- Dependency-aware `agent_swarm` tool for orchestrating multiple sub-agents
-- Expanded sub-agent tool access (apply_patch, web_search, file_search)
-
-### Changed
-- Auto-compaction now accounts for pinned budget and preserves working-set context
-- Apply patch tool validates patch shape, reports per-file summaries, and improves hunk mismatch diagnostics
-- Eval harness shell step now uses a Windows-safe default command
-- Increased `max_subagents` clamp to `1..=20`
-
-## [0.2.2] - 2026-01-22
-
-### Fixed
-- Session save no longer panics on serialization errors
-- Web search regex patterns are now cached for better performance
-- Improved panic messages for regex compilation failures
-
-## [0.2.1] - 2026-01-22
-
-### Fixed
-- Resolve clippy warnings for Rust 1.92
-
-## [0.2.0] - 2026-01-20
-
-### Changed
-- Removed npm package distribution; now Cargo-only
-- Clean up for public release
-
-### Fixed
-- Disabled automatic RLM mode switching; use /rlm or /aleph to enter RLM mode
-- Fixed cargo fmt formatting issues
-
-## [0.0.5] - 2026-06-13
-
-### Changed
-- **Tool details off by default.** `show_tool_details` now defaults to off:
-  tool calls run normally, but their detailed output is collapsed in the TUI.
-  Re-enable with `/config show_tool_details on`. Mirrors the reasoning-display
-  default introduced in 0.0.3.
-
-## [0.0.4] - 2026-06-13
-
-### Added
-- **EasyBits MCP server bundled by default.** Fresh installs now ship the
-  EasyBits MCP server (file management from the agent, 100+ tools) seeded into
-  the config — disabled until you add a key, so a clean install never fails to
-  connect. Add your key in one command with the new `--bearer` flag:
-  `ghosty mcp add easybits --url "https://www.easybits.cloud/api/mcp?tools=all" --bearer <KEY>`.
-  Get a key at https://www.easybits.cloud/dash/developer. The `/mcp` manager
-  shows the setup hint while the server is disabled.
-
-## [0.0.3] - 2026-06-13
-
-### Changed
-- **Reasoning display off by default.** `show_thinking` now defaults to off:
-  the model still reasons at full effort (default tier is `max`), but the live
-  reasoning stream is hidden in the TUI. Re-enable with `/config show_thinking on`.
-- **Ghosty mascot.** Filled the welcome-screen mascot's lower body into a
-  solid skirt with a ruffled (`olán`) bottom edge.
-
-### Added
-- **Spanish adaptive-reasoning keywords.** Auto mode now recognizes Spanish
-  debug/search terms (`depurar`, `falla`, `analiza`, `buscar`, `consulta`, …)
-  when picking a reasoning-effort tier.
-
-## [0.0.2] - 2026-01-20
-
-### Fixed
-- Disabled automatic RLM mode switching; use /rlm or /aleph to enter RLM mode.
-
-## [0.0.1] - 2026-01-19
-
-### Added
-- DeepSeek Responses API client with chat-completions fallback
-- CLI parity commands: login/logout, exec, review, apply, mcp, sandbox
-- Resume/fork session workflows with picker fallback
-- DeepSeek blue branding refresh + whale indicator
-- Responses API proxy subcommand for key-isolated forwarding
-- Execpolicy check tooling and feature flag CLI
-- Agentic exec mode (`deepseek exec --auto`) with auto-approvals
-
-### Changed
-- Removed multimedia tooling and aligned prompts/docs for text-only DeepSeek API
-
-## [0.1.9] - 2026-01-17
-
-### Added
-- API connectivity test in `deepseek doctor` command
-- Helpful error diagnostics for common API failures (invalid key, timeout, network issues)
-
-## [0.1.8] - 2026-01-16
-
-### Added
-- Renderable widget abstraction and modal view stack for TUI composition
-- Parallel tool execution with lock-aware scheduling
-- Interactive shell mode with terminal pause/resume handling
-
-### Changed
-- Tool approval requirements moved into tool specs
-- Tool results are recorded in original request order
-
-## [0.1.7] - 2026-01-15
-
-### Added
-- Duo mode (player-coach autocoding workflow)
-- Character-level transcript selection
-
-### Fixed
-- Approval flow tool use ID routing
-- Cursor position sync for transcript selection
-
-## [0.1.6] - 2026-01-14
-
-### Added
-- Auto-RLM for large pasted blocks with context auto-load
-- `chunk_auto` and `rlm_query` `auto_chunks` for quick document sweeps
-- RLM usage badge with budget warnings in the footer
-
-### Changed
-- Auto-RLM now honors explicit RLM file requests even for smaller files
-
-## [0.1.5] - 2026-01-14
-
-### Added
-- RLM prompt with external-context guidance and REPL tooling
-- RLM tools for context loading, execution, status, and sub-queries (rlm_load, rlm_exec, rlm_status, rlm_query)
-- RLM query usage tracking and variable buffers
-- Workspace-relative `@path` support for RLM loads
-- Auto-switch to RLM when users request large file analysis (or the largest file)
-
-### Changed
-- Removed Edit mode; RLM chat is default with /repl toggle
-
-## [0.1.0] - 2026-01-12
-
-### Added
-- Initial alpha release of DeepSeek TUI
-- Interactive TUI chat interface
-- DeepSeek API integration (OpenAI-compatible Responses API)
-- Tool execution (shell, file ops)
-- MCP (Model Context Protocol) support
-- Session management with history
-- Skills/plugin system
-- Cost tracking and estimation
-- Hooks system and config profiles
-- Example skills and launch assets
-
-[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.8.53...HEAD
-[0.8.53]: https://github.com/blissito/ghostycode/compare/v0.8.52...v0.8.53
-[0.8.52]: https://github.com/blissito/ghostycode/compare/v0.8.51...v0.8.52
-[0.8.51]: https://github.com/blissito/ghostycode/compare/v0.8.50...v0.8.51
-[0.8.50]: https://github.com/blissito/ghostycode/compare/v0.8.49...v0.8.50
-[0.8.49]: https://github.com/blissito/ghostycode/compare/v0.8.48...v0.8.49
-[0.8.48]: https://github.com/blissito/ghostycode/compare/v0.8.47...v0.8.48
-[0.8.47]: https://github.com/blissito/ghostycode/compare/v0.8.46...v0.8.47
-[0.8.46]: https://github.com/blissito/ghostycode/compare/v0.8.45...v0.8.46
-[0.8.45]: https://github.com/blissito/ghostycode/compare/v0.8.44...v0.8.45
-[0.8.44]: https://github.com/blissito/ghostycode/compare/v0.8.43...v0.8.44
-[0.8.43]: https://github.com/blissito/ghostycode/compare/v0.8.42...v0.8.43
-[0.8.42]: https://github.com/blissito/ghostycode/compare/v0.8.41...v0.8.42
-[0.8.41]: https://github.com/blissito/ghostycode/compare/v0.8.40...v0.8.41
-[0.8.40]: https://github.com/blissito/ghostycode/compare/v0.8.39...v0.8.40
-[0.8.39]: https://github.com/blissito/ghostycode/compare/v0.8.38...v0.8.39
-[0.8.38]: https://github.com/blissito/ghostycode/compare/v0.8.37...v0.8.38
-[0.8.37]: https://github.com/blissito/ghostycode/compare/v0.8.36...v0.8.37
-[0.8.36]: https://github.com/blissito/ghostycode/compare/v0.8.35...v0.8.36
-[0.8.35]: https://github.com/blissito/ghostycode/compare/v0.8.34...v0.8.35
-[0.8.34]: https://github.com/blissito/ghostycode/compare/v0.8.33...v0.8.34
-[0.8.33]: https://github.com/blissito/ghostycode/compare/v0.8.32...v0.8.33
-[0.8.32]: https://github.com/blissito/ghostycode/compare/v0.8.31...v0.8.32
-[0.8.31]: https://github.com/blissito/ghostycode/compare/v0.8.30...v0.8.31
-[0.8.30]: https://github.com/blissito/ghostycode/compare/v0.8.29...v0.8.30
-[0.8.29]: https://github.com/blissito/ghostycode/compare/v0.8.28...v0.8.29
-[0.8.28]: https://github.com/blissito/ghostycode/compare/v0.8.27...v0.8.28
-[0.8.27]: https://github.com/blissito/ghostycode/compare/v0.8.26...v0.8.27
-[0.8.26]: https://github.com/blissito/ghostycode/compare/v0.8.25...v0.8.26
-[0.8.25]: https://github.com/blissito/ghostycode/compare/v0.8.24...v0.8.25
-[0.8.24]: https://github.com/blissito/ghostycode/compare/v0.8.23...v0.8.24
-[0.8.23]: https://github.com/blissito/ghostycode/compare/v0.8.22...v0.8.23
-[0.8.22]: https://github.com/blissito/ghostycode/compare/v0.8.21...v0.8.22
-[0.8.21]: https://github.com/blissito/ghostycode/compare/v0.8.20...v0.8.21
-[0.8.20]: https://github.com/blissito/ghostycode/compare/v0.8.19...v0.8.20
-[0.8.19]: https://github.com/blissito/ghostycode/compare/v0.8.18...v0.8.19
-[0.8.18]: https://github.com/blissito/ghostycode/compare/v0.8.17...v0.8.18
-[0.8.17]: https://github.com/blissito/ghostycode/compare/v0.8.16...v0.8.17
-[0.8.16]: https://github.com/blissito/ghostycode/compare/v0.8.15...v0.8.16
-[0.8.15]: https://github.com/blissito/ghostycode/compare/v0.8.13...v0.8.15
-[0.8.13]: https://github.com/blissito/ghostycode/compare/v0.8.12...v0.8.13
-[0.8.12]: https://github.com/blissito/ghostycode/compare/v0.8.11...v0.8.12
-[0.8.11]: https://github.com/blissito/ghostycode/compare/v0.8.10...v0.8.11
-[0.8.10]: https://github.com/blissito/ghostycode/compare/v0.8.8...v0.8.10
-[0.8.8]: https://github.com/blissito/ghostycode/compare/v0.8.7...v0.8.8
-[0.8.7]: https://github.com/blissito/ghostycode/compare/v0.8.6...v0.8.7
-[0.8.6]: https://github.com/blissito/ghostycode/compare/v0.8.5...v0.8.6
-[0.8.5]: https://github.com/blissito/ghostycode/compare/v0.8.4...v0.8.5
-[0.8.4]: https://github.com/blissito/ghostycode/compare/v0.8.3...v0.8.4
-[0.8.3]: https://github.com/blissito/ghostycode/compare/v0.8.2...v0.8.3
-[0.8.2]: https://github.com/blissito/ghostycode/compare/v0.8.1...v0.8.2
-[0.8.1]: https://github.com/blissito/ghostycode/compare/v0.8.0...v0.8.1
-[0.8.0]: https://github.com/blissito/ghostycode/compare/v0.7.9...v0.8.0
-[0.7.9]: https://github.com/blissito/ghostycode/compare/v0.7.8...v0.7.9
-[0.7.8]: https://github.com/blissito/ghostycode/compare/v0.7.7...v0.7.8
-[0.7.7]: https://github.com/blissito/ghostycode/compare/v0.7.6...v0.7.7
-[0.7.6]: https://github.com/blissito/ghostycode/compare/v0.7.5...v0.7.6
-[0.6.1]: https://github.com/blissito/ghostycode/compare/v0.6.0...v0.6.1
-[0.6.0]: https://github.com/blissito/ghostycode/compare/v0.4.9...v0.6.0
-[0.4.9]: https://github.com/blissito/ghostycode/compare/v0.4.8...v0.4.9
-[0.4.8]: https://github.com/blissito/ghostycode/compare/v0.3.33...v0.4.8
-[0.3.33]: https://github.com/blissito/ghostycode/compare/v0.3.32...v0.3.33
-[0.3.32]: https://github.com/blissito/ghostycode/compare/v0.3.31...v0.3.32
-[0.3.31]: https://github.com/blissito/ghostycode/compare/v0.3.28...v0.3.31
-[0.3.28]: https://github.com/blissito/ghostycode/compare/v0.3.27...v0.3.28
-[0.3.23]: https://github.com/blissito/ghostycode/compare/v0.3.22...v0.3.23
-[0.3.22]: https://github.com/blissito/ghostycode/compare/v0.3.21...v0.3.22
-[0.3.21]: https://github.com/blissito/ghostycode/compare/v0.3.17...v0.3.21
-[0.3.17]: https://github.com/blissito/ghostycode/compare/v0.3.16...v0.3.17
-[0.3.16]: https://github.com/blissito/ghostycode/compare/v0.3.14...v0.3.16
-[0.3.14]: https://github.com/blissito/ghostycode/compare/v0.3.13...v0.3.14
-[0.3.13]: https://github.com/blissito/ghostycode/compare/v0.3.12...v0.3.13
-[0.3.12]: https://github.com/blissito/ghostycode/compare/v0.3.11...v0.3.12
-[0.3.11]: https://github.com/blissito/ghostycode/compare/v0.3.10...v0.3.11
-[0.3.10]: https://github.com/blissito/ghostycode/compare/v0.3.6...v0.3.10
-[0.3.6]: https://github.com/blissito/ghostycode/compare/v0.3.5...v0.3.6
-[0.3.5]: https://github.com/blissito/ghostycode/compare/v0.3.4...v0.3.5
-[0.3.4]: https://github.com/blissito/ghostycode/compare/v0.3.3...v0.3.4
-[0.3.3]: https://github.com/blissito/ghostycode/compare/v0.3.2...v0.3.3
-[0.3.2]: https://github.com/blissito/ghostycode/compare/v0.3.1...v0.3.2
-[0.3.1]: https://github.com/blissito/ghostycode/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/blissito/ghostycode/compare/v0.2.2...v0.3.0
-[0.2.2]: https://github.com/blissito/ghostycode/compare/v0.2.0...v0.2.2
-[0.2.0]: https://github.com/blissito/ghostycode/releases/tag/v0.2.0
-[0.0.5]: https://github.com/blissito/ghostycode/releases/tag/v0.0.5
-[0.0.4]: https://github.com/blissito/ghostycode/releases/tag/v0.0.4
-[0.0.3]: https://github.com/blissito/ghostycode/releases/tag/v0.0.3
-[0.0.2]: https://github.com/blissito/ghostycode/releases/tag/v0.0.2
-[0.0.1]: https://github.com/blissito/ghostycode/releases/tag/v0.0.1
-[0.1.9]: https://github.com/blissito/ghostycode/compare/v0.1.8...v0.1.9
-[0.1.8]: https://github.com/blissito/ghostycode/compare/v0.1.7...v0.1.8
-[0.1.7]: https://github.com/blissito/ghostycode/compare/v0.1.6...v0.1.7
-[0.1.6]: https://github.com/blissito/ghostycode/compare/v0.1.5...v0.1.6
-[0.1.5]: https://github.com/blissito/ghostycode/compare/v0.1.0...v0.1.5
-[0.1.0]: https://github.com/blissito/ghostycode/releases/tag/v0.1.0
-[0.0.6]: https://github.com/blissito/ghostycode/compare/v0.0.5...v0.0.6
-[0.0.14]: https://github.com/blissito/ghostycode/releases/tag/v0.0.14
-[0.0.13]: https://github.com/blissito/ghostycode/releases/tag/v0.0.13
-[0.0.12]: https://github.com/blissito/ghostycode/releases/tag/v0.0.12
-[0.0.11]: https://github.com/blissito/ghostycode/releases/tag/v0.0.11
-[0.0.10]: https://github.com/blissito/ghostycode/releases/tag/v0.0.10
-[0.0.9]: https://github.com/blissito/ghostycode/releases/tag/v0.0.9
-[0.0.8-preview.0]: https://github.com/blissito/ghostycode/releases/tag/v0.0.8-preview.0
-[0.0.7]: https://github.com/blissito/ghostycode/compare/v0.0.6...v0.0.7
+- Removed unused model-registry helpers. Harvested from #3872 by @cyq1017.
+- Removed unused request-tuning metadata. Harvested from #3871 by @cyq1017.
+- Removed dead fleet task helpers (#3894 by @cyq1017), the unused
+  approval-cache container (#3845) and localization QA metadata (both by
+  @nightt5879), the dormant tab collaboration subsystem (#3838), the legacy
+  flash auto-router (#3839), the stale project_doc loader (#3840), ignored
+  mock LLM placeholders (#3841), dead model-catalog helpers (#3842), the
+  unused execpolicy amend module, and dead MCP/client retry helpers.
+- Retired the deprecated `WHALE.md` context fallback (#3798).
+
+---
+
+Older releases: [CHANGELOG.md](https://github.com/blissito/ghostycode/blob/main/CHANGELOG.md) and [docs/CHANGELOG_ARCHIVE.md](https://github.com/blissito/ghostycode/blob/main/docs/CHANGELOG_ARCHIVE.md).

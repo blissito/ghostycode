@@ -1,10 +1,50 @@
 import type { NextConfig } from "next";
+import { execFileSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const webRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(webRoot, "..");
+
+function git(args: string[]): string | null {
+  try {
+    return execFileSync("git", args, {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+const requestedSourceRevision =
+  process.env.GHOSTY_SOURCE_REVISION?.trim() ||
+  process.env.GITHUB_SHA?.trim();
+const gitSourceRevision = git(["rev-parse", "HEAD"]);
+const sourceRevision = /^[0-9a-f]{40}$/i.test(requestedSourceRevision ?? "")
+  ? requestedSourceRevision ?? ""
+  : /^[0-9a-f]{40}$/i.test(gitSourceRevision ?? "")
+    ? gitSourceRevision ?? ""
+    : "";
+const sourceCommittedAt =
+  process.env.GHOSTY_SOURCE_COMMITTED_AT?.trim() ||
+  (sourceRevision ? git(["show", "-s", "--format=%cI", sourceRevision]) : null) ||
+  "";
 
 // Security headers are set in middleware.ts (more reliable under OpenNext on
 // Cloudflare than next.config.ts headers(), which doesn't always apply to
 // prerendered/cached responses).
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: webRoot,
   reactStrictMode: true,
+  // Public, non-secret provenance for the exact source used to build the
+  // deployed worker. Next inlines these values into server output, allowing a
+  // credential-free post-deploy comparison without dirtying tracked facts.
+  env: {
+    NEXT_PUBLIC_GHOSTY_SOURCE_REVISION: sourceRevision,
+    NEXT_PUBLIC_GHOSTY_SOURCE_COMMITTED_AT: sourceCommittedAt,
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
