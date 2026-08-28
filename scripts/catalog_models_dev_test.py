@@ -78,7 +78,7 @@ class CatalogModelsDevScriptTests(unittest.TestCase):
                 encoding="utf-8",
             )
             env = os.environ.copy()
-            env["CODEWHALE_MODELS_DEV_PATH"] = str(source)
+            env["GHOSTY_MODELS_DEV_PATH"] = str(source)
 
             proc = subprocess.run(
                 [
@@ -152,7 +152,7 @@ class CatalogModelsDevScriptTests(unittest.TestCase):
                 encoding="utf-8",
             )
             env = os.environ.copy()
-            env["CODEWHALE_MODELS_DEV_PATH"] = str(upstream)
+            env["GHOSTY_MODELS_DEV_PATH"] = str(upstream)
             proc = subprocess.run(
                 [sys.executable, str(SCRIPT), "drift", "--seed", str(seed)],
                 cwd=ROOT,

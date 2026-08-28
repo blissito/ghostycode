@@ -1,12 +1,12 @@
 //! Hermetic configuration-scope tests: a provider authorized once must stay
 //! visible from every folder, repository, and worktree.
 //!
-//! Everything here uses sealed fixtures (temp `CODEWHALE_HOME`, test keys in
+//! Everything here uses sealed fixtures (temp `GHOSTY_HOME`, test keys in
 //! the real secret-store path, no network, no OAuth). The claims proven:
 //!
 //! - readiness is identical across unrelated workspaces unless an explicit
 //!   workspace override was selected;
-//! - an explicit workspace config (via `CODEWHALE_CONFIG_PATH`) can select a
+//! - an explicit workspace config (via `GHOSTY_CONFIG_PATH`) can select a
 //!   different route but never makes a user-global credential disappear;
 //! - unavailable truly means unavailable, with a precise reason;
 //! - readers never rewrite configuration (concurrent processes cannot revert
@@ -27,12 +27,12 @@ impl Drop for HomeGuard {
         // SAFETY: serialised by lock_test_env held by the caller.
         unsafe {
             match &self.prev_home {
-                Some(v) => std::env::set_var("CODEWHALE_HOME", v),
-                None => std::env::remove_var("CODEWHALE_HOME"),
+                Some(v) => std::env::set_var("GHOSTY_HOME", v),
+                None => std::env::remove_var("GHOSTY_HOME"),
             }
             match &self.prev_config_path {
-                Some(v) => std::env::set_var("CODEWHALE_CONFIG_PATH", v),
-                None => std::env::remove_var("CODEWHALE_CONFIG_PATH"),
+                Some(v) => std::env::set_var("GHOSTY_CONFIG_PATH", v),
+                None => std::env::remove_var("GHOSTY_CONFIG_PATH"),
             }
         }
     }
@@ -45,8 +45,8 @@ fn sealed_home() -> &'static Path {
     HOME.get_or_init(|| {
         let dir = tempfile::TempDir::new().expect("temp home").keep();
         // Seed the user-global config: DeepSeek is the authorized provider.
-        // The config lives at $CODEWHALE_HOME/config.toml (the primary path
-        // when CODEWHALE_HOME is explicit).
+        // The config lives at $GHOSTY_HOME/config.toml (the primary path
+        // when GHOSTY_HOME is explicit).
         std::fs::write(
             dir.join("config.toml"),
             r#"provider = "deepseek"
@@ -59,17 +59,17 @@ api_key = "sk-test-scope-deepseek"
     })
 }
 
-/// Point `CODEWHALE_HOME` at the sealed home (optionally also pinning
-/// `CODEWHALE_CONFIG_PATH`). Caller must hold `lock_test_env`.
+/// Point `GHOSTY_HOME` at the sealed home (optionally also pinning
+/// `GHOSTY_CONFIG_PATH`). Caller must hold `lock_test_env`.
 fn sealed_env(config_path: Option<&Path>) -> HomeGuard {
-    let prev_home = std::env::var_os("CODEWHALE_HOME");
-    let prev_config_path = std::env::var_os("CODEWHALE_CONFIG_PATH");
+    let prev_home = std::env::var_os("GHOSTY_HOME");
+    let prev_config_path = std::env::var_os("GHOSTY_CONFIG_PATH");
     // SAFETY: serialised by lock_test_env held by the caller.
     unsafe {
-        std::env::set_var("CODEWHALE_HOME", sealed_home());
+        std::env::set_var("GHOSTY_HOME", sealed_home());
         match config_path {
-            Some(path) => std::env::set_var("CODEWHALE_CONFIG_PATH", path),
-            None => std::env::remove_var("CODEWHALE_CONFIG_PATH"),
+            Some(path) => std::env::set_var("GHOSTY_CONFIG_PATH", path),
+            None => std::env::remove_var("GHOSTY_CONFIG_PATH"),
         }
     }
     HomeGuard {
@@ -89,9 +89,9 @@ fn deepseek_readiness(config: &Config) -> ResolvedProviderReadiness {
 
 fn workspace_with_config(dir: &Path, provider: &str) -> PathBuf {
     let ws = dir.join(provider);
-    std::fs::create_dir_all(ws.join(".codewhale")).expect("workspace dir");
+    std::fs::create_dir_all(ws.join(".ghosty")).expect("workspace dir");
     std::fs::write(
-        ws.join(".codewhale").join("config.toml"),
+        ws.join(".ghosty").join("config.toml"),
         format!(
             r#"provider = "{provider}"
 
@@ -149,7 +149,7 @@ fn explicit_workspace_config_selects_its_route_without_locking_user_global() {
     let ws_a = workspace_with_config(base.path(), "zai");
     // The explicit config path is the workspace file — this is the
     // "launched from that folder with --config" shape.
-    let config_path = ws_a.join(".codewhale").join("config.toml");
+    let config_path = ws_a.join(".ghosty").join("config.toml");
     let _home = sealed_env(Some(&config_path));
 
     let config = Config::load(Some(config_path.clone()), None).expect("load workspace config");
@@ -192,9 +192,9 @@ fn explicit_workspace_config_selects_its_route_without_locking_user_global() {
 
 fn write_nested_zai_config(base: &std::path::Path) -> std::path::PathBuf {
     let nested = base.join("parent-repo").join("nested-repo");
-    std::fs::create_dir_all(nested.join(".codewhale")).expect("nested dir");
+    std::fs::create_dir_all(nested.join(".ghosty")).expect("nested dir");
     std::fs::write(
-        nested.join(".codewhale").join("config.toml"),
+        nested.join(".ghosty").join("config.toml"),
         r#"provider = "zai"
 
 [providers.zai]
@@ -221,7 +221,7 @@ fn nested_repo_does_not_change_readiness() {
     let _lock = crate::test_support::lock_test_env();
     let base = tempfile::TempDir::new().expect("temp base");
     let nested = write_nested_zai_config(base.path());
-    assert_user_global_survives_workspace("nested", nested.join(".codewhale/config.toml"));
+    assert_user_global_survives_workspace("nested", nested.join(".ghosty/config.toml"));
 }
 
 #[cfg(unix)]
@@ -232,7 +232,7 @@ fn symlinked_worktree_does_not_change_readiness() {
     let nested = write_nested_zai_config(base.path());
     let symlinked = base.path().join("symlink-worktree");
     std::os::unix::fs::symlink(&nested, &symlinked).expect("symlink");
-    assert_user_global_survives_workspace("symlinked", symlinked.join(".codewhale/config.toml"));
+    assert_user_global_survives_workspace("symlinked", symlinked.join(".ghosty/config.toml"));
 }
 
 #[test]
@@ -290,9 +290,9 @@ fn workspace_fleet_selection_affects_only_that_workspace() {
     // the parallel personal-selection test's writes.
     let home = tempfile::TempDir::new().expect("temp home");
     std::fs::create_dir_all(home.path().join("fleets")).expect("fleets dir");
-    let prev = std::env::var_os("CODEWHALE_HOME");
+    let prev = std::env::var_os("GHOSTY_HOME");
     // SAFETY: serialised by lock_test_env.
-    unsafe { std::env::set_var("CODEWHALE_HOME", home.path()) };
+    unsafe { std::env::set_var("GHOSTY_HOME", home.path()) };
 
     let base = tempfile::TempDir::new().expect("temp base");
     let ws_a = base.path().join("ws-a");
@@ -319,14 +319,14 @@ fn workspace_fleet_selection_affects_only_that_workspace() {
     let sel = selected_fleet(&ws_a).expect("selected in A");
     assert_eq!(sel.scope, FleetScope::Personal);
     assert!(
-        !ws_a.join(".codewhale/fleets/team-a.toml").exists(),
+        !ws_a.join(".ghosty/fleets/team-a.toml").exists(),
         "a workspace selection must not copy the fleet file"
     );
     // SAFETY: serialised by lock_test_env.
     unsafe {
         match prev {
-            Some(v) => std::env::set_var("CODEWHALE_HOME", v),
-            None => std::env::remove_var("CODEWHALE_HOME"),
+            Some(v) => std::env::set_var("GHOSTY_HOME", v),
+            None => std::env::remove_var("GHOSTY_HOME"),
         }
     }
 }
@@ -340,9 +340,9 @@ fn personal_fleet_selection_persists_across_restart() {
     // Fresh personal home per test (see the workspace-selection test).
     let home = tempfile::TempDir::new().expect("temp home");
     std::fs::create_dir_all(home.path().join("fleets")).expect("fleets dir");
-    let prev = std::env::var_os("CODEWHALE_HOME");
+    let prev = std::env::var_os("GHOSTY_HOME");
     // SAFETY: serialised by lock_test_env.
-    unsafe { std::env::set_var("CODEWHALE_HOME", home.path()) };
+    unsafe { std::env::set_var("GHOSTY_HOME", home.path()) };
 
     let ws = tempfile::TempDir::new().expect("temp ws");
     let fleet = FleetFile::new("My Default".to_string(), None).expect("fleet");
@@ -356,8 +356,8 @@ fn personal_fleet_selection_persists_across_restart() {
     // SAFETY: serialised by lock_test_env.
     unsafe {
         match prev {
-            Some(v) => std::env::set_var("CODEWHALE_HOME", v),
-            None => std::env::remove_var("CODEWHALE_HOME"),
+            Some(v) => std::env::set_var("GHOSTY_HOME", v),
+            None => std::env::remove_var("GHOSTY_HOME"),
         }
     }
 }

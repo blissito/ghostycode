@@ -15,8 +15,8 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderName, StatusCode};
 use axum::response::IntoResponse;
-use codewhale_agent::ModelRegistry;
-use codewhale_config::{
+use ghosty_agent::ModelRegistry;
+use ghosty_config::{
     ConfigApiKeyValueKind, ConfigToml, ProviderKind, auth_mode_disables_api_key,
     classify_config_api_key_value, is_upstream_auth_header,
     provider::WireFormat,
@@ -374,7 +374,7 @@ pub(crate) async fn chat_completions_handler(
     }
 
     // Build upstream request.
-    let upstream_req = codewhale_release::platform_http_client_builder()
+    let upstream_req = ghosty_release::platform_http_client_builder()
         .build()
         .map_err(|e| {
             (
@@ -463,7 +463,7 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::{Method, Request};
-    use codewhale_config::provider::WireFormat;
+    use ghosty_config::provider::WireFormat;
     use std::fs;
     use tokio::sync::mpsc;
     use tower::ServiceExt;
@@ -1091,7 +1091,7 @@ api_key = {provider_api_key:?}
 
         assert_eq!(api_key, None);
         assert!(!ambient_was_read.get());
-        for sentinel in [codewhale_config::API_KEYRING_SENTINEL, "  __KEYRING__  "] {
+        for sentinel in [ghosty_config::API_KEYRING_SENTINEL, "  __KEYRING__  "] {
             assert_eq!(
                 resolve_upstream_api_key(Some(sentinel), false, false, || unreachable!()),
                 None

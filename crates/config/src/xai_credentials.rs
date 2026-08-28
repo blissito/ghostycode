@@ -1,4 +1,4 @@
-//! Naming and cleanup policy for Codewhale-owned xAI OAuth generations.
+//! Naming and cleanup policy for Ghosty-owned xAI OAuth generations.
 //!
 //! Config stores only a validated basename. Callers can therefore never turn
 //! the generation pointer into an arbitrary path read or deletion primitive.
@@ -22,9 +22,9 @@ pub const LEGACY_XAI_OAUTH_FILE_NAME: &str = "xai-auth.json";
 const XAI_OAUTH_LIFECYCLE_LOCK_FILE_NAME: &str = ".xai-oauth.lock";
 const XAI_OAUTH_FILE_LIMIT: u64 = 1024 * 1024;
 
-/// Stable handle to Codewhale's private xAI OAuth directory.
+/// Stable handle to Ghosty's private xAI OAuth directory.
 ///
-/// The lexical `$CODEWHALE_HOME/credentials` boundary is retained verbatim.
+/// The lexical `$GHOSTY_HOME/credentials` boundary is retained verbatim.
 /// Unix opens every component relative to the preceding directory with
 /// `O_NOFOLLOW`; Windows keeps non-delete-shared handles to every component and
 /// rejects reparse points. Holding this value therefore pins the directory
@@ -73,26 +73,26 @@ pub fn is_valid_xai_oauth_generation(value: &str) -> bool {
 pub fn validate_xai_oauth_generation(value: &str) -> Result<&str> {
     if !is_valid_xai_oauth_generation(value) {
         bail!(
-            "invalid Codewhale-owned xAI OAuth generation; expected xai-auth-<32 lowercase hex>.json"
+            "invalid Ghosty-owned xAI OAuth generation; expected xai-auth-<32 lowercase hex>.json"
         );
     }
     Ok(value)
 }
 
 pub fn xai_oauth_credentials_dir() -> Result<PathBuf> {
-    lexical_absolute_path(&crate::codewhale_home()?.join("credentials"))
+    lexical_absolute_path(&crate::ghosty_home()?.join("credentials"))
 }
 
 /// Make an owned path absolute without resolving any filesystem component.
 /// Canonicalization is deliberately forbidden here: following an existing
-/// `credentials` symlink would erase the lexical Codewhale-owned boundary and
+/// `credentials` symlink would erase the lexical Ghosty-owned boundary and
 /// turn an external directory into an apparently valid destination.
 fn lexical_absolute_path(path: &Path) -> Result<PathBuf> {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
         std::env::current_dir()
-            .context("resolving the Codewhale credentials directory")?
+            .context("resolving the Ghosty credentials directory")?
             .join(path)
     };
     if absolute
@@ -100,7 +100,7 @@ fn lexical_absolute_path(path: &Path) -> Result<PathBuf> {
         .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
     {
         bail!(
-            "Codewhale credentials directory must be lexically normalized: {}",
+            "Ghosty credentials directory must be lexically normalized: {}",
             crate::quote_os_path(&absolute)
         );
     }
@@ -115,7 +115,7 @@ pub fn legacy_xai_oauth_path() -> Result<PathBuf> {
     Ok(xai_oauth_credentials_dir()?.join(LEGACY_XAI_OAUTH_FILE_NAME))
 }
 
-/// Serialize every Codewhale-owned xAI OAuth lifecycle mutation across threads
+/// Serialize every Ghosty-owned xAI OAuth lifecycle mutation across threads
 /// and processes while pinning the lexical credentials directory.
 ///
 /// Lock order is always xAI lifecycle first, then config document. Callers must
@@ -141,7 +141,7 @@ pub fn with_xai_oauth_lifecycle_lock<T>(
 }
 
 /// Run an authority mode switch while the prior owned OAuth epoch is hidden
-/// from concurrent Codewhale readers. A failed authority mutation restores the
+/// from concurrent Ghosty readers. A failed authority mutation restores the
 /// old files; a successful mutation permanently removes them.
 pub fn with_xai_oauth_revocation_transaction<T>(
     operation: impl FnOnce() -> Result<T>,
@@ -191,7 +191,7 @@ impl XaiOAuthCredentialStore {
         let metadata = validate_owned_file_handle(&file, &self.directory.join(name))?;
         if metadata.len() > XAI_OAUTH_FILE_LIMIT {
             bail!(
-                "Codewhale-owned xAI OAuth file {} exceeds the {} byte limit",
+                "Ghosty-owned xAI OAuth file {} exceeds the {} byte limit",
                 crate::quote_os_path(&self.directory.join(name)),
                 XAI_OAUTH_FILE_LIMIT
             );
@@ -202,20 +202,20 @@ impl XaiOAuthCredentialStore {
             .read_to_end(&mut bytes)
             .with_context(|| {
                 format!(
-                    "reading Codewhale-owned xAI OAuth file {}",
+                    "reading Ghosty-owned xAI OAuth file {}",
                     crate::quote_os_path(&self.directory.join(name))
                 )
             })?;
         if bytes.len() as u64 > XAI_OAUTH_FILE_LIMIT {
             bail!(
-                "Codewhale-owned xAI OAuth file {} exceeds the {} byte limit",
+                "Ghosty-owned xAI OAuth file {} exceeds the {} byte limit",
                 crate::quote_os_path(&self.directory.join(name)),
                 XAI_OAUTH_FILE_LIMIT
             );
         }
         String::from_utf8(bytes).map(Some).map_err(|_| {
             anyhow::anyhow!(
-                "Codewhale-owned xAI OAuth file {} is not valid UTF-8",
+                "Ghosty-owned xAI OAuth file {} is not valid UTF-8",
                 crate::quote_os_path(&self.directory.join(name))
             )
         })
@@ -247,11 +247,11 @@ impl XaiOAuthCredentialStore {
 
     /// Stage every active owned credential before a config mode switch. The
     /// generation basename is the OAuth epoch; the lifecycle lock prevents a
-    /// stale Codewhale reader from using it while authority changes.
+    /// stale Ghosty reader from using it while authority changes.
     pub fn stage_revocation(&self) -> Result<XaiOAuthRevocation> {
         #[cfg(windows)]
         {
-            // Every Codewhale reader/writer takes the lifecycle lock, so a
+            // Every Ghosty reader/writer takes the lifecycle lock, so a
             // Windows mode switch can retain the exact active basenames until
             // the config commit succeeds. `commit` then opens each leaf with
             // DELETE access and marks that exact handle for deletion. This
@@ -315,7 +315,7 @@ fn owned_auth_names_in_store(store: &XaiOAuthCredentialStore) -> Result<Vec<Stri
         unsafe { libc::fcntl(store.directory_handle.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
     if duplicated < 0 {
         return Err(std::io::Error::last_os_error())
-            .context("duplicating Codewhale credentials directory handle");
+            .context("duplicating Ghosty credentials directory handle");
     }
     // SAFETY: `duplicated` is an owned directory descriptor. `closedir` below
     // assumes ownership on the successful conversion.
@@ -324,7 +324,7 @@ fn owned_auth_names_in_store(store: &XaiOAuthCredentialStore) -> Result<Vec<Stri
         let error = std::io::Error::last_os_error();
         // SAFETY: `fdopendir` failed and therefore did not consume the fd.
         unsafe { libc::close(duplicated) };
-        return Err(error).context("enumerating Codewhale credentials directory");
+        return Err(error).context("enumerating Ghosty credentials directory");
     }
     let mut names = Vec::new();
     loop {
@@ -346,7 +346,7 @@ fn owned_auth_names_in_store(store: &XaiOAuthCredentialStore) -> Result<Vec<Stri
     // SAFETY: `stream` is still owned and has not previously been closed.
     if unsafe { libc::closedir(stream) } != 0 {
         return Err(std::io::Error::last_os_error())
-            .context("closing Codewhale credentials directory enumeration");
+            .context("closing Ghosty credentials directory enumeration");
     }
     names.sort();
     Ok(names)
@@ -357,14 +357,14 @@ fn owned_auth_names_in_store(store: &XaiOAuthCredentialStore) -> Result<Vec<Stri
     let mut names = Vec::new();
     let entries = fs::read_dir(&store.directory).with_context(|| {
         format!(
-            "failed to inspect Codewhale credentials directory {}",
+            "failed to inspect Ghosty credentials directory {}",
             crate::quote_os_path(&store.directory)
         )
     })?;
     for entry in entries {
         let entry = entry.with_context(|| {
             format!(
-                "failed to inspect Codewhale credentials directory {}",
+                "failed to inspect Ghosty credentials directory {}",
                 crate::quote_os_path(&store.directory)
             )
         })?;
@@ -430,7 +430,7 @@ impl XaiOAuthRevocation {
 fn validate_owned_auth_name(name: &str) -> Result<()> {
     anyhow::ensure!(
         name == LEGACY_XAI_OAUTH_FILE_NAME || is_valid_xai_oauth_generation(name),
-        "invalid Codewhale-owned xAI OAuth basename"
+        "invalid Ghosty-owned xAI OAuth basename"
     );
     Ok(())
 }
@@ -474,7 +474,7 @@ fn open_owned_credentials_directory(directory: &Path) -> Result<XaiOAuthCredenti
                 continue;
             }
             bail!(
-                "Codewhale credentials directory has an unsupported component: {}",
+                "Ghosty credentials directory has an unsupported component: {}",
                 crate::quote_os_path(directory)
             );
         };
@@ -501,7 +501,7 @@ fn open_owned_credentials_directory(directory: &Path) -> Result<XaiOAuthCredenti
                 if error.kind() != std::io::ErrorKind::AlreadyExists {
                     return Err(error).with_context(|| {
                         format!(
-                            "creating a component of Codewhale credentials directory {}",
+                            "creating a component of Ghosty credentials directory {}",
                             crate::quote_os_path(directory)
                         )
                     });
@@ -519,7 +519,7 @@ fn open_owned_credentials_directory(directory: &Path) -> Result<XaiOAuthCredenti
         if fd < 0 {
             return Err(std::io::Error::last_os_error()).with_context(|| {
                 format!(
-                    "opening Codewhale credentials directory without following links: {}",
+                    "opening Ghosty credentials directory without following links: {}",
                     crate::quote_os_path(directory)
                 )
             });
@@ -529,23 +529,23 @@ fn open_owned_credentials_directory(directory: &Path) -> Result<XaiOAuthCredenti
     }
     let metadata = current.metadata().with_context(|| {
         format!(
-            "inspecting Codewhale credentials directory {}",
+            "inspecting Ghosty credentials directory {}",
             crate::quote_os_path(directory)
         )
     })?;
     anyhow::ensure!(
         metadata.is_dir(),
-        "Codewhale credentials path must be a directory"
+        "Ghosty credentials path must be a directory"
     );
     anyhow::ensure!(
         metadata.uid() == unsafe { libc::geteuid() },
-        "Codewhale credentials directory must be owned by the current user"
+        "Ghosty credentials directory must be owned by the current user"
     );
     current
         .set_permissions(fs::Permissions::from_mode(0o700))
         .with_context(|| {
             format!(
-                "securing Codewhale credentials directory {}",
+                "securing Ghosty credentials directory {}",
                 crate::quote_os_path(directory)
             )
         })?;
@@ -586,7 +586,7 @@ impl XaiOAuthCredentialStore {
             }
             return Err(error).with_context(|| {
                 format!(
-                    "opening Codewhale-owned xAI OAuth path {}",
+                    "opening Ghosty-owned xAI OAuth path {}",
                     crate::quote_os_path(&self.directory.join(name.to_string_lossy().as_ref()))
                 )
             });
@@ -693,7 +693,7 @@ impl XaiOAuthCredentialStore {
             }
             self.directory_handle
                 .sync_all()
-                .context("syncing Codewhale credentials directory")?;
+                .context("syncing Ghosty credentials directory")?;
             Ok(())
         })();
         drop(temp);
@@ -719,7 +719,7 @@ impl XaiOAuthCredentialStore {
             if error.kind() == std::io::ErrorKind::NotFound {
                 return Ok(false);
             }
-            return Err(error).context("removing Codewhale-owned xAI OAuth file");
+            return Err(error).context("removing Ghosty-owned xAI OAuth file");
         }
         Ok(true)
     }
@@ -761,7 +761,7 @@ fn validate_owned_file_handle(file: &File, path: &Path) -> Result<fs::Metadata> 
     use std::os::unix::fs::MetadataExt as _;
     let metadata = file.metadata().with_context(|| {
         format!(
-            "inspecting Codewhale-owned xAI OAuth file {}",
+            "inspecting Ghosty-owned xAI OAuth file {}",
             crate::quote_os_path(path)
         )
     })?;
@@ -803,7 +803,7 @@ fn open_owned_credentials_directory(directory: &Path) -> Result<XaiOAuthCredenti
                     Err(error) => {
                         return Err(error).with_context(|| {
                             format!(
-                                "creating a component of Codewhale credentials directory {}",
+                                "creating a component of Ghosty credentials directory {}",
                                 crate::quote_os_path(directory)
                             )
                         });
@@ -816,7 +816,7 @@ fn open_owned_credentials_directory(directory: &Path) -> Result<XaiOAuthCredenti
                     .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
                 let handle = options.open(&current).with_context(|| {
                     format!(
-                        "opening Codewhale credentials directory component {}",
+                        "opening Ghosty credentials directory component {}",
                         crate::quote_os_path(&current)
                     )
                 })?;
@@ -824,14 +824,14 @@ fn open_owned_credentials_directory(directory: &Path) -> Result<XaiOAuthCredenti
                 handles.push(handle);
             }
             Component::CurDir | Component::ParentDir => bail!(
-                "Codewhale credentials directory must be lexically normalized: {}",
+                "Ghosty credentials directory must be lexically normalized: {}",
                 crate::quote_os_path(directory)
             ),
         }
     }
     anyhow::ensure!(
         !handles.is_empty(),
-        "Codewhale credentials directory cannot be a volume root"
+        "Ghosty credentials directory cannot be a volume root"
     );
     let mut secure_options = fs::OpenOptions::new();
     secure_options
@@ -840,15 +840,15 @@ fn open_owned_credentials_directory(directory: &Path) -> Result<XaiOAuthCredenti
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
     let final_directory = secure_options.open(directory).with_context(|| {
         format!(
-            "opening Codewhale credentials directory for owner-only security: {}",
+            "opening Ghosty credentials directory for owner-only security: {}",
             crate::quote_os_path(directory)
         )
     })?;
     validate_windows_handle_path(&final_directory, directory, true)?;
     secure_windows_owner_only_handle(&final_directory, true)
-        .context("securing Codewhale credentials directory for the current user")?;
+        .context("securing Ghosty credentials directory for the current user")?;
     verify_windows_owner_only_handle(&final_directory)
-        .context("verifying Codewhale credentials directory ownership")?;
+        .context("verifying Ghosty credentials directory ownership")?;
     handles.push(final_directory);
     Ok(XaiOAuthCredentialStore {
         directory: directory.to_path_buf(),
@@ -880,7 +880,7 @@ impl XaiOAuthCredentialStore {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error).with_context(|| {
                 format!(
-                    "opening Codewhale-owned xAI OAuth path {}",
+                    "opening Ghosty-owned xAI OAuth path {}",
                     crate::quote_os_path(&path)
                 )
             }),
@@ -923,7 +923,7 @@ impl XaiOAuthCredentialStore {
                 Err(error) => {
                     return Err(error).with_context(|| {
                         format!(
-                            "creating Codewhale-owned xAI OAuth lifecycle lock {}",
+                            "creating Ghosty-owned xAI OAuth lifecycle lock {}",
                             crate::quote_os_path(&path)
                         )
                     });
@@ -1160,7 +1160,7 @@ fn fail_next_windows_post_persist_validation(path: &Path) {
 fn validate_owned_file_handle(file: &File, path: &Path) -> Result<fs::Metadata> {
     let metadata = validate_windows_file_shape(file, path)?;
     verify_windows_owner_only_handle(file)
-        .context("Codewhale-owned xAI OAuth file is not current-user-only")?;
+        .context("Ghosty-owned xAI OAuth file is not current-user-only")?;
     Ok(metadata)
 }
 
@@ -1202,13 +1202,13 @@ fn validate_windows_handle_path(
 
     let metadata = file.metadata().with_context(|| {
         format!(
-            "inspecting Codewhale-owned path {}",
+            "inspecting Ghosty-owned path {}",
             crate::quote_os_path(expected)
         )
     })?;
     anyhow::ensure!(
         metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0,
-        "Codewhale-owned xAI OAuth path must not be a reparse point"
+        "Ghosty-owned xAI OAuth path must not be a reparse point"
     );
     anyhow::ensure!(
         if expect_directory {
@@ -1216,7 +1216,7 @@ fn validate_windows_handle_path(
         } else {
             metadata.is_file()
         },
-        "Codewhale-owned xAI OAuth path has the wrong filesystem type"
+        "Ghosty-owned xAI OAuth path has the wrong filesystem type"
     );
     let flags = FILE_NAME_NORMALIZED | VOLUME_NAME_DOS;
     let handle = file.as_raw_handle();
@@ -1224,7 +1224,7 @@ fn validate_windows_handle_path(
     let needed = unsafe { GetFinalPathNameByHandleW(handle, std::ptr::null_mut(), 0, flags) };
     if needed == 0 {
         return Err(std::io::Error::last_os_error())
-            .context("resolving Codewhale-owned xAI OAuth handle path");
+            .context("resolving Ghosty-owned xAI OAuth handle path");
     }
     let mut buffer = vec![0u16; needed as usize + 1];
     // SAFETY: the buffer is writable and the handle remains valid.
@@ -1233,13 +1233,13 @@ fn validate_windows_handle_path(
     };
     if written == 0 || written as usize >= buffer.len() {
         return Err(std::io::Error::last_os_error())
-            .context("resolving Codewhale-owned xAI OAuth handle path");
+            .context("resolving Ghosty-owned xAI OAuth handle path");
     }
     let actual = OsString::from_wide(&buffer[..written as usize]);
     anyhow::ensure!(
         normalize_windows_path_for_comparison(Path::new(&actual))?
             == normalize_windows_path_for_comparison(expected)?,
-        "Codewhale-owned xAI OAuth path was redirected while opening"
+        "Ghosty-owned xAI OAuth path was redirected while opening"
     );
     Ok(metadata)
 }
@@ -1300,7 +1300,7 @@ fn secure_windows_owner_only_handle(file: &File, inherit_to_children: bool) -> R
     let result = unsafe { SetEntriesInAclW(1, &raw const entry, std::ptr::null(), &mut acl) };
     if result != ERROR_SUCCESS {
         return Err(std::io::Error::from_raw_os_error(result as i32))
-            .context("building a current-user-only DACL for Codewhale-owned xAI OAuth storage");
+            .context("building a current-user-only DACL for Ghosty-owned xAI OAuth storage");
     }
     let _acl = WindowsLocalAllocation(acl.cast());
     // SAFETY: the file handle remains owned by `file`, and the ACL remains
@@ -1321,7 +1321,7 @@ fn secure_windows_owner_only_handle(file: &File, inherit_to_children: bool) -> R
     };
     if result != ERROR_SUCCESS {
         return Err(std::io::Error::from_raw_os_error(result as i32))
-            .context("applying a current-user-only DACL to Codewhale-owned xAI OAuth storage");
+            .context("applying a current-user-only DACL to Ghosty-owned xAI OAuth storage");
     }
     Ok(())
 }
@@ -1359,16 +1359,16 @@ fn verify_windows_owner_only_handle(file: &File) -> Result<()> {
     };
     if result != ERROR_SUCCESS {
         return Err(std::io::Error::from_raw_os_error(result as i32))
-            .context("reading Codewhale-owned xAI OAuth security descriptor");
+            .context("reading Ghosty-owned xAI OAuth security descriptor");
     }
     let _descriptor = WindowsLocalAllocation(descriptor.cast());
     anyhow::ensure!(
         !owner.is_null() && unsafe { EqualSid(owner, user.sid()) } != 0,
-        "Codewhale-owned xAI OAuth storage owner is not the current user"
+        "Ghosty-owned xAI OAuth storage owner is not the current user"
     );
     anyhow::ensure!(
         !dacl.is_null(),
-        "Codewhale-owned xAI OAuth storage must have an owner-only DACL"
+        "Ghosty-owned xAI OAuth storage must have an owner-only DACL"
     );
     let mut count = 0;
     let mut entries: *mut EXPLICIT_ACCESS_W = std::ptr::null_mut();
@@ -1377,12 +1377,12 @@ fn verify_windows_owner_only_handle(file: &File) -> Result<()> {
     let result = unsafe { GetExplicitEntriesFromAclW(dacl, &mut count, &mut entries) };
     if result != ERROR_SUCCESS {
         return Err(std::io::Error::from_raw_os_error(result as i32))
-            .context("reading Codewhale-owned xAI OAuth DACL entries");
+            .context("reading Ghosty-owned xAI OAuth DACL entries");
     }
     let _entries = WindowsLocalAllocation(entries.cast());
     anyhow::ensure!(
         count == 1 && !entries.is_null(),
-        "Codewhale-owned xAI OAuth DACL must grant only one user"
+        "Ghosty-owned xAI OAuth DACL must grant only one user"
     );
     // SAFETY: `count == 1` proves the first returned entry is initialized.
     let entry = unsafe { &*entries };
@@ -1393,7 +1393,7 @@ fn verify_windows_owner_only_handle(file: &File) -> Result<()> {
             && unsafe { EqualSid(trustee_sid, user.sid()) } != 0
             && matches!(entry.grfAccessMode, SET_ACCESS | GRANT_ACCESS)
             && entry.grfAccessPermissions == FILE_ALL_ACCESS,
-        "Codewhale-owned xAI OAuth DACL is not current-user-only"
+        "Ghosty-owned xAI OAuth DACL is not current-user-only"
     );
     Ok(())
 }
@@ -1490,7 +1490,7 @@ fn open_owned_credentials_directory(directory: &Path) -> Result<XaiOAuthCredenti
     let metadata = fs::symlink_metadata(directory)?;
     anyhow::ensure!(
         metadata.is_dir(),
-        "Codewhale credentials path must be a directory"
+        "Ghosty credentials path must be a directory"
     );
     Ok(XaiOAuthCredentialStore {
         directory: directory.to_path_buf(),
@@ -1557,7 +1557,7 @@ pub fn remove_xai_oauth_generation(generation: &str) -> Result<bool> {
     with_xai_oauth_lifecycle_lock(|store| store.remove(generation))
 }
 
-/// Explicit logout policy: remove the legacy Codewhale-owned file and every
+/// Explicit logout policy: remove the legacy Ghosty-owned file and every
 /// valid generated xAI OAuth file. Unknown files in the credentials directory
 /// are never touched.
 pub fn clear_all_xai_oauth_credentials() -> Result<usize> {

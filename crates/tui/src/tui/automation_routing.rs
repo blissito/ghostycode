@@ -312,7 +312,7 @@ fn field(locale: Locale, label: MessageId, value: &str) -> String {
 fn display_text(value: &str) -> String {
     let mut visible = String::with_capacity(value.len());
     crate::tui::osc8::strip_ansi_into(value, &mut visible);
-    codewhale_config::persistence::redact_secrets(&visible)
+    ghosty_config::persistence::redact_secrets(&visible)
 }
 
 fn format_run_enqueued(locale: Locale, id: &str, run: &AutomationRunRecord) -> String {

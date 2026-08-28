@@ -8,7 +8,7 @@ use std::io::Cursor;
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use codewhale_config::route::CapabilityState;
+use ghosty_config::route::CapabilityState;
 use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView, ImageFormat, ImageReader, Limits};
 use serde::{Deserialize, Serialize};
@@ -266,9 +266,9 @@ pub(crate) async fn execute_read_media(
 
     // 2. Resolve path and protect credentials (including symlink/canonicalization escapes)
     let file_path = context.resolve_path(path_str)?;
-    if crate::tools::file::is_codewhale_credential_path(&file_path) {
+    if crate::tools::file::is_ghosty_credential_path(&file_path) {
         return Err(ToolError::permission_denied(
-            "read_media cannot read Codewhale configuration or credential-store files; use `codewhale config list` or `codewhale auth status` for safe inspection",
+            "read_media cannot read Ghosty configuration or credential-store files; use `ghosty config list` or `ghosty auth status` for safe inspection",
         ));
     }
 
@@ -886,8 +886,8 @@ mod tests {
     async fn read_media_credential_path_is_denied() {
         let _env_lock = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
-        let _config_path = crate::test_support::EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
+        let _config_path = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _legacy_config_path = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
 
         std::fs::write(tmp.path().join("config.toml"), "api_key = \"secret\"\n")
@@ -899,7 +899,7 @@ mod tests {
         let err = tool.execute_rich(input, &ctx).await.unwrap_err();
         assert!(
             err.to_string()
-                .contains("cannot read Codewhale configuration or credential-store"),
+                .contains("cannot read Ghosty configuration or credential-store"),
             "{}",
             err
         );
@@ -912,9 +912,8 @@ mod tests {
         let _env_lock = crate::test_support::lock_test_env();
         let home_tmp = tempdir().expect("home tempdir");
         let ws_tmp = tempdir().expect("workspace tempdir");
-        let _codewhale_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home_tmp.path());
-        let _config_path = crate::test_support::EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home_tmp.path());
+        let _config_path = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _legacy_config_path = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
 
         let real_config = home_tmp.path().join("config.toml");
@@ -946,7 +945,7 @@ mod tests {
             assert!(
                 err_follow
                     .to_string()
-                    .contains("cannot read Codewhale configuration or credential-store"),
+                    .contains("cannot read Ghosty configuration or credential-store"),
                 "follow_symlinks policy must catch canonical credential path: {}",
                 err_follow
             );

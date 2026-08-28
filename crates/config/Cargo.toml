@@ -1,20 +1,20 @@
 [package]
-name = "codewhale-config"
+name = "ghosty-config"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Config schema and precedence model for Codewhale"
+description = "Config schema and precedence model for Ghosty"
 
 [lints]
 workspace = true
 
 [dependencies]
 anyhow.workspace = true
-codewhale-execpolicy = { path = "../execpolicy", version = "0.9.11" }
-codewhale-paths = { path = "../paths", version = "0.9.11" }
-codewhale-secrets = { path = "../secrets", version = "0.9.11" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.15" }
+ghosty-paths = { path = "../paths", version = "0.0.15" }
+ghosty-secrets = { path = "../secrets", version = "0.0.15" }
 fd-lock = "4.0.4"
 libc = "0.2"
 serde.workspace = true

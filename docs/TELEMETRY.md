@@ -1,4 +1,4 @@
-# Codewhale product telemetry
+# Ghosty product telemetry
 
 > 阅读简体中文版：[zh_hans/TELEMETRY.md](zh_hans/TELEMETRY.md)
 
@@ -11,21 +11,21 @@ surfaces follow the same documented default without pretending an interactive
 notice was shown. Every decline recorded by the former 0.9.4 opt-in notice
 remains off after upgrade.
 
-Codewhale does not collect conversations, code, prompts, files, file/repo/branch
+Ghosty does not collect conversations, code, prompts, files, file/repo/branch
 names, model content, or credentials. It sends no per-turn or per-tool timeline.
 It does send the closed, aggregate schema below: version and platform classes,
 session duration/outcome, feature/error counters, and a random install id that
 rotates every 90 days.
 
 **There is now a real endpoint.** An enabled session sends its batches to the
-first-party ingest service at `https://telemetry.codewhale.net/v1/telemetry`,
+first-party ingest service at `https://telemetry.ghosty.net/v1/telemetry`,
 which is the shipped default for `telemetry_endpoint`. What that service is,
 what it stores, and what it structurally cannot store is spelled out in "What
 the endpoint does" below.
 
 **To send nothing anywhere, keep telemetry off** (see "Turning it off"). To stay
 enabled but contact nobody, set `telemetry_endpoint = ""`: batches are then
-appended to `$CODEWHALE_HOME/telemetry/dryrun.jsonl` on your own machine, byte
+appended to `$GHOSTY_HOME/telemetry/dryrun.jsonl` on your own machine, byte
 for byte what the server would have received, and no HTTP client is ever
 constructed. That file is how you audit this document against reality.
 
@@ -40,13 +40,13 @@ There are two off switches and they do different things. Both stop collection
 completely; only one of them erases anything.
 
 ```sh
-codewhale config set telemetry false     # opt out: stops collection and erases state
-CODEWHALE_TELEMETRY=0 codewhale          # kill switch: stops collection, erases nothing
-codewhale --telemetry false              # the same kill switch, for one command
+ghosty config set telemetry false     # opt out: stops collection and erases state
+GHOSTY_TELEMETRY=0 ghosty          # kill switch: stops collection, erases nothing
+ghosty --telemetry false              # the same kill switch, for one command
 ```
 
 **`telemetry = false` in the config file is the opt-out.** It is a floor:
-`--telemetry true` and `CODEWHALE_TELEMETRY=1` both lose to it, because a
+`--telemetry true` and `GHOSTY_TELEMETRY=1` both lose to it, because a
 setting you can undo by accident from a wrapper script is not a setting. It
 deletes the random install id, truncates every buffered event and every dry-run
 record, and writes a tombstone. Appends, identity/state writes, and delivery all
@@ -61,11 +61,11 @@ ever sent.
 **The environment variable and the flag are kill switches, not opt-outs.**
 Telemetry is off for the run, nothing is written, nothing is sent — and
 nothing on disk is touched or deleted. That is deliberate: a harness or agent
-that sets `CODEWHALE_TELEMETRY=0` for one command must not silently discard the
+that sets `GHOSTY_TELEMETRY=0` for one command must not silently discard the
 install id and the dry-run records of the person who owns the machine. If you
 want the erasing kind, use the config file.
 
-`CODEWHALE_TELEMETRY` (and its `DEEPSEEK_TELEMETRY` alias) accepts
+`GHOSTY_TELEMETRY` (and its `DEEPSEEK_TELEMETRY` alias) accepts
 `0`, `1`, `true`, `false`, `yes`, `no`, `on`, `off`, `enabled`, `disabled`.
 A value this list cannot read also resolves to off — a typo in a kill switch
 must never resolve to "on".
@@ -74,13 +74,13 @@ The first-run notice is not shown when telemetry is already persistently off or
 a run-scoped kill switch is active. The notice never rewrites a
 `telemetry = false` you put there yourself.
 
-A repo-local `.codewhale/config.toml` can set neither `telemetry` nor
+A repo-local `.ghosty/config.toml` can set neither `telemetry` nor
 `telemetry_endpoint`, and a workspace `.env` can set neither. Someone else's
 repository cannot turn your telemetry on or aim it at a host of their choosing.
 
 ## Where it lives, and how much of your disk it uses
 
-Everything is under `$CODEWHALE_HOME/telemetry/` (`0700`), every file `0600`:
+Everything is under `$GHOSTY_HOME/telemetry/` (`0700`), every file `0600`:
 
 | file | role |
 |---|---|
@@ -100,10 +100,10 @@ The install id is a random v4 UUID. It is never derived from your hostname,
 MAC address, `machine-id`, home directory, username, or executable path — a
 derived id is a device fingerprint that survives reinstall and re-identifies
 you across your own opt-out. It is regenerated whenever
-`$CODEWHALE_HOME/telemetry/` is cleared, which opting out does automatically,
+`$GHOSTY_HOME/telemetry/` is cleared, which opting out does automatically,
 and in any case every 90 days.
 
-There is no factory-reset command in Codewhale, so this document does not
+There is no factory-reset command in Ghosty, so this document does not
 claim one.
 
 ## When anything is sent, and where
@@ -119,13 +119,13 @@ dry-run batch immediately.
 
 There is no startup flush, mid-session flush, per-turn flush, or per-tool-call
 flush. Every network shutdown flush re-resolves your setting from disk
-immediately beforehand, so `codewhale config set telemetry false` written from
+immediately beforehand, so `ghosty config set telemetry false` written from
 another terminal stops the flush of a session that is already running.
 
 A flush is **one `POST`** to the resolved endpoint — by default
-`https://telemetry.codewhale.net/v1/telemetry`. The request carries a
+`https://telemetry.ghosty.net/v1/telemetry`. The request carries a
 `content-type: application/json` header, a
-`user-agent: codewhale-telemetry/<app_version>`, and the batch body. That is
+`user-agent: ghosty-telemetry/<app_version>`, and the batch body. That is
 all: no cookies (the HTTP client is built without a cookie jar to disable), no
 redirects (refused outright), no `Authorization` header, no custom headers, and
 no query string. The response body is discarded unread; only the status class is
@@ -171,8 +171,8 @@ most once per flush point and never grows a queue.
 | `sent_at` | RFC3339 | `chrono::Utc::now()` | Second precision. Per-**batch** only — events carry no timestamps at all. |
 | `install_id` | uuid v4 | `crates/telemetry/src/envelope.rs` | Random, never derived, rotated every 90 days. See "Where it lives" above. |
 | `app_version` | string | `env!("CARGO_PKG_VERSION")`, as at `crates/telemetry/src/lib.rs:112` | Must match `^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`. |
-| `git_sha` | string \| null | `option_env!("CODEWHALE_RELEASE_BUILD_SHA")` — a **new** rustc-env | First 12 hex chars. Emitted **only** when `codewhale_build_support::release_build_sha` saw a valid full SHA in `CODEWHALE_BUILD_SHA`, the legacy `DEEPSEEK_BUILD_SHA`, or `GITHUB_SHA`, in that precedence order. `null` for every unstamped build, with no runtime lookup of any kind. **Never** `CODEWHALE_BUILD_COMMIT` — that falls back to `git_commit` and is the builder's private HEAD. **Never** `Thread.git_sha` (`crates/state/src/lib.rs:93`) — that is the user's workspace commit and a red line, one identifier away by name. |
-| `surface` | enum | set explicitly at each subcommand dispatch | `tui \| exec \| cli \| app-server \| mcp-server \| serve`. **Not derivable from the executable**: `codewhale` serves at least five surfaces, and app-server runs *in-process* inside that same binary (`crates/cli/src/lib.rs:4225`), so `current_exe()` would report every app-server session as CLI. `desktop` is omitted — no desktop surface exists. Which of these can emit is governed by the opt-out policy, not by the surface: see "Which surfaces emit" below. |
+| `git_sha` | string \| null | `option_env!("GHOSTY_RELEASE_BUILD_SHA")` — a **new** rustc-env | First 12 hex chars. Emitted **only** when `ghosty_build_support::release_build_sha` saw a valid full SHA in `GHOSTY_BUILD_SHA`, the legacy `DEEPSEEK_BUILD_SHA`, or `GITHUB_SHA`, in that precedence order. `null` for every unstamped build, with no runtime lookup of any kind. **Never** `GHOSTY_BUILD_COMMIT` — that falls back to `git_commit` and is the builder's private HEAD. **Never** `Thread.git_sha` (`crates/state/src/lib.rs:93`) — that is the user's workspace commit and a red line, one identifier away by name. |
+| `surface` | enum | set explicitly at each subcommand dispatch | `tui \| exec \| cli \| app-server \| mcp-server \| serve`. **Not derivable from the executable**: `ghosty` serves at least five surfaces, and app-server runs *in-process* inside that same binary (`crates/cli/src/lib.rs:4225`), so `current_exe()` would report every app-server session as CLI. `desktop` is omitted — no desktop surface exists. Which of these can emit is governed by the opt-out policy, not by the surface: see "Which surfaces emit" below. |
 | `os` | enum | `std::env::consts::OS`, as at `crates/cli/src/update.rs:41` | Whitelist: `linux \| macos \| windows \| freebsd \| android \| other`. |
 | `arch` | enum | `std::env::consts::ARCH` | `x86_64 \| aarch64 \| other`. |
 | `libc` | enum | `cfg!(target_env)` — **compile time** | `gnu \| musl \| none`. Runtime detection reads distro vendor strings; compile-time is free and leaks nothing. |
@@ -203,7 +203,7 @@ Emitted once when `state.json`'s `last_version` differs from `app_version`.
 | Field | Type | Source | Rule |
 |---|---|---|---|
 | `kind` | enum | derived | `install` (no prior record) \| `upgrade` \| `downgrade`. |
-| `previous_version` | string \| null | `$CODEWHALE_HOME/telemetry/state.json` **only** | Same regex as `app_version`. Never derived from session history or config mtimes — those files have a different privacy contract. |
+| `previous_version` | string \| null | `$GHOSTY_HOME/telemetry/state.json` **only** | Same regex as `app_version`. Never derived from session history or config mtimes — those files have a different privacy contract. |
 
 ### Event: `session_start`
 
@@ -290,7 +290,7 @@ Appended **synchronously** by the panic hook, because a `session_end` may never 
 
 This section was a gate on configuring any non-loopback endpoint. The endpoint is now configured by default, so this is a description of a service that exists rather than a promise about one that might.
 
-**What it is.** `https://telemetry.codewhale.net/v1/telemetry` — a Cloudflare Worker named `codewhale-telemetry-ingest`, whose complete source is in this repository at [`telemetry-ingest/`](../telemetry-ingest/). It is the only component; there is no queue, no proxy, and no other service in the path. It is write-only: nothing in the Worker can read back what was stored, and querying happens out of band through Cloudflare's SQL API with the owner's token. The hostname is deliberately self-describing, so anyone inspecting their own network traffic can tell what it is from the name alone.
+**What it is.** `https://telemetry.ghosty.net/v1/telemetry` — a Cloudflare Worker named `ghosty-telemetry-ingest`, whose complete source is in this repository at [`telemetry-ingest/`](../telemetry-ingest/). It is the only component; there is no queue, no proxy, and no other service in the path. It is write-only: nothing in the Worker can read back what was stored, and querying happens out of band through Cloudflare's SQL API with the owner's token. The hostname is deliberately self-describing, so anyone inspecting their own network traffic can tell what it is from the name alone.
 
 **What it stores.** Everything in this document and nothing else, in Workers Analytics Engine — one row per event. The validator in `telemetry-ingest/src/schema.ts` is a **closed** field set: an unknown key anywhere in a batch rejects the whole batch with `400`. A future client bug that starts attaching a path, a prompt, or a provider table name gets refused by the server rather than quietly stored. `telemetry-ingest/test/schema-doc.test.ts` parses the field names and enum spellings back out of *this file* and asserts set equality against the validator, and `telemetry-ingest/test/ingest.test.ts` posts the Rust client's own pinned golden batch and asserts it is accepted byte for byte — so this document, the client, and the endpoint cannot drift apart without a red test.
 
@@ -311,7 +311,7 @@ Batches are **IP-stripped at ingest**. No IP is stored, logged, or joined to `in
 
 `install_id` rotates client-side every 90 days (`rotated_at` in `install_id.json`), so no single identifier spans a long history. This costs longitudinal accuracy and the docs say so: **no count derived from `install_id` is a user count.** It is a lower bound on distinct machine-installs in a window, and it undercounts a returning user across a rotation.
 
-**Turning it off deletes what was kept locally, not what was already sent.** `codewhale config set telemetry false` erases the install id, the buffer, and the dry-run records on your machine, and stops anything further. Rows already accepted by the endpoint are keyed only by a rotating random id that is now gone; they age out with the three-month window. There is no deletion API, and this document does not claim one.
+**Turning it off deletes what was kept locally, not what was already sent.** `ghosty config set telemetry false` erases the install id, the buffer, and the dry-run records on your machine, and stops anything further. Rows already accepted by the endpoint are keyed only by a rotating random id that is now gone; they age out with the three-month window. There is no deletion API, and this document does not claim one.
 
 ### What the owner reads back — observed active installs
 

@@ -11,10 +11,10 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return buildPageMetadata({
     path: "/community",
     locale,
-    title: isZh ? "社区 · Codewhale" : "Community · Codewhale",
+    title: isZh ? "社区 · Ghosty" : "Community · Ghosty",
     description: isZh
-      ? "了解 Codewhale 的国际开源社区，提交 issue、发送 pull request、改进翻译并查看版本贡献者。"
-      : "File issues, send pull requests, improve translations, and see who contributed to each Codewhale release.",
+      ? "了解 Ghosty 的国际开源社区，提交 issue、发送 pull request、改进翻译并查看版本贡献者。"
+      : "File issues, send pull requests, improve translations, and see who contributed to each Ghosty release.",
   });
 }
 
@@ -31,25 +31,25 @@ export default async function CommunityPage({ params }: { params: Promise<{ loca
           title: "报告问题",
           description: "报告 bug、兼容性问题或不清楚的行为，并附上系统信息、复现步骤和可以安全分享的日志。",
           cta: "提交 issue →",
-          href: "https://github.com/Hmbown/CodeWhale/issues/new/choose",
+          href: "https://github.com/blissito/ghostycode/issues/new/choose",
         },
         {
           title: "改进代码或测试",
           description: "挑一个范围清楚的问题，写最小的补丁，加一个覆盖改动的回归测试。",
           cta: "查看开放 issues →",
-          href: "https://github.com/Hmbown/CodeWhale/issues",
+          href: "https://github.com/blissito/ghostycode/issues",
         },
         {
           title: "改进文档或翻译",
           description: "改正说错的地方，补一个示例，或者帮忙完成一个语言包。",
           cta: "查看本地化指南 ↗",
-          href: "https://github.com/Hmbown/CodeWhale/blob/main/docs/LOCALIZATION.md",
+          href: "https://github.com/blissito/ghostycode/blob/main/docs/LOCALIZATION.md",
         },
         {
           title: "复现并审查现有工作",
           description: "在你的平台和提供商上验证 issue 或 pull request，然后分享你运行的命令、结果和剩余问题。",
           cta: "查看 pull requests →",
-          href: "https://github.com/Hmbown/CodeWhale/pulls",
+          href: "https://github.com/blissito/ghostycode/pulls",
         },
       ]
     : [
@@ -57,25 +57,25 @@ export default async function CommunityPage({ params }: { params: Promise<{ loca
           title: "Report a problem",
           description: "File a bug, compatibility problem, or unclear behavior with system details, reproduction steps, and any logs you can share safely.",
           cta: "File an issue →",
-          href: "https://github.com/Hmbown/CodeWhale/issues/new/choose",
+          href: "https://github.com/blissito/ghostycode/issues/new/choose",
         },
         {
           title: "Improve code or tests",
           description: "Pick one problem with clear edges, write the smallest patch that fixes it, and add a regression test that covers it.",
           cta: "Browse open issues →",
-          href: "https://github.com/Hmbown/CodeWhale/issues",
+          href: "https://github.com/blissito/ghostycode/issues",
         },
         {
           title: "Improve documentation or translations",
           description: "Fix a wrong sentence, add an example, or help finish a language pack.",
           cta: "Open the localization guide ↗",
-          href: "https://github.com/Hmbown/CodeWhale/blob/main/docs/LOCALIZATION.md",
+          href: "https://github.com/blissito/ghostycode/blob/main/docs/LOCALIZATION.md",
         },
         {
           title: "Reproduce and review existing work",
           description: "Try an issue or pull request on your platform and provider. Post the commands you ran, what happened, and what is still wrong.",
           cta: "Browse pull requests →",
-          href: "https://github.com/Hmbown/CodeWhale/pulls",
+          href: "https://github.com/blissito/ghostycode/pulls",
         },
       ];
 
@@ -97,17 +97,17 @@ export default async function CommunityPage({ params }: { params: Promise<{ loca
         <div className="portal-current" aria-hidden="true" />
         <div className="portal-container community-welcome-inner">
           <div className="eyebrow">{isZh ? "国际开源社区" : "International open-source community"}</div>
-          <h1>{isZh ? "与世界各地的贡献者一起构建 Codewhale。" : "Build Codewhale with contributors around the world."}</h1>
+          <h1>{isZh ? "与世界各地的贡献者一起构建 Ghosty。" : "Build Ghosty with contributors around the world."}</h1>
           <p>
             {isZh
               ? "运行时、文档、测试和翻译，来自不同国家、语言和平台的贡献者。第一次参与不必是大功能。一份清楚的 bug 报告、一处文档修正、或一个带测试的小补丁，都算。"
               : "The runtime, docs, tests, and translations come from contributors across countries, languages, and platforms. A first contribution does not have to be a feature. A clear bug report, a documentation fix, or a small tested patch counts."}
           </p>
           <div className="portal-actions">
-            <Link href="https://github.com/Hmbown/CodeWhale/issues/new/choose" className="portal-button portal-button-primary">
+            <Link href="https://github.com/blissito/ghostycode/issues/new/choose" className="portal-button portal-button-primary">
               {isZh ? "提交 issue" : "File an issue"}
             </Link>
-            <Link href="https://github.com/Hmbown/CodeWhale/pulls" className="portal-button portal-button-secondary">
+            <Link href="https://github.com/blissito/ghostycode/pulls" className="portal-button portal-button-secondary">
               {isZh ? "查看 pull requests" : "Browse pull requests"}
             </Link>
             <Link href={p("/contribute")} className="portal-button portal-button-secondary">
@@ -182,10 +182,10 @@ export default async function CommunityPage({ params }: { params: Promise<{ loca
                 : `This ${sourceIsPublished ? "release" : "version"} includes code, tests, reproductions, and verification from the community. If a maintainer reworks a patch before it lands, the original author stays credited in the commit, the changelog, and the contributor record.`}
             </p>
             <div className="community-record-links">
-              <Link href="https://github.com/Hmbown/CodeWhale/blob/main/docs/CONTRIBUTORS.md">
+              <Link href="https://github.com/blissito/ghostycode/blob/main/docs/CONTRIBUTORS.md">
                 {isZh ? "完整贡献者名单 ↗" : "Full contributor record ↗"}
               </Link>
-              <Link href="https://github.com/Hmbown/CodeWhale/blob/main/CHANGELOG.md">CHANGELOG ↗</Link>
+              <Link href="https://github.com/blissito/ghostycode/blob/main/CHANGELOG.md">CHANGELOG ↗</Link>
             </div>
           </div>
           <div className="community-credit-groups">

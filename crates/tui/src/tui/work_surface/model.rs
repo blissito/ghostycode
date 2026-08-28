@@ -1245,7 +1245,7 @@ fn agent_nesting_indent(depth: usize) -> String {
 /// and `(+N)` when that agent has spawned children of its own.
 ///
 /// `who` is the agent's nickname when it has one and its fleet role when it
-/// does not. A nickname is identity that CodeWhale actually has, so it leads;
+/// does not. A nickname is identity that GhostyCode actually has, so it leads;
 /// the role is the honest fallback. The raw agent-id hash is never a name and
 /// is never rendered (#36).
 fn agent_strip_label(indent: &str, who: &str, children: usize) -> String {

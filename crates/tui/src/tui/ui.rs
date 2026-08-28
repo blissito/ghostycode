@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use crate::error_taxonomy::{ErrorCategory, ErrorEnvelope, ErrorSeverity};
 use crate::resource_telemetry::{TokenThroughput, estimate_output_tokens_from_text};
 use anyhow::{Context, Result};
-use codewhale_release::InstallMethod;
+use ghosty_release::InstallMethod;
 // On Windows the push/pop helpers write the escapes directly; crossterm's
 // PushKeyboardEnhancementFlags / PopKeyboardEnhancementFlags commands are
 // never referenced, so the imports are gated to avoid -D warnings failures.
@@ -234,33 +234,29 @@ const SESSION_TITLE_MAX_CHARS: usize = 32;
 const VERSION_HINT_TOAST_TTL_MS: u64 = 12_000;
 
 const REQUIRED_RELEASE_ASSETS: &[&str] = &[
-    "codewhale-linux-x64",
-    "codew-linux-x64",
-    "codewhale-linux-arm64",
-    "codew-linux-arm64",
-    "codewhale-android-arm64",
-    "codew-android-arm64",
-    "codewhale-macos-x64",
-    "codew-macos-x64",
-    "codewhale-macos-arm64",
-    "codew-macos-arm64",
-    "codewhale-windows-x64.exe",
-    "codew-windows-x64.exe",
-    "codewhale.bat",
-    "codewhale-windows-arm64.exe",
-    "codew-windows-arm64.exe",
-    "codewhale-linux-x64.tar.gz",
-    "codewhale-linux-arm64.tar.gz",
-    "codewhale-android-arm64.tar.gz",
-    "codewhale-macos-x64.tar.gz",
-    "codewhale-macos-arm64.tar.gz",
-    "codewhale-windows-x64.zip",
-    "codewhale-windows-x64-portable.zip",
-    "codewhale-windows-arm64.zip",
-    "codewhale-windows-arm64-portable.zip",
-    "CodeWhaleSetup.exe",
-    "codewhale-bundles-sha256.txt",
-    "codewhale-artifacts-sha256.txt",
+    // Un solo binario por plataforma (ver release-artifacts.yml). Los assets
+    // `ghosty-tui-*` del pipeline son copias byte-idénticas para compatibilidad
+    // y no se esperan aquí: un release sin ellos sigue siendo completo.
+    "ghosty-linux-x64",
+    "ghosty-linux-arm64",
+    "ghosty-android-arm64",
+    "ghosty-macos-x64",
+    "ghosty-macos-arm64",
+    "ghosty-windows-x64.exe",
+    "ghosty.bat",
+    "ghosty-windows-arm64.exe",
+    "ghosty-linux-x64.tar.gz",
+    "ghosty-linux-arm64.tar.gz",
+    "ghosty-android-arm64.tar.gz",
+    "ghosty-macos-x64.tar.gz",
+    "ghosty-macos-arm64.tar.gz",
+    "ghosty-windows-x64.zip",
+    "ghosty-windows-x64-portable.zip",
+    "ghosty-windows-arm64.zip",
+    "ghosty-windows-arm64-portable.zip",
+    "GhostyCodeSetup.exe",
+    "ghosty-bundles-sha256.txt",
+    "ghosty-artifacts-sha256.txt",
 ];
 
 type AppTerminal = Terminal<ColorCompatBackend<Stdout>>;
@@ -345,7 +341,7 @@ fn tui_launch_preflight_explains_non_tty_failure() {
             .expect_err("a missing TTY must fail before raw mode");
         let message = err.to_string();
         assert!(message.contains("interactive terminal"), "{message}");
-        assert!(message.contains("codewhale exec"), "{message}");
+        assert!(message.contains("ghosty exec"), "{message}");
     }
 }
 
@@ -358,7 +354,7 @@ fn tui_launch_preflight_rejects_background_process_group() {
     let message = err.to_string();
     assert!(message.contains("background or suspended"), "{message}");
     assert!(message.contains("Run `fg`"), "{message}");
-    assert!(message.contains("codewhale exec"), "{message}");
+    assert!(message.contains("ghosty exec"), "{message}");
 }
 
 fn should_show_resume_hint(session_id: Option<&str>) -> bool {
@@ -366,7 +362,7 @@ fn should_show_resume_hint(session_id: Option<&str>) -> bool {
 }
 
 fn resume_hint_text() -> &'static str {
-    "To continue this session, execute codewhale run --continue"
+    "To continue this session, execute ghosty run --continue"
 }
 
 struct TerminalCleanupGuard {
@@ -488,8 +484,8 @@ fn preview_effective_base_prompt(app: &mut App, config: &Config) {
     use crate::prompts::base_preview;
 
     let prompt = build_app_system_prompt_with_goal(app, config, app.goal.objective.as_deref());
-    let home = codewhale_config::codewhale_home().ok();
-    let constitution_path = codewhale_config::UserConstitution::path().ok();
+    let home = ghosty_config::ghosty_home().ok();
+    let constitution_path = ghosty_config::UserConstitution::path().ok();
     let sources = base_preview::PreviewSources {
         base_prompt: Some(crate::prompts::effective_base_prompt_source(
             home.as_deref(),
@@ -540,7 +536,7 @@ fn deliver_constitution_draft_result(
     app: &mut App,
     model_label: String,
     locale: crate::localization::Locale,
-    outcome: Result<Box<codewhale_config::UserConstitution>, String>,
+    outcome: Result<Box<ghosty_config::UserConstitution>, String>,
 ) {
     match outcome {
         Ok(constitution) => {
@@ -849,7 +845,7 @@ fn open_fleet_model_target(app: &mut App, config: &Config, member_id: &str) {
 
 pub(crate) struct ProviderFallbackRollback {
     identity: ProviderIdentity,
-    chain: Option<codewhale_config::ProviderChain>,
+    chain: Option<ghosty_config::ProviderChain>,
 }
 
 // File-picker relevance scoring moved to `tui/file_picker_relevance.rs`.
@@ -979,15 +975,15 @@ fn use_bundled_constitution(app: &mut App, config: &Config) {
     let mut state = crate::tui::setup::load_setup_state_for_app(app, config);
     state.complete_constitution_checkpoint(
         crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
-        codewhale_config::ConstitutionChoice::Bundled,
+        ghosty_config::ConstitutionChoice::Bundled,
     );
-    state.constitution_source = codewhale_config::ConstitutionSource::Bundled;
-    state.constitution_validity = codewhale_config::ConstitutionValidity::Unknown;
+    state.constitution_source = ghosty_config::ConstitutionSource::Bundled;
+    state.constitution_validity = ghosty_config::ConstitutionValidity::Unknown;
     state.constitution_preview_hash = None;
     state.set_step(
-        codewhale_config::SetupStep::Constitution,
-        codewhale_config::StepEntry::new(
-            codewhale_config::StepStatus::Verified,
+        ghosty_config::SetupStep::Constitution,
+        ghosty_config::StepEntry::new(
+            ghosty_config::StepStatus::Verified,
             true,
             crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
         )
@@ -1031,7 +1027,7 @@ pub(crate) struct ApprovalDecisionEvent {
     timed_out: bool,
     approval_key: String,
     approval_grouping_key: String,
-    persistent_rules: Vec<codewhale_config::ToolAskRule>,
+    persistent_rules: Vec<ghosty_config::ToolAskRule>,
 }
 
 fn mark_active_turn_cancelled_locally(app: &mut App) {
@@ -1136,7 +1132,7 @@ fn request_active_foreground_shell_background(app: &App) -> Result<()> {
         .clone()
         .context("No shell session is active.")?;
     let mut manager = shell_manager.lock().map_err(|_| {
-        anyhow::anyhow!("Shell tracking hit an internal error — restart Codewhale to recover.")
+        anyhow::anyhow!("Shell tracking hit an internal error — restart Ghosty to recover.")
     })?;
     manager.request_foreground_background();
     Ok(())
@@ -1241,24 +1237,24 @@ impl UpdateNotice {
     /// update command, and restart guidance.
     ///
     /// Package-managed installs get their manager's command instead of
-    /// `codewhale update`, plus an explicit warning: self-updating a binary
+    /// `ghosty update`, plus an explicit warning: self-updating a binary
     /// Homebrew or npm owns leaves the manager's metadata lying about what is
     /// on disk, and the next upgrade silently reverts the user.
     fn notice_block(&self, install: InstallMethod) -> String {
         let action = if install.supports_self_update() {
-            "Run `/update install` here (preview it with a bare `/update`), or `codewhale update` in a shell, then restart CodeWhale."
+            "Run `/update install` here (preview it with a bare `/update`), or `ghosty update` in a shell, then restart GhostyCode."
                 .to_string()
         } else {
             format!(
-                "Installed via {label}. Run `{command}`, then restart CodeWhale.\n\
-                 Do not use `codewhale update` here — it would replace a binary {label} manages.",
+                "Installed via {label}. Run `{command}`, then restart GhostyCode.\n\
+                 Do not use `ghosty update` here — it would replace a binary {label} manages.",
                 label = install.label(),
                 command = install.update_command()
             )
         };
         format!(
             "Update available: v{current} -> v{latest}\n\
-             Release notes: https://github.com/Hmbown/CodeWhale/releases/tag/v{latest}\n\
+             Release notes: https://github.com/blissito/ghostycode/releases/tag/v{latest}\n\
              {action}",
             current = self.current,
             latest = self.latest
@@ -1277,7 +1273,7 @@ mod provider_key_validation_tests {
 
     struct ConfigPathEnvGuard {
         _tmp: TempDir,
-        _codewhale_config_path: crate::test_support::EnvVarGuard,
+        _ghosty_config_path: crate::test_support::EnvVarGuard,
         _deepseek_config_path: crate::test_support::EnvVarGuard,
         _lock: crate::test_support::TestEnvLock,
     }
@@ -1286,13 +1282,13 @@ mod provider_key_validation_tests {
         fn new() -> Self {
             let lock = crate::test_support::lock_test_env();
             let tmp = TempDir::new().expect("config tempdir");
-            let config_path = tmp.path().join(".codewhale").join("config.toml");
+            let config_path = tmp.path().join(".ghosty").join("config.toml");
             std::fs::create_dir_all(config_path.parent().expect("config parent"))
                 .expect("config dir");
             Self {
                 _tmp: tmp,
-                _codewhale_config_path: crate::test_support::EnvVarGuard::set(
-                    "CODEWHALE_CONFIG_PATH",
+                _ghosty_config_path: crate::test_support::EnvVarGuard::set(
+                    "GHOSTY_CONFIG_PATH",
                     &config_path,
                 ),
                 _deepseek_config_path: crate::test_support::EnvVarGuard::set(
@@ -1304,7 +1300,7 @@ mod provider_key_validation_tests {
         }
 
         fn config_path(&self) -> PathBuf {
-            std::env::var_os("CODEWHALE_CONFIG_PATH")
+            std::env::var_os("GHOSTY_CONFIG_PATH")
                 .map(PathBuf::from)
                 .expect("config path set")
         }
@@ -1335,9 +1331,9 @@ mod provider_key_validation_tests {
                 xai: ProviderConfig {
                     auth_mode: Some("oauth".to_string()),
                     external_credentials: Some(
-                        codewhale_config::ExternalCredentialConsentToml::read_only(
-                            codewhale_config::ProviderKind::Xai,
-                            codewhale_config::ExternalCredentialSource::GrokCli,
+                        ghosty_config::ExternalCredentialConsentToml::read_only(
+                            ghosty_config::ProviderKind::Xai,
+                            ghosty_config::ExternalCredentialSource::GrokCli,
                             external_path,
                         ),
                     ),
@@ -1351,14 +1347,14 @@ mod provider_key_validation_tests {
         mirror_saved_api_key_in_config(
             &mut config,
             ApiProvider::Xai,
-            "codewhale-owned-api-key".to_string(),
+            "ghosty-owned-api-key".to_string(),
         );
 
         let xai = config
             .provider_config_for(ApiProvider::Xai)
             .expect("xAI live config");
         assert_eq!(xai.auth_mode.as_deref(), Some("api_key"));
-        assert_eq!(xai.api_key.as_deref(), Some("codewhale-owned-api-key"));
+        assert_eq!(xai.api_key.as_deref(), Some("ghosty-owned-api-key"));
         assert!(xai.external_credentials.is_none());
     }
 

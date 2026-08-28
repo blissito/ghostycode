@@ -68,20 +68,20 @@ function dsEnv(env: WatchEnv): DeepSeekEnv {
 // Targets to probe daily. For registries that block bot HEAD/GET (npm, crates.io)
 // we hit the public JSON API instead — same upstream, doesn't 403.
 const LINK_TARGETS: { url: string; label: string }[] = [
-  { url: "https://github.com/Hmbown/CodeWhale", label: "Main repo" },
-  { url: "https://github.com/Hmbown/CodeWhale/issues", label: "Issues" },
-  { url: "https://github.com/Hmbown/CodeWhale/pulls", label: "Pull Requests" },
-  { url: "https://github.com/Hmbown/CodeWhale/discussions", label: "Discussions" },
-  { url: "https://github.com/Hmbown/CodeWhale/releases", label: "Releases" },
-  { url: "https://github.com/Hmbown/CodeWhale/blob/main/LICENSE", label: "License file" },
-  { url: "https://github.com/Hmbown/CodeWhale/blob/main/CODE_OF_CONDUCT.md", label: "Code of Conduct" },
-  { url: "https://github.com/Hmbown/CodeWhale/blob/main/SECURITY.md", label: "Security policy" },
-  { url: "https://github.com/Hmbown/CodeWhale/blob/main/CONTRIBUTING.md", label: "Contributing guide" },
-  { url: "https://github.com/Hmbown/CodeWhale/blob/main/.github/PULL_REQUEST_TEMPLATE.md", label: "PR template" },
-  { url: "https://github.com/Hmbown/homebrew-deepseek-tui", label: "Homebrew tap" },
+  { url: "https://github.com/blissito/ghostycode", label: "Main repo" },
+  { url: "https://github.com/blissito/ghostycode/issues", label: "Issues" },
+  { url: "https://github.com/blissito/ghostycode/pulls", label: "Pull Requests" },
+  { url: "https://github.com/blissito/ghostycode/discussions", label: "Discussions" },
+  { url: "https://github.com/blissito/ghostycode/releases", label: "Releases" },
+  { url: "https://github.com/blissito/ghostycode/blob/main/LICENSE", label: "License file" },
+  { url: "https://github.com/blissito/ghostycode/blob/main/CODE_OF_CONDUCT.md", label: "Code of Conduct" },
+  { url: "https://github.com/blissito/ghostycode/blob/main/SECURITY.md", label: "Security policy" },
+  { url: "https://github.com/blissito/ghostycode/blob/main/CONTRIBUTING.md", label: "Contributing guide" },
+  { url: "https://github.com/blissito/ghostycode/blob/main/.github/PULL_REQUEST_TEMPLATE.md", label: "PR template" },
+  { url: "https://github.com/blissito/homebrew-ghosty", label: "Homebrew tap" },
   { url: "https://github.com/sponsors/Hmbown", label: "Support link (GitHub Sponsors)" },
   { url: "https://buymeacoffee.com/hmbown", label: "Support link (BMC)" },
-  { url: "https://registry.npmjs.org/codewhale", label: "npm package (registry API)" },
+  { url: "https://registry.npmjs.org/ghosty", label: "npm package (registry API)" },
   // crates.io intentionally not in this list — both their HTML and JSON API return 403 to
   // Cloudflare Workers, so the check produces false positives. The crate links on the site
   // still work for human users.
@@ -133,8 +133,8 @@ export async function runLinkCheck(env: WatchEnv): Promise<{ ok: boolean; checke
       id,
       type: "linkcheck",
       targetUrl: b.url,
-      bodyEn: `**Broken link** (auto-detected by daily watch cron)\n\n- Label: **${b.label}**\n- URL: ${b.url}\n- HTTP status: ${b.status}\n- Latency: ${b.ms}ms\n\nThis URL is referenced in codewhale.net copy. Update the source page or fix the destination.\n\n— drafted by community assistant, pending maintainer review`,
-      bodyZh: `**链接失效**（每日巡检自动发现）\n\n- 名称：**${b.label}**\n- 地址：${b.url}\n- HTTP 状态：${b.status}\n- 延迟：${b.ms}ms\n\n该地址被 codewhale.net 文案引用，请更新源页面或修复目标。\n\n— 由社区助理草拟，待维护者审阅`,
+      bodyEn: `**Broken link** (auto-detected by daily watch cron)\n\n- Label: **${b.label}**\n- URL: ${b.url}\n- HTTP status: ${b.status}\n- Latency: ${b.ms}ms\n\nThis URL is referenced in ghosty.net copy. Update the source page or fix the destination.\n\n— drafted by community assistant, pending maintainer review`,
+      bodyZh: `**链接失效**（每日巡检自动发现）\n\n- 名称：**${b.label}**\n- 地址：${b.url}\n- HTTP 状态：${b.status}\n- 延迟：${b.ms}ms\n\n该地址被 ghosty.net 文案引用，请更新源页面或修复目标。\n\n— 由社区助理草拟，待维护者审阅`,
       generatedAt: new Date().toISOString(),
       posted: false,
     };
@@ -149,7 +149,7 @@ export async function runLinkCheck(env: WatchEnv): Promise<{ ok: boolean; checke
 
 // --- Semantic drift ---
 
-const SEMANTIC_DRIFT_PROMPT = `You are reviewing copy on a community website (codewhale.net) for the open-source Codewhale project.
+const SEMANTIC_DRIFT_PROMPT = `You are reviewing copy on a community website (ghosty.net) for the open-source Ghosty project.
 
 Given:
 1. The CHANGELOG entries below (most recent first)
@@ -285,16 +285,16 @@ export async function runSemanticDrift(env: WatchEnv): Promise<{ ok: boolean; dr
 
   const ghHeaders: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "codewhale-web-semantic-drift",
+    "User-Agent": "ghosty-web-semantic-drift",
   };
   if (env.GITHUB_TOKEN) ghHeaders["Authorization"] = `Bearer ${env.GITHUB_TOKEN}`;
 
   // Fetch CHANGELOG (truncated), recent commits, and live homepage HTML.
   const [changelog, commits, homepageHtml, docsHtml] = await Promise.all([
-    fetch("https://raw.githubusercontent.com/Hmbown/CodeWhale/main/CHANGELOG.md", { headers: ghHeaders }).then((r) => r.ok ? r.text() : "").catch(() => ""),
-    fetch("https://api.github.com/repos/Hmbown/CodeWhale/commits?per_page=30", { headers: ghHeaders }).then((r) => r.ok ? r.json() as Promise<{ commit: { message: string }; sha: string }[]> : []).catch(() => []),
-    fetch("https://codewhale.net/en", { headers: { "User-Agent": "codewhale-watch" } }).then((r) => r.ok ? r.text() : "").catch(() => ""),
-    fetch("https://codewhale.net/en/docs", { headers: { "User-Agent": "codewhale-watch" } }).then((r) => r.ok ? r.text() : "").catch(() => ""),
+    fetch("https://raw.githubusercontent.com/blissito/ghostycode/main/CHANGELOG.md", { headers: ghHeaders }).then((r) => r.ok ? r.text() : "").catch(() => ""),
+    fetch("https://api.github.com/repos/blissito/ghostycode/commits?per_page=30", { headers: ghHeaders }).then((r) => r.ok ? r.json() as Promise<{ commit: { message: string }; sha: string }[]> : []).catch(() => []),
+    fetch("https://ghosty.net/en", { headers: { "User-Agent": "ghosty-watch" } }).then((r) => r.ok ? r.text() : "").catch(() => ""),
+    fetch("https://ghosty.net/en/docs", { headers: { "User-Agent": "ghosty-watch" } }).then((r) => r.ok ? r.text() : "").catch(() => ""),
   ]);
 
   if (!changelog && (!commits || commits.length === 0)) {
@@ -354,7 +354,7 @@ ${docsText}`;
     const draft: AgentDraft = {
       id,
       type: "semantic-drift",
-      targetUrl: `https://codewhale.net/en/${d.page === "homepage" ? "" : d.page}`,
+      targetUrl: `https://ghosty.net/en/${d.page === "homepage" ? "" : d.page}`,
       bodyEn: body,
       bodyZh: body,
       generatedAt: new Date().toISOString(),

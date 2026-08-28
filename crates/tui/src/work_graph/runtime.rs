@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use crate::fleet::ledger::FleetLedger;
 use crate::tools::plan::{PlanSnapshot, PlanState, SharedPlanState, StepStatus};
 use crate::tools::todo::{SharedTodoList, TodoList, TodoListSnapshot, TodoStatus};
-use codewhale_lane::LaneRegistry;
+use ghosty_lane::LaneRegistry;
 
 use super::{
     BindingId, ChangeCtx, CompatPlanMetadata, CompatProjectionState, CompatTodoBinding, EdgeKind,
@@ -18,9 +18,8 @@ use super::{
 };
 
 pub(crate) const ACTIVE_OPERATION_SUMMARY_START: &str =
-    "<!-- codewhale:active-work-operations:start -->";
-pub(crate) const ACTIVE_OPERATION_SUMMARY_END: &str =
-    "<!-- codewhale:active-work-operations:end -->";
+    "<!-- ghosty:active-work-operations:start -->";
+pub(crate) const ACTIVE_OPERATION_SUMMARY_END: &str = "<!-- ghosty:active-work-operations:end -->";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkRuntimeSnapshot {

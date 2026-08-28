@@ -4,14 +4,14 @@
 //! role a species-led whale and every whale one of six runtime states. This
 //! module carries that identity into the TUI as authored glyph art: nothing
 //! here is converted from the CWC rasters (there is no vector source), and no
-//! CWC file is copied. Colors are Codewhale palette tokens resolved through
+//! CWC file is copied. Colors are Ghosty palette tokens resolved through
 //! the live [`UiTheme`], so the whales follow Blue Stage dark/light, the
 //! Terminal theme, and ANSI-16 adaptation like every other surface.
 //!
 //! Contract:
 //! - **Role → species is one table** ([`WhaleSpecies::for_role_id`]). Fleet
 //!   roles map onto the six species; roles without a species (`worker`,
-//!   `general`, `custom`, unknown) render the plain Codewhale whale.
+//!   `general`, `custom`, unknown) render the plain Ghosty whale.
 //! - **State is evidence, never decoration.** [`WhaleState`] is derived only
 //!   from real runtime facts ([`WhaleState::for_subagent`],
 //!   [`WhaleState::for_shell_phase`]). *Working* is asserted only for a child
@@ -50,7 +50,7 @@ pub const BADGE_WIDTH: usize = 2;
 pub const WORKING_FRAME_MS: u64 = 180;
 pub const WORKING_FRAMES: usize = 4;
 
-/// The six Signal Cut species plus the plain Codewhale whale for roles that
+/// The six Signal Cut species plus the plain Ghosty whale for roles that
 /// have no species of their own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WhaleSpecies {
@@ -66,7 +66,7 @@ pub enum WhaleSpecies {
     Keel,
     /// Orca — review.
     Lantern,
-    /// The plain Codewhale whale: no species, no accent. Used for `worker`,
+    /// The plain Ghosty whale: no species, no accent. Used for `worker`,
     /// `general`, `custom`, and unknown roles rather than guessing.
     Plain,
 }
@@ -119,7 +119,7 @@ impl WhaleSpecies {
             Self::Echo => "Echo",
             Self::Keel => "Keel",
             Self::Lantern => "Lantern",
-            Self::Plain => "Codewhale",
+            Self::Plain => "Ghosty",
         }
     }
 
@@ -388,7 +388,7 @@ impl Ink {
 /// the state-cue lane (kept free of body glyphs on rows 0 and 2; row 1 may
 /// hold a species feature at column 1 that a state cue overrides). Columns
 /// 10–13 of row 2 are the wake lane. Head at the left, crown fluke `▚△▞` at
-/// the right, matching the idle Codewhale mark in `underwater.rs`.
+/// the right, matching the idle Ghosty mark in `underwater.rs`.
 struct Art {
     rows: [&'static str; PORTRAIT_HEIGHT],
     inks: [&'static str; PORTRAIT_HEIGHT],
@@ -431,7 +431,7 @@ const fn art(species: WhaleSpecies) -> Art {
             rows: ["  ▗▄▐▄▄▖  ▚△▞ ", "  ▐█○█▘▙━━▞   ", "  ▝▀▀▀▀▘      "],
             inks: ["  bbbbbb  bdb ", "  bbabhbbbb   ", "  bbbbbb      "],
         },
-        // The plain Codewhale whale.
+        // The plain Ghosty whale.
         WhaleSpecies::Plain => Art {
             rows: ["  ▗▄▄▄▄▄▖  ▚△▞", "  ▐█·███▙━━▞  ", "  ▝▀▀▀▀▀▘     "],
             inks: ["  bbbbbbb  bdb", "  bbdbbbbbbb  ", "  bbbbbbb     "],
@@ -631,7 +631,7 @@ pub fn portrait(
 }
 
 /// The portrait narrowed through the glyph charter's ASCII fallback — what an
-/// `CODEWHALE_ASCII_SAFE=1` terminal draws. Pure text, for tests and
+/// `GHOSTY_ASCII_SAFE=1` terminal draws. Pure text, for tests and
 /// text-only surfaces.
 #[cfg(test)]
 #[must_use]
@@ -932,7 +932,7 @@ mod tests {
     }
 
     #[test]
-    fn plain_whale_matches_the_codewhale_mark_vocabulary() {
+    fn plain_whale_matches_the_ghosty_mark_vocabulary() {
         let rows = portrait_text(WhaleSpecies::Plain, None, 0);
         assert_eq!(rows[0], "  ▗▄▄▄▄▄▖  ▚△▞");
         assert_eq!(rows[1], "  ▐█·███▙━━▞  ");
@@ -1145,7 +1145,7 @@ mod tests {
             }
         }
         assert_eq!(WhaleSpecies::Scout.name(), "Scout");
-        assert_eq!(WhaleSpecies::Plain.name(), "Codewhale");
+        assert_eq!(WhaleSpecies::Plain.name(), "Ghosty");
     }
 
     /// Rendered gallery — kept as a test so the whole set can be eyeballed

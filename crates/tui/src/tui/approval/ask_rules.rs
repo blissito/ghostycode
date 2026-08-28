@@ -7,8 +7,8 @@
 
 use std::path::Path;
 
-use codewhale_config::ToolAskRule;
-use codewhale_execpolicy::PermissionAction;
+use ghosty_config::ToolAskRule;
+use ghosty_execpolicy::PermissionAction;
 use serde_json::Value;
 
 use crate::tools::canonical_action::canonical_action_alias;
@@ -136,8 +136,7 @@ pub(super) fn build_persistent_allow_rules(
     }
 
     let workspace = workspace.to_string_lossy();
-    let Some(workspace) = codewhale_execpolicy::normalize_workspace_scope(workspace.as_ref())
-    else {
+    let Some(workspace) = ghosty_execpolicy::normalize_workspace_scope(workspace.as_ref()) else {
         return Vec::new();
     };
 
@@ -182,7 +181,7 @@ fn build_file_write_ask_rules(
     // preview stay disabled.
     let workspace = workspace.to_string_lossy();
     let Some(relative) =
-        codewhale_execpolicy::normalize_workspace_relative_path(path, workspace.as_ref())
+        ghosty_execpolicy::normalize_workspace_relative_path(path, workspace.as_ref())
             .filter(|relative| !relative.is_empty())
     else {
         return Vec::new();
@@ -200,7 +199,7 @@ fn build_apply_patch_ask_rules(params: &Value, workspace: &Path) -> Vec<ToolAskR
 
     for path in preflight.touched_files {
         let Some(relative) =
-            codewhale_execpolicy::normalize_workspace_relative_path(&path, workspace.as_ref())
+            ghosty_execpolicy::normalize_workspace_relative_path(&path, workspace.as_ref())
                 .filter(|relative| !relative.is_empty())
         else {
             return Vec::new();

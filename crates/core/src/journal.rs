@@ -12,7 +12,7 @@
 //! `core` agree on the wire. `core` adds the `SessionJournal` wrapper that
 //! owns the `current_leaf_id` column in `state.threads`.
 
-pub use codewhale_protocol::journal::{Journal, JournalEntry};
+pub use ghosty_protocol::journal::{Journal, JournalEntry};
 
 use serde::{Deserialize, Serialize};
 

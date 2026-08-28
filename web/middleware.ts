@@ -26,7 +26,7 @@ function applySecurityHeaders(res: NextResponse): NextResponse {
  * canonical host has to win for assets and API routes too, or a `www` page
  * keeps pulling subresources from `www` after the document moved.
  */
-const CANONICAL_HOST = "codewhale.net";
+const CANONICAL_HOST = "ghosty.net";
 
 function canonicalHostRedirect(req: NextRequest): NextResponse | null {
   const host = req.headers.get("host");

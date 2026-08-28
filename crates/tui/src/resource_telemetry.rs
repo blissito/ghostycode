@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-//! Resource-usage telemetry for long-running CodeWhale tasks.
+//! Resource-usage telemetry for long-running GhostyCode tasks.
 //!
 //! This module is a pure, side-effect-free foundation for surfacing how many
 //! tokens and how much wall-clock time a task has consumed, optionally relative

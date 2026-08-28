@@ -171,7 +171,7 @@ fn ambient_glyphs_are_ascii_or_have_fallbacks() {
     // Every glyph the water can paint is either pure ASCII (fish and
     // the whole jellyfish silhouette, by construction) or carries a
     // glyphs::ascii_fallback entry (bubbles, whale cameo) so
-    // CODEWHALE_ASCII_SAFE=1 covers the whole field.
+    // GHOSTY_ASCII_SAFE=1 covers the whole field.
     let mut jellyfish: Vec<&str> = Vec::new();
     jellyfish.extend(JELLY_DOME_TOP_FRAMES);
     jellyfish.extend(JELLY_DOME_SKIRT_FRAMES);

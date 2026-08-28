@@ -332,7 +332,7 @@ pub(crate) fn agent_approval_mode_for_turn(
 ///
 /// Permission posture and filesystem scope are separate controls, but the
 /// named Full Access posture must have a truthful default: outside Plan it
-/// disables Codewhale's own sandbox, matching the product meaning of the
+/// disables Ghosty's own sandbox, matching the product meaning of the
 /// name. An explicit effective sandbox setting may still *tighten* that
 /// default. It can never loosen Plan, Ask, or Auto-Review.
 #[must_use]
@@ -606,12 +606,12 @@ fn is_carve_out_excluded_name(name: &str) -> bool {
     if name == ".git" {
         return true;
     }
-    // Runtime/project state and credential-bearing directories. `.codewhale`
+    // Runtime/project state and credential-bearing directories. `.ghosty`
     // holds session state plus MCP/hook configuration — editing it changes
     // what runs, so it keeps the modal.
     if matches!(
         name,
-        ".codewhale" | ".ssh" | ".aws" | ".gnupg" | ".kube" | ".docker"
+        ".ghosty" | ".ssh" | ".aws" | ".gnupg" | ".kube" | ".docker"
     ) {
         return true;
     }
@@ -793,7 +793,7 @@ mod tests {
             vec![".ssh/config".to_string()],
             vec!["deploy/id_rsa".to_string()],
             vec!["certs/server.pem".to_string()],
-            vec![".codewhale/mcp.json".to_string()],
+            vec![".ghosty/mcp.json".to_string()],
             vec!["aws/credentials".to_string()],
             // One bad target poisons the whole call.
             vec!["src/main.rs".to_string(), ".env".to_string()],

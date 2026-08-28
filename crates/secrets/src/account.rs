@@ -1,4 +1,4 @@
-//! Shared secure-storage contract for Codewhale account sessions.
+//! Shared secure-storage contract for Ghosty account sessions.
 //!
 //! The CLI owns device authorization and refresh traffic. This module owns the
 //! durable record written by that flow so the TUI and Runtime API can recognize
@@ -14,18 +14,18 @@ use thiserror::Error;
 use crate::{Secrets, SecretsError};
 
 /// Production account API origin used when no override is configured.
-pub const DEFAULT_ACCOUNT_API_BASE: &str = "https://api.codewhale.net";
+pub const DEFAULT_ACCOUNT_API_BASE: &str = "https://api.ghosty.net";
 /// Environment variable that selects the account API origin.
-pub const ACCOUNT_API_BASE_ENV: &str = "CODEWHALE_CLOUD_API_BASE";
+pub const ACCOUNT_API_BASE_ENV: &str = "GHOSTY_CLOUD_API_BASE";
 /// Former opt-in for the local file session store. The file store is now the
 /// automatic fallback (codex-style); the variable is accepted but ignored.
 #[deprecated(
     since = "0.9.11",
     note = "the file session store is the automatic fallback; this variable is ignored"
 )]
-pub const ACCOUNT_ALLOW_FILE_SESSION_STORE_ENV: &str = "CODEWHALE_CLOUD_ALLOW_FILE_SESSION_STORE";
+pub const ACCOUNT_ALLOW_FILE_SESSION_STORE_ENV: &str = "GHOSTY_CLOUD_ALLOW_FILE_SESSION_STORE";
 /// OS credential-manager service shared by CLI, TUI, and Runtime API.
-pub const ACCOUNT_KEYRING_SERVICE: &str = "codewhale-cloud";
+pub const ACCOUNT_KEYRING_SERVICE: &str = "ghosty-cloud";
 /// Current serialized account-session record version.
 pub const ACCOUNT_SESSION_SCHEMA_VERSION: u8 = 1;
 
@@ -58,7 +58,7 @@ pub struct AccountAuthBundle {
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountSession {
-    /// Durable session identifier shared across Codewhale surfaces.
+    /// Durable session identifier shared across Ghosty surfaces.
     pub id: String,
     /// Authorization provider used to establish the session.
     #[serde(default)]
@@ -87,7 +87,7 @@ pub struct AccountSession {
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountUser {
-    /// Stable Codewhale account identifier.
+    /// Stable Ghosty account identifier.
     #[serde(default)]
     pub id: String,
     /// User-facing account name.
@@ -116,7 +116,7 @@ pub struct AccountModelKeyState {
     pub configured: bool,
 }
 
-/// Versioned secure-storage envelope shared by every local Codewhale surface.
+/// Versioned secure-storage envelope shared by every local Ghosty surface.
 ///
 /// This type intentionally does not implement `Debug` because `bundle`
 /// contains access and refresh credentials.
@@ -192,14 +192,14 @@ pub enum AccountSessionError {
     #[error(transparent)]
     Secrets(#[from] SecretsError),
     /// Stored session JSON could not be decoded.
-    #[error("the local Codewhale account session is unreadable")]
+    #[error("the local Ghosty account session is unreadable")]
     UnreadableRecord(#[source] serde_json::Error),
     /// Stored or newly returned authentication credentials are malformed.
-    #[error("the Codewhale account session contains invalid credentials")]
+    #[error("the Ghosty account session contains invalid credentials")]
     InvalidCredentials,
     /// No approved secure session backend is available.
     #[error(
-        "Codewhale account sessions could not open a secret store; check that HOME is writable or set CODEWHALE_HOME to an absolute path"
+        "Ghosty account sessions could not open a secret store; check that HOME is writable or set GHOSTY_HOME to an absolute path"
     )]
     SecureStoreUnavailable,
 }
@@ -274,9 +274,9 @@ impl AccountSessionStore {
 
 /// Select the approved account-session backend shared by CLI, TUI, and Runtime.
 ///
-/// Account sessions live in the private `0600` Codewhale secrets file. The OS
-/// keyring is not used: on macOS every unsigned or rebuilt `codewhale` binary
-/// is a new Keychain ACL principal, so reading `codewhale-cloud-auth-v1-*`
+/// Account sessions live in the private `0600` Ghosty secrets file. The OS
+/// keyring is not used: on macOS every unsigned or rebuilt `ghosty` binary
+/// is a new Keychain ACL principal, so reading `ghosty-cloud-auth-v1-*`
 /// under the legacy `deepseek` service pops a password dialog on every start.
 pub fn secure_account_session_secrets() -> Result<Secrets, AccountSessionError> {
     Ok(Secrets::file_backed())
@@ -306,7 +306,7 @@ pub fn account_auth_slot(profile: &str, api_base: &str) -> String {
         encoded.push(HEX[(byte >> 4) as usize] as char);
         encoded.push(HEX[(byte & 0x0f) as usize] as char);
     }
-    format!("codewhale-cloud-auth-v1-{encoded}")
+    format!("ghosty-cloud-auth-v1-{encoded}")
 }
 
 /// Validate the credential-bearing portion of an account response or record.
@@ -416,16 +416,16 @@ mod tests {
     use crate::InMemoryKeyringStore;
 
     /// Account sessions must never touch the OS keyring. Unsigned rebuilds
-    /// on macOS otherwise prompt on every `codewhale web` / TUI start.
+    /// on macOS otherwise prompt on every `ghosty web` / TUI start.
     #[test]
     fn session_secrets_use_the_file_store_not_keychain() {
         let _lock = crate::tests::env_lock();
         let dir = tempfile::TempDir::new().expect("tempdir");
-        let home = dir.path().join("codewhale-home");
+        let home = dir.path().join("ghosty-home");
         std::fs::create_dir_all(&home).expect("home");
-        unsafe { std::env::set_var("CODEWHALE_HOME", &home) };
-        unsafe { std::env::remove_var("CODEWHALE_CLOUD_ALLOW_FILE_SESSION_STORE") };
-        unsafe { std::env::remove_var("CODEWHALE_SECRET_BACKEND") };
+        unsafe { std::env::set_var("GHOSTY_HOME", &home) };
+        unsafe { std::env::remove_var("GHOSTY_CLOUD_ALLOW_FILE_SESSION_STORE") };
+        unsafe { std::env::remove_var("GHOSTY_SECRET_BACKEND") };
         unsafe { std::env::remove_var("DEEPSEEK_SECRET_BACKEND") };
         let secrets =
             secure_account_session_secrets().expect("session secrets must resolve without opt-in");
@@ -471,7 +471,7 @@ mod tests {
     #[test]
     fn runtime_receipt_is_token_free_and_preserves_only_explicit_scopes() {
         let (secrets, _) = test_store();
-        let store = AccountSessionStore::new(secrets, Some("work"), "https://api.codewhale.net");
+        let store = AccountSessionStore::new(secrets, Some("work"), "https://api.ghosty.net");
         store
             .save(auth(
                 "acct-1",
@@ -499,9 +499,9 @@ mod tests {
     #[test]
     fn profiles_and_origins_preserve_same_account_and_cross_account_isolation() {
         let (secrets, _) = test_store();
-        let default = AccountSessionStore::new(secrets.clone(), None, "https://api.codewhale.net");
+        let default = AccountSessionStore::new(secrets.clone(), None, "https://api.ghosty.net");
         let work =
-            AccountSessionStore::new(secrets.clone(), Some("work"), "https://api.codewhale.net");
+            AccountSessionStore::new(secrets.clone(), Some("work"), "https://api.ghosty.net");
         let local = AccountSessionStore::new(secrets, None, "http://127.0.0.1:8787");
         default.save(auth("acct-a", "session-a", "", "")).unwrap();
         work.save(auth("acct-a", "session-b", "", "")).unwrap();

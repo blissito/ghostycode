@@ -27,7 +27,7 @@ def metric_command(test_name: str) -> list[str]:
         "test",
         "--locked",
         "-p",
-        "codewhale-tui",
+        "ghosty-tui",
         "--lib",
         exact_test_name,
         "--",
@@ -82,7 +82,7 @@ def main() -> int:
     )
 
     receipt = {
-        "document_kind": "codewhale.runtime_contract_receipt",
+        "document_kind": "ghosty.runtime_contract_receipt",
         "schema_version": 1,
         "representative_context": representative_context_metrics,
         "skill_discovery": skill_discovery_metrics,

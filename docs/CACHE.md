@@ -102,7 +102,7 @@ header change or a history reset explains the difference.
 
 DeepSeek Harness derives every request from an append-only session log via a
 pure `deriveMessages()` projection, so prefix-extension is emergent rather than
-managed. Codewhale now pins the header and delivers drift as `<context_update>`
+managed. Ghosty now pins the header and delivers drift as `<context_update>`
 appends; the remaining step is to make the session log the single source of
 truth with a pure projection (and to persist the context-update baseline with
 it). That is a follow-up lane, not part of this change.

@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn long_labels_are_pre_truncated() {
-        let long = "cargo test -p codewhale-tui --lib background_indicator -- --exact this is long";
+        let long = "cargo test -p ghosty-tui --lib background_indicator -- --exact this is long";
         let work = PendingWork {
             items: vec![shell(long)],
         };
@@ -383,7 +383,7 @@ mod tests {
         app.task_panel.push(TaskPanelEntry {
             id: "shell_a1b2c3d4".to_string(),
             status: "running".to_string(),
-            prompt_summary: "shell: cargo test -p codewhale-tui".to_string(),
+            prompt_summary: "shell: cargo test -p ghosty-tui".to_string(),
             duration_ms: Some(42_000),
             kind: TaskPanelEntryKind::Background,
             stale: true,

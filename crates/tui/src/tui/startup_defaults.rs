@@ -58,7 +58,7 @@
 //! So the atomicity of a single load/modify/save belongs one level down, in
 //! [`Settings::transact`], which holds a per-settings-path process mutex *and*
 //! a cross-process advisory lock on an adjacent `settings.toml.lock` across the
-//! whole cycle — the second one because a user can easily have two Codewhale
+//! whole cycle — the second one because a user can easily have two Ghosty
 //! processes open on the same home directory. Every reachable settings writer
 //! goes through it. What stays here is the part `transact` cannot provide:
 //! **ordering**. A lock makes concurrent transactions safe but says nothing
@@ -515,7 +515,7 @@ impl StartupDefaultsWriter {
 ///
 /// Mode and thinking cycling happen inside a great many `App` unit tests that do
 /// not seal `HOME`. Those tests predate this write and must not start rewriting
-/// the developer's real `~/.codewhale/settings.toml`, so under `cfg(test)` the
+/// the developer's real `~/.ghosty/settings.toml`, so under `cfg(test)` the
 /// background write is inert unless the caller is inside a sealed env scope that
 /// opted in with `allow_writes_in_tests`.
 ///
@@ -809,15 +809,15 @@ mod tests {
     #[test]
     fn safe_error_detail_keeps_the_cause_and_drops_the_path() {
         let err = anyhow::anyhow!("Permission denied (os error 13)")
-            .context("Failed to write settings to /Users/real-name/.codewhale/settings.toml");
+            .context("Failed to write settings to /Users/real-name/.ghosty/settings.toml");
         let detail = safe_error_detail(&err);
         assert_eq!(detail, "Permission denied (os error 13)");
         assert!(!detail.contains("real-name"));
-        assert!(!detail.contains(".codewhale"));
+        assert!(!detail.contains(".ghosty"));
 
         // Even when the root cause itself names a path, nothing path-shaped
         // survives.
-        let rooted = anyhow::anyhow!("cannot open /Users/real-name/.codewhale/settings.toml");
+        let rooted = anyhow::anyhow!("cannot open /Users/real-name/.ghosty/settings.toml");
         let scrubbed = safe_error_detail(&rooted);
         assert_eq!(scrubbed, "cannot open <path>");
     }
@@ -867,10 +867,10 @@ mod tests {
         let tmp = tempfile::TempDir::new().expect("tempdir");
         let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path());
         let _user_profile = crate::test_support::EnvVarGuard::set("USERPROFILE", tmp.path());
-        let _codewhale_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path().join(".codewhale"));
+        let _ghosty_home =
+            crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path().join(".ghosty"));
         let _deepseek_config = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_config = crate::test_support::EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _ghosty_config = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _writes = allow_writes_in_tests();
 
         let writer = StartupDefaultsWriter::default();
@@ -905,19 +905,19 @@ mod tests {
                 .default_mode,
             "operate"
         );
-        assert!(tmp.path().join(".codewhale/settings.toml").exists());
+        assert!(tmp.path().join(".ghosty/settings.toml").exists());
     }
 
-    /// Seal `HOME`/`CODEWHALE_HOME` onto `tmp`. Caller must already hold
+    /// Seal `HOME`/`GHOSTY_HOME` onto `tmp`. Caller must already hold
     /// `lock_test_env()`.
     fn seal_home(tmp: &std::path::Path) -> Vec<crate::test_support::EnvVarGuard> {
         use crate::test_support::EnvVarGuard;
         vec![
             EnvVarGuard::set("HOME", tmp),
             EnvVarGuard::set("USERPROFILE", tmp),
-            EnvVarGuard::set("CODEWHALE_HOME", tmp.join(".codewhale")),
+            EnvVarGuard::set("GHOSTY_HOME", tmp.join(".ghosty")),
             EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH"),
-            EnvVarGuard::remove("CODEWHALE_CONFIG_PATH"),
+            EnvVarGuard::remove("GHOSTY_CONFIG_PATH"),
         ]
     }
 
@@ -970,7 +970,7 @@ mod tests {
             "an unauthorized caller must not enqueue work an authorized drain could inherit"
         );
         assert!(
-            !tmp.path().join(".codewhale/settings.toml").exists(),
+            !tmp.path().join(".ghosty/settings.toml").exists(),
             "an unauthorized caller must not write any settings file"
         );
 
@@ -1058,7 +1058,7 @@ mod tests {
             let writer = StartupDefaultsWriter::default();
             writer.spawn(StartupDefaults::mode(AppMode::Operate));
             assert_eq!(writer.pending_len(), 0);
-            assert!(!tmp.path().join(".codewhale/settings.toml").exists());
+            assert!(!tmp.path().join(".ghosty/settings.toml").exists());
 
             // With its own opt-in it writes into *its* home, keyed to *its*
             // generation.
@@ -1070,7 +1070,7 @@ mod tests {
                 Settings::load_persisted().expect("reload").default_mode,
                 "operate"
             );
-            assert!(tmp.path().join(".codewhale/settings.toml").exists());
+            assert!(tmp.path().join(".ghosty/settings.toml").exists());
         }
     }
 

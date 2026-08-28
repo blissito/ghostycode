@@ -2,18 +2,18 @@
 # Guard the OpenHarmony target dependency graph.
 #
 # This check intentionally does not require an OpenHarmony SDK or sysroot. It
-# only asks Cargo to resolve the codewhale-tui dependency graph for the OHOS
+# only asks Cargo to resolve the ghosty-tui dependency graph for the OHOS
 # target and fails if crates known to break or be unsupported on OHOS re-enter
 # that graph. It also proves the OHOS target activates the rquickjs-sys
-# `bindgen` feature for codewhale-workflow-js, which is the only reason the
+# `bindgen` feature for ghosty-workflow-js, which is the only reason the
 # crate compiles for a target with no pre-generated QuickJS bindings.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
 target="${1:-aarch64-unknown-linux-ohos}"
-package="${CODEWHALE_OHOS_DEP_PACKAGE:-codewhale-tui}"
-workflow_js_package="${CODEWHALE_OHOS_WORKFLOW_JS_PACKAGE:-codewhale-workflow-js}"
+package="${GHOSTY_OHOS_DEP_PACKAGE:-ghosty-tui}"
+workflow_js_package="${GHOSTY_OHOS_WORKFLOW_JS_PACKAGE:-ghosty-workflow-js}"
 
 require_literal() {
   local file="$1"
@@ -84,14 +84,14 @@ cargo_tree_with_retry() {
   local package="$1"
   shift
   local attempt
-  local max_attempts="${CODEWHALE_OHOS_DEP_RETRIES:-3}"
-  local delay_seconds="${CODEWHALE_OHOS_DEP_RETRY_DELAY_SECONDS:-10}"
+  local max_attempts="${GHOSTY_OHOS_DEP_RETRIES:-3}"
+  local delay_seconds="${GHOSTY_OHOS_DEP_RETRY_DELAY_SECONDS:-10}"
   local err_file
   local output
   local status
 
   if ! [[ "${max_attempts}" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
-    echo "CODEWHALE_OHOS_DEP_RETRIES must be an integer greater than or equal to 1." >&2
+    echo "GHOSTY_OHOS_DEP_RETRIES must be an integer greater than or equal to 1." >&2
     return 1
   fi
 
@@ -143,7 +143,7 @@ fi
 
 echo "OHOS dependency graph OK for ${package} on ${target}."
 
-# codewhale-workflow-js only compiles for OHOS because its
+# ghosty-workflow-js only compiles for OHOS because its
 # `cfg(target_env = "ohos")` dependency gate activates rquickjs's `bindgen`
 # feature, which forwards to rquickjs-sys so QuickJS bindings are generated at
 # build time. Resolve the feature graph for the OHOS target (pure metadata, no

@@ -11,13 +11,13 @@ const {
 
 test("npm wrapper cleanup bounds retries for transient Windows removal races", async () => {
   const calls = [];
-  await removeSmokeWorkspace("C:\\Temp\\codewhale-smoke", async (...args) => {
+  await removeSmokeWorkspace("C:\\Temp\\ghosty-smoke", async (...args) => {
     calls.push(args);
   });
 
   assert.deepEqual(calls, [
     [
-      "C:\\Temp\\codewhale-smoke",
+      "C:\\Temp\\ghosty-smoke",
       {
         force: true,
         recursive: true,
@@ -38,7 +38,7 @@ test("npm wrapper cleanup surfaces persistent removal failures", async () => {
   });
 
   await assert.rejects(
-    removeSmokeWorkspace("C:\\Temp\\codewhale-smoke", async () => {
+    removeSmokeWorkspace("C:\\Temp\\ghosty-smoke", async () => {
       throw failure;
     }),
     (error) => error === failure,

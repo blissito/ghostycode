@@ -54,7 +54,7 @@ impl HarnessBuilder {
         // PTY scenarios must never emit product telemetry merely because they
         // launch a real binary in a fresh HOME. Tests that explicitly exercise
         // the first-run disclosure can override this value on their builder.
-        let env = HashMap::from([("CODEWHALE_TELEMETRY".to_string(), "0".to_string())]);
+        let env = HashMap::from([("GHOSTY_TELEMETRY".to_string(), "0".to_string())]);
         Self {
             program: program.into(),
             args: Vec::new(),
@@ -116,7 +116,7 @@ impl HarnessBuilder {
         }
         if let Some(home) = self.seal_home.as_deref() {
             std::fs::create_dir_all(home).context("create sealed HOME")?;
-            let codewhale_config = home.join(".codewhale").join("config.toml");
+            let ghosty_config = home.join(".ghosty").join("config.toml");
             let deepseek_config = home.join(".deepseek").join("config.toml");
             builder = builder
                 .env("HOME", home.to_string_lossy())
@@ -124,7 +124,7 @@ impl HarnessBuilder {
                 .env("XDG_DATA_HOME", home.join(".local/share").to_string_lossy())
                 .env("XDG_CACHE_HOME", home.join(".cache").to_string_lossy())
                 .env("USERPROFILE", home.to_string_lossy())
-                .env("CODEWHALE_CONFIG_PATH", codewhale_config.to_string_lossy())
+                .env("GHOSTY_CONFIG_PATH", ghosty_config.to_string_lossy())
                 .env("DEEPSEEK_CONFIG_PATH", deepseek_config.to_string_lossy());
         }
         for (k, v) in &self.env {
@@ -263,12 +263,12 @@ impl Harness {
     /// Resolve a binary by Cargo bin-name (uses `CARGO_BIN_EXE_<name>`).
     /// Tests should call this rather than hard-coding paths.
     ///
-    /// `QA_TUI_BIN` overrides the `codewhale-tui` resolution entirely — cargo
+    /// `QA_TUI_BIN` overrides the `ghosty-tui` resolution entirely — cargo
     /// itself always sets `CARGO_BIN_EXE_*` for integration tests, so an
     /// inherited value cannot win. Release QA uses this to A/B an older
     /// released binary against the in-tree build (e.g. the #5424 sweep).
     pub fn cargo_bin(name: &str) -> PathBuf {
-        if name == "codewhale-tui"
+        if name == "ghosty-tui"
             && let Some(path) = std::env::var_os("QA_TUI_BIN")
             && !path.is_empty()
         {
@@ -280,8 +280,8 @@ impl Harness {
         if let Some(path) = std::env::var_os(&key) {
             return PathBuf::from(path);
         }
-        if name == "codewhale-tui"
-            && let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui")
+        if name == "ghosty-tui"
+            && let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui")
         {
             return PathBuf::from(path);
         }
@@ -374,14 +374,14 @@ pub fn make_sealed_workspace() -> Result<SealedWorkspace> {
     let workspace = tmp.path().join("workspace");
     let home = tmp.path().join("home");
     std::fs::create_dir_all(&workspace).context("mkdir workspace")?;
-    std::fs::create_dir_all(home.join(".codewhale")).context("mkdir home/.codewhale")?;
+    std::fs::create_dir_all(home.join(".ghosty")).context("mkdir home/.ghosty")?;
     std::fs::create_dir_all(home.join(".deepseek")).context("mkdir home/.deepseek")?;
     let silent_notifications = "[notifications]\nmethod = \"off\"\ncompletion_sound = \"off\"\n";
     std::fs::write(
-        home.join(".codewhale").join("config.toml"),
+        home.join(".ghosty").join("config.toml"),
         silent_notifications,
     )
-    .context("write silent CodeWhale PTY config")?;
+    .context("write silent GhostyCode PTY config")?;
     std::fs::write(
         home.join(".deepseek").join("config.toml"),
         silent_notifications,

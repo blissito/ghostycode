@@ -8,8 +8,8 @@
 //!   dispatch posture — worker/scout/planner/reviewer/builder/verifier/
 //!   consultant/custom — is seeded here, #5285),
 //! - `[fleet.profiles]` entries from config.toml,
-//! - personal `$CODEWHALE_HOME/agents/*.toml` profile files,
-//! - workspace `.codewhale/agents/*.toml` profile files.
+//! - personal `$GHOSTY_HOME/agents/*.toml` profile files,
+//! - workspace `.ghosty/agents/*.toml` profile files.
 //!
 //! Precedence is Workspace > Personal > Config > Plugin > BuiltIn, merged by id. Loading never
 //! fails the session: an unreadable workspace profile dir degrades to the
@@ -21,9 +21,9 @@
 //!   lower-precedence file for the same id, the roster keeps a
 //!   [`ShadowedProfile`] receipt (logged at load, badged in the roster view)
 //!   so an edit in the losing layer is visibly ignored rather than dropped.
-//! - Project-scope profiles (`.codewhale/agents/*.toml`) join the roster only
+//! - Project-scope profiles (`.ghosty/agents/*.toml`) join the roster only
 //!   when project-level config is trusted for the launch; `--no-project-config`
-//!   opts the whole layer out, same as `.codewhale/config.toml` (#485).
+//!   opts the whole layer out, same as `.ghosty/config.toml` (#485).
 
 #![allow(dead_code)]
 
@@ -32,7 +32,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use codewhale_config::{
+use ghosty_config::{
     FleetConfigToml, FleetDelegationHints, FleetLoadout, FleetProfile, FleetProfilePermissions,
     FleetRole, FleetSlot,
 };
@@ -128,7 +128,7 @@ fn origin_precedence(origin: ProfileOrigin) -> u8 {
 }
 
 /// Process-launch decision: whether project-scope agent profiles
-/// (`.codewhale/agents/*.toml`) may join the dispatch roster (#5098). Set
+/// (`.ghosty/agents/*.toml`) may join the dispatch roster (#5098). Set
 /// once from `--no-project-config` at launch so every roster re-read (spawn
 /// refresh, dispatch, views) honors the same trust decision other
 /// project-level config already has (#485). Defaults to enabled, matching
@@ -191,8 +191,8 @@ impl FleetRoster {
     /// Load and merge the full roster for a workspace.
     ///
     /// Config members come from `[fleet.profiles]` (id = map key). Personal
-    /// members come from `$CODEWHALE_HOME/agents/*.toml`, and workspace members
-    /// come from `.codewhale/agents/*.toml`. A load failure is logged and
+    /// members come from `$GHOSTY_HOME/agents/*.toml`, and workspace members
+    /// come from `.ghosty/agents/*.toml`. A load failure is logged and
     /// skipped so one broken profile layer cannot take down the session.
     #[must_use]
     pub fn load(fleet_config: &FleetConfigToml, workspace: &Path) -> Self {
@@ -324,7 +324,7 @@ impl FleetRoster {
 
         // #5098: project-scope profiles join the dispatch roster only when the
         // launch trusted project-level config (`--no-project-config` opts the
-        // whole layer out, same as `.codewhale/config.toml`).
+        // whole layer out, same as `.ghosty/config.toml`).
         if include_workspace_profiles {
             match load_workspace_agent_profiles_tolerant(workspace) {
                 Ok((profiles, issues)) => {
@@ -880,7 +880,7 @@ mod tests {
     fn config_member_overrides_built_in_and_extras_sort_alphabetically() {
         let _env_lock = crate::test_support::lock_test_env();
         let home = TempDir::new().unwrap();
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
         let tmp = TempDir::new().unwrap();
         let config = config_with_profiles(BTreeMap::from([
             (
@@ -993,7 +993,7 @@ mod tests {
     fn personal_setup_target_round_trips_through_the_runtime_roster() {
         let _env_lock = crate::test_support::lock_test_env();
         let home = TempDir::new().unwrap();
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
         let workspace = TempDir::new().unwrap();
         let personal_dir = super::super::profile::agent_profile_dir_for_scope(
             super::super::profile::FleetProfileScope::Personal,
@@ -1003,14 +1003,14 @@ mod tests {
         assert_eq!(personal_dir, home.path().join("agents"));
 
         let target = personal_dir.join("reviewer.toml");
-        let mut transaction = codewhale_config::persistence::SetupTransaction::new();
+        let mut transaction = ghosty_config::persistence::SetupTransaction::new();
         transaction.stage(
             target.clone(),
             b"id = \"reviewer\"\nrole_hint = \"reviewer\"\nprovider = \"deepseek\"\nmodel = \"deepseek-v4-flash\"\n"
                 .to_vec(),
         );
         transaction.commit().expect("atomic personal save");
-        assert!(target.is_file(), "save must land under CODEWHALE_HOME");
+        assert!(target.is_file(), "save must land under GHOSTY_HOME");
 
         let roster = FleetRoster::load(&FleetConfigToml::default(), workspace.path());
         let reviewer = roster
@@ -1024,12 +1024,12 @@ mod tests {
 
     #[test]
     fn broken_workspace_dir_degrades_to_built_ins_and_config() {
-        // `load` reads the real personal agent dir under CODEWHALE_HOME; a
+        // `load` reads the real personal agent dir under GHOSTY_HOME; a
         // developer's own extra profiles must not change this assertion.
         let _env_lock = crate::test_support::lock_test_env();
         let isolated_home = TempDir::new().unwrap();
-        let _codewhale_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", isolated_home.path());
+        let _ghosty_home =
+            crate::test_support::EnvVarGuard::set("GHOSTY_HOME", isolated_home.path());
         let tmp = TempDir::new().unwrap();
         // A malformed provider token is still a load failure (#4093 / #3965):
         // profile pins may name built-ins or simple custom ids like
@@ -1058,7 +1058,7 @@ mod tests {
     fn invalid_legacy_profile_does_not_hide_valid_scout_neighbor() {
         let _env_lock = crate::test_support::lock_test_env();
         let home = TempDir::new().unwrap();
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
         let tmp = TempDir::new().unwrap();
         write_workspace_profile(
             tmp.path(),
@@ -1094,8 +1094,8 @@ mod tests {
     fn model_overrides_use_lowercased_ids_and_only_explicit_models() {
         let _env_lock = crate::test_support::lock_test_env();
         let home = TempDir::new().unwrap();
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
-        // Isolate personal `$CODEWHALE_HOME/agents` so ambient developer
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
+        // Isolate personal `$GHOSTY_HOME/agents` so ambient developer
         // profiles cannot pin built-ins like manager during unit tests.
         let tmp = TempDir::new().unwrap();
         let config = config_with_profiles(BTreeMap::from([
@@ -1129,7 +1129,7 @@ mod tests {
     fn model_overrides_skip_provider_pinned_profiles() {
         let _env_lock = crate::test_support::lock_test_env();
         let home = TempDir::new().unwrap();
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
         let tmp = TempDir::new().unwrap();
 
         let mut pinned = config_profile("scout", Some("deepseek-v4-flash"));

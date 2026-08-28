@@ -1,5 +1,5 @@
 //! End-to-end shape lock for the per-model-call `turn_usage` event on the
-//! `codewhale exec --output-format stream-json` stream (#52 / FINISH-0.9.4).
+//! `ghosty exec --output-format stream-json` stream (#52 / FINISH-0.9.4).
 //!
 //! A `wiremock` OpenAI-compatible endpoint stands in for the provider. Two
 //! cases pin the contract:
@@ -143,7 +143,7 @@ fn run_exec_stream_json(server: &MockServer) -> Vec<Value> {
     let workspace = TempDir::new().expect("workspace tempdir");
     let home = TempDir::new().expect("home tempdir");
 
-    let mut command = Command::new(codewhale_tui_binary());
+    let mut command = Command::new(ghosty_tui_binary());
     preserve_host_env(&mut command);
     command
         .current_dir(workspace.path())
@@ -163,8 +163,8 @@ fn run_exec_stream_json(server: &MockServer) -> Vec<Value> {
         .env("XDG_DATA_HOME", home.path().join(".local").join("share"))
         .env("XDG_CACHE_HOME", home.path().join(".cache"))
         .env(
-            "CODEWHALE_CONFIG_PATH",
-            home.path().join(".codewhale").join("config.toml"),
+            "GHOSTY_CONFIG_PATH",
+            home.path().join(".ghosty").join("config.toml"),
         )
         .env(
             "DEEPSEEK_CONFIG_PATH",
@@ -172,23 +172,23 @@ fn run_exec_stream_json(server: &MockServer) -> Vec<Value> {
         )
         .env("DEEPSEEK_API_KEY", "ci-test-key-not-real")
         .env("DEEPSEEK_BASE_URL", server.uri())
-        .env("CODEWHALE_BASE_URL", server.uri())
+        .env("GHOSTY_BASE_URL", server.uri())
         .env("DEEPSEEK_MODEL", TEST_MODEL)
-        .env("CODEWHALE_MODEL", TEST_MODEL)
+        .env("GHOSTY_MODEL", TEST_MODEL)
         .env("RUST_LOG", "warn")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    std::fs::create_dir_all(home.path().join(".codewhale")).expect("create codewhale config dir");
+    std::fs::create_dir_all(home.path().join(".ghosty")).expect("create ghosty config dir");
     std::fs::create_dir_all(home.path().join(".deepseek")).expect("create deepseek config dir");
 
-    let mut child = command.spawn().expect("spawn codewhale-tui exec");
+    let mut child = command.spawn().expect("spawn ghosty-tui exec");
     let stdout_reader = read_pipe_in_background(child.stdout.take().expect("stdout pipe"));
     let stderr_reader = read_pipe_in_background(child.stderr.take().expect("stderr pipe"));
 
     let status = match child
         .wait_timeout(RUN_TIMEOUT)
-        .expect("wait for codewhale-tui")
+        .expect("wait for ghosty-tui")
     {
         Some(status) => status,
         None => {
@@ -197,7 +197,7 @@ fn run_exec_stream_json(server: &MockServer) -> Vec<Value> {
             let stdout = join_pipe_reader(stdout_reader, "stdout");
             let stderr = join_pipe_reader(stderr_reader, "stderr");
             panic!(
-                "codewhale-tui exec timed out after {RUN_TIMEOUT:?}\nstdout:\n{}\nstderr:\n{}",
+                "ghosty-tui exec timed out after {RUN_TIMEOUT:?}\nstdout:\n{}\nstderr:\n{}",
                 String::from_utf8_lossy(&stdout),
                 String::from_utf8_lossy(&stderr)
             );
@@ -208,7 +208,7 @@ fn run_exec_stream_json(server: &MockServer) -> Vec<Value> {
     let stderr = join_pipe_reader(stderr_reader, "stderr");
     assert!(
         status.success(),
-        "codewhale-tui exec failed\nstdout:\n{}\nstderr:\n{}",
+        "ghosty-tui exec failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&stdout),
         String::from_utf8_lossy(&stderr)
     );
@@ -245,11 +245,11 @@ fn join_pipe_reader(
         .unwrap_or_else(|err| panic!("failed to read {stream_name}: {err}"))
 }
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
 
@@ -258,7 +258,7 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }
 
@@ -276,7 +276,7 @@ async fn turn_usage_event_is_emitted_with_reported_fields_and_stream_contract_ho
 
     // Every event carries the stream schema envelope.
     for event in &events {
-        assert_eq!(event["schema"], "codewhale.exec-stream");
+        assert_eq!(event["schema"], "ghosty.exec-stream");
         assert_eq!(event["schema_version"], 1);
     }
 

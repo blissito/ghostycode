@@ -55,8 +55,8 @@ jobs:
           fi
 
           workspace_version="$(grep -E '^version = "' Cargo.toml | head -n1 | sed -E 's/^version = "([^"]+)".*/\1/')"
-          npm_version="$(node -p "require('./npm/codewhale/package.json').version")"
-          binary_version="$(node -p "require('./npm/codewhale/package.json').codewhaleBinaryVersion")"
+          npm_version="$(node -p "require('./npm/ghosty/package.json').version")"
+          binary_version="$(node -p "require('./npm/ghosty/package.json').ghostyBinaryVersion")"
           if [[ "${workspace_version}" != "${npm_version}" ]]; then
             echo "::error::Candidate version drift: workspace=${workspace_version}, npm=${npm_version}, binary=${binary_version}." >&2
             exit 1

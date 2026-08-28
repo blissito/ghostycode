@@ -1,5 +1,5 @@
 /**
- * Codewhale first-party telemetry ingest.
+ * Ghosty first-party telemetry ingest.
  *
  * ============================ THE RED LINE ============================
  *

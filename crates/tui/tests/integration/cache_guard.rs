@@ -4,22 +4,22 @@
 //! hit rate stays above a configurable threshold (default 40%).
 //!
 //! Environment variables:
-//!   CODEWHALE_CACHE_GUARD=1              Enable the guard (default: disabled)
-//!   CODEWHALE_CACHE_GUARD_THRESHOLD=90   Hit rate threshold (0-100)
-//!   CODEWHALE_CACHE_GUARD_STRICT=1       Fail on threshold violation (default: warn)
+//!   GHOSTY_CACHE_GUARD=1              Enable the guard (default: disabled)
+//!   GHOSTY_CACHE_GUARD_THRESHOLD=90   Hit rate threshold (0-100)
+//!   GHOSTY_CACHE_GUARD_STRICT=1       Fail on threshold violation (default: warn)
 //!
 //! Usage:
-//!   CODEWHALE_CACHE_GUARD=1 cargo test --test cache_guard
-//!   CODEWHALE_CACHE_GUARD=1 CODEWHALE_CACHE_GUARD_STRICT=1 cargo test --test cache_guard
+//!   GHOSTY_CACHE_GUARD=1 cargo test --test cache_guard
+//!   GHOSTY_CACHE_GUARD=1 GHOSTY_CACHE_GUARD_STRICT=1 cargo test --test cache_guard
 
 // No external dependencies needed for the mock.
 
 // === Configuration ===
 
 const DEFAULT_THRESHOLD: f64 = 40.0;
-const ENABLED_ENV: &str = "CODEWHALE_CACHE_GUARD";
-const THRESHOLD_ENV: &str = "CODEWHALE_CACHE_GUARD_THRESHOLD";
-const STRICT_ENV: &str = "CODEWHALE_CACHE_GUARD_STRICT";
+const ENABLED_ENV: &str = "GHOSTY_CACHE_GUARD";
+const THRESHOLD_ENV: &str = "GHOSTY_CACHE_GUARD_THRESHOLD";
+const STRICT_ENV: &str = "GHOSTY_CACHE_GUARD_STRICT";
 
 fn guard_enabled() -> bool {
     std::env::var(ENABLED_ENV)

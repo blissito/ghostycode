@@ -1146,7 +1146,7 @@ pub(crate) mod test_support {
             allowed_tool_gate_count: None,
             disallowed_tool_gate_count: None,
             base_prompt: BasePromptProvenance {
-                origin: "bundled in this codewhale-tui build".to_string(),
+                origin: "bundled in this ghosty-tui build".to_string(),
                 bytes: 11,
                 sha256: crate::hashing::sha256_hex(b"BASE PROMPT"),
             },
@@ -1334,7 +1334,7 @@ mod tests {
     fn no_prompt_message_secret_or_path_reaches_any_surface() {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
         let mut body = chat_body();
-        body["messages"][1]["content"] = json!(format!("look at {home}/.codewhale/config.toml"));
+        body["messages"][1]["content"] = json!(format!("look at {home}/.ghosty/config.toml"));
         let manifest = manifest(body);
 
         for surface in [

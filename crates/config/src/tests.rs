@@ -80,8 +80,8 @@ fn lifecycle_outbox_toml_is_off_by_default_and_parses_when_configured() {
     let full: ConfigToml = toml::from_str(
         r#"
         [lifecycle_outbox]
-        path = "~/.codewhale/notifications/outbox.jsonl"
-        webhook_url = "https://example.com/hooks/codewhale"
+        path = "~/.ghosty/notifications/outbox.jsonl"
+        webhook_url = "https://example.com/hooks/ghosty"
         webhook_token = "secret-token"
         "#,
     )
@@ -89,11 +89,11 @@ fn lifecycle_outbox_toml_is_off_by_default_and_parses_when_configured() {
     let outbox = full.lifecycle_outbox.expect("table should parse");
     assert_eq!(
         outbox.path,
-        Some(PathBuf::from("~/.codewhale/notifications/outbox.jsonl"))
+        Some(PathBuf::from("~/.ghosty/notifications/outbox.jsonl"))
     );
     assert_eq!(
         outbox.webhook_url.as_deref(),
-        Some("https://example.com/hooks/codewhale")
+        Some("https://example.com/hooks/ghosty")
     );
     assert_eq!(outbox.webhook_token.as_deref(), Some("secret-token"));
 }
@@ -118,7 +118,7 @@ fn lifecycle_outbox_toml_webhook_is_optional() {
     let webhook_only: ConfigToml = toml::from_str(
         r#"
         [lifecycle_outbox]
-        webhook_url = "https://example.com/hooks/codewhale"
+        webhook_url = "https://example.com/hooks/ghosty"
         "#,
     )
     .expect("webhook-only lifecycle_outbox table");
@@ -126,7 +126,7 @@ fn lifecycle_outbox_toml_webhook_is_optional() {
     assert!(outbox.path.is_none());
     assert_eq!(
         outbox.webhook_url.as_deref(),
-        Some("https://example.com/hooks/codewhale")
+        Some("https://example.com/hooks/ghosty")
     );
     assert!(outbox.webhook_token.is_none());
 }
@@ -195,15 +195,15 @@ fn permissions_toml_deserializes_action_deny_and_allow() {
     assert_eq!(permissions.rules.len(), 3);
     assert_eq!(
         permissions.rules[0].action,
-        codewhale_execpolicy::PermissionAction::Deny
+        ghosty_execpolicy::PermissionAction::Deny
     );
     assert_eq!(
         permissions.rules[1].action,
-        codewhale_execpolicy::PermissionAction::Allow
+        ghosty_execpolicy::PermissionAction::Allow
     );
     assert_eq!(
         permissions.rules[2].action,
-        codewhale_execpolicy::PermissionAction::Ask
+        ghosty_execpolicy::PermissionAction::Ask
     ); // default
 }
 
@@ -281,7 +281,7 @@ fn permissions_ruleset_deny_without_command_stays_in_ask_rules() {
     assert_eq!(ruleset.ask_rules.len(), 1);
     assert_eq!(
         ruleset.ask_rules[0].action,
-        codewhale_execpolicy::PermissionAction::Deny
+        ghosty_execpolicy::PermissionAction::Deny
     );
     // No command → nothing to promote to denied_prefixes
     assert!(ruleset.denied_prefixes.is_empty());
@@ -347,10 +347,7 @@ fn permissions_ruleset_mixed_actions_all_coexist() {
         .iter()
         .find(|r| r.path.as_deref() == Some("src/secrets.rs"))
         .unwrap();
-    assert_eq!(
-        path_deny.action,
-        codewhale_execpolicy::PermissionAction::Deny
-    );
+    assert_eq!(path_deny.action, ghosty_execpolicy::PermissionAction::Deny);
 
     let path_allow = ruleset
         .ask_rules
@@ -359,7 +356,7 @@ fn permissions_ruleset_mixed_actions_all_coexist() {
         .unwrap();
     assert_eq!(
         path_allow.action,
-        codewhale_execpolicy::PermissionAction::Allow
+        ghosty_execpolicy::PermissionAction::Allow
     );
 }
 
@@ -369,7 +366,7 @@ fn provider_command_auth_source_deserializes() {
         r#"
         [providers.deepseek.auth]
         source = "command"
-        command = ["keepassxc-cli", "show", "CodeWhale/DeepSeek", "--attribute", "password"]
+        command = ["keepassxc-cli", "show", "GhostyCode/DeepSeek", "--attribute", "password"]
         timeout_ms = 2000
         "#,
     )
@@ -393,7 +390,7 @@ fn provider_secret_auth_source_deserializes() {
         r#"
         [providers.openai.auth]
         source = "secret"
-        secret_id = "codewhale/openai"
+        secret_id = "ghosty/openai"
         "#,
     )
     .expect("config toml");
@@ -401,7 +398,7 @@ fn provider_secret_auth_source_deserializes() {
     let auth = config.providers.openai.auth.expect("provider auth source");
     assert_eq!(auth.source, AuthSourceKind::Secret);
     assert_eq!(auth.source_class(), "secret");
-    assert_eq!(auth.secret_id.as_deref(), Some("codewhale/openai"));
+    assert_eq!(auth.secret_id.as_deref(), Some("ghosty/openai"));
     auth.validate().expect("valid secret auth source");
 }
 
@@ -578,7 +575,7 @@ fn config_store_loads_sibling_permissions_toml() {
         .expect("clock")
         .as_nanos();
     let dir = std::env::temp_dir().join(format!(
-        "codewhale-permissions-schema-{}-{unique}",
+        "ghosty-permissions-schema-{}-{unique}",
         std::process::id()
     ));
     fs::create_dir_all(&dir).expect("mkdir");
@@ -629,7 +626,7 @@ fn config_store_loads_permissions_even_when_config_is_absent() {
         .expect("clock")
         .as_nanos();
     let dir = std::env::temp_dir().join(format!(
-        "codewhale-permissions-only-{}-{unique}",
+        "ghosty-permissions-only-{}-{unique}",
         std::process::id()
     ));
     fs::create_dir_all(&dir).expect("mkdir");
@@ -664,7 +661,7 @@ fn config_store_exec_policy_engine_uses_sibling_permissions() {
         .expect("clock")
         .as_nanos();
     let dir = std::env::temp_dir().join(format!(
-        "codewhale-permissions-engine-{}-{unique}",
+        "ghosty-permissions-engine-{}-{unique}",
         std::process::id()
     ));
     fs::create_dir_all(&dir).expect("mkdir");
@@ -683,12 +680,12 @@ fn config_store_exec_policy_engine_uses_sibling_permissions() {
     let store = ConfigStore::load(Some(config_path)).expect("load config store");
     let decision = store
         .exec_policy_engine()
-        .check(codewhale_execpolicy::ExecPolicyContext {
+        .check(ghosty_execpolicy::ExecPolicyContext {
             command: "cargo test --workspace",
             cwd: "/workspace",
             tool: Some("exec_shell"),
             path: None,
-            ask_for_approval: codewhale_execpolicy::AskForApproval::UnlessTrusted,
+            ask_for_approval: ghosty_execpolicy::AskForApproval::UnlessTrusted,
             sandbox_mode: Some("workspace-write"),
         })
         .expect("policy check");
@@ -815,29 +812,29 @@ fn config_store_appends_exact_workspace_allow_rules() {
 
     let exact = store
         .exec_policy_engine()
-        .check(codewhale_execpolicy::ExecPolicyContext {
+        .check(ghosty_execpolicy::ExecPolicyContext {
             command: "cargo test",
             cwd: dir.path().to_string_lossy().as_ref(),
             tool: Some("exec_shell"),
             path: None,
-            ask_for_approval: codewhale_execpolicy::AskForApproval::OnRequest,
+            ask_for_approval: ghosty_execpolicy::AskForApproval::OnRequest,
             sandbox_mode: Some("workspace-write"),
         })
         .expect("check exact grant");
     assert_eq!(
         exact.matched_action,
-        Some(codewhale_execpolicy::PermissionAction::Allow)
+        Some(ghosty_execpolicy::PermissionAction::Allow)
     );
     assert!(!exact.requires_approval);
 
     let extra_args = store
         .exec_policy_engine()
-        .check(codewhale_execpolicy::ExecPolicyContext {
+        .check(ghosty_execpolicy::ExecPolicyContext {
             command: "cargo test --workspace",
             cwd: dir.path().to_string_lossy().as_ref(),
             tool: Some("exec_shell"),
             path: None,
-            ask_for_approval: codewhale_execpolicy::AskForApproval::OnRequest,
+            ask_for_approval: ghosty_execpolicy::AskForApproval::OnRequest,
             sandbox_mode: Some("workspace-write"),
         })
         .expect("check extra args");
@@ -854,7 +851,7 @@ fn config_store_rejects_broad_or_unscoped_allow_rules() {
     let mut store = ConfigStore::load(Some(config_path)).expect("load config store");
 
     let mut unscoped = ToolAskRule::exec_shell("cargo test");
-    unscoped.action = codewhale_execpolicy::PermissionAction::Allow;
+    unscoped.action = ghosty_execpolicy::PermissionAction::Allow;
     assert!(
         store
             .append_allow_rules(&[unscoped])
@@ -864,7 +861,7 @@ fn config_store_rejects_broad_or_unscoped_allow_rules() {
     );
 
     let mut prefix = ToolAskRule::exec_shell("cargo test");
-    prefix.action = codewhale_execpolicy::PermissionAction::Allow;
+    prefix.action = ghosty_execpolicy::PermissionAction::Allow;
     prefix.workspace = Some(dir.path().to_string_lossy().into_owned());
     assert!(
         store
@@ -1226,9 +1223,9 @@ struct EnvGuard {
     hf_base_url: Option<OsString>,
     huggingface_model: Option<OsString>,
     hf_model: Option<OsString>,
-    codewhale_provider: Option<OsString>,
-    codewhale_model: Option<OsString>,
-    codewhale_base_url: Option<OsString>,
+    ghosty_provider: Option<OsString>,
+    ghosty_model: Option<OsString>,
+    ghosty_base_url: Option<OsString>,
     xai_api_key: Option<OsString>,
     xai_base_url: Option<OsString>,
     xai_model: Option<OsString>,
@@ -1268,9 +1265,9 @@ impl EnvGuard {
             deepseek_default_text_model: env::var_os("DEEPSEEK_DEFAULT_TEXT_MODEL"),
             deepseek_provider: env::var_os("DEEPSEEK_PROVIDER"),
             deepseek_auth_mode: env::var_os("DEEPSEEK_AUTH_MODE"),
-            codewhale_provider: env::var_os("CODEWHALE_PROVIDER"),
-            codewhale_model: env::var_os("CODEWHALE_MODEL"),
-            codewhale_base_url: env::var_os("CODEWHALE_BASE_URL"),
+            ghosty_provider: env::var_os("GHOSTY_PROVIDER"),
+            ghosty_model: env::var_os("GHOSTY_MODEL"),
+            ghosty_base_url: env::var_os("GHOSTY_BASE_URL"),
             xai_api_key: env::var_os("XAI_API_KEY"),
             xai_base_url: env::var_os("XAI_BASE_URL"),
             xai_model: env::var_os("XAI_MODEL"),
@@ -1406,9 +1403,9 @@ impl EnvGuard {
             env::remove_var("DEEPSEEK_DEFAULT_TEXT_MODEL");
             env::remove_var("DEEPSEEK_PROVIDER");
             env::remove_var("DEEPSEEK_AUTH_MODE");
-            env::remove_var("CODEWHALE_PROVIDER");
-            env::remove_var("CODEWHALE_MODEL");
-            env::remove_var("CODEWHALE_BASE_URL");
+            env::remove_var("GHOSTY_PROVIDER");
+            env::remove_var("GHOSTY_MODEL");
+            env::remove_var("GHOSTY_BASE_URL");
             env::remove_var("XAI_API_KEY");
             env::remove_var("XAI_BASE_URL");
             env::remove_var("XAI_MODEL");
@@ -1567,9 +1564,9 @@ impl Drop for EnvGuard {
             );
             Self::restore_var("DEEPSEEK_PROVIDER", self.deepseek_provider.take());
             Self::restore_var("DEEPSEEK_AUTH_MODE", self.deepseek_auth_mode.take());
-            Self::restore_var("CODEWHALE_PROVIDER", self.codewhale_provider.take());
-            Self::restore_var("CODEWHALE_MODEL", self.codewhale_model.take());
-            Self::restore_var("CODEWHALE_BASE_URL", self.codewhale_base_url.take());
+            Self::restore_var("GHOSTY_PROVIDER", self.ghosty_provider.take());
+            Self::restore_var("GHOSTY_MODEL", self.ghosty_model.take());
+            Self::restore_var("GHOSTY_BASE_URL", self.ghosty_base_url.take());
             Self::restore_var("XAI_API_KEY", self.xai_api_key.take());
             Self::restore_var("XAI_BASE_URL", self.xai_base_url.take());
             Self::restore_var("XAI_MODEL", self.xai_model.take());
@@ -1749,18 +1746,18 @@ impl RecordingSecretsStore {
     }
 }
 
-impl codewhale_secrets::KeyringStore for RecordingSecretsStore {
-    fn get(&self, key: &str) -> Result<Option<String>, codewhale_secrets::SecretsError> {
+impl ghosty_secrets::KeyringStore for RecordingSecretsStore {
+    fn get(&self, key: &str) -> Result<Option<String>, ghosty_secrets::SecretsError> {
         self.gets.lock().unwrap().push(key.to_string());
         Ok(self.values.get(key).cloned().or_else(|| self.value.clone()))
     }
 
-    fn set(&self, key: &str, _value: &str) -> Result<(), codewhale_secrets::SecretsError> {
+    fn set(&self, key: &str, _value: &str) -> Result<(), ghosty_secrets::SecretsError> {
         self.sets.lock().unwrap().push(key.to_string());
         Ok(())
     }
 
-    fn delete(&self, key: &str) -> Result<(), codewhale_secrets::SecretsError> {
+    fn delete(&self, key: &str) -> Result<(), ghosty_secrets::SecretsError> {
         self.deletes.lock().unwrap().push(key.to_string());
         Ok(())
     }
@@ -2363,8 +2360,8 @@ fn hook_sinks_unix_socket_path_round_trips_through_key_value_api() -> Result<()>
 /// End-to-end smoke for the preferred Kimi Code setup path:
 ///   1. Start from a fresh root config that uses DeepSeek defaults.
 ///   2. Mutate it through the same key-value setters the
-///      `codewhale config set providers.moonshot.*` CLI invokes.
-///   3. Switch the active provider through `CODEWHALE_PROVIDER` —
+///      `ghosty config set providers.moonshot.*` CLI invokes.
+///   3. Switch the active provider through `GHOSTY_PROVIDER` —
 ///      the public env alias — without ever touching the legacy
 ///      `DEEPSEEK_PROVIDER` name.
 ///   4. Resolve the runtime and confirm the doctor/runtime values.
@@ -2382,7 +2379,7 @@ fn moonshot_kimi_code_smoke_config_set_then_resolve() -> Result<()> {
         ..ConfigToml::default()
     };
 
-    // Same key paths a user would run via `codewhale config set`.
+    // Same key paths a user would run via `ghosty config set`.
     config.set_value("providers.moonshot.api_key", "kimi-code-key-placeholder")?;
     config.set_value("providers.moonshot.auth_mode", "api_key")?;
     config.set_value("providers.moonshot.base_url", DEFAULT_KIMI_CODE_BASE_URL)?;
@@ -2390,7 +2387,7 @@ fn moonshot_kimi_code_smoke_config_set_then_resolve() -> Result<()> {
 
     // Public env alias for the active-provider switch.
     // Safety: test-only env mutation guarded by env_lock().
-    unsafe { env::set_var("CODEWHALE_PROVIDER", "moonshot") };
+    unsafe { env::set_var("GHOSTY_PROVIDER", "moonshot") };
 
     let resolved = config.resolve_runtime_options(&CliRuntimeOverrides::default());
 
@@ -2807,7 +2804,7 @@ fn project_merge_denies_credentials_endpoints_and_provider_selection() {
     assert_eq!(base.base_url.as_deref(), Some("https://api.deepseek.com"));
     assert_eq!(base.auth_mode, None);
     assert_eq!(base.telemetry, None);
-    // A repo-local `.codewhale/config.toml` cannot aim telemetry at a host of
+    // A repo-local `.ghosty/config.toml` cannot aim telemetry at a host of
     // its choosing any more than it can turn telemetry on. Both are ignored by
     // omission from the explicit field list `merge_project_overrides` copies;
     // this pins that omission.
@@ -2948,27 +2945,24 @@ fn list_values_redacts_unicode_api_key_without_byte_slicing() {
 #[test]
 fn app_homes_prefer_home_env_before_platform_home_fallback() {
     let _lock = env_lock();
-    let home =
-        std::env::temp_dir().join(format!("codewhale-config-home-env-{}", std::process::id()));
-    let userprofile = std::env::temp_dir().join(format!(
-        "codewhale-config-userprofile-{}",
-        std::process::id()
-    ));
+    let home = std::env::temp_dir().join(format!("ghosty-config-home-env-{}", std::process::id()));
+    let userprofile =
+        std::env::temp_dir().join(format!("ghosty-config-userprofile-{}", std::process::id()));
     let _env = StateEnvRestore {
         home: env::var_os("HOME"),
         userprofile: env::var_os("USERPROFILE"),
-        codewhale_home: env::var_os("CODEWHALE_HOME"),
+        ghosty_home: env::var_os("GHOSTY_HOME"),
     };
     // Safety: test-only environment mutation is serialized by env_lock().
     unsafe {
         env::set_var("HOME", &home);
         env::set_var("USERPROFILE", &userprofile);
-        env::remove_var("CODEWHALE_HOME");
+        env::remove_var("GHOSTY_HOME");
     }
 
     assert_eq!(
-        codewhale_home().expect("codewhale home"),
-        home.join(CODEWHALE_APP_DIR)
+        ghosty_home().expect("ghosty home"),
+        home.join(GHOSTY_APP_DIR)
     );
     assert_eq!(
         legacy_deepseek_home().expect("legacy home"),
@@ -2976,32 +2970,32 @@ fn app_homes_prefer_home_env_before_platform_home_fallback() {
     );
 
     let explicit = std::env::temp_dir().join(format!(
-        "codewhale-config-explicit-home-{}",
+        "ghosty-config-explicit-home-{}",
         std::process::id()
     ));
     // Safety: test-only environment mutation is serialized by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_HOME", &explicit);
+        env::set_var("GHOSTY_HOME", &explicit);
     }
-    assert_eq!(codewhale_home().expect("explicit home"), explicit);
+    assert_eq!(ghosty_home().expect("explicit home"), explicit);
 }
 
 #[test]
-fn relative_codewhale_home_is_a_hard_error() {
+fn relative_ghosty_home_is_a_hard_error() {
     let _lock = env_lock();
     let _env = StateEnvRestore {
         home: env::var_os("HOME"),
         userprofile: env::var_os("USERPROFILE"),
-        codewhale_home: env::var_os("CODEWHALE_HOME"),
+        ghosty_home: env::var_os("GHOSTY_HOME"),
     };
     // Safety: test-only environment mutation is serialized by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_HOME", ".codewhale");
+        env::set_var("GHOSTY_HOME", ".ghosty");
     }
 
-    let error = codewhale_home().expect_err("relative global home must fail closed");
+    let error = ghosty_home().expect_err("relative global home must fail closed");
     let message = format!("{error:#}");
-    assert!(message.contains("CODEWHALE_HOME"), "{message}");
+    assert!(message.contains("GHOSTY_HOME"), "{message}");
     assert!(message.contains("absolute"), "{message}");
 }
 
@@ -3040,24 +3034,24 @@ fn migrate_config_reports_copied_legacy_path() {
         .expect("clock")
         .as_nanos();
     let home = std::env::temp_dir().join(format!(
-        "codewhale-config-migration-{}-{unique}",
+        "ghosty-config-migration-{}-{unique}",
         std::process::id()
     ));
     let legacy_dir = home.join(LEGACY_APP_DIR);
-    let primary_dir = home.join(CODEWHALE_APP_DIR);
+    let primary_dir = home.join(GHOSTY_APP_DIR);
     let legacy_config = legacy_dir.join(CONFIG_FILE_NAME);
     let _legacy = LegacyConfigGuard::install(legacy_config.clone(), b"provider = \"deepseek\"\n");
 
     let _env = StateEnvRestore {
         home: env::var_os("HOME"),
         userprofile: env::var_os("USERPROFILE"),
-        codewhale_home: env::var_os("CODEWHALE_HOME"),
+        ghosty_home: env::var_os("GHOSTY_HOME"),
     };
     // Safety: test-only environment mutation is serialized by env_lock().
     unsafe {
         env::set_var("HOME", &home);
         env::set_var("USERPROFILE", &home);
-        env::remove_var("CODEWHALE_HOME");
+        env::remove_var("GHOSTY_HOME");
     }
 
     let migration = migrate_config_if_needed()
@@ -3069,7 +3063,7 @@ fn migrate_config_reports_copied_legacy_path() {
     let notice = migration.user_notice();
     assert!(notice.contains(&legacy_dir.join(CONFIG_FILE_NAME).display().to_string()));
     assert!(notice.contains(&primary_dir.join(CONFIG_FILE_NAME).display().to_string()));
-    assert!(notice.contains(".codewhale path for future edits"));
+    assert!(notice.contains(".ghosty path for future edits"));
     assert!(notice.contains(".deepseek file remains only as a compatibility fallback"));
     assert_eq!(
         fs::read_to_string(primary_dir.join(CONFIG_FILE_NAME)).expect("primary config"),
@@ -3080,47 +3074,47 @@ fn migrate_config_reports_copied_legacy_path() {
 }
 
 #[test]
-fn explicit_codewhale_home_bypasses_legacy_config_fallback_and_migration() {
+fn explicit_ghosty_home_bypasses_legacy_config_fallback_and_migration() {
     let _lock = env_lock();
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("clock")
         .as_nanos();
     let home = std::env::temp_dir().join(format!(
-        "codewhale-config-explicit-isolation-{}-{unique}",
+        "ghosty-config-explicit-isolation-{}-{unique}",
         std::process::id()
     ));
     let legacy_config = home.join(LEGACY_APP_DIR).join(CONFIG_FILE_NAME);
     fs::create_dir_all(legacy_config.parent().expect("legacy config parent")).expect("legacy dir");
     fs::write(&legacy_config, b"provider = \"deepseek\"\n").expect("legacy config");
 
-    let explicit_home = home.join("isolated-codewhale");
+    let explicit_home = home.join("isolated-ghosty");
     let _env = StateEnvRestore {
         home: env::var_os("HOME"),
         userprofile: env::var_os("USERPROFILE"),
-        codewhale_home: env::var_os("CODEWHALE_HOME"),
+        ghosty_home: env::var_os("GHOSTY_HOME"),
     };
     // Safety: test-only environment mutation is serialized by env_lock().
     unsafe {
         env::set_var("HOME", &home);
         env::set_var("USERPROFILE", &home);
-        env::set_var("CODEWHALE_HOME", &explicit_home);
+        env::set_var("GHOSTY_HOME", &explicit_home);
     }
 
     assert_eq!(
         default_config_path().expect("default config path"),
         explicit_home.join(CONFIG_FILE_NAME),
-        "explicit CODEWHALE_HOME must not read ambient legacy config"
+        "explicit GHOSTY_HOME must not read ambient legacy config"
     );
     assert!(
         migrate_config_if_needed()
             .expect("migration check")
             .is_none(),
-        "explicit CODEWHALE_HOME must not migrate ambient legacy config"
+        "explicit GHOSTY_HOME must not migrate ambient legacy config"
     );
     assert!(
         !explicit_home.join(CONFIG_FILE_NAME).exists(),
-        "legacy config must not be copied into explicit CODEWHALE_HOME"
+        "legacy config must not be copied into explicit GHOSTY_HOME"
     );
 
     let _ = fs::remove_dir_all(home);
@@ -3132,7 +3126,7 @@ fn explicit_codewhale_home_bypasses_legacy_config_fallback_and_migration() {
 struct StateEnvRestore {
     home: Option<OsString>,
     userprofile: Option<OsString>,
-    codewhale_home: Option<OsString>,
+    ghosty_home: Option<OsString>,
 }
 
 impl Drop for StateEnvRestore {
@@ -3147,16 +3141,16 @@ impl Drop for StateEnvRestore {
                 Some(value) => env::set_var("USERPROFILE", value),
                 None => env::remove_var("USERPROFILE"),
             }
-            match self.codewhale_home.take() {
-                Some(value) => env::set_var("CODEWHALE_HOME", value),
-                None => env::remove_var("CODEWHALE_HOME"),
+            match self.ghosty_home.take() {
+                Some(value) => env::set_var("GHOSTY_HOME", value),
+                None => env::remove_var("GHOSTY_HOME"),
             }
         }
     }
 }
 
 /// Points `HOME`/`USERPROFILE` at a fresh temp tree and clears
-/// `CODEWHALE_HOME` so `codewhale_home()` -> `<home>/.codewhale` and
+/// `GHOSTY_HOME` so `ghosty_home()` -> `<home>/.ghosty` and
 /// `legacy_deepseek_home()` -> `<home>/.deepseek`. Env is restored on drop.
 struct StateDirEnv {
     home: PathBuf,
@@ -3166,19 +3160,19 @@ struct StateDirEnv {
 impl StateDirEnv {
     fn install(unique: u128) -> Self {
         let home = std::env::temp_dir().join(format!(
-            "codewhale-state-migration-{}-{unique}",
+            "ghosty-state-migration-{}-{unique}",
             std::process::id()
         ));
         let restore = StateEnvRestore {
             home: env::var_os("HOME"),
             userprofile: env::var_os("USERPROFILE"),
-            codewhale_home: env::var_os("CODEWHALE_HOME"),
+            ghosty_home: env::var_os("GHOSTY_HOME"),
         };
         // Safety: test-only environment mutation is serialized by env_lock().
         unsafe {
             env::set_var("HOME", &home);
             env::set_var("USERPROFILE", &home);
-            env::remove_var("CODEWHALE_HOME");
+            env::remove_var("GHOSTY_HOME");
         }
         Self {
             home,
@@ -3189,7 +3183,7 @@ impl StateDirEnv {
         self.home.join(LEGACY_APP_DIR).join(sub)
     }
     fn primary(&self, sub: &str) -> PathBuf {
-        self.home.join(CODEWHALE_APP_DIR).join(sub)
+        self.home.join(GHOSTY_APP_DIR).join(sub)
     }
 }
 
@@ -3241,17 +3235,17 @@ fn state_migration_notice_explains_preserved_data_and_canonical_root() {
     let migration = StateMigration {
         subdir: "sessions".to_string(),
         legacy_path: PathBuf::from("/home/alice/.deepseek/sessions"),
-        primary_path: PathBuf::from("/home/alice/.codewhale/sessions"),
+        primary_path: PathBuf::from("/home/alice/.ghosty/sessions"),
         kind: StateMigrationKind::Relocated,
     };
 
     let notice = migration.user_notice();
 
-    assert!(notice.contains("Codewhale migrated legacy state"));
+    assert!(notice.contains("Ghosty migrated legacy state"));
     assert!(notice.contains("/home/alice/.deepseek/sessions"));
-    assert!(notice.contains("/home/alice/.codewhale/sessions"));
+    assert!(notice.contains("/home/alice/.ghosty/sessions"));
     assert!(notice.contains("Your data was preserved"));
-    assert!(notice.contains("Use .codewhale as the canonical state location"));
+    assert!(notice.contains("Use .ghosty as the canonical state location"));
     assert!(notice.contains("remove the legacy .deepseek tree"));
 }
 
@@ -3260,7 +3254,7 @@ fn copied_state_migration_notice_says_legacy_copy_remains() {
     let migration = StateMigration {
         subdir: "catalog".to_string(),
         legacy_path: PathBuf::from("/home/alice/.deepseek/catalog"),
-        primary_path: PathBuf::from("/home/alice/.codewhale/catalog"),
+        primary_path: PathBuf::from("/home/alice/.ghosty/catalog"),
         kind: StateMigrationKind::Copied,
     };
 
@@ -3327,17 +3321,17 @@ fn resolve_state_dir_still_finds_legacy_for_backfill() {
 }
 
 #[test]
-fn explicit_codewhale_home_bypasses_legacy_state_fallback_and_migration() {
+fn explicit_ghosty_home_bypasses_legacy_state_fallback_and_migration() {
     let _lock = env_lock();
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("clock")
         .as_nanos();
     let state_env = StateDirEnv::install(unique);
-    let explicit_home = state_env.home.join("isolated-codewhale");
+    let explicit_home = state_env.home.join("isolated-ghosty");
     // Safety: test-only environment mutation is serialized by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_HOME", &explicit_home);
+        env::set_var("GHOSTY_HOME", &explicit_home);
     }
     fs::create_dir_all(state_env.legacy("catalog")).expect("legacy dir");
     fs::write(state_env.legacy("catalog").join("legacy.json"), b"legacy").expect("legacy file");
@@ -3346,18 +3340,18 @@ fn explicit_codewhale_home_bypasses_legacy_state_fallback_and_migration() {
     assert_eq!(
         resolve_state_dir("catalog").expect("resolve"),
         primary,
-        "explicit CODEWHALE_HOME must not read ambient legacy state"
+        "explicit GHOSTY_HOME must not read ambient legacy state"
     );
 
     let ensured = ensure_state_dir("catalog").expect("ensure");
     assert_eq!(ensured, primary);
     assert!(
         state_env.legacy("catalog").join("legacy.json").exists(),
-        "explicit CODEWHALE_HOME must not migrate ambient legacy state"
+        "explicit GHOSTY_HOME must not migrate ambient legacy state"
     );
     assert!(
         !primary.join("legacy.json").exists(),
-        "legacy contents must not be copied into an explicit CODEWHALE_HOME"
+        "legacy contents must not be copied into an explicit GHOSTY_HOME"
     );
     let _ = fs::remove_dir_all(&state_env.home);
 }
@@ -3418,7 +3412,7 @@ fn project_state_resolvers_reject_path_traversal_subdirs() {
         ensure_project_state_dir(&workspace, "a/b").expect("safe nested project state dir");
     assert_eq!(
         created,
-        canonical_workspace.join(CODEWHALE_APP_DIR).join("a/b")
+        canonical_workspace.join(GHOSTY_APP_DIR).join("a/b")
     );
 }
 
@@ -3474,16 +3468,16 @@ fn config_store_save_revalidates_path_before_parent_creation() {
 fn resolve_config_path_rejects_relative_env_path_before_cwd_resolution() {
     let _lock = env_lock();
     struct ConfigPathEnvGuard {
-        codewhale: Option<OsString>,
+        ghosty: Option<OsString>,
         deepseek: Option<OsString>,
     }
     impl Drop for ConfigPathEnvGuard {
         fn drop(&mut self) {
             // Safety: test-only environment mutation is serialized by env_lock().
             unsafe {
-                match self.codewhale.as_ref() {
-                    Some(value) => env::set_var("CODEWHALE_CONFIG_PATH", value),
-                    None => env::remove_var("CODEWHALE_CONFIG_PATH"),
+                match self.ghosty.as_ref() {
+                    Some(value) => env::set_var("GHOSTY_CONFIG_PATH", value),
+                    None => env::remove_var("GHOSTY_CONFIG_PATH"),
                 }
                 match self.deepseek.as_ref() {
                     Some(value) => env::set_var("DEEPSEEK_CONFIG_PATH", value),
@@ -3493,19 +3487,19 @@ fn resolve_config_path_rejects_relative_env_path_before_cwd_resolution() {
         }
     }
     let _guard = ConfigPathEnvGuard {
-        codewhale: env::var_os("CODEWHALE_CONFIG_PATH"),
+        ghosty: env::var_os("GHOSTY_CONFIG_PATH"),
         deepseek: env::var_os("DEEPSEEK_CONFIG_PATH"),
     };
 
     // Safety: test-only environment mutation is serialized by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_CONFIG_PATH", "../config.toml");
+        env::set_var("GHOSTY_CONFIG_PATH", "../config.toml");
         env::remove_var("DEEPSEEK_CONFIG_PATH");
     }
 
     let err = resolve_config_path(None).expect_err("relative env path should fail");
     let message = format!("{err:#}");
-    assert!(message.contains("CODEWHALE_CONFIG_PATH"), "{message}");
+    assert!(message.contains("GHOSTY_CONFIG_PATH"), "{message}");
     assert!(message.contains("absolute"), "{message}");
 }
 
@@ -3527,7 +3521,7 @@ fn normalize_config_file_path_rejects_symlink_file() {
 fn load_project_config_rejects_symlinked_primary_config() {
     let workspace = tempfile::tempdir().expect("workspace tempdir");
     let outside = tempfile::tempdir().expect("outside tempdir");
-    let primary_dir = workspace.path().join(CODEWHALE_APP_DIR);
+    let primary_dir = workspace.path().join(GHOSTY_APP_DIR);
     let legacy_dir = workspace.path().join(LEGACY_APP_DIR);
     fs::create_dir_all(&primary_dir).expect("mkdir primary");
     fs::create_dir_all(&legacy_dir).expect("mkdir legacy");
@@ -3552,7 +3546,7 @@ fn load_project_config_rejects_symlinked_primary_config() {
 #[test]
 fn load_project_config_keeps_unknown_provider_names_strict() {
     let workspace = tempfile::tempdir().expect("workspace tempdir");
-    let config_dir = workspace.path().join(CODEWHALE_APP_DIR);
+    let config_dir = workspace.path().join(GHOSTY_APP_DIR);
     fs::create_dir_all(&config_dir).expect("mkdir project config");
     fs::write(
         config_dir.join(CONFIG_FILE_NAME),
@@ -3594,7 +3588,7 @@ fn malformed_project_config_is_distinguishable_from_a_missing_one() {
         "a workspace with no project config must report Missing"
     );
 
-    let config_dir = workspace.path().join(CODEWHALE_APP_DIR);
+    let config_dir = workspace.path().join(GHOSTY_APP_DIR);
     fs::create_dir_all(&config_dir).expect("mkdir project config");
     fs::write(
         config_dir.join(CONFIG_FILE_NAME),
@@ -3623,7 +3617,7 @@ fn malformed_project_config_is_distinguishable_from_a_missing_one() {
 #[test]
 fn well_formed_project_config_still_loads() {
     let workspace = tempfile::tempdir().expect("workspace tempdir");
-    let config_dir = workspace.path().join(CODEWHALE_APP_DIR);
+    let config_dir = workspace.path().join(GHOSTY_APP_DIR);
     fs::create_dir_all(&config_dir).expect("mkdir project config");
     fs::write(
         config_dir.join(CONFIG_FILE_NAME),
@@ -3771,7 +3765,7 @@ fn config_store_save_skips_identical_serialized_body() {
         .expect("clock")
         .as_nanos();
     let dir = std::env::temp_dir().join(format!(
-        "codewhale-config-noop-save-{}-{unique}",
+        "ghosty-config-noop-save-{}-{unique}",
         std::process::id()
     ));
     fs::create_dir_all(&dir).expect("mkdir");
@@ -3813,7 +3807,7 @@ fn config_store_save_creates_one_time_backup_before_changed_write() {
         .expect("clock")
         .as_nanos();
     let dir = std::env::temp_dir().join(format!(
-        "codewhale-config-backup-save-{}-{unique}",
+        "ghosty-config-backup-save-{}-{unique}",
         std::process::id()
     ));
     fs::create_dir_all(&dir).expect("mkdir");
@@ -3936,7 +3930,7 @@ fn config_store_save_preserves_disabled_keys() {
 #[test]
 fn config_store_save_preserves_comments_with_other_keys() {
     // Realistic scenario: user already has api_key + model, adds a comment,
-    // then changes model via `codewhale config set model`.
+    // then changes model via `ghosty config set model`.
     let dir = tempfile::tempdir().expect("tempdir");
     let config_path = dir.path().join(CONFIG_FILE_NAME);
     fs::write(
@@ -4285,7 +4279,7 @@ fn provider_kind_parses_openrouter_and_novita_aliases() {
     assert_eq!(parsed.provider, ProviderKind::Siliconflow);
 }
 
-/// Models.dev publishes provider ids that do not always match CodeWhale's
+/// Models.dev publishes provider ids that do not always match GhostyCode's
 /// canonical id (`fireworks-ai`, `togetherai`, `novita-ai`, `moonshotai`).
 /// These MUST normalize onto the right [`ProviderKind`] via
 /// [`ProviderKind::parse`], which is the seam `ModelReferenceCard::from_offering`
@@ -4309,7 +4303,7 @@ fn provider_kind_normalizes_models_dev_provider_ids() {
         ("xiaomi", ProviderKind::XiaomiMimo),
         ("deepinfra", ProviderKind::Deepinfra),
         ("siliconflow", ProviderKind::Siliconflow),
-        // Models.dev spells the China endpoint `siliconflow-cn`; CodeWhale's
+        // Models.dev spells the China endpoint `siliconflow-cn`; GhostyCode's
         // canonical id is `siliconflow-CN` and `parse` is case-insensitive.
         ("siliconflow-cn", ProviderKind::SiliconflowCN),
         ("openrouter", ProviderKind::Openrouter),
@@ -4386,11 +4380,11 @@ fn fireworks_and_together_base_url_and_auth_metadata() {
         std::env::set_var("TOGETHER_API_KEY", "tg-test-key");
     }
     assert_eq!(
-        codewhale_secrets::env_for("fireworks").as_deref(),
+        ghosty_secrets::env_for("fireworks").as_deref(),
         Some("fw-test-key")
     );
     assert_eq!(
-        codewhale_secrets::env_for("together").as_deref(),
+        ghosty_secrets::env_for("together").as_deref(),
         Some("tg-test-key")
     );
     unsafe {
@@ -4736,7 +4730,7 @@ model = "opencode-go/glm-5.2"
         std::env::set_var("OPENCODE_GO_MODEL", "opencode-go/mimo-v2.5-pro");
     }
     assert_eq!(
-        codewhale_secrets::env_for("opencode-go").as_deref(),
+        ghosty_secrets::env_for("opencode-go").as_deref(),
         Some("go-env-key")
     );
     let resolved = config.resolve_runtime_options(&CliRuntimeOverrides::default());
@@ -4823,7 +4817,7 @@ model = "glm-5.2"
         std::env::set_var("TELECOMJS_MODEL", "kimi-k2.5");
     }
     assert_eq!(
-        codewhale_secrets::env_for("tokenhub").as_deref(),
+        ghosty_secrets::env_for("tokenhub").as_deref(),
         Some("telecom-env-key")
     );
 
@@ -4999,9 +4993,9 @@ fn meta_model_api_scopes_both_documented_key_names_to_official_endpoint() {
 fn provider_metadata_registry_covers_every_provider_kind_once() {
     let providers = provider::all_providers();
     // Full registry keeps legacy dialect/plan kinds for provider_for_kind.
-    assert_eq!(providers.len(), 47);
+    assert_eq!(providers.len(), 48);
     // Catalog surface is one identity per vendor (no dual-wire / plan rows).
-    assert_eq!(ProviderKind::ALL.len(), 42);
+    assert_eq!(ProviderKind::ALL.len(), 43);
     assert!(ProviderKind::ALL.len() < providers.len());
 
     let mut ids = std::collections::BTreeSet::new();
@@ -5107,7 +5101,8 @@ fn provider_metadata_defaults_match_runtime_helpers() {
         // and the Anthropic-compatible routes speak native Messages; every
         // other built-in provider is OpenAI-compatible Chat Completions.
         let expected_wire = match kind {
-            ProviderKind::Deepseek | ProviderKind::OpencodeZen => None,
+            // EasyBits revende DeepSeek: wire ModelAware, sin formato fijo.
+            ProviderKind::Deepseek | ProviderKind::OpencodeZen | ProviderKind::Easybits => None,
             ProviderKind::OpenaiCodex => Some(provider::WireFormat::Responses),
             ProviderKind::Anthropic
             | ProviderKind::DeepseekAnthropic
@@ -5610,7 +5605,7 @@ fn first_party_provider_env_model_overrides_pass_through() {
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "minimax");
+        env::set_var("GHOSTY_PROVIDER", "minimax");
         env::set_var("MINIMAX_MODEL", "MiniMax-M2.7-highspeed");
         env::set_var("MINIMAX_BASE_URL", "https://minimax.example/v1");
     }
@@ -5627,7 +5622,7 @@ fn minimax_env_model_override_canonicalizes_known_aliases() {
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "minimax");
+        env::set_var("GHOSTY_PROVIDER", "minimax");
         env::set_var("MINIMAX_MODEL", "minimax-m2-5-highspeed");
     }
 
@@ -5730,7 +5725,7 @@ api_key = "sk-legacy-deepseek-table"
 fn legacy_dual_wire_env_provider_preserves_named_table_credentials() {
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
-    // CODEWHALE_PROVIDER must resolve legacy spellings to the same kind TOML
+    // GHOSTY_PROVIDER must resolve legacy spellings to the same kind TOML
     // serde produces; catalog collapse would orphan the user's own table and
     // drop the configured key.
     for (slug, kind, table, base_url) in [
@@ -5754,7 +5749,7 @@ fn legacy_dual_wire_env_provider_preserves_named_table_credentials() {
         ),
     ] {
         unsafe {
-            env::set_var("CODEWHALE_PROVIDER", slug);
+            env::set_var("GHOSTY_PROVIDER", slug);
         }
         let config: ConfigToml = toml::from_str(&format!(
             "[providers.{table}]\napi_key = \"sk-legacy-{table}\"\n"
@@ -5774,7 +5769,7 @@ fn legacy_dual_wire_env_provider_preserves_named_table_credentials() {
         );
         assert_eq!(resolved.base_url, base_url, "env slug {slug}");
         unsafe {
-            env::remove_var("CODEWHALE_PROVIDER");
+            env::remove_var("GHOSTY_PROVIDER");
         }
     }
 }
@@ -5819,7 +5814,7 @@ fn sakana_env_overrides_resolve_fugu_route() {
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "sakana");
+        env::set_var("GHOSTY_PROVIDER", "sakana");
         env::set_var("SAKANA_BASE_URL", "https://sakana.example/v1");
         env::set_var("SAKANA_MODEL", "fugu-ultra-20260615");
     }
@@ -5891,16 +5886,16 @@ fn moonshot_kimi_code_api_key_endpoint_defaults_to_kimi_for_coding() {
     );
 }
 
-/// `CODEWHALE_PROVIDER` is the user-facing env alias for switching the
+/// `GHOSTY_PROVIDER` is the user-facing env alias for switching the
 /// active provider. It must be honored by the runtime resolver and win
 /// over a root `provider = "deepseek"` config entry.
 #[test]
-fn codewhale_provider_env_switches_active_provider() {
+fn ghosty_provider_env_switches_active_provider() {
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only env mutation guarded by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "moonshot");
+        env::set_var("GHOSTY_PROVIDER", "moonshot");
     }
     let mut config = ConfigToml {
         provider: ProviderKind::Deepseek,
@@ -5914,24 +5909,24 @@ fn codewhale_provider_env_switches_active_provider() {
     assert_eq!(resolved.provider, ProviderKind::Moonshot);
     assert_eq!(
         resolved.provider_source,
-        ProviderSource::Env("CODEWHALE_PROVIDER")
+        ProviderSource::Env("GHOSTY_PROVIDER")
     );
     assert_eq!(resolved.base_url, DEFAULT_KIMI_CODE_BASE_URL);
     assert_eq!(resolved.model, DEFAULT_KIMI_CODE_MODEL);
     assert_eq!(resolved.api_key.as_deref(), Some("kimi-code-key"));
 }
 
-/// When both `CODEWHALE_PROVIDER` and the legacy `DEEPSEEK_PROVIDER`
-/// are set, the public alias wins — a user adopting `CODEWHALE_*` in a
+/// When both `GHOSTY_PROVIDER` and the legacy `DEEPSEEK_PROVIDER`
+/// are set, the public alias wins — a user adopting `GHOSTY_*` in a
 /// fresh shell config is not tripped up by a stale legacy export still
 /// living in their dotfiles.
 #[test]
-fn codewhale_provider_env_wins_over_deepseek_provider_env() {
+fn ghosty_provider_env_wins_over_deepseek_provider_env() {
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only env mutation guarded by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "moonshot");
+        env::set_var("GHOSTY_PROVIDER", "moonshot");
         env::set_var("DEEPSEEK_PROVIDER", "openrouter");
     }
     let config = ConfigToml {
@@ -5944,7 +5939,7 @@ fn codewhale_provider_env_wins_over_deepseek_provider_env() {
     assert_eq!(resolved.provider, ProviderKind::Moonshot);
     assert_eq!(
         resolved.provider_source,
-        ProviderSource::Env("CODEWHALE_PROVIDER")
+        ProviderSource::Env("GHOSTY_PROVIDER")
     );
 }
 
@@ -5976,7 +5971,7 @@ fn cli_provider_records_provider_source() {
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only env mutation guarded by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "moonshot");
+        env::set_var("GHOSTY_PROVIDER", "moonshot");
     }
     let cli = CliRuntimeOverrides {
         provider: Some(ProviderKind::Openai),
@@ -6008,17 +6003,17 @@ fn config_provider_records_provider_source() {
     assert_eq!(resolved.provider_source, ProviderSource::Config);
 }
 
-/// `CODEWHALE_MODEL` is the user-facing env alias for picking a model
+/// `GHOSTY_MODEL` is the user-facing env alias for picking a model
 /// against the active provider. It must be honored by the runtime
 /// resolver in place of `DEEPSEEK_MODEL`.
 #[test]
-fn codewhale_model_env_alias_overrides_default_for_active_provider() {
+fn ghosty_model_env_alias_overrides_default_for_active_provider() {
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only env mutation guarded by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "moonshot");
-        env::set_var("CODEWHALE_MODEL", "custom-kimi-test-model");
+        env::set_var("GHOSTY_PROVIDER", "moonshot");
+        env::set_var("GHOSTY_MODEL", "custom-kimi-test-model");
     }
     let config = ConfigToml::default();
 
@@ -6029,13 +6024,13 @@ fn codewhale_model_env_alias_overrides_default_for_active_provider() {
 }
 
 #[test]
-fn blank_codewhale_model_env_alias_does_not_override_default_for_active_provider() {
+fn blank_ghosty_model_env_alias_does_not_override_default_for_active_provider() {
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only env mutation guarded by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "moonshot");
-        env::set_var("CODEWHALE_MODEL", "   ");
+        env::set_var("GHOSTY_PROVIDER", "moonshot");
+        env::set_var("GHOSTY_MODEL", "   ");
     }
     let config = ConfigToml::default();
 
@@ -6051,7 +6046,7 @@ fn deepseek_default_text_model_legacy_alias_still_overrides_active_provider_mode
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only env mutation guarded by env_lock().
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "moonshot");
+        env::set_var("GHOSTY_PROVIDER", "moonshot");
         env::set_var("DEEPSEEK_DEFAULT_TEXT_MODEL", "legacy-env-model");
     }
     let config = ConfigToml::default();
@@ -6861,7 +6856,7 @@ fn siliconflow_custom_env_url_does_not_inherit_ambient_key() {
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only environment mutation guarded by a module mutex.
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "siliconflow");
+        env::set_var("GHOSTY_PROVIDER", "siliconflow");
         env::set_var("SILICONFLOW_API_KEY", "sf-env-key");
         env::set_var("SILICONFLOW_BASE_URL", "https://sf-mirror.example/v1");
         env::set_var("SILICONFLOW_MODEL", "deepseek-v4-flash");
@@ -6898,7 +6893,7 @@ fn arcee_custom_env_url_does_not_inherit_ambient_key() {
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only environment mutation guarded by a module mutex.
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "arcee");
+        env::set_var("GHOSTY_PROVIDER", "arcee");
         env::set_var("ARCEE_API_KEY", "arcee-env-key");
         env::set_var("ARCEE_BASE_URL", "https://arcee-mirror.example/api/v1");
         env::set_var("ARCEE_MODEL", "trinity-large-preview");
@@ -6939,7 +6934,7 @@ fn huggingface_custom_env_url_does_not_inherit_documented_key_names() {
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only environment mutation guarded by a module mutex.
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "hf");
+        env::set_var("GHOSTY_PROVIDER", "hf");
         env::set_var("HUGGINGFACE_API_KEY", "hf-full-key");
         env::set_var("HF_TOKEN", "hf-token-fallback");
         env::set_var("HUGGINGFACE_BASE_URL", "https://hf-full.example/v1");
@@ -6963,7 +6958,7 @@ fn huggingface_short_custom_env_url_does_not_inherit_ambient_token() {
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only environment mutation guarded by a module mutex.
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "huggingface");
+        env::set_var("GHOSTY_PROVIDER", "huggingface");
         env::set_var("HF_TOKEN", "hf-token-fallback");
         env::set_var("HF_BASE_URL", "https://hf-short.example/v1");
         env::set_var("HF_MODEL", "org/short-model");
@@ -6984,7 +6979,7 @@ fn huggingface_token_fallback_resolves_when_primary_api_key_is_blank() {
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only environment mutation guarded by a module mutex.
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "huggingface");
+        env::set_var("GHOSTY_PROVIDER", "huggingface");
         env::set_var("HUGGINGFACE_API_KEY", " ");
         env::set_var("HF_TOKEN", "hf-token-fallback");
     }
@@ -7001,7 +6996,7 @@ fn siliconflow_cn_base_url_env_normalizes_model_aliases() {
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: test-only environment mutation guarded by a module mutex.
     unsafe {
-        env::set_var("CODEWHALE_PROVIDER", "siliconflow");
+        env::set_var("GHOSTY_PROVIDER", "siliconflow");
         env::set_var("SILICONFLOW_API_KEY", "sf-env-key");
         env::set_var("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1");
     }
@@ -7420,13 +7415,13 @@ fn sentinel_config_values_fall_through_without_becoming_runtime_keys() {
 
 #[test]
 fn config_file_resolves_above_env_and_keyring() {
-    use codewhale_secrets::KeyringStore;
+    use ghosty_secrets::KeyringStore;
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: env mutation guarded by env_lock().
     unsafe { std::env::set_var("DEEPSEEK_API_KEY", "env-key") };
 
-    let store = std::sync::Arc::new(codewhale_secrets::InMemoryKeyringStore::new());
+    let store = std::sync::Arc::new(ghosty_secrets::InMemoryKeyringStore::new());
     store.set("deepseek", "ring-key").unwrap();
     let secrets = Secrets::new(store);
 
@@ -7453,7 +7448,7 @@ fn env_resolves_when_config_file_and_keyring_empty() {
     unsafe { std::env::set_var("DEEPSEEK_API_KEY", "env-key") };
 
     let secrets = Secrets::new(std::sync::Arc::new(
-        codewhale_secrets::InMemoryKeyringStore::new(),
+        ghosty_secrets::InMemoryKeyringStore::new(),
     ));
     let config = ConfigToml::default();
 
@@ -7472,7 +7467,7 @@ fn config_file_resolves_when_keyring_and_env_empty() {
     let _env = EnvGuard::without_deepseek_runtime_overrides();
 
     let secrets = Secrets::new(std::sync::Arc::new(
-        codewhale_secrets::InMemoryKeyringStore::new(),
+        ghosty_secrets::InMemoryKeyringStore::new(),
     ));
     let mut config = ConfigToml::default();
     config.providers.deepseek.api_key = Some("file-key".to_string());
@@ -7488,13 +7483,13 @@ fn config_file_resolves_when_keyring_and_env_empty() {
 
 #[test]
 fn keyring_resolves_when_config_file_empty_even_if_env_is_set() {
-    use codewhale_secrets::KeyringStore;
+    use ghosty_secrets::KeyringStore;
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     // Safety: env mutation guarded by env_lock().
     unsafe { std::env::set_var("DEEPSEEK_API_KEY", "stale-env-key") };
 
-    let store = std::sync::Arc::new(codewhale_secrets::InMemoryKeyringStore::new());
+    let store = std::sync::Arc::new(ghosty_secrets::InMemoryKeyringStore::new());
     store.set("deepseek", "ring-key").unwrap();
     let secrets = Secrets::new(store);
 
@@ -7509,11 +7504,11 @@ fn keyring_resolves_when_config_file_empty_even_if_env_is_set() {
 
 #[test]
 fn cli_flag_still_overrides_keyring() {
-    use codewhale_secrets::KeyringStore;
+    use ghosty_secrets::KeyringStore;
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
 
-    let store = std::sync::Arc::new(codewhale_secrets::InMemoryKeyringStore::new());
+    let store = std::sync::Arc::new(ghosty_secrets::InMemoryKeyringStore::new());
     store.set("deepseek", "ring-key").unwrap();
     let secrets = Secrets::new(store);
 
@@ -8169,12 +8164,12 @@ fn test_verbosity_resolution() {
     // Test Env overrides
     let _env = EnvGuard::without_deepseek_runtime_overrides();
     unsafe {
-        std::env::set_var("CODEWHALE_VERBOSITY", "normal");
+        std::env::set_var("GHOSTY_VERBOSITY", "normal");
     }
     let env_overrides = EnvRuntimeOverrides::load();
     assert_eq!(env_overrides.verbosity, Some("normal".to_string()));
     unsafe {
-        std::env::remove_var("CODEWHALE_VERBOSITY");
+        std::env::remove_var("GHOSTY_VERBOSITY");
     }
 
     // Test fallback to DEEPSEEK_VERBOSITY
@@ -8541,10 +8536,10 @@ max_spawn_depth = 1
 /// Held together with [`env_lock`]: the process environment is global, so
 /// every telemetry test serialises on the same mutex the provider tests use.
 struct TelemetryEnvGuard {
-    codewhale: Option<OsString>,
+    ghosty: Option<OsString>,
     deepseek: Option<OsString>,
     floor: Option<OsString>,
-    codewhale_endpoint: Option<OsString>,
+    ghosty_endpoint: Option<OsString>,
     deepseek_endpoint: Option<OsString>,
     _lock: std::sync::MutexGuard<'static, ()>,
 }
@@ -8553,23 +8548,23 @@ impl TelemetryEnvGuard {
     fn take() -> Self {
         let lock = env_lock();
         let guard = Self {
-            codewhale: env::var_os("CODEWHALE_TELEMETRY"),
+            ghosty: env::var_os("GHOSTY_TELEMETRY"),
             deepseek: env::var_os("DEEPSEEK_TELEMETRY"),
             floor: env::var_os(TELEMETRY_FLOOR_ENV),
             // The endpoint variables are cleared too. Resolution now has a
             // shipped default, so an ambient endpoint in the developer's or
             // CI's environment is the difference between pinning the default
             // and pinning whatever that machine happened to export.
-            codewhale_endpoint: env::var_os("CODEWHALE_TELEMETRY_ENDPOINT"),
+            ghosty_endpoint: env::var_os("GHOSTY_TELEMETRY_ENDPOINT"),
             deepseek_endpoint: env::var_os("DEEPSEEK_TELEMETRY_ENDPOINT"),
             _lock: lock,
         };
         // Safety: test-only environment mutation guarded by the module mutex.
         unsafe {
-            env::remove_var("CODEWHALE_TELEMETRY");
+            env::remove_var("GHOSTY_TELEMETRY");
             env::remove_var("DEEPSEEK_TELEMETRY");
             env::remove_var(TELEMETRY_FLOOR_ENV);
-            env::remove_var("CODEWHALE_TELEMETRY_ENDPOINT");
+            env::remove_var("GHOSTY_TELEMETRY_ENDPOINT");
             env::remove_var("DEEPSEEK_TELEMETRY_ENDPOINT");
         }
         guard
@@ -8578,14 +8573,14 @@ impl TelemetryEnvGuard {
     fn set(&self, value: &str) {
         // Safety: test-only environment mutation guarded by the module mutex.
         unsafe {
-            env::set_var("CODEWHALE_TELEMETRY", value);
+            env::set_var("GHOSTY_TELEMETRY", value);
         }
     }
 
     fn set_endpoint(&self, value: &str) {
         // Safety: test-only environment mutation guarded by the module mutex.
         unsafe {
-            env::set_var("CODEWHALE_TELEMETRY_ENDPOINT", value);
+            env::set_var("GHOSTY_TELEMETRY_ENDPOINT", value);
         }
     }
 
@@ -8599,7 +8594,7 @@ impl TelemetryEnvGuard {
     fn clear(&self) {
         // Safety: test-only environment mutation guarded by the module mutex.
         unsafe {
-            env::remove_var("CODEWHALE_TELEMETRY");
+            env::remove_var("GHOSTY_TELEMETRY");
             env::remove_var("DEEPSEEK_TELEMETRY");
             env::remove_var(TELEMETRY_FLOOR_ENV);
         }
@@ -8610,9 +8605,9 @@ impl Drop for TelemetryEnvGuard {
     fn drop(&mut self) {
         // Safety: test-only environment mutation guarded by the module mutex.
         unsafe {
-            match self.codewhale.take() {
-                Some(value) => env::set_var("CODEWHALE_TELEMETRY", value),
-                None => env::remove_var("CODEWHALE_TELEMETRY"),
+            match self.ghosty.take() {
+                Some(value) => env::set_var("GHOSTY_TELEMETRY", value),
+                None => env::remove_var("GHOSTY_TELEMETRY"),
             }
             match self.deepseek.take() {
                 Some(value) => env::set_var("DEEPSEEK_TELEMETRY", value),
@@ -8622,9 +8617,9 @@ impl Drop for TelemetryEnvGuard {
                 Some(value) => env::set_var(TELEMETRY_FLOOR_ENV, value),
                 None => env::remove_var(TELEMETRY_FLOOR_ENV),
             }
-            match self.codewhale_endpoint.take() {
-                Some(value) => env::set_var("CODEWHALE_TELEMETRY_ENDPOINT", value),
-                None => env::remove_var("CODEWHALE_TELEMETRY_ENDPOINT"),
+            match self.ghosty_endpoint.take() {
+                Some(value) => env::set_var("GHOSTY_TELEMETRY_ENDPOINT", value),
+                None => env::remove_var("GHOSTY_TELEMETRY_ENDPOINT"),
             }
             match self.deepseek_endpoint.take() {
                 Some(value) => env::set_var("DEEPSEEK_TELEMETRY_ENDPOINT", value),
@@ -8651,7 +8646,7 @@ fn env_telemetry_off_is_a_floor_over_cli_on() {
     let resolved = config.resolve_runtime_options(&cli);
 
     // `--telemetry true` must not be able to climb back over an explicit
-    // `CODEWHALE_TELEMETRY=0`. Off is a floor, not one more precedence rung.
+    // `GHOSTY_TELEMETRY=0`. Off is a floor, not one more precedence rung.
     assert!(!resolved.telemetry);
     // …but the environment is a run-scoped switch, not a revocation. See
     // `a_run_scoped_off_is_a_kill_switch_and_not_a_revocation`.
@@ -8662,7 +8657,7 @@ fn env_telemetry_off_is_a_floor_over_cli_on() {
 fn persisted_telemetry_off_is_a_floor_over_cli_on() {
     // Regression: `--telemetry true` used to beat `telemetry = false` in the
     // config file, and the dispatcher then forwarded the resolved `true` as
-    // `CODEWHALE_TELEMETRY=true`, which also outranked the child's own copy of
+    // `GHOSTY_TELEMETRY=true`, which also outranked the child's own copy of
     // that file. Any wrapper script, alias, or agent harness passing the flag
     // silently re-enabled a user who had turned telemetry off through the one
     // switch the first-run notice advertises as permanent.
@@ -8692,7 +8687,7 @@ fn persisted_telemetry_off_is_a_floor_over_cli_on() {
 
 #[test]
 fn a_run_scoped_off_is_a_kill_switch_and_not_a_revocation() {
-    // Regression: an explicit `CODEWHALE_TELEMETRY=0` marked the run as an
+    // Regression: an explicit `GHOSTY_TELEMETRY=0` marked the run as an
     // *answer*, so the telemetry crate took its destructive opt-out branch —
     // deleting the install id and truncating the user's own dry-run records —
     // on a recipe the runtime docs prescribe for one command. Worse, the
@@ -8840,7 +8835,7 @@ fn config_display_for_telemetry_reports_resolved_consent_with_source() {
 #[test]
 fn the_dispatcher_states_the_floor_rather_than_letting_the_child_infer_it() {
     // The child cannot tell an operator's declared kill switch from the
-    // shipped default: both arrive as `CODEWHALE_TELEMETRY=false`. So the
+    // shipped default: both arrive as `GHOSTY_TELEMETRY=false`. So the
     // dispatcher states it, and the statement outranks the inference — which
     // is what lets the first-run notice refuse to ask under a real floor while
     // still asking on an ordinary first run.
@@ -8962,7 +8957,7 @@ fn an_unconfigured_endpoint_resolves_to_the_shipped_default() {
 
     assert_eq!(
         DEFAULT_TELEMETRY_ENDPOINT,
-        "https://telemetry.codewhale.net/v1/telemetry"
+        "https://telemetry.ghosty.net/v1/telemetry"
     );
     let resolved = ConfigToml::default().resolve_runtime_options(&CliRuntimeOverrides::default());
     assert_eq!(
@@ -9016,7 +9011,7 @@ fn a_configured_endpoint_beats_the_shipped_default() {
 
 /// An empty endpoint means "contact nobody", not "use the default".
 ///
-/// `None` at the resolved layer is what `codewhale-telemetry`'s client reads as
+/// `None` at the resolved layer is what `ghosty-telemetry`'s client reads as
 /// the dry-run sink: batches are serialized exactly as a server would see them
 /// and appended to `dryrun.jsonl`, and no HTTP client is constructed. With a
 /// shipped default in place that path is only reachable through an explicit
@@ -9051,7 +9046,7 @@ fn an_empty_endpoint_keeps_the_dry_run_sink_reachable() {
 
     // An emptied environment variable says it too, and it says it over a
     // config file that names a real host — otherwise the documented one-shot
-    // `CODEWHALE_TELEMETRY_ENDPOINT= codewhale …` would silently keep sending.
+    // `GHOSTY_TELEMETRY_ENDPOINT= ghosty …` would silently keep sending.
     let config = ConfigToml {
         telemetry_endpoint: Some("https://collector.internal/v1/batch".to_string()),
         ..ConfigToml::default()

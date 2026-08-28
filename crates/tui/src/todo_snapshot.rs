@@ -1,6 +1,6 @@
 //! Bounded renderings of a To-do snapshot.
 //!
-//! Codewhale has exactly one To-do list. The model learns what is on it the
+//! Ghosty has exactly one To-do list. The model learns what is on it the
 //! same way it learns anything else: from the tool result its own `todo_write`
 //! / `work_update` call returned, which is ordinary persisted transcript
 //! state. **Nothing in this module is appended to a provider request**, and no
@@ -10,7 +10,7 @@
 //! What this module owns is the small set of places that render a snapshot
 //! *once*, at an explicit seam a person asked for:
 //!
-//! 1. the `<codewhale:fork_state>` block a newly forked sub-agent is handed,
+//! 1. the `<ghosty:fork_state>` block a newly forked sub-agent is handed,
 //! 2. `/relay` handoff instructions,
 //! 3. the in-transcript agent card (display only).
 //!
@@ -28,7 +28,7 @@
 //!   the active item is the one omission that would actively mislead.
 //! - Truncation happens on `char` boundaries and marks the omission, so a
 //!   multi-byte item can neither panic nor silently shrink the list.
-//! - Item text can never close its wrapper: a closing tag in the `codewhale:`
+//! - Item text can never close its wrapper: a closing tag in the `ghosty:`
 //!   namespace is escaped before it reaches the model, and control characters
 //!   are flattened so content cannot forge a new line.
 //!
@@ -55,8 +55,8 @@ pub const MAX_ITEM_CONTENT_CHARS: usize = 160;
 const OMISSION_MARKER: char = '…';
 
 /// Escaped form of a closing wrapper tag found inside item content.
-const ESCAPED_CLOSE_PREFIX: &str = "<\\/codewhale:";
-const CLOSE_PREFIX: &str = "</codewhale:";
+const ESCAPED_CLOSE_PREFIX: &str = "<\\/ghosty:";
+const CLOSE_PREFIX: &str = "</ghosty:";
 
 /// Render the To-do snapshot body, or `None` when there is nothing on the list.
 ///
@@ -270,7 +270,7 @@ pub fn card_omission_line(count: usize) -> String {
 /// Heading the fork-state block uses for its To-do section.
 pub const FORK_TODO_SECTION_HEADING: &str = "### To-do";
 
-/// Render the To-do section of a `<codewhale:fork_state>` block.
+/// Render the To-do section of a `<ghosty:fork_state>` block.
 ///
 /// This is the one place a To-do snapshot is handed to a model that did not
 /// produce it, and it happens exactly once — when a sub-agent is forked, as
@@ -343,7 +343,7 @@ fn sanitize_to(content: &str, max_chars: usize) -> String {
     truncate_chars(escaped.trim(), max_chars)
 }
 
-/// Neutralize any closing tag in the `codewhale:` namespace so item content
+/// Neutralize any closing tag in the `ghosty:` namespace so item content
 /// cannot terminate a wrapper early and smuggle instructions past it.
 fn escape_wrapper(content: &str) -> String {
     if !content.to_ascii_lowercase().contains(CLOSE_PREFIX) {

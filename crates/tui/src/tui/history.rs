@@ -2461,7 +2461,7 @@ fn render_error_message(
 ) -> Vec<Line<'static>> {
     // Error messages are machine-generated and should not be run through
     // markdown rendering, which would mangle env-var names containing
-    // underscores (e.g. CODEWHALE_ALLOW_INSECURE_HTTP would lose them as
+    // underscores (e.g. GHOSTY_ALLOW_INSECURE_HTTP would lose them as
     // italic markers).
     let label = error_label_text(severity);
     let label_style = error_label_style(severity);

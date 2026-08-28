@@ -81,8 +81,7 @@ impl ToolSpec for LoadSkillTool {
         // tool's lookup mirrors what the system-prompt skills block
         // already lists, so the model never asks for a name it
         // can't find.
-        let discovery_mode =
-            SkillDiscoveryMode::from_codewhale_only(context.skills_scan_codewhale_only);
+        let discovery_mode = SkillDiscoveryMode::from_ghosty_only(context.skills_scan_ghosty_only);
         let registry = if let Some(skills_dir) = context.skills_dir.as_deref() {
             discover_for_workspace_and_dir_with_mode_and_plugins(
                 &context.workspace,
@@ -136,11 +135,11 @@ impl ToolSpec for LoadSkillTool {
                     .map(|p| p.display().to_string())
                     .collect();
                 if dirs.is_empty() {
-                    if context.skills_scan_codewhale_only {
-                        "no skills directories found; install skills under `<workspace>/.codewhale/skills/<name>/SKILL.md` or `~/.codewhale/skills/<name>/SKILL.md`"
+                    if context.skills_scan_ghosty_only {
+                        "no skills directories found; install skills under `<workspace>/.ghosty/skills/<name>/SKILL.md` or `~/.ghosty/skills/<name>/SKILL.md`"
                             .to_string()
                     } else {
-                        "no skills directories found; install skills under `<workspace>/.agents/skills/<name>/SKILL.md`, `~/.codewhale/skills/<name>/SKILL.md`, or `~/.deepseek/skills/<name>/SKILL.md`"
+                        "no skills directories found; install skills under `<workspace>/.agents/skills/<name>/SKILL.md`, `~/.ghosty/skills/<name>/SKILL.md`, or `~/.deepseek/skills/<name>/SKILL.md`"
                             .to_string()
                     }
                 } else {
@@ -192,7 +191,7 @@ fn ensure_native_skill_file_present(skill: &Skill) -> Result<(), ToolError> {
     let message = format!(
         "Skill `{}` is registered at {} but that file no longer exists on disk, \
          so the skill did not load. Restore the file, or fix the skills directory it \
-         came from (`skills_dir` in config.toml, `$CODEWHALE_HOME`, or the OS home) — \
+         came from (`skills_dir` in config.toml, `$GHOSTY_HOME`, or the OS home) — \
          the path above shows exactly where the runtime looked.",
         skill.name,
         skill.path.display()
@@ -478,8 +477,8 @@ mod tests {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempdir().unwrap();
         let home = tmp.path().join("home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
-        let bundle = tmp.path().join(".codewhale/plugins/demo");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
+        let bundle = tmp.path().join(".ghosty/plugins/demo");
         let skill_dir = bundle.join("skills/hello");
         fs::create_dir_all(&skill_dir).unwrap();
         fs::write(
@@ -504,7 +503,7 @@ mod tests {
             .unwrap();
         let registry = crate::skills::discover_in_workspace_with_mode_and_plugins(
             tmp.path(),
-            SkillDiscoveryMode::CodeWhaleOnly,
+            SkillDiscoveryMode::GhostyCodeOnly,
             Some(plugins.as_ref()),
         );
         let skill = registry.get("demo:hello").expect("active plugin skill");
@@ -566,9 +565,9 @@ mod tests {
         // never leak into the listing count.
         let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path().join("home"));
         let _cw_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path().join("cw-home"));
+            crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path().join("cw-home"));
         let workspace = tmp.path().to_path_buf();
-        let skills_dir = workspace.join(".codewhale").join("skills");
+        let skills_dir = workspace.join(".ghosty").join("skills");
         write_skill(&skills_dir, "alpha-skill", "First demo skill", "Body A.");
         write_skill(&skills_dir, "beta-skill", "", "Body B.");
 
@@ -607,7 +606,7 @@ mod tests {
         let tmp = tempdir().unwrap();
         let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path().join("home"));
         let _cw_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path().join("cw-home"));
+            crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path().join("cw-home"));
         let context = ToolContext::new(tmp.path().to_path_buf());
         let result = LoadSkillTool
             .execute(json!({"name": "list"}), &context)
@@ -672,7 +671,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn execute_respects_codewhale_only_skill_discovery() {
+    async fn execute_respects_ghosty_only_skill_discovery() {
         let tmp = tempdir().unwrap();
         let workspace = tmp.path().to_path_buf();
         write_skill(
@@ -681,30 +680,30 @@ mod tests {
             "Claude skill",
             "Body content marker.",
         );
-        let codewhale_dir = workspace.join(".codewhale").join("skills");
+        let ghosty_dir = workspace.join(".ghosty").join("skills");
         write_skill(
-            &codewhale_dir,
-            "codewhale-only",
-            "CodeWhale skill",
+            &ghosty_dir,
+            "ghosty-only",
+            "GhostyCode skill",
             "Body content marker.",
         );
 
-        let context = ToolContext::new(workspace).with_skills_config(codewhale_dir, true);
+        let context = ToolContext::new(workspace).with_skills_config(ghosty_dir, true);
         let tool = LoadSkillTool;
 
         let result = tool
-            .execute(json!({"name": "codewhale-only"}), &context)
+            .execute(json!({"name": "ghosty-only"}), &context)
             .await
-            .expect("CodeWhale skill should load");
+            .expect("GhostyCode skill should load");
         assert!(result.success);
 
         let err = tool
             .execute(json!({"name": "claude-only"}), &context)
             .await
-            .expect_err("Claude skill should be hidden in CodeWhale-only mode");
+            .expect_err("Claude skill should be hidden in GhostyCode-only mode");
         let msg = err.to_string();
         assert!(
-            msg.contains("claude-only") && msg.contains("codewhale-only"),
+            msg.contains("claude-only") && msg.contains("ghosty-only"),
             "error should name the missing skill and available strict catalog: {msg}"
         );
     }
@@ -714,7 +713,7 @@ mod tests {
         let tmp = tempdir().unwrap();
         let workspace = tmp.path().join("workspace");
         let home = tmp.path().join("home");
-        let global_skills = home.join(".codewhale/skills");
+        let global_skills = home.join(".ghosty/skills");
         fs::create_dir_all(&workspace).unwrap();
         write_skill(
             &global_skills,
@@ -726,7 +725,7 @@ mod tests {
         // Keep this test independent of the process-native home directory:
         // `crate::config::effective_home_dir()` cannot be redirected reliably after process start
         // on Windows. The injected-home discovery test in `skills::tests`
-        // separately proves that ~/.codewhale/skills enters the default catalog.
+        // separately proves that ~/.ghosty/skills enters the default catalog.
         let context = ToolContext::new(&workspace).with_skills_config(global_skills.clone(), false);
         assert!(!context.trust_mode);
         assert!(

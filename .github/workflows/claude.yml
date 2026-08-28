@@ -1,6 +1,6 @@
 name: Claude issue worker
 
-# A maintainer can explicitly start a bounded Codewhale work branch by adding
+# A maintainer can explicitly start a bounded Ghosty work branch by adding
 # `@claude <request>` to a GitHub *issue* comment. Pull-request review remains
 # handled by claude-review.yml, so this workflow never checks out untrusted PR
 # heads or gives issue comments a route to an existing PR branch.

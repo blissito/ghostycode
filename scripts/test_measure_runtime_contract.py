@@ -53,7 +53,7 @@ class RuntimeContractMeasurementTests(unittest.TestCase):
                 "test",
                 "--locked",
                 "-p",
-                "codewhale-tui",
+                "ghosty-tui",
                 "--lib",
                 exact_name,
                 "--",

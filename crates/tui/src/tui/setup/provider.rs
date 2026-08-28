@@ -1,4 +1,4 @@
-use codewhale_config::{StepEntry, StepStatus};
+use ghosty_config::{StepEntry, StepStatus};
 
 pub(super) fn step_status(provider_ready: bool) -> StepStatus {
     if provider_ready {

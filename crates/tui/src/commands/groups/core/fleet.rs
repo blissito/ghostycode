@@ -6,16 +6,16 @@
 //! for switching between saved configurations — never the primary face.
 //! `/fleet list|status|interrupt|resume` are control-plane verbs that run
 //! against the **durable** workspace ledger through the shared contract in
-//! `codewhale-lane`, exactly as `codewhale fleet …` does (#1888, #4022).
+//! `ghosty-lane`, exactly as `ghosty fleet …` does (#1888, #4022).
 //!
 //! `/fleet status` used to show the current TUI session's sub-agents. That was
 //! a different thing wearing the same name: session sub-agents are not the
-//! durable Fleet ledger, and a run started by `codewhale fleet run` never
+//! durable Fleet ledger, and a run started by `ghosty fleet run` never
 //! appeared. The session view is still reachable as `/fleet workers` (and
 //! `/subagents`), now labelled as what it is.
 
-use codewhale_lane::control::operations_for_domain;
-use codewhale_lane::{ControlDomain, ControlOperation, ControlSurface};
+use ghosty_lane::control::operations_for_domain;
+use ghosty_lane::{ControlDomain, ControlOperation, ControlSurface};
 
 use crate::commands::traits::{CommandInfo, RegisterCommand};
 use crate::fleet::control::execute_fleet_control;
@@ -39,8 +39,8 @@ fn help_text() -> String {
          Fleet is who. /fleet (or /fleet members) opens the Fleet member list and orchestration state — \
          each member's role, model, and access. /fleet setup opens the authoring wizard. \
          /fleet fleets (or saved/manage) switches between named saved Fleets.\n\n\
-         /fleet list, status, interrupt, and resume act on the durable .codewhale/fleet.jsonl \
-         ledger for this workspace — the same records `codewhale fleet` reads and writes. \
+         /fleet list, status, interrupt, and resume act on the durable .ghosty/fleet.jsonl \
+         ledger for this workspace — the same records `ghosty fleet` reads and writes. \
          /fleet workers (and /subagents) shows sub-agents in the current TUI session only, which \
          is a different set: it does not include durable Fleet runs.\n",
     );
@@ -233,7 +233,7 @@ mod tests {
         assert!(
             !workspace
                 .path()
-                .join(".codewhale")
+                .join(".ghosty")
                 .join("fleet.jsonl")
                 .exists(),
             "a read verb must not create the durable ledger"
@@ -280,8 +280,8 @@ mod tests {
         }
         for truth in [
             "current TUI session",
-            "codewhale fleet status",
-            ".codewhale/fleet.jsonl",
+            "ghosty fleet status",
+            ".ghosty/fleet.jsonl",
         ] {
             assert!(message.contains(truth), "help must distinguish {truth}");
         }

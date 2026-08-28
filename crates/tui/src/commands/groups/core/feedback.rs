@@ -3,7 +3,7 @@ use crate::commands::traits::{CommandInfo, RegisterCommand};
 use crate::localization::MessageId;
 use crate::tui::app::{App, AppAction};
 
-const SECURITY_POLICY_URL: &str = "https://github.com/Hmbown/CodeWhale/security/policy";
+const SECURITY_POLICY_URL: &str = "https://github.com/blissito/ghostycode/security/policy";
 
 pub(in crate::commands) const COMMAND_INFO: CommandInfo = CommandInfo {
     name: "feedback",
@@ -103,9 +103,9 @@ impl FeedbackKind {
 
     fn issue_url_base(self) -> &'static str {
         match self {
-            Self::Bug => "https://github.com/Hmbown/CodeWhale/issues/new?template=bug_report.md",
+            Self::Bug => "https://github.com/blissito/ghostycode/issues/new?template=bug_report.md",
             Self::Feature => {
-                "https://github.com/Hmbown/CodeWhale/issues/new?template=feature_request.md"
+                "https://github.com/blissito/ghostycode/issues/new?template=feature_request.md"
             }
             Self::Security => SECURITY_POLICY_URL,
         }
@@ -143,8 +143,8 @@ fn feedback_help() -> String {
 fn bug_report_diagnostics_hint() -> &'static str {
     "Before filing, first check whether this looks like a model issue or an environment/tool issue: \
      command exit, network/service, sandbox/approval, missing dependency/path, timeout, or an unclosed turn. \
-     If you have a local JSONL log, run `codewhale session-diagnostics <path>` and include the redacted category summary. \
-     Include the Codewhale version, OS/terminal, the tool name, and redacted timestamps or log handles when available. \
+     If you have a local JSONL log, run `ghosty session-diagnostics <path>` and include the redacted category summary. \
+     Include the Ghosty version, OS/terminal, the tool name, and redacted timestamps or log handles when available. \
      Do not paste prompts, secrets, raw command output, full local paths, or conversation transcripts."
 }
 
@@ -228,7 +228,7 @@ mod tests {
         assert!(message.contains("sandbox/approval"));
         assert!(message.contains("missing dependency/path"));
         assert!(message.contains("timeout"));
-        assert!(message.contains("codewhale session-diagnostics <path>"));
+        assert!(message.contains("ghosty session-diagnostics <path>"));
         assert!(message.contains("Do not paste prompts, secrets, raw command output"));
         assert!(message.contains(url));
         assert!(url.contains("template=bug_report.md"));
@@ -270,11 +270,11 @@ mod tests {
 
         assert_eq!(
             bug,
-            "https://github.com/Hmbown/CodeWhale/issues/new?template=bug_report.md"
+            "https://github.com/blissito/ghostycode/issues/new?template=bug_report.md"
         );
         assert_eq!(
             feature,
-            "https://github.com/Hmbown/CodeWhale/issues/new?template=feature_request.md"
+            "https://github.com/blissito/ghostycode/issues/new?template=feature_request.md"
         );
     }
 

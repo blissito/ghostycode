@@ -103,7 +103,7 @@ export function commandAction(command) {
 
 export function helpText() {
   return [
-    "CodeWhale 企业微信桥接命令:",
+    "GhostyCode 企业微信桥接命令:",
     "/help - 显示帮助",
     "/status - runtime 和工作区状态",
     "/threads - 最近的 runtime 线程",
@@ -115,7 +115,7 @@ export function helpText() {
     "/allow <approval_id> [remember] - 批准待处理的工具调用",
     "/deny <approval_id> - 拒绝待处理的工具调用",
     "",
-    "其他所有内容均作为 CodeWhale 提示发送。"
+    "其他所有内容均作为 GhostyCode 提示发送。"
   ].join("\n");
 }
 
@@ -140,21 +140,21 @@ export function validateBridgeConfig(env) {
     }
   }
 
-  const runtimeUrl = cleanEnvValue(env.CODEWHALE_RUNTIME_URL || "http://127.0.0.1:7878");
+  const runtimeUrl = cleanEnvValue(env.GHOSTY_RUNTIME_URL || "http://127.0.0.1:7878");
   try {
     const parsed = new URL(runtimeUrl);
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      add(errors, "invalid_runtime_url", "CODEWHALE_RUNTIME_URL must use http or https");
+      add(errors, "invalid_runtime_url", "GHOSTY_RUNTIME_URL must use http or https");
     }
   } catch {
-    add(errors, "invalid_runtime_url", "CODEWHALE_RUNTIME_URL is not a valid URL");
+    add(errors, "invalid_runtime_url", "GHOSTY_RUNTIME_URL is not a valid URL");
   }
 
-  const runtimeToken = cleanEnvValue(env.CODEWHALE_RUNTIME_TOKEN);
+  const runtimeToken = cleanEnvValue(env.GHOSTY_RUNTIME_TOKEN);
   if (!runtimeToken) {
-    add(errors, "missing_runtime_token", "CODEWHALE_RUNTIME_TOKEN is required");
+    add(errors, "missing_runtime_token", "GHOSTY_RUNTIME_TOKEN is required");
   } else if (isPlaceholderValue(runtimeToken)) {
-    add(errors, "placeholder_runtime_token", "CODEWHALE_RUNTIME_TOKEN is still a placeholder");
+    add(errors, "placeholder_runtime_token", "GHOSTY_RUNTIME_TOKEN is still a placeholder");
   }
 
   const allowUnlisted = parseBool(env.WECOM_ALLOW_UNLISTED, false);

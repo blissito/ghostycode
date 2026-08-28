@@ -1,4 +1,4 @@
-//! Project context loading for Codewhale.
+//! Project context loading for Ghosty.
 //!
 //! This module handles loading project-specific context files that provide
 //! instructions and context to the AI agent. These include:
@@ -6,11 +6,11 @@
 //! - `AGENTS.md` - Cross-agent project instructions (canonical, highest priority)
 //! - `.claude/instructions.md` - Claude-style hidden instructions (compat)
 //! - `CLAUDE.md` - Claude-style instructions (compat)
-//! - `.codewhale/instructions.md` - Hidden instructions file (compat)
+//! - `.ghosty/instructions.md` - Hidden instructions file (compat)
 //! - `.deepseek/instructions.md` - Hidden instructions file (legacy)
 //!
-//! Codewhale-specific repo authority/prioritization policy lives separately in
-//! `.codewhale/constitution.json` and is rendered as its own higher-authority
+//! Ghosty-specific repo authority/prioritization policy lives separately in
+//! `.ghosty/constitution.json` and is rendered as its own higher-authority
 //! block. The loaded content is injected into the system prompt to give the
 //! agent context about the project's conventions, structure, and requirements.
 
@@ -32,17 +32,17 @@ use self::types::ProjectContextError;
 /// Names of project context files to look for, in priority order.
 ///
 /// `AGENTS.md` is the canonical cross-agent project-instructions file.
-/// `WHALE.md` is no longer an active context surface; when present, Codewhale
-/// reports a migration warning but ignores it. Codewhale-specific repo
-/// authority now lives in `.codewhale/constitution.json`, not a bespoke
+/// `WHALE.md` is no longer an active context surface; when present, Ghosty
+/// reports a migration warning but ignores it. Ghosty-specific repo
+/// authority now lives in `.ghosty/constitution.json`, not a bespoke
 /// markdown file. `CLAUDE.md` and the `*/instructions.md` variants are
-/// read-only compatibility fallbacks; Codewhale never creates or recommends
+/// read-only compatibility fallbacks; Ghosty never creates or recommends
 /// them.
 const PROJECT_CONTEXT_FILES: &[&str] = &[
     "AGENTS.md",
     ".claude/instructions.md",
     "CLAUDE.md",
-    ".codewhale/instructions.md",
+    ".ghosty/instructions.md",
     ".deepseek/instructions.md",
 ];
 
@@ -96,7 +96,7 @@ impl ForeignInstructionFormat {
         match self {
             Self::Claude => &[".claude/instructions.md", "CLAUDE.md"],
             // The remaining formats are imported through the bounded-fragment
-            // loader in `codewhale_core::fragments`, not through this chain.
+            // loader in `ghosty_core::fragments`, not through this chain.
             _ => &[],
         }
     }
@@ -110,7 +110,7 @@ impl ForeignInstructionFormat {
     }
 
     /// Candidates handled by the bounded-fragment loader in
-    /// `codewhale_core::fragments` rather than by the instruction chain.
+    /// `ghosty_core::fragments` rather than by the instruction chain.
     fn fragment_candidates(self) -> &'static [&'static str] {
         match self {
             Self::Cursor => &[".cursorrules", ".cursor/rules"],
@@ -130,7 +130,7 @@ impl ForeignInstructionFormat {
 ///
 /// Resolved from config once and read by the loader. Empty by default: a fresh
 /// checkout containing a `CLAUDE.md` written for another tool contributes
-/// nothing to Codewhale's standing instructions until someone says so.
+/// nothing to Ghosty's standing instructions until someone says so.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ForeignInstructionImports {
     enabled: std::collections::BTreeSet<&'static str>,
@@ -190,7 +190,7 @@ impl ForeignInstructionImports {
 /// Foreign fragment candidates enabled by the active opt-in set.
 ///
 /// `.agents/AGENTS.md` is always included: it is the cross-agent `AGENTS.md`
-/// standard Codewhale already follows, not another vendor's format.
+/// standard Ghosty already follows, not another vendor's format.
 #[must_use]
 pub(crate) fn active_fragment_candidates() -> Vec<&'static str> {
     let imports = foreign_instruction_imports();
@@ -232,12 +232,12 @@ pub(crate) fn foreign_instruction_imports() -> ForeignInstructionImports {
 /// Instruction file candidates in priority order for the active opt-in set.
 fn context_files_for(imports: &ForeignInstructionImports) -> Vec<&'static str> {
     // Order is priority: `load_dir_instructions` takes the first match in a
-    // directory. AGENTS.md leads, then Codewhale's own files, and only then
+    // directory. AGENTS.md leads, then Ghosty's own files, and only then
     // anything imported from another tool — an imported CLAUDE.md must never
-    // outrank .codewhale/instructions.md the way the old flat list let it.
+    // outrank .ghosty/instructions.md the way the old flat list let it.
     let mut files: Vec<&'static str> = vec![
         "AGENTS.md",
-        ".codewhale/instructions.md",
+        ".ghosty/instructions.md",
         ".deepseek/instructions.md",
     ];
     for format in ForeignInstructionFormat::ALL {
@@ -250,7 +250,7 @@ fn context_files_for(imports: &ForeignInstructionImports) -> Vec<&'static str> {
 
 /// Rules directories for the active opt-in set.
 fn rules_dirs_for(imports: &ForeignInstructionImports) -> Vec<&'static str> {
-    let mut dirs: Vec<&'static str> = vec![".codewhale/rules"];
+    let mut dirs: Vec<&'static str> = vec![".ghosty/rules"];
     for format in ForeignInstructionFormat::ALL {
         if imports.is_enabled(*format) {
             dirs.extend(format.rules_dirs());
@@ -302,12 +302,11 @@ fn unimported_foreign_warnings(
             .rules_dirs()
             .iter()
             .any(|relative| rules_dir_has_loadable_content(workspace, relative));
-        let fragment_present =
-            codewhale_core::fragments::load_selected_project_instruction_fragment(
-                workspace,
-                format.fragment_candidates(),
-            )
-            .is_some();
+        let fragment_present = ghosty_core::fragments::load_selected_project_instruction_fragment(
+            workspace,
+            format.fragment_candidates(),
+        )
+        .is_some();
         // Keep discovery aligned with the loaders. A path can exist without
         // being importable (for example an empty or unreadable file, a rules
         // directory containing no Markdown, an oversized file, or a symlink
@@ -323,7 +322,7 @@ fn unimported_foreign_warnings(
         return Vec::new();
     }
     vec![format!(
-        "Found instruction files for {} in this workspace; they are not loaded.          Codewhale reads AGENTS.md and its own instruction files by default.          To import them, set project_instruction_imports = [{}] in config.",
+        "Found instruction files for {} in this workspace; they are not loaded.          Ghosty reads AGENTS.md and its own instruction files by default.          To import them, set project_instruction_imports = [{}] in config.",
         seen.join(", "),
         seen.iter()
             .map(|key| format!("\"{key}\""))
@@ -333,33 +332,33 @@ fn unimported_foreign_warnings(
 }
 
 /// Rules directories auto-discovered at workspace level, in priority order.
-/// `.codewhale/rules/` is Codewhale-native; `.claude/rules/` is Claude compatibility.
+/// `.ghosty/rules/` is Ghosty-native; `.claude/rules/` is Claude compatibility.
 /// All `.md` files in these directories are loaded as project rules in filename order.
 /// Security model: same trust class as AGENTS.md — workspace-contained content only,
 /// no absolute-path escape. Does not require #417 project-config relaxation.
-const RULES_DIRS: &[&str] = &[".codewhale/rules", ".claude/rules"];
+const RULES_DIRS: &[&str] = &[".ghosty/rules", ".claude/rules"];
 
-/// File name of the deprecated Codewhale-native instructions file.
+/// File name of the deprecated Ghosty-native instructions file.
 const DEPRECATED_WHALE_FILENAME: &str = "WHALE.md";
 
 /// Warning surfaced when an ignored `WHALE.md` is present.
-const WHALE_IGNORED_WARNING: &str = "WHALE.md is ignored; move project instructions to AGENTS.md, or Codewhale-specific authority policy to .codewhale/constitution.json.";
+const WHALE_IGNORED_WARNING: &str = "WHALE.md is ignored; move project instructions to AGENTS.md, or Ghosty-specific authority policy to .ghosty/constitution.json.";
 
 /// User-level project instructions loaded as a fallback when the workspace and
 /// its parents do not define project context. Any global AGENTS.md takes
 /// priority over a global instructions.md (#3012). Within each file name,
-/// `.codewhale/` takes priority over vendor-neutral `.agents/`, which takes
+/// `.ghosty/` takes priority over vendor-neutral `.agents/`, which takes
 /// priority over legacy `.deepseek/`. Global `WHALE.md` files are ignored and
 /// reported as migration-only diagnostics.
-const GLOBAL_AGENTS_RELATIVE_PATH: &[&str] = &[".codewhale", "AGENTS.md"];
+const GLOBAL_AGENTS_RELATIVE_PATH: &[&str] = &[".ghosty", "AGENTS.md"];
 const GLOBAL_AGENTS_VENDOR_NEUTRAL_PATH: &[&str] = &[".agents", "AGENTS.md"];
 const GLOBAL_AGENTS_LEGACY_PATH: &[&str] = &[".deepseek", "AGENTS.md"];
-const GLOBAL_WHALE_RELATIVE_PATH: &[&str] = &[".codewhale", "WHALE.md"];
+const GLOBAL_WHALE_RELATIVE_PATH: &[&str] = &[".ghosty", "WHALE.md"];
 const GLOBAL_WHALE_VENDOR_NEUTRAL_PATH: &[&str] = &[".agents", "WHALE.md"];
 const GLOBAL_WHALE_LEGACY_PATH: &[&str] = &[".deepseek", "WHALE.md"];
 /// Global `instructions.md` (#3012): auto-loaded as a fallback context layer,
 /// ranked below AGENTS.md, mirroring the project-level precedence.
-const GLOBAL_INSTRUCTIONS_RELATIVE_PATH: &[&str] = &[".codewhale", "instructions.md"];
+const GLOBAL_INSTRUCTIONS_RELATIVE_PATH: &[&str] = &[".ghosty", "instructions.md"];
 const GLOBAL_INSTRUCTIONS_VENDOR_NEUTRAL_PATH: &[&str] = &[".agents", "instructions.md"];
 const GLOBAL_INSTRUCTIONS_LEGACY_PATH: &[&str] = &[".deepseek", "instructions.md"];
 
@@ -506,7 +505,7 @@ pub(crate) fn load_project_context_with_imports(
     ctx.warnings
         .extend(unimported_foreign_warnings(workspace, imports));
 
-    // Load rules from auto-discovered directories (.codewhale/rules/, .claude/rules/)
+    // Load rules from auto-discovered directories (.ghosty/rules/, .claude/rules/)
     // Each rule file is wrapped in a <project_rule> block and appended after
     // the main instructions content. Security model: same as AGENTS.md —
     // workspace-contained content only, no absolute-path escape.
@@ -701,7 +700,7 @@ fn load_project_context_with_parents_and_home_imports(
 
     // Generate a bounded in-memory fallback when no context file exists
     // anywhere. This keeps prompt shape stable without creating project-local
-    // `.codewhale/` files merely because Codewhale was opened in a directory.
+    // `.ghosty/` files merely because Ghosty was opened in a directory.
     if !ctx.has_instructions()
         && let Some(generated) = generate_ephemeral_context(workspace)
     {
@@ -709,8 +708,8 @@ fn load_project_context_with_parents_and_home_imports(
         ctx.source_path = None;
     }
 
-    // Load the Codewhale-specific repo authority policy
-    // (.codewhale/constitution.json) independently of the prose instructions —
+    // Load the Ghosty-specific repo authority policy
+    // (.ghosty/constitution.json) independently of the prose instructions —
     // it is a distinct, higher-authority artifact and may exist with or without
     // an AGENTS.md. Legacy WHALE.md files are ignored and reported as
     // migration-only diagnostics.
@@ -793,7 +792,7 @@ pub(crate) fn project_context_cache_candidate_paths(
     // and the superset keeps disabled-format discovery correct.
     for format in ForeignInstructionFormat::ALL {
         paths.extend(
-            codewhale_core::fragments::selected_project_instruction_candidate_files(
+            ghosty_core::fragments::selected_project_instruction_candidate_files(
                 &workspace,
                 format.fragment_candidates(),
             ),
@@ -963,10 +962,10 @@ fn load_global_agents_context(workspace: &Path, home_dir: Option<&Path>) -> Opti
     let home = home_dir?;
 
     // Priority order (AGENTS.md preferred; instructions.md next, #3012):
-    // 1. ~/.codewhale/AGENTS.md       (canonical)
+    // 1. ~/.ghosty/AGENTS.md       (canonical)
     // 2. ~/.agents/AGENTS.md          (vendor-neutral fallback)
     // 3. ~/.deepseek/AGENTS.md        (legacy fallback)
-    // 4. ~/.codewhale/instructions.md (canonical)
+    // 4. ~/.ghosty/instructions.md (canonical)
     // 5. ~/.agents/instructions.md    (vendor-neutral fallback)
     // 6. ~/.deepseek/instructions.md  (legacy fallback)
     // Global WHALE.md files are ignored and reported as migration-only
@@ -1006,8 +1005,8 @@ fn generate_ephemeral_context(workspace: &Path) -> Option<String> {
 
     Some(format!(
         "# Project Context (Auto-generated, ephemeral)\n\n\
-         > This context was generated in memory by Codewhale.\n\
-         > No .codewhale/instructions.md file was written.\n\n\
+         > This context was generated in memory by Ghosty.\n\
+         > No .ghosty/instructions.md file was written.\n\n\
          {overview}"
     ))
 }
@@ -1199,7 +1198,7 @@ pub fn create_default_agents_md(workspace: &Path) -> std::io::Result<PathBuf> {
 
     let default_content = r#"# Project Agent Instructions
 
-This file provides guidance to AI agents (Codewhale, Claude Code, etc.) when working with code in this repository.
+This file provides guidance to AI agents (Ghosty, Claude Code, etc.) when working with code in this repository.
 
 ## File Location
 
@@ -1611,9 +1610,9 @@ mod tests {
     fn constitution_json_renders_authority_block() {
         let tmp = tempdir().expect("tempdir");
         fs::create_dir(tmp.path().join(".git")).expect("mkdir .git");
-        fs::create_dir(tmp.path().join(".codewhale")).expect("mkdir .codewhale");
+        fs::create_dir(tmp.path().join(".ghosty")).expect("mkdir .ghosty");
         fs::write(
-            tmp.path().join(".codewhale").join("constitution.json"),
+            tmp.path().join(".ghosty").join("constitution.json"),
             r#"{
                 "schema_version": 1,
                 "authority": ["current user request", "live code and tests", "AGENTS.md"],
@@ -1630,7 +1629,7 @@ mod tests {
             .constitution_block
             .as_deref()
             .expect("constitution block rendered");
-        assert!(block.contains("<codewhale_repo_constitution"));
+        assert!(block.contains("<ghosty_repo_constitution"));
         assert!(block.contains("current user request"));
         assert!(block.contains("run focused tests"));
         assert!(block.contains("keep the tool-catalog head byte-stable"));
@@ -1640,7 +1639,7 @@ mod tests {
         assert!(
             ctx.constitution_source_path
                 .as_ref()
-                .is_some_and(|path| path.ends_with(".codewhale/constitution.json")),
+                .is_some_and(|path| path.ends_with(".ghosty/constitution.json")),
             "constitution source path should be visible: {:?}",
             ctx.constitution_source_path
         );
@@ -1648,7 +1647,7 @@ mod tests {
         assert!(
             ctx.as_system_block()
                 .expect("system block")
-                .contains("codewhale_repo_constitution")
+                .contains("ghosty_repo_constitution")
         );
     }
 
@@ -1656,9 +1655,9 @@ mod tests {
     fn stale_constitution_branch_policy_warns() {
         let tmp = tempdir().expect("tempdir");
         fs::create_dir(tmp.path().join(".git")).expect("mkdir .git");
-        fs::create_dir(tmp.path().join(".codewhale")).expect("mkdir .codewhale");
+        fs::create_dir(tmp.path().join(".ghosty")).expect("mkdir .ghosty");
         fs::write(
-            tmp.path().join(".codewhale").join("constitution.json"),
+            tmp.path().join(".ghosty").join("constitution.json"),
             r#"{
                 "schema_version": 1,
                 "authority": ["current user request"],
@@ -1685,9 +1684,9 @@ mod tests {
     fn malformed_constitution_warns_without_crashing() {
         let tmp = tempdir().expect("tempdir");
         fs::create_dir(tmp.path().join(".git")).expect("mkdir .git");
-        fs::create_dir(tmp.path().join(".codewhale")).expect("mkdir .codewhale");
+        fs::create_dir(tmp.path().join(".ghosty")).expect("mkdir .ghosty");
         fs::write(
-            tmp.path().join(".codewhale").join("constitution.json"),
+            tmp.path().join(".ghosty").join("constitution.json"),
             "{ not valid json",
         )
         .expect("write bad constitution");
@@ -1710,7 +1709,7 @@ mod tests {
         let workspace = tempdir().expect("workspace tempdir");
         let outside = tempdir().expect("outside tempdir");
         fs::create_dir(workspace.path().join(".git")).expect("mkdir .git");
-        fs::create_dir(workspace.path().join(".codewhale")).expect("mkdir .codewhale");
+        fs::create_dir(workspace.path().join(".ghosty")).expect("mkdir .ghosty");
         let outside_constitution = outside.path().join("constitution.json");
         fs::write(
             &outside_constitution,
@@ -1719,10 +1718,7 @@ mod tests {
         .expect("write outside constitution");
         std::os::unix::fs::symlink(
             &outside_constitution,
-            workspace
-                .path()
-                .join(".codewhale")
-                .join("constitution.json"),
+            workspace.path().join(".ghosty").join("constitution.json"),
         )
         .expect("symlink constitution");
 
@@ -1768,15 +1764,15 @@ mod tests {
         let ctx = load_project_context_with_parents_and_home(workspace.path(), Some(home.path()));
         assert!(ctx.has_instructions());
 
-        let generated_path = workspace.path().join(".codewhale").join("instructions.md");
+        let generated_path = workspace.path().join(".ghosty").join("instructions.md");
         assert_eq!(ctx.source_path, None);
         assert!(
             !generated_path.exists(),
             "generated project context should stay ephemeral"
         );
         assert!(
-            !workspace.path().join(".codewhale").exists(),
-            "loading context should not create a .codewhale directory"
+            !workspace.path().join(".ghosty").exists(),
+            "loading context should not create a .ghosty directory"
         );
         let generated = ctx.instructions.as_ref().expect("generated instructions");
         assert!(generated.contains("Project Context (Auto-generated, ephemeral)"));
@@ -1868,11 +1864,8 @@ mod tests {
         let workspace = tempdir().expect("workspace tempdir");
         let home = tempdir().expect("home tempdir");
         fs::create_dir(workspace.path().join(".git")).expect("mkdir git");
-        fs::create_dir(workspace.path().join(".codewhale")).expect("mkdir codewhale");
-        let constitution = workspace
-            .path()
-            .join(".codewhale")
-            .join("constitution.json");
+        fs::create_dir(workspace.path().join(".ghosty")).expect("mkdir ghosty");
+        let constitution = workspace.path().join(".ghosty").join("constitution.json");
         fs::write(
             &constitution,
             r#"{"schema_version":1,"authority":["alpha authority"]}"#,
@@ -1917,7 +1910,7 @@ mod tests {
         let first =
             load_project_context_with_parents_cached_and_home(workspace.path(), Some(home.path()));
         assert!(first.has_instructions());
-        let generated_path = workspace.path().join(".codewhale").join("instructions.md");
+        let generated_path = workspace.path().join(".ghosty").join("instructions.md");
         assert!(
             !generated_path.exists(),
             "first load should not write generated instructions"
@@ -1998,15 +1991,14 @@ mod tests {
     }
 
     #[test]
-    fn test_codewhale_specific_path_wins_over_agents_path() {
+    fn test_ghosty_specific_path_wins_over_agents_path() {
         let workspace = tempdir().expect("workspace tempdir");
         let home = tempdir().expect("home tempdir");
 
-        let codewhale_dir = home.path().join(".codewhale");
-        fs::create_dir(&codewhale_dir).expect("mkdir .codewhale");
-        let codewhale_agents = codewhale_dir.join("AGENTS.md");
-        fs::write(&codewhale_agents, "Codewhale-specific instructions")
-            .expect("write codewhale agents");
+        let ghosty_dir = home.path().join(".ghosty");
+        fs::create_dir(&ghosty_dir).expect("mkdir .ghosty");
+        let ghosty_agents = ghosty_dir.join("AGENTS.md");
+        fs::write(&ghosty_agents, "Ghosty-specific instructions").expect("write ghosty agents");
 
         let agents_dir = home.path().join(".agents");
         fs::create_dir(&agents_dir).expect("mkdir .agents");
@@ -2018,14 +2010,14 @@ mod tests {
         assert!(ctx.has_instructions());
         let instructions = ctx.instructions.as_ref().unwrap();
         assert!(
-            instructions.contains("Codewhale-specific instructions"),
-            "Codewhale-specific global file should win:\n{instructions}"
+            instructions.contains("Ghosty-specific instructions"),
+            "Ghosty-specific global file should win:\n{instructions}"
         );
         assert!(
             !instructions.contains("Vendor-neutral instructions"),
             "lower-priority .agents file should be skipped:\n{instructions}"
         );
-        assert_eq!(ctx.source_path, Some(codewhale_agents));
+        assert_eq!(ctx.source_path, Some(ghosty_agents));
     }
 
     #[test]
@@ -2033,10 +2025,9 @@ mod tests {
         let workspace = tempdir().expect("workspace tempdir");
         let home = tempdir().expect("home tempdir");
 
-        let codewhale_dir = home.path().join(".codewhale");
-        fs::create_dir(&codewhale_dir).expect("mkdir .codewhale");
-        fs::write(codewhale_dir.join("WHALE.md"), "Global WHALE legacy")
-            .expect("write codewhale whale");
+        let ghosty_dir = home.path().join(".ghosty");
+        fs::create_dir(&ghosty_dir).expect("mkdir .ghosty");
+        fs::write(ghosty_dir.join("WHALE.md"), "Global WHALE legacy").expect("write ghosty whale");
 
         let agents_dir = home.path().join(".agents");
         fs::create_dir(&agents_dir).expect("mkdir .agents");
@@ -2070,10 +2061,10 @@ mod tests {
         let workspace = tempdir().expect("workspace tempdir");
         let home = tempdir().expect("home tempdir");
 
-        let codewhale_dir = home.path().join(".codewhale");
-        fs::create_dir(&codewhale_dir).expect("mkdir .codewhale");
-        let global_whale = codewhale_dir.join("WHALE.md");
-        fs::write(&global_whale, "Global WHALE legacy").expect("write codewhale whale");
+        let ghosty_dir = home.path().join(".ghosty");
+        fs::create_dir(&ghosty_dir).expect("mkdir .ghosty");
+        let global_whale = ghosty_dir.join("WHALE.md");
+        fs::write(&global_whale, "Global WHALE legacy").expect("write ghosty whale");
 
         let ctx = load_project_context_with_parents_and_home(workspace.path(), Some(home.path()));
 
@@ -2094,16 +2085,15 @@ mod tests {
 
     #[test]
     fn test_global_instructions_md_is_autoloaded_while_whale_is_ignored() {
-        // #3012: a global ~/.codewhale/instructions.md should be auto-loaded as
+        // #3012: a global ~/.ghosty/instructions.md should be auto-loaded as
         // a fallback context layer while legacy WHALE.md remains ignored.
         let workspace = tempdir().expect("workspace tempdir");
         let home = tempdir().expect("home tempdir");
 
-        let codewhale_dir = home.path().join(".codewhale");
-        fs::create_dir(&codewhale_dir).expect("mkdir .codewhale");
-        fs::write(codewhale_dir.join("WHALE.md"), "Global WHALE legacy")
-            .expect("write codewhale whale");
-        let global_instructions = codewhale_dir.join("instructions.md");
+        let ghosty_dir = home.path().join(".ghosty");
+        fs::create_dir(&ghosty_dir).expect("mkdir .ghosty");
+        fs::write(ghosty_dir.join("WHALE.md"), "Global WHALE legacy").expect("write ghosty whale");
+        let global_instructions = ghosty_dir.join("instructions.md");
         fs::write(&global_instructions, "Global instructions body")
             .expect("write global instructions");
 
@@ -2135,12 +2125,12 @@ mod tests {
         let workspace = tempdir().expect("workspace tempdir");
         let home = tempdir().expect("home tempdir");
 
-        let codewhale_dir = home.path().join(".codewhale");
-        fs::create_dir(&codewhale_dir).expect("mkdir .codewhale");
-        let global_agents = codewhale_dir.join("AGENTS.md");
+        let ghosty_dir = home.path().join(".ghosty");
+        fs::create_dir(&ghosty_dir).expect("mkdir .ghosty");
+        let global_agents = ghosty_dir.join("AGENTS.md");
         fs::write(&global_agents, "Global AGENTS canonical").expect("write global agents");
         fs::write(
-            codewhale_dir.join("instructions.md"),
+            ghosty_dir.join("instructions.md"),
             "Global instructions body",
         )
         .expect("write global instructions");
@@ -2261,9 +2251,9 @@ mod tests {
     // ── Rules directory auto-discovery tests ──
 
     #[test]
-    fn rules_from_codewhale_dir_are_loaded_as_project_context() {
+    fn rules_from_ghosty_dir_are_loaded_as_project_context() {
         let tmp = tempdir().expect("tempdir");
-        let rules_dir = tmp.path().join(".codewhale/rules");
+        let rules_dir = tmp.path().join(".ghosty/rules");
         fs::create_dir_all(&rules_dir).expect("mkdir rules");
         fs::write(
             rules_dir.join("security.md"),
@@ -2287,7 +2277,7 @@ mod tests {
     #[test]
     fn rules_are_loaded_in_filename_order() {
         let tmp = tempdir().expect("tempdir");
-        let rules_dir = tmp.path().join(".codewhale/rules");
+        let rules_dir = tmp.path().join(".ghosty/rules");
         fs::create_dir_all(&rules_dir).expect("mkdir rules");
         fs::write(rules_dir.join("zzz.md"), "last").expect("write");
         fs::write(rules_dir.join("aaa.md"), "first").expect("write");
@@ -2310,7 +2300,7 @@ mod tests {
         fs::create_dir_all(&rules_dir).expect("mkdir rules");
         fs::write(rules_dir.join("style.md"), "Use tabs").expect("write");
 
-        // Default: another tool's rules directory is not Codewhale's law.
+        // Default: another tool's rules directory is not Ghosty's law.
         let ctx = load_project_context_with_imports(tmp.path(), &ForeignInstructionImports::none());
         assert!(
             ctx.rules_block.is_none(),
@@ -2325,7 +2315,7 @@ mod tests {
             ctx.warnings
         );
 
-        // Opted in by name: loaded, and ranked after Codewhale's own.
+        // Opted in by name: loaded, and ranked after Ghosty's own.
         let (imports, unknown) = ForeignInstructionImports::from_config(&["claude".to_string()]);
         assert!(unknown.is_empty());
         let ctx = load_project_context_with_imports(tmp.path(), &imports);
@@ -2459,38 +2449,34 @@ mod tests {
     }
 
     #[test]
-    fn codewhale_instructions_outrank_an_imported_claude_file() {
+    fn ghosty_instructions_outrank_an_imported_claude_file() {
         // On the previous default list CLAUDE.md sat at rank 3 and
-        // .codewhale/instructions.md at rank 4, so another tool's file won.
+        // .ghosty/instructions.md at rank 4, so another tool's file won.
         let tmp = tempdir().expect("tempdir");
-        fs::create_dir_all(tmp.path().join(".codewhale")).expect("mkdir codewhale");
-        fs::write(
-            tmp.path().join(".codewhale/instructions.md"),
-            "CODEWHALE-OWN",
-        )
-        .expect("write codewhale");
+        fs::create_dir_all(tmp.path().join(".ghosty")).expect("mkdir ghosty");
+        fs::write(tmp.path().join(".ghosty/instructions.md"), "GHOSTY-OWN").expect("write ghosty");
         fs::write(tmp.path().join("CLAUDE.md"), "CLAUDE-FILE").expect("write claude");
 
         let (imports, _) = ForeignInstructionImports::from_config(&["claude".to_string()]);
         let files = context_files_for(&imports);
         let cw = files
             .iter()
-            .position(|f| *f == ".codewhale/instructions.md")
-            .expect("codewhale file in list");
+            .position(|f| *f == ".ghosty/instructions.md")
+            .expect("ghosty file in list");
         let cl = files
             .iter()
             .position(|f| *f == "CLAUDE.md")
             .expect("claude file in list");
         assert!(
             cl > cw,
-            "Codewhale's own instruction file must outrank an imported CLAUDE.md: {files:?}"
+            "Ghosty's own instruction file must outrank an imported CLAUDE.md: {files:?}"
         );
     }
 
     #[test]
     fn rules_directory_missing_does_not_crash() {
         let tmp = tempdir().expect("tempdir");
-        // No .codewhale/rules/ or .claude/rules/ directories exist
+        // No .ghosty/rules/ or .claude/rules/ directories exist
         let ctx = load_project_context(tmp.path());
         // Rules block should be None when no rules directories exist
         assert!(
@@ -2503,7 +2489,7 @@ mod tests {
     fn rules_coexist_with_agents_md() {
         let tmp = tempdir().expect("tempdir");
         fs::write(tmp.path().join("AGENTS.md"), "Main project instructions").expect("write");
-        let rules_dir = tmp.path().join(".codewhale/rules");
+        let rules_dir = tmp.path().join(".ghosty/rules");
         fs::create_dir_all(&rules_dir).expect("mkdir rules");
         fs::write(rules_dir.join("extra.md"), "Extra rule").expect("write");
 
@@ -2526,7 +2512,7 @@ mod tests {
     #[test]
     fn non_md_files_in_rules_dir_are_ignored() {
         let tmp = tempdir().expect("tempdir");
-        let rules_dir = tmp.path().join(".codewhale/rules");
+        let rules_dir = tmp.path().join(".ghosty/rules");
         fs::create_dir_all(&rules_dir).expect("mkdir rules");
         fs::write(rules_dir.join("notes.txt"), "should be ignored").expect("write");
         fs::write(rules_dir.join("valid.md"), "loaded").expect("write");
@@ -2544,7 +2530,7 @@ mod tests {
     #[test]
     fn rules_cap_truncates_excess_files() {
         let tmp = tempdir().expect("tempdir");
-        let rules_dir = tmp.path().join(".codewhale/rules");
+        let rules_dir = tmp.path().join(".ghosty/rules");
         fs::create_dir_all(&rules_dir).expect("mkdir rules");
 
         // Create more files than the cap
@@ -2582,7 +2568,7 @@ mod tests {
     fn rules_rejects_symlinked_files() {
         let workspace = tempdir().expect("workspace tempdir");
         let outside = tempdir().expect("outside tempdir");
-        let rules_dir = workspace.path().join(".codewhale/rules");
+        let rules_dir = workspace.path().join(".ghosty/rules");
         fs::create_dir_all(&rules_dir).expect("mkdir rules");
 
         let outside_rule = outside.path().join("outside.md");
@@ -2612,10 +2598,10 @@ mod tests {
         let outside_dir = outside.path().join("real_rules");
         fs::create_dir_all(&outside_dir).expect("mkdir outside dir");
         fs::write(outside_dir.join("secret.md"), "outside content").expect("write outside");
-        fs::create_dir_all(workspace.path().join(".codewhale")).expect("mkdir codewhale");
+        fs::create_dir_all(workspace.path().join(".ghosty")).expect("mkdir ghosty");
 
         // Symlink the directory itself, not individual files
-        std::os::unix::fs::symlink(&outside_dir, workspace.path().join(".codewhale/rules"))
+        std::os::unix::fs::symlink(&outside_dir, workspace.path().join(".ghosty/rules"))
             .expect("symlink rules dir");
 
         let ctx = load_project_context(workspace.path());
@@ -2635,11 +2621,11 @@ mod tests {
     #[test]
     fn rules_from_both_dirs_are_loaded_together() {
         let tmp = tempdir().expect("tempdir");
-        let codewhale_rules = tmp.path().join(".codewhale/rules");
+        let ghosty_rules = tmp.path().join(".ghosty/rules");
         let claude_rules = tmp.path().join(".claude/rules");
-        fs::create_dir_all(&codewhale_rules).expect("mkdir codewhale rules");
+        fs::create_dir_all(&ghosty_rules).expect("mkdir ghosty rules");
         fs::create_dir_all(&claude_rules).expect("mkdir claude rules");
-        fs::write(codewhale_rules.join("cw.md"), "codewhale-rule").expect("write");
+        fs::write(ghosty_rules.join("cw.md"), "ghosty-rule").expect("write");
         fs::write(claude_rules.join("claude.md"), "claude-rule").expect("write");
 
         let (imports, _) = ForeignInstructionImports::from_config(&["claude".to_string()]);
@@ -2647,26 +2633,26 @@ mod tests {
         let rules = ctx.rules_block.as_ref().unwrap();
 
         assert!(
-            rules.contains("codewhale-rule"),
-            ".codewhale/rules/ should be loaded"
+            rules.contains("ghosty-rule"),
+            ".ghosty/rules/ should be loaded"
         );
         assert!(
             rules.contains("claude-rule"),
             "an imported .claude/rules/ should be loaded"
         );
-        // .codewhale/rules/ content should precede an imported foreign dir
-        let pos_cw = rules.find("codewhale-rule").unwrap();
+        // .ghosty/rules/ content should precede an imported foreign dir
+        let pos_cw = rules.find("ghosty-rule").unwrap();
         let pos_claude = rules.find("claude-rule").unwrap();
         assert!(
             pos_cw < pos_claude,
-            ".codewhale/rules/ should precede .claude/rules/"
+            ".ghosty/rules/ should precede .claude/rules/"
         );
     }
 
     #[test]
     fn rules_block_truncated_at_the_aggregate_budget() {
         let tmp = tempdir().expect("tempdir");
-        let rules_dir = tmp.path().join(".codewhale/rules");
+        let rules_dir = tmp.path().join(".ghosty/rules");
         fs::create_dir_all(&rules_dir).expect("mkdir rules");
 
         let per_file = "X".repeat(20 * 1024); // 20 KB each
@@ -2697,7 +2683,7 @@ mod tests {
         // how much standing instruction text could precede the conversation.
         let tmp = tempdir().expect("tempdir");
         fs::write(tmp.path().join("AGENTS.md"), "A".repeat(40 * 1024)).expect("write agents");
-        let rules_dir = tmp.path().join(".codewhale/rules");
+        let rules_dir = tmp.path().join(".ghosty/rules");
         fs::create_dir_all(&rules_dir).expect("mkdir rules");
         for i in 0..10 {
             fs::write(rules_dir.join(format!("r{i}.md")), "B".repeat(20 * 1024)).expect("write");

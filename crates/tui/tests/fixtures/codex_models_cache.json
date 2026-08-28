@@ -12,7 +12,7 @@
       "supported_reasoning_levels": [{"effort": "medium"}],
       "visibility": "list",
       "supported_in_api": true,
-      "base_instructions": "ignored by CodeWhale"
+      "base_instructions": "ignored by GhostyCode"
     },
     {
       "slug": "gpt-test-primary",
@@ -23,7 +23,7 @@
       "supported_reasoning_levels": [{"effort": "high"}],
       "visibility": "list",
       "supported_in_api": true,
-      "base_instructions": "ignored by CodeWhale"
+      "base_instructions": "ignored by GhostyCode"
     },
     {
       "slug": "codex-test-review",
@@ -34,7 +34,7 @@
       "supported_reasoning_levels": [{"effort": "medium"}],
       "visibility": "hide",
       "supported_in_api": true,
-      "base_instructions": "ignored by CodeWhale"
+      "base_instructions": "ignored by GhostyCode"
     }
   ]
 }

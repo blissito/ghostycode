@@ -1,6 +1,6 @@
 //! Typed incremental ModelContext / WorldState fragments.
 //!
-//! CodeWhale already assembles prompts most-static → most-volatile for prefix
+//! GhostyCode already assembles prompts most-static → most-volatile for prefix
 //! caching (`prompts.rs`). This module adds the missing identity layer: each
 //! volatile concern is a capped, marked fragment with `render_diff` so an
 //! environment or agent-topology change does not rebuild unrelated material.
@@ -137,17 +137,17 @@ mod tests {
         ));
 
         let snapshot = WorldStateSnapshot {
-            constitution: "You are CodeWhale.".to_string(),
+            constitution: "You are GhostyCode.".to_string(),
             world_state: state,
         };
         let blocks = snapshot.to_system_blocks();
         assert_eq!(blocks.len(), 3);
-        assert_eq!(blocks[0].text, "You are CodeWhale.");
+        assert_eq!(blocks[0].text, "You are GhostyCode.");
         assert!(blocks[1].text.starts_with(FragmentId::Workspace.marker()));
         assert!(blocks[2].text.starts_with(FragmentId::SkillsTools.marker()));
 
         let text = snapshot.render_text();
-        assert!(text.starts_with("You are CodeWhale."));
+        assert!(text.starts_with("You are GhostyCode."));
         assert!(text.contains(FragmentId::Workspace.marker()));
         assert!(text.contains(FragmentId::SkillsTools.marker()));
     }

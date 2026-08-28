@@ -39,7 +39,7 @@ pub(crate) enum ProjectContextError {
 pub struct ProjectContext {
     /// The loaded instructions content
     pub instructions: Option<String>,
-    /// Auto-discovered rules from `.codewhale/rules/` / `.claude/rules/`.
+    /// Auto-discovered rules from `.ghosty/rules/` / `.claude/rules/`.
     /// Kept separate from `instructions` so rules alone don't block
     /// parent-directory AGENTS.md discovery via `has_instructions()`.
     pub rules_block: Option<String>,
@@ -47,8 +47,8 @@ pub struct ProjectContext {
     pub source_path: Option<PathBuf>,
     /// Any warnings during loading
     pub warnings: Vec<String>,
-    /// Rendered `.codewhale/constitution.json` authority block, if present.
-    /// Codewhale-specific repo authority/prioritization policy — distinct from
+    /// Rendered `.ghosty/constitution.json` authority block, if present.
+    /// Ghosty-specific repo authority/prioritization policy — distinct from
     /// the cross-agent prose in `instructions`.
     pub constitution_block: Option<String>,
     /// Path to the repo constitution file that produced `constitution_block`.
@@ -82,7 +82,7 @@ impl ProjectContext {
 
     /// Get the instructions as a formatted block for system prompt.
     ///
-    /// The Codewhale repo constitution (`.codewhale/constitution.json`), when
+    /// The Ghosty repo constitution (`.ghosty/constitution.json`), when
     /// present, is emitted first as a higher-authority block, followed by the
     /// cross-agent `<project_instructions>` prose. Either may be absent.
     pub fn as_system_block(&self) -> Option<String> {

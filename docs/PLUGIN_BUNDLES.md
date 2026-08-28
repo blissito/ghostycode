@@ -1,9 +1,9 @@
 # Plugin bundles
 
-Codewhale supports a deliberately small plugin-bundle boundary. The boundary
+Ghosty supports a deliberately small plugin-bundle boundary. The boundary
 was drawn in v0.9.1 and is extended deliberately in v0.9.10: a bundle may
 contribute declarative Skills, MCP configuration, Commands, Agent profiles,
-and Hooks through Codewhale's existing engines. Unsupported declarations stay
+and Hooks through Ghosty's existing engines. Unsupported declarations stay
 inventoried instead of disabling a mixed bundle. Discovery alone never
 executes, enables, trusts, downloads, updates, or installs anything.
 
@@ -16,13 +16,13 @@ plugin repositories are a different, unconverted format; that boundary is
 
 ## Discovery and precedence
 
-Codewhale scans only its own roots, looking in each `<name>/` directory for a
+Ghosty scans only its own roots, looking in each `<name>/` directory for a
 manifest named `plugin.json` (the native Agent Plugins v1.0.0 format, since
 v0.9.4), `kimi.plugin.json` (the compatible Kimi Skills/MCP subset, since
-v0.9.8), or `plugin.toml` (the legacy Codewhale format, still fully readable):
+v0.9.8), or `plugin.toml` (the legacy Ghosty format, still fully readable):
 
-- User: `~/.codewhale/plugins/<name>/`
-- Workspace: `<workspace>/.codewhale/plugins/<name>/`
+- User: `~/.ghosty/plugins/<name>/`
+- Workspace: `<workspace>/.ghosty/plugins/<name>/`
 
 A bundle that publishes multiple formats is read through `plugin.json` first,
 then `kimi.plugin.json`, then the legacy `plugin.toml`.
@@ -39,7 +39,7 @@ never scanned.
 
 Pre-v0.9.1 `overrides.json` enablement was intentionally not imported as
 trust; every bundle activates only through the content-hash and
-`codewhale-plugin-capabilities-v3` activation-policy review below.
+`ghosty-plugin-capabilities-v3` activation-policy review below.
 
 ## Manifest
 
@@ -57,24 +57,24 @@ well-known fields (`version`, `description`, `author`, `homepage`,
 parse error. Client-specific data lives under `extensions`, keyed by
 reverse-domain namespace: unknown vendor namespaces are ignored, never
 rejected — that is what lets a bundle authored for another client load here —
-while unknown keys inside Codewhale's own `extensions["net.codewhale"]`
+while unknown keys inside Ghosty's own `extensions["net.ghosty"]`
 namespace are rejected rather than silently dropped.
 
 Names follow the standard's rule: 1–64 lowercase ASCII letters, digits, or
 internal single `-`/`.`, starting and ending alphanumeric, never `--` or `..`.
 A `skills/` directory in the bundle root is picked up automatically; other
 component locations, `capabilities`, `when`, and `display_name` ride in
-`extensions["net.codewhale"]`.
+`extensions["net.ghosty"]`.
 
 MCP servers cannot live in `plugin.json` (the root is closed); they live in a
 sibling `mcp.json` under `mcpServers`, with `stdio`, `streamable-http`, or
 `sse` transports (`type` may be omitted and is inferred from `command` vs
-`url`). Codewhale-only server options — timeouts, tool filters, env-backed
-credentials, enablement — ride per-server under `extensions["net.codewhale"]`.
+`url`). Ghosty-only server options — timeouts, tool filters, env-backed
+credentials, enablement — ride per-server under `extensions["net.ghosty"]`.
 The `env` names `PLUGIN_ROOT` and `PLUGIN_DATA` are reserved by the standard
 for the host runtime and are rejected in plugin definitions.
 
-### `plugin.toml` (legacy Codewhale format)
+### `plugin.toml` (legacy Ghosty format)
 
 ```toml
 schema_version = 1
@@ -143,7 +143,7 @@ existing explicit proxy support.
 
 Local stdio environment entries must use exact `${SOURCE_ENV}` references.
 The review shows destination and source names, but never reads or prints their
-values. Plugin children inherit only Codewhale's base secret-scrubbed child
+values. Plugin children inherit only Ghosty's base secret-scrubbed child
 environment plus those reviewed mappings; credential-capable proxy variables
 and the broader compatibility environment used by user-authored MCP
 configuration are not inherited ambiently. Absolute arguments and parent
@@ -159,7 +159,7 @@ a manifest declaring OAuth fields on a plugin MCP server fails validation.
 
 ### Active and inactive component surfaces
 
-Codewhale 0.9.10 activates declarative `[skills]`, `[mcp_servers.*]`,
+Ghosty 0.9.10 activates declarative `[skills]`, `[mcp_servers.*]`,
 `[commands]`, `[agents]`, and `[hooks]` components from its content-addressed
 runtime snapshot. Commands use markdown command files, Agents use Fleet TOML
 profiles, and Hooks use `HooksConfig` TOML files. A component may name one file
@@ -185,16 +185,16 @@ lifecycle_mutation = true
 ```
 
 (In a `plugin.json` bundle the same tables ride under
-`extensions["net.codewhale"]`.)
+`extensions["net.ghosty"]`.)
 
 The accept/reject behavior is deliberately loud, never silent:
 
 - Compatibility is per-component: `full` when every declared surface has an
   adapter (or the bundle is empty), `partial` when supported components can
   activate beside named inactive surfaces, and `unsupported` when the bundle
-  only declares surfaces Codewhale cannot activate yet. The same versioned
+  only declares surfaces Ghosty cannot activate yet. The same versioned
   activation policy (v3) drives those labels, the runtime adapters, and the
-  capability hash. A future Codewhale that starts executing LSP or native code
+  capability hash. A future Ghosty that starts executing LSP or native code
   must change that policy, which changes the capability hash and forces
   re-review. v1 and v2 trust receipts fail closed as
   `capabilities-changed`.
@@ -208,11 +208,11 @@ The accept/reject behavior is deliberately loud, never silent:
   the inactive surfaces stay named as inactive.
 - An **all-unsupported** bundle can be reviewed and trusted, but `/plugin
   enable` fails closed and names the inactive surfaces. There is nothing
-  Codewhale can honestly activate.
+  Ghosty can honestly activate.
 - An **unrecognized** section or field is a validation failure, not an
   inventory entry: unknown top-level TOML tables, unknown MCP server fields,
   unknown `plugin.json` root keys, and unknown keys inside
-  `extensions["net.codewhale"]` are all rejected outright. The single
+  `extensions["net.ghosty"]` are all rejected outright. The single
   ignore-without-error case is another vendor's `extensions` namespace in the
   Agent Plugins format, which the standard requires clients to skip.
 - `capabilities.network_hosts` is not a future surface: it is enforced today,
@@ -245,7 +245,7 @@ uses both complete SHA-256 receipts rather than display prefixes. The
 capability receipt is the v3 digest: it still hashes the complete inventory
 and also binds this build's activation policy (which adapters are executable
 versus inventoried-only). Trust first
-copies the complete reviewed tree into a Codewhale-owned, content-addressed
+copies the complete reviewed tree into a Ghosty-owned, content-addressed
 runtime snapshot and records the matching receipt; it does not activate
 anything.
 Then run `/plugin enable example` again. Trust and enablement are separate:
@@ -269,14 +269,14 @@ entries, terminates an idle plugin stdio child, and denies persisted queued
 Skills carrying the older authority receipt.
 
 The review distinguishes remote MCP endpoints from local stdio MCP servers.
-A local stdio server is a child process running with the Codewhale user's host
+A local stdio server is a child process running with the Ghosty user's host
 filesystem and network authority; plugin trust is not an OS sandbox. The
 review therefore shows the command, argument count, working directory,
 environment-variable names, and this host-authority warning without printing
 environment or header values. MCP tool approval still applies after the
 server starts.
 
-Trust receipts live in `~/.codewhale/plugins/state.json`. Atomic owner-only
+Trust receipts live in `~/.ghosty/plugins/state.json`. Atomic owner-only
 writes record the full content hash, capability hash, reviewed capability
 inventory, generation, and review time, with the latest 32 reviews retained as
 a bounded audit trail. Malformed or unsupported state is not overwritten: all
@@ -354,7 +354,7 @@ remain a distinct system and are listed under `/plugin tools`.
 ## Explicit non-goals as of v0.9.10
 
 Federated marketplace catalogs (`/plugin marketplace add|list|show|remove|install`)
-parse local Kimi-, Claude-, Codex-, and Codewhale-format catalog documents; see
+parse local Kimi-, Claude-, Codex-, and Ghosty-format catalog documents; see
 the marketplace section below (`/plugin install` fetches
 one reviewed source, and `/plugin suggest` ranks only what is already
 installed), no ambient compatibility discovery, no automatic trust, no
@@ -367,7 +367,7 @@ implied capabilities.
 ## Marketplace catalogs (#5311)
 
 `/plugin marketplace` reads LOCAL catalog documents in the real published
-schemas (Kimi, Claude, Codex, Codewhale native; Codex via its policy markers)
+schemas (Kimi, Claude, Codex, Ghosty native; Codex via its policy markers)
 and renders every candidate with an honest install plan:
 
 ```text
@@ -386,7 +386,7 @@ and renders every candidate with an honest install plan:
 - Foreign policies are visibly ignored: a Codex `INSTALLED_BY_DEFAULT` entry
   is listed with a `NO_AUTO_INSTALL` warning and nothing is installed until
   an operator runs the install verb.
-- Sources Codewhale cannot fetch (npm packages, `command:` sources, non-tarball
+- Sources Ghosty cannot fetch (npm packages, `command:` sources, non-tarball
   URLs) are listed as `not installable` with the reason.
 - `install` routes through the same reviewed installer as `/plugin install`:
   the bundle lands disabled and untrusted, and enters the hash-bound trust

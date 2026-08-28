@@ -28,7 +28,7 @@ pub(crate) fn isolated_test_state_root() -> &'static Path {
             .unwrap_or_default()
             .as_nanos();
         let root = std::env::temp_dir().join(format!(
-            "codewhale-tui-test-state-{}-{nonce}",
+            "ghosty-tui-test-state-{}-{nonce}",
             std::process::id()
         ));
         std::fs::create_dir_all(&root).unwrap_or_else(|error| {
@@ -164,7 +164,7 @@ pub(crate) fn env_var_currently_guarded(key: &str) -> bool {
 /// Holding [`lock_test_env`] alone is not that: many tests hold the lock only
 /// to serialize access to unrelated variables (`TERM_PROGRAM`, API keys) and
 /// have provided no temporary paths at all. Trusting the lock routed those
-/// tests to the developer's real `~/.codewhale` state, which is exactly the
+/// tests to the developer's real `~/.ghosty` state, which is exactly the
 /// leak the isolated root exists to prevent (#5359). A test earns environment
 /// resolution by holding the lock *and* either setting one of the explicit
 /// override variables or redirecting `HOME`/`USERPROFILE` through
@@ -179,8 +179,8 @@ pub(crate) fn guarded_environment_provides_state_paths() -> bool {
                 .is_some_and(|value| value.to_str().is_none_or(|text| !text.trim().is_empty()))
     };
     [
-        "CODEWHALE_HOME",
-        "CODEWHALE_CONFIG_PATH",
+        "GHOSTY_HOME",
+        "GHOSTY_CONFIG_PATH",
         "DEEPSEEK_CONFIG_PATH",
         "HOME",
         "USERPROFILE",
@@ -360,22 +360,22 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    fn ambient_codewhale_home_is_not_a_test_seal() {
+    fn ambient_ghosty_home_is_not_a_test_seal() {
         let _lock = lock_test_env();
-        let _ambient = EnvVarGuard::set("CODEWHALE_HOME", "/tmp/ambient-codewhale-home");
-        unregister_guarded_env_key("CODEWHALE_HOME");
+        let _ambient = EnvVarGuard::set("GHOSTY_HOME", "/tmp/ambient-ghosty-home");
+        unregister_guarded_env_key("GHOSTY_HOME");
 
         let sealed = guarded_environment_provides_state_paths();
 
-        register_guarded_env_key("CODEWHALE_HOME");
+        register_guarded_env_key("GHOSTY_HOME");
         assert!(!sealed, "ambient developer state must remain confined");
     }
 
     #[test]
     fn removing_overrides_does_not_seal_the_ambient_home() {
         let _lock = lock_test_env();
-        let _codewhale_home = EnvVarGuard::remove("CODEWHALE_HOME");
-        let _codewhale_config = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _ghosty_home = EnvVarGuard::remove("GHOSTY_HOME");
+        let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
 
         assert!(
@@ -397,7 +397,7 @@ mod tests {
         assert_eq!(
             crate::config_persistence::config_toml_path(None)
                 .expect("resolve isolated config path"),
-            unsealed_test_state_root().join(codewhale_config::CONFIG_FILE_NAME)
+            unsealed_test_state_root().join(ghosty_config::CONFIG_FILE_NAME)
         );
     }
 
@@ -409,26 +409,26 @@ mod tests {
         let root = isolated_test_state_root();
         assert!(
             path.starts_with(root),
-            "holding lock_test_env without an EnvVarGuard must not read ~/.codewhale ({})",
+            "holding lock_test_env without an EnvVarGuard must not read ~/.ghosty ({})",
             path.display()
         );
         assert_eq!(
             path,
-            unsealed_test_state_root().join(codewhale_config::CONFIG_FILE_NAME)
+            unsealed_test_state_root().join(ghosty_config::CONFIG_FILE_NAME)
         );
     }
 
     #[test]
     fn unguarded_state_writes_use_isolated_test_root() {
-        const PROBE_ENV: &str = "CODEWHALE_TEST_STATE_ISOLATION_PROBE";
-        const RECEIPT_ENV: &str = "CODEWHALE_TEST_STATE_ISOLATION_RECEIPT";
+        const PROBE_ENV: &str = "GHOSTY_TEST_STATE_ISOLATION_PROBE";
+        const RECEIPT_ENV: &str = "GHOSTY_TEST_STATE_ISOLATION_RECEIPT";
 
         if std::env::var_os(PROBE_ENV).is_some() {
             let config_path =
                 crate::config_persistence::persist_root_bool_key(None, "allow_shell", true)
                     .expect("write isolated config");
             let direct_config_path =
-                crate::config::save_workspace_trust(Path::new("/tmp/codewhale-test-workspace"))
+                crate::config::save_workspace_trust(Path::new("/tmp/ghosty-test-workspace"))
                     .expect("write through direct default config path");
             crate::settings::Settings::default()
                 .save()
@@ -463,7 +463,7 @@ mod tests {
         }
 
         let sentinel = tempfile::tempdir().expect("sentinel home");
-        let user_state = sentinel.path().join(".codewhale");
+        let user_state = sentinel.path().join(".ghosty");
         std::fs::create_dir_all(&user_state).expect("create sentinel state");
         let config_path = user_state.join("config.toml");
         let settings_path = user_state.join("settings.toml");
@@ -481,8 +481,8 @@ mod tests {
             .env(RECEIPT_ENV, &receipt_path)
             .env("HOME", sentinel.path())
             .env("USERPROFILE", sentinel.path())
-            .env_remove("CODEWHALE_HOME")
-            .env_remove("CODEWHALE_CONFIG_PATH")
+            .env_remove("GHOSTY_HOME")
+            .env_remove("GHOSTY_CONFIG_PATH")
             .env_remove("DEEPSEEK_CONFIG_PATH")
             .output()
             .expect("run isolated-state probe");
@@ -521,7 +521,7 @@ mod tests {
         let (started_tx, started_rx) = mpsc::channel();
         let (tx, rx) = mpsc::channel();
         let redirected = std::env::temp_dir().join(format!(
-            "codewhale-config-path-read-barrier-{}",
+            "ghosty-config-path-read-barrier-{}",
             std::process::id()
         ));
 

@@ -6,21 +6,21 @@ import type { HomeDict } from "../types";
  * machine. Every trace of the old positioning has been dropped.
  *
  * Product vocabulary stays fixed: modes Plan / Work / Operate, permission
- * postures Ask / Auto-Review / Full Access, and the product name Codewhale —
+ * postures Ask / Auto-Review / Full Access, and the product name Ghosty —
  * exactly as the TUI locale pack (`crates/tui/locales/id.json`) renders them.
- * Commands, package names, and surface names (`codewhale exec`, Fleet,
+ * Commands, package names, and surface names (`ghosty exec`, Fleet,
  * Runtime API + MCP) stay literal; only the prose around them is translated.
  *
  * Section seals (法 行 起 界 面 众) are the paper's marks, shared across
  * locales.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — menyelam ke laut dalam, jadi Anda tidak perlu.",
+  metaTitle: "Ghosty — menyelam ke laut dalam, jadi Anda tidak perlu.",
   metaDescription:
-    "Codewhale menyelam ke laut dalam, jadi Anda tidak perlu — agen coding terminal sumber terbuka. Bawa model sendiri. Berjalan di mesin Anda. Rust, MIT.",
+    "Ghosty menyelam ke laut dalam, jadi Anda tidak perlu — agen coding terminal sumber terbuka. Bawa model sendiri. Berjalan di mesin Anda. Rust, MIT.",
 
   kicker: "Sumber terbuka · Bawa model sendiri · Berjalan di terminal Anda",
-  heroTitleA: "Codewhale menyelam ke laut dalam",
+  heroTitleA: "Ghosty menyelam ke laut dalam",
   heroTitleB: "jadi Anda tidak perlu.",
   heroIntro:
     "{brand} adalah agen coding sumber terbuka untuk terminal Anda. Beri ia model dan tugas — ia membaca kode Anda, mengedit berkas, menjalankan pemeriksaannya sendiri, dan berhenti saat pekerjaan selesai atau saat butuh Anda. Bawa model apa pun, atau campurkan: pasang model berbeda untuk tiap peran.",
@@ -43,8 +43,8 @@ export const home: HomeDict = {
 
   shotSession: "Sesi saat ini",
   screenshotAlt:
-    "Sesi terminal Codewhale saat ini yang menampilkan mode Operate, sang paus, komposer, dan bilah bawah",
-  figcaption: "Sesi Codewhale saat ini · mode Operate · postur izin Ask",
+    "Sesi terminal Ghosty saat ini yang menampilkan mode Operate, sang paus, komposer, dan bilah bawah",
+  figcaption: "Sesi Ghosty saat ini · mode Operate · postur izin Ask",
 
   proofHeading: "Shell terminal bawah laut. Model apa pun. Di mesin Anda.",
   proofBody:
@@ -70,7 +70,7 @@ export const home: HomeDict = {
   receiptReport: "pemeriksaan lulus · tanda terima tersimpan",
 
   sealStart: "起",
-  startHeading: "Baru mengenal Codewhale? Empat langkah dari awal sampai akhir.",
+  startHeading: "Baru mengenal Ghosty? Empat langkah dari awal sampai akhir.",
   startLede:
     "Instal → sesi pertama tanpa kunci → hubungkan penyedia → workflow Fleet pertama. Istilah didefinisikan di halaman kosakata.",
   startGuideLink: "Baca panduan memulai →",
@@ -90,7 +90,7 @@ export const home: HomeDict = {
   surfacesHeading: "Gunakan runtime di tempat pekerjaan berlangsung.",
   surfaces: [
     ["TUI", "Kerja terminal interaktif"],
-    ["codewhale exec", "Skrip dan CI"],
+    ["ghosty exec", "Skrip dan CI"],
     ["Klien Web", "Klien peramban khusus loopback"],
     ["Runtime API + MCP", "Integrasi lokal"],
     ["Fleet", "Kerja multi-agen yang tahan lama"],

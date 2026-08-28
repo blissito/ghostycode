@@ -1,4 +1,4 @@
-use codewhale_execpolicy::{
+use ghosty_execpolicy::{
     AskForApproval, ExecPolicyContext, ExecPolicyEngine, PermissionAction, Ruleset, ToolAskRule,
 };
 

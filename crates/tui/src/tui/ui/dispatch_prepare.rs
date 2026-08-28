@@ -91,7 +91,7 @@ pub(crate) fn paused_command_note(title: &str, resume: bool) -> String {
         "The user is not resuming that paused command. Answer only the new message and do not continue the paused command."
     };
     format!(
-        "\n\nCodewhale paused custom slash command context:\n\
+        "\n\nGhosty paused custom slash command context:\n\
 Paused custom slash command: {title}\n\
 Paused command: {title}\n\
 {instruction}"

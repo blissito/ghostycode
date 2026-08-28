@@ -1,5 +1,5 @@
-//! User-defined slash commands from `~/.codewhale/commands/<name>.md` and
-//! workspace-local `<workspace>/.codewhale/commands/<name>.md`.
+//! User-defined slash commands from `~/.ghosty/commands/<name>.md` and
+//! workspace-local `<workspace>/.ghosty/commands/<name>.md`.
 //!
 //! Users drop `.md` files into a commands directory and the filename
 //! (without `.md` extension) becomes the default slash-command name. A
@@ -15,11 +15,11 @@
 //!
 //! Workspace-local directories shadow user-global by name:
 //!
-//! 1. `<workspace>/.codewhale/commands/` (project-local, highest)
+//! 1. `<workspace>/.ghosty/commands/` (project-local, highest)
 //! 2. `<workspace>/.deepseek/commands/`  (legacy project-local)
 //! 3. `<workspace>/.claude/commands/`    (Claude Code interop)
 //! 4. `<workspace>/.cursor/commands/`    (Cursor interop)
-//! 5. `~/.codewhale/commands/`           (user-global)
+//! 5. `~/.ghosty/commands/`           (user-global)
 //! 6. `~/.deepseek/commands/`            (legacy user-global)
 //!
 //! ## Permanent Role
@@ -39,10 +39,10 @@ use crate::tui::app::{App, AppAction};
 #[cfg(test)]
 use super::CommandResult;
 
-/// Path to the global user commands directory: `~/.codewhale/commands/`.
+/// Path to the global user commands directory: `~/.ghosty/commands/`.
 fn global_commands_dir() -> PathBuf {
     let home = crate::config::effective_home_dir().unwrap_or_else(|| PathBuf::from("~"));
-    home.join(".codewhale").join("commands")
+    home.join(".ghosty").join("commands")
 }
 
 fn legacy_global_commands_dir() -> PathBuf {
@@ -54,7 +54,7 @@ fn legacy_global_commands_dir() -> PathBuf {
 pub(crate) fn commands_dirs(workspace: Option<&Path>) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(ws) = workspace {
-        dirs.push(ws.join(".codewhale").join("commands"));
+        dirs.push(ws.join(".ghosty").join("commands"));
         dirs.push(ws.join(".deepseek").join("commands"));
         dirs.push(ws.join(".claude").join("commands"));
         dirs.push(ws.join(".cursor").join("commands"));
@@ -71,10 +71,10 @@ pub(crate) fn commands_dirs(workspace: Option<&Path>) -> Vec<PathBuf> {
 pub(crate) fn workflow_dirs(workspace: Option<&Path>) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(ws) = workspace {
-        dirs.push(ws.join(".codewhale").join("workflows"));
+        dirs.push(ws.join(".ghosty").join("workflows"));
     }
     let home = crate::config::effective_home_dir().unwrap_or_else(|| PathBuf::from("~"));
-    dirs.push(home.join(".codewhale").join("workflows"));
+    dirs.push(home.join(".ghosty").join("workflows"));
     dirs
 }
 
@@ -129,7 +129,7 @@ fn synthesize_workflow_command(name: &str, description: &str, path: &Path) -> St
     // line but defend against pathological sources.
     let description = description.replace(['\r', '\n'], " ");
     format!(
-        "---\ndescription: {description}\nusage: /{name} [args...]\narguments: forwarded to the workflow run's args\n---\nStart the saved workflow `{name}` now: call the `workflow` tool with action=\"start\", source_path=\"{path}\", and args built from this argument text: $ARGUMENTS\nIf the argument text is empty, start the run without args. Report the run_id, monitor with the workflow tool's status action, and when the run settles present its receipt summary (status, phases, failures, artifacts). The durable report lands under .codewhale/reports/<run_id>.md.",
+        "---\ndescription: {description}\nusage: /{name} [args...]\narguments: forwarded to the workflow run's args\n---\nStart the saved workflow `{name}` now: call the `workflow` tool with action=\"start\", source_path=\"{path}\", and args built from this argument text: $ARGUMENTS\nIf the argument text is empty, start the run without args. Report the run_id, monitor with the workflow tool's status action, and when the run settles present its receipt summary (status, phases, failures, artifacts). The durable report lands under .ghosty/reports/<run_id>.md.",
         path = path.display(),
     )
 }
@@ -364,17 +364,15 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_global_commands_dir_contains_codewhale_commands() {
+    fn test_global_commands_dir_contains_ghosty_commands() {
         let dir = global_commands_dir();
         let parts: Vec<_> = dir
             .components()
             .filter_map(|component| component.as_os_str().to_str())
             .collect();
         assert!(
-            parts
-                .windows(2)
-                .any(|pair| pair == [".codewhale", "commands"]),
-            "expected .codewhale/commands components in path, got: {}",
+            parts.windows(2).any(|pair| pair == [".ghosty", "commands"]),
+            "expected .ghosty/commands components in path, got: {}",
             dir.display()
         );
     }
@@ -416,7 +414,7 @@ mod tests {
     fn load_user_commands_scans_workspace_local_dir() {
         let tmp = TempDir::new().unwrap();
         let ws = tmp.path();
-        let cmds_dir = ws.join(".codewhale").join("commands");
+        let cmds_dir = ws.join(".ghosty").join("commands");
         write_command(&cmds_dir, "hello", "echo hi");
 
         let cmds = load_user_commands(Some(ws));
@@ -461,7 +459,7 @@ mod tests {
 
         // Workspace-local version
         write_command(
-            &ws.join(".codewhale").join("commands"),
+            &ws.join(".ghosty").join("commands"),
             "shared",
             "workspace version",
         );
@@ -482,7 +480,7 @@ mod tests {
             .expect("shared present");
         assert_eq!(
             shared.1, "workspace version",
-            "workspace-local (.codewhale) must shadow later dirs"
+            "workspace-local (.ghosty) must shadow later dirs"
         );
     }
 
@@ -625,7 +623,7 @@ mod tests {
         );
         std::fs::write(ws.join("user-work.txt"), "untracked user work").unwrap();
         write_command(
-            &ws.join(".codewhale").join("commands"),
+            &ws.join(".ghosty").join("commands"),
             "pause-scan",
             "---\ndescription: Scan repos\npausable: true\n---\nscan",
         );
@@ -658,7 +656,7 @@ mod tests {
 
         let tmp = TempDir::new().unwrap();
         let ws = tmp.path().to_path_buf();
-        let commands_dir = ws.join(".codewhale").join("commands");
+        let commands_dir = ws.join(".ghosty").join("commands");
         write_command(
             &commands_dir,
             "pause-scan",
@@ -686,7 +684,7 @@ mod tests {
 
         let tmp = TempDir::new().unwrap();
         let ws = tmp.path().to_path_buf();
-        let commands_dir = ws.join(".codewhale").join("commands");
+        let commands_dir = ws.join(".ghosty").join("commands");
         write_command(&commands_dir, "first", "first command body");
         write_command(&commands_dir, "second", "second command body");
 

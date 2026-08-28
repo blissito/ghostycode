@@ -1,11 +1,11 @@
 [package]
-name = "codewhale-release"
+name = "ghosty-release"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Shared Codewhale release discovery and version comparison helpers"
+description = "Shared Ghosty release discovery and version comparison helpers"
 
 [lints]
 workspace = true

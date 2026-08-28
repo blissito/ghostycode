@@ -9,12 +9,13 @@ use super::{
     DEFAULT_ARCEE_MODEL, DEFAULT_ATLASCLOUD_BASE_URL, DEFAULT_ATLASCLOUD_MODEL,
     DEFAULT_DEEPINFRA_BASE_URL, DEFAULT_DEEPINFRA_MODEL, DEFAULT_DEEPSEEK_ANTHROPIC_BASE_URL,
     DEFAULT_DEEPSEEK_ANTHROPIC_MODEL, DEFAULT_DEEPSEEK_BASE_URL, DEFAULT_DEEPSEEK_MODEL,
-    DEFAULT_EDENAI_BASE_URL, DEFAULT_EDENAI_MODEL, DEFAULT_FIREWORKS_BASE_URL,
-    DEFAULT_FIREWORKS_MODEL, DEFAULT_GOOGLE_BASE_URL, DEFAULT_GOOGLE_MODEL,
-    DEFAULT_HUGGINGFACE_BASE_URL, DEFAULT_HUGGINGFACE_MODEL, DEFAULT_LONGCAT_BASE_URL,
-    DEFAULT_LONGCAT_MODEL, DEFAULT_META_BASE_URL, DEFAULT_META_MODEL,
-    DEFAULT_MINIMAX_ANTHROPIC_BASE_URL, DEFAULT_MINIMAX_BASE_URL, DEFAULT_MINIMAX_MODEL,
-    DEFAULT_MISTRAL_BASE_URL, DEFAULT_MISTRAL_MODEL, DEFAULT_MODELSTUDIO_CODING_PLAN_BASE_URL,
+    DEFAULT_EASYBITS_BASE_URL, DEFAULT_EASYBITS_MODEL, DEFAULT_EDENAI_BASE_URL,
+    DEFAULT_EDENAI_MODEL, DEFAULT_FIREWORKS_BASE_URL, DEFAULT_FIREWORKS_MODEL,
+    DEFAULT_GOOGLE_BASE_URL, DEFAULT_GOOGLE_MODEL, DEFAULT_HUGGINGFACE_BASE_URL,
+    DEFAULT_HUGGINGFACE_MODEL, DEFAULT_LONGCAT_BASE_URL, DEFAULT_LONGCAT_MODEL,
+    DEFAULT_META_BASE_URL, DEFAULT_META_MODEL, DEFAULT_MINIMAX_ANTHROPIC_BASE_URL,
+    DEFAULT_MINIMAX_BASE_URL, DEFAULT_MINIMAX_MODEL, DEFAULT_MISTRAL_BASE_URL,
+    DEFAULT_MISTRAL_MODEL, DEFAULT_MODELSTUDIO_CODING_PLAN_BASE_URL,
     DEFAULT_MODELSTUDIO_TOKEN_PLAN_BASE_URL, DEFAULT_MODELSTUDIO_TOKEN_PLAN_MODEL,
     DEFAULT_MOONSHOT_BASE_URL, DEFAULT_MOONSHOT_MODEL, DEFAULT_NOVITA_BASE_URL,
     DEFAULT_NOVITA_MODEL, DEFAULT_NVIDIA_NIM_BASE_URL, DEFAULT_NVIDIA_NIM_MODEL,
@@ -61,7 +62,7 @@ pub enum CredentialAcquisition {
     ApiKeyOrOAuth,
     /// A self-hosted route that is keyless by default but can be configured with auth.
     LocalOptional,
-    /// An OAuth-only route; Codewhale does not collect an API key for it.
+    /// An OAuth-only route; Ghosty does not collect an API key for it.
     OAuth,
     /// A user-defined route whose credential source belongs in configuration.
     Configuration,
@@ -213,6 +214,13 @@ pub const fn credential_help(kind: ProviderKind) -> CredentialHelp {
             docs_url: Some("https://api-docs.deepseek.com/"),
             guidance: "Create an API key in the DeepSeek platform console.",
         },
+        ProviderKind::Easybits => CredentialHelp {
+            acquisition: ApiKey,
+            credential_url: Some("https://www.easybits.cloud/dash/developer"),
+            docs_url: Some("https://www.easybits.cloud/docs"),
+            guidance: "Create an API key in the EasyBits developer panel. \
+                       The same key serves the LLM and the EasyBits MCP server.",
+        },
         ProviderKind::NvidiaNim => CredentialHelp {
             acquisition: ApiKey,
             credential_url: Some("https://build.nvidia.com/settings/api-keys"),
@@ -343,7 +351,7 @@ pub const fn credential_help(kind: ProviderKind) -> CredentialHelp {
             acquisition: OAuth,
             credential_url: None,
             docs_url: Some("https://developers.openai.com/codex/"),
-            guidance: "Run `codex login`, then explicitly grant Codewhale read-only access to that exact Codex credential file; or use a process-scoped token environment variable.",
+            guidance: "Run `codex login`, then explicitly grant Ghosty read-only access to that exact Codex credential file; or use a process-scoped token environment variable.",
         },
         ProviderKind::Anthropic => CredentialHelp {
             acquisition: ApiKey,
@@ -417,7 +425,7 @@ pub const fn credential_help(kind: ProviderKind) -> CredentialHelp {
             acquisition: ApiKeyOrOAuth,
             credential_url: Some("https://console.x.ai/"),
             docs_url: None,
-            guidance: "Use an xAI Console API key or Codewhale's native device login. Reading an existing Grok CLI file requires explicit provider-scoped read-only consent.",
+            guidance: "Use an xAI Console API key or Ghosty's native device login. Reading an existing Grok CLI file requires explicit provider-scoped read-only consent.",
         },
         ProviderKind::Mistral => CredentialHelp {
             acquisition: ApiKey,
@@ -450,13 +458,13 @@ pub const fn credential_help(kind: ProviderKind) -> CredentialHelp {
             acquisition: OAuth,
             credential_url: None,
             docs_url: Some("https://antigravity.google/docs/cli/reference"),
-            guidance: "Sign in with the official agy CLI (1.1.13). Codewhale can read that login's token read-only from the exact pinned state.vscdb after `codewhale auth external-consent`; it never writes or refreshes it. An ANTIGRAVITY_API_KEY or AGY_ADC_AUTH in the process wins over the file.",
+            guidance: "Sign in with the official agy CLI (1.1.13). Ghosty can read that login's token read-only from the exact pinned state.vscdb after `ghosty auth external-consent`; it never writes or refreshes it. An ANTIGRAVITY_API_KEY or AGY_ADC_AUTH in the process wins over the file.",
         },
         ProviderKind::Google => CredentialHelp {
             acquisition: ApiKey,
             credential_url: Some("https://aistudio.google.com/apikey"),
             docs_url: Some("https://ai.google.dev/gemini-api/docs/openai"),
-            guidance: "Create a Google AI Studio API key. Codewhale uses the official Gemini OpenAI-compatible endpoint and never reads Google OAuth files.",
+            guidance: "Create a Google AI Studio API key. Ghosty uses the official Gemini OpenAI-compatible endpoint and never reads Google OAuth files.",
         },
         ProviderKind::Custom => CredentialHelp {
             acquisition: Configuration,
@@ -601,7 +609,7 @@ pub fn credential_help_for_route(kind: ProviderKind, base_url: &str) -> Credenti
             acquisition: CredentialAcquisition::ApiKey,
             credential_url: Some(KIMI_CODE_MEMBERSHIP_PLAN_CONSOLE_URL),
             docs_url: None,
-            guidance: "Create a Kimi Code membership-plan API key in the Kimi Code console. This route uses api.kimi.com/coding/v1; Codewhale does not import Kimi CLI credentials.",
+            guidance: "Create a Kimi Code membership-plan API key in the Kimi Code console. This route uses api.kimi.com/coding/v1; Ghosty does not import Kimi CLI credentials.",
         };
     }
 
@@ -712,6 +720,51 @@ impl Provider for Deepseek {
     }
 
     fn wire_policy(&self) -> WirePolicy {
+        WirePolicy::ModelAware
+    }
+}
+
+/// EasyBits.cloud — revendedor de DeepSeek.
+///
+/// Comparte wire y catálogo con [`Deepseek`]; solo cambia la base URL y la
+/// credencial. Una sola key sirve para el LLM y para el MCP de EasyBits.
+pub struct Easybits;
+
+impl Provider for Easybits {
+    fn id(&self) -> &'static str {
+        "easybits"
+    }
+
+    fn kind(&self) -> ProviderKind {
+        ProviderKind::Easybits
+    }
+
+    fn display_name(&self) -> &'static str {
+        "EasyBits"
+    }
+
+    fn default_base_url(&self) -> &'static str {
+        DEFAULT_EASYBITS_BASE_URL
+    }
+
+    fn default_model(&self) -> &'static str {
+        DEFAULT_EASYBITS_MODEL
+    }
+
+    fn env_vars(&self) -> &'static [&'static str] {
+        &["EASYBITS_API_KEY"]
+    }
+
+    fn provider_config_key(&self) -> &'static str {
+        "easybits"
+    }
+
+    fn aliases(&self) -> &'static [&'static str] {
+        &["easy-bits", "easy_bits", "eb"]
+    }
+
+    fn wire_policy(&self) -> WirePolicy {
+        // Mismo criterio que DeepSeek: revende su API.
         WirePolicy::ModelAware
     }
 }
@@ -1680,6 +1733,7 @@ static OPENAI_CODEX: OpenaiCodex = OpenaiCodex;
 static ANTHROPIC: Anthropic = Anthropic;
 static OPENMODEL: Openmodel = Openmodel;
 static ZAI: Zai = Zai;
+static EASYBITS: Easybits = Easybits;
 static STEPFUN: Stepfun = Stepfun;
 static MINIMAX: Minimax = Minimax;
 static MINIMAX_ANTHROPIC: MinimaxAnthropic = MinimaxAnthropic;
@@ -1702,7 +1756,7 @@ static MODELSTUDIO_CODING_PLAN_ANTHROPIC: ModelstudioCodingPlanAnthropic =
     ModelstudioCodingPlanAnthropic;
 static CUSTOM: Custom = Custom;
 
-static PROVIDER_REGISTRY: [&dyn Provider; 47] = [
+static PROVIDER_REGISTRY: [&dyn Provider; 48] = [
     &DEEPSEEK,
     &DEEPSEEK_ANTHROPIC,
     &NVIDIA_NIM,
@@ -1730,6 +1784,7 @@ static PROVIDER_REGISTRY: [&dyn Provider; 47] = [
     &ANTHROPIC,
     &OPENMODEL,
     &ZAI,
+    &EASYBITS,
     &STEPFUN,
     &MINIMAX,
     &MINIMAX_ANTHROPIC,

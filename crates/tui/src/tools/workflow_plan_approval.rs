@@ -4,8 +4,8 @@
 //! and decides whether a launch is elevated enough to require operator approval
 //! beyond read-only auto-start.
 
-use codewhale_config::WorkflowConfigToml;
-use codewhale_workflow::{
+use ghosty_config::WorkflowConfigToml;
+use ghosty_workflow::{
     ElevationOptions, WorkflowPlanElevation, WorkflowSpec, assess_workflow_elevation,
 };
 use serde::{Deserialize, Serialize};

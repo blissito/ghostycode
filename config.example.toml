@@ -1,5 +1,5 @@
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║                         Codewhale Configuration                               ║
+# ║                         Ghosty Configuration                               ║
 # ║                                                                              ║
 # ║  Terminal coding agent for any model — open models first.                ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -97,7 +97,7 @@ reasoning_effort = "max"
 
 # NOTE: `show_thinking`, `thinking_default_expanded`, `thinking_preview_lines`,
 # `help_expand_groups`, `pin_last_prompt`, and `cost_currency` live in
-# `~/.codewhale/settings.toml`, not here — `Config` has no such fields and
+# `~/.ghosty/settings.toml`, not here — `Config` has no such fields and
 # unknown keys are ignored. See crates/tui/src/settings.rs.
 #
 # Density (Grok-like compact defaults; turn these up if you want more shown):
@@ -110,18 +110,18 @@ reasoning_effort = "max"
 # ─────────────────────────────────────────────────────────────────────────────────
 # Startup update check
 # ─────────────────────────────────────────────────────────────────────────────────
-# The TUI checks for newer Codewhale releases in the background at startup.
+# The TUI checks for newer Ghosty releases in the background at startup.
 # Set check_for_updates = false in managed or air-gapped environments.
-# The result is cached in ~/.codewhale/update-check.json, so the network is
+# The result is cached in ~/.ghosty/update-check.json, so the network is
 # touched at most once per check_interval_hours while the notice still shows
 # on every launch. Set 0 to check on every launch.
-# Checks are skipped entirely in CI, and when CODEWHALE_NO_UPDATE_CHECK or
+# Checks are skipped entirely in CI, and when GHOSTY_NO_UPDATE_CHECK or
 # NO_UPDATE_NOTIFIER is set.
 # update_uri may point at a GitHub-compatible latest-release JSON endpoint.
 [update]
 check_for_updates = true
 check_interval_hours = 24
-# update_uri = "https://internal.mirror.example/codewhale/releases/latest"
+# update_uri = "https://internal.mirror.example/ghosty/releases/latest"
 
 # ─────────────────────────────────────────────────────────────────────────────────
 # Hotbar slots (#2061 / #2064)
@@ -154,21 +154,21 @@ check_interval_hours = 24
 # ─────────────────────────────────────────────────────────────────────────────────
 # Paths
 # ─────────────────────────────────────────────────────────────────────────────────
-# New installs write product state under ~/.codewhale/. Existing ~/.deepseek/
-# files are still read as compatibility fallbacks when the .codewhale file is
+# New installs write product state under ~/.ghosty/. Existing ~/.deepseek/
+# files are still read as compatibility fallbacks when the .ghosty file is
 # absent.
-skills_dir = "~/.codewhale/skills"
-mcp_config_path = "~/.codewhale/mcp.json"
-notes_path = "~/.codewhale/notes.txt"
+skills_dir = "~/.ghosty/skills"
+mcp_config_path = "~/.ghosty/mcp.json"
+notes_path = "~/.ghosty/notes.txt"
 
 # Anchors the native memory store. The filename itself is not written: under
 # the Native backend (the only backend) the store is re-rooted to
 # `<parent-of-this-path>/memory/global/MEMORY.md`. With the default below that
-# resolves to `~/.codewhale/memory/global/MEMORY.md` (plus workspace-scoped
+# resolves to `~/.ghosty/memory/global/MEMORY.md` (plus workspace-scoped
 # files and a rebuildable SQLite FTS5 index). See docs/MEMORY.md.
-memory_path = "~/.codewhale/memory.md"
+memory_path = "~/.ghosty/memory.md"
 
-# instructions = ["./AGENTS.md", "~/.codewhale/global.md"]
+# instructions = ["./AGENTS.md", "~/.ghosty/global.md"]
 #
 # Optional list of additional instruction files concatenated into the
 # system prompt in declared order (#454). Useful for layering
@@ -176,7 +176,7 @@ memory_path = "~/.codewhale/memory.md"
 # is expanded so `~` and env vars work; missing files are skipped with
 # a tracing warning. Files are capped at 100 KiB per entry.
 #
-# Project-level config (.codewhale/config.toml in the workspace) replaces
+# Project-level config (.ghosty/config.toml in the workspace) replaces
 # the user-level array wholesale rather than merging — list `~/global.md`
 # inside the project array if you want both. An explicit empty array
 # (`instructions = []`) clears the user list for the current repo.
@@ -215,15 +215,15 @@ memory_path = "~/.codewhale/memory.md"
 # that a session already running re-checks before it sends anything. Every
 # later run re-reads this key and re-asserts that tombstone, so it stands for
 # as long as the `false` does — and nothing outranks it, not `--telemetry true`
-# and not `CODEWHALE_TELEMETRY=1`. Turning telemetry back on means writing
+# and not `GHOSTY_TELEMETRY=1`. Turning telemetry back on means writing
 # `telemetry = true` here.
 #
 # The environment variable and the flag are different: they stop the run and
 # erase nothing, so a harness that disables telemetry for one command does not
 # discard the machine owner's install id and dry-run records.
 #
-#   codewhale config set telemetry false     # opt out: stops it and erases state
-#   CODEWHALE_TELEMETRY=0 codewhale          # kill switch: stops it, erases nothing
+#   ghosty config set telemetry false     # opt out: stops it and erases state
+#   GHOSTY_TELEMETRY=0 ghosty          # kill switch: stops it, erases nothing
 #
 # What is never collected: prompts, completions, tool arguments, diffs, file
 # contents, filenames, paths, git remotes, repo or branch names, memory
@@ -233,14 +233,14 @@ memory_path = "~/.codewhale/memory.md"
 # screenshots, or location. The complete schema is `docs/TELEMETRY.md`, and a
 # test asserts this file and the serializer agree.
 #
-# A repo-local `.codewhale/config.toml` can set neither key: someone else's
+# A repo-local `.ghosty/config.toml` can set neither key: someone else's
 # repository cannot turn your telemetry on or aim it at a host of their choosing.
 # telemetry = false
 
 # Where batches are POSTed. Leaving this unset selects the shipped default,
 # the first-party ingest service:
 #
-#   https://telemetry.codewhale.net/v1/telemetry
+#   https://telemetry.ghosty.net/v1/telemetry
 #
 # That default is only ever consulted for a session that is already enabled —
 # it decides where a batch goes, never whether one exists. Nothing is sent
@@ -253,14 +253,14 @@ memory_path = "~/.codewhale/memory.md"
 #
 # The empty string is the local dry-run sink: batches are serialized exactly as
 # a real endpoint would see them, appended to
-# `$CODEWHALE_HOME/telemetry/dryrun.jsonl`, and no HTTP client is ever
+# `$GHOSTY_HOME/telemetry/dryrun.jsonl`, and no HTTP client is ever
 # constructed. Read that file to see precisely what would have been sent.
-# `CODEWHALE_TELEMETRY_ENDPOINT` overrides this file, and setting it to the
+# `GHOSTY_TELEMETRY_ENDPOINT` overrides this file, and setting it to the
 # empty string means the same "contact nobody".
 #
 # `https://` is required; plain `http://` is accepted only for loopback, and no
 # environment variable overrides that refusal.
-# telemetry_endpoint = "https://telemetry.codewhale.net/v1/telemetry"
+# telemetry_endpoint = "https://telemetry.ghosty.net/v1/telemetry"
 
 # ─────────────────────────────────────────────────────────────────────────────────
 # Security
@@ -273,7 +273,7 @@ sandbox_mode = "workspace-write" # read-only | workspace-write | danger-full-acc
 # network. Default false: being allowed to edit this repository is not a
 # reason to be allowed to open outbound connections, so `curl`, package
 # installs, and `git fetch` are denied by the OS sandbox unless you opt in.
-# When a command is denied, Codewhale offers an elevation prompt that grants
+# When a command is denied, Ghosty offers an elevation prompt that grants
 # network for that call only; set this to `true` to grant it for the whole
 # session instead. `danger-full-access` and `yolo` are unsandboxed and
 # unaffected by this key. Note that on platforms with no OS sandbox backend
@@ -282,24 +282,24 @@ sandbox_mode = "workspace-write" # read-only | workspace-write | danger-full-acc
 # sandbox_network_access = false
 
 # Which other agents' instruction files to import as project instructions.
-# Empty by default. Codewhale reads AGENTS.md (the cross-agent standard) and
-# its own .codewhale/instructions.md without being asked; a CLAUDE.md,
+# Empty by default. Ghosty reads AGENTS.md (the cross-agent standard) and
+# its own .ghosty/instructions.md without being asked; a CLAUDE.md,
 # .cursorrules, or .github/copilot-instructions.md written as law for a
-# different tool is not treated as law here until you say so. Codewhale's own
+# different tool is not treated as law here until you say so. Ghosty's own
 # files always outrank anything imported.
 # Accepts: "claude", "cursor", "cline", "windsurf", "gemini", "copilot",
-# "muse", or "all". Env: CODEWHALE_PROJECT_INSTRUCTION_IMPORTS (comma-separated).
+# "muse", or "all". Env: GHOSTY_PROJECT_INSTRUCTION_IMPORTS (comma-separated).
 # project_instruction_imports = ["claude"]
 #
 # Everything that reaches the model as standing project instruction authority —
 # the repository-root -> workspace AGENTS.md chain, the global fallback layer,
-# .codewhale/rules/*.md, and any imported foreign files — shares one 48 KiB
+# .ghosty/rules/*.md, and any imported foreign files — shares one 48 KiB
 # aggregate budget. Instructions claim it first and are trimmed from the
 # broadest scope inward, so the nearest-scope file is the last thing dropped.
 # prompt_suggestion = true  # opt-in: show ghost-text follow-up question in composer after each turn
 
 # Optional tab/window title shown as `[title] …` in front of the terminal
-# window title (the `Codewhale` / `reasoning…` / `using tool…` / `done`
+# window title (the `Ghosty` / `reasoning…` / `using tool…` / `done`
 # states). Multi-window setups can give each workspace its own `--config`
 # file (or profile) so alt-tabbed sessions are identifiable at a glance.
 # The `/title` command overrides this per session; `/config title … --save`
@@ -335,7 +335,7 @@ sandbox_mode = "workspace-write" # read-only | workspace-write | danger-full-acc
 # uses the same lock as approval-card appends, and atomically replaces the file.
 # `/config ask-rules` remains a compatibility entry to the same list.
 #
-# Example ~/.codewhale/permissions.toml:
+# Example ~/.ghosty/permissions.toml:
 #
 # [[rules]]
 # tool = "exec_shell"
@@ -421,7 +421,7 @@ sandbox_mode = "workspace-write" # read-only | workspace-write | danger-full-acc
 #
 # prefer_bwrap = false  # default — use Landlock only
 #
-# Env override: CODEWHALE_PREFER_BWRAP=true
+# Env override: GHOSTY_PREFER_BWRAP=true
 # Legacy alias (deprecated until 0.10.0): DEEPSEEK_PREFER_BWRAP=true
 #
 # With prefer_bwrap = true, the sandbox gets a private /dev and /proc plus a
@@ -529,7 +529,7 @@ max_subagents = 10 # optional (default 64, clamped to 1-128)
 # model = "deepseek-v4-pro"
 # [providers.deepseek.auth] # provider-scoped auth source metadata; command execution lands in a follow-up slice
 # source = "command"
-# command = ["secret-tool", "lookup", "service", "codewhale-deepseek"]
+# command = ["secret-tool", "lookup", "service", "ghosty-deepseek"]
 # timeout_ms = 2000
 # insecure_skip_tls_verify = true # last resort for private gateways; prefer SSL_CERT_FILE
 
@@ -612,7 +612,7 @@ max_subagents = 10 # optional (default 64, clamped to 1-128)
 # mode = "token-plan-cn"               # China cluster
 # mode = "token-plan-ams"              # Europe cluster
 # mode = "pay-as-you-go"               # standard API / sk- keys
-# TTS aliases are also accepted by `codewhale speech`: tts, voice-design, voice-clone
+# TTS aliases are also accepted by `ghosty speech`: tts, voice-design, voice-clone
 # TTS model IDs: mimo-v2.5-tts, mimo-v2.5-tts-voicedesign, mimo-v2.5-tts-voiceclone, mimo-v2-tts
 
 # Novita AI-hosted inference (https://novita.ai)
@@ -664,8 +664,8 @@ max_subagents = 10 # optional (default 64, clamped to 1-128)
 # context_window = 262144                    # manually cap k3 to the Moderato/256K window
 # context_window = 1048576                   # Allegretto+ only; do not claim an unavailable entitlement
 # Alternatively use model = "k3-256k" with context_window = 262144 for the fixed 256K route.
-# Omit context_window to keep Codewhale's safe 262144-token bare-k3 baseline.
-# `k3[1m]` is a Claude Code-only convention, not an API model ID; Codewhale rejects it.
+# Omit context_window to keep Ghosty's safe 262144-token bare-k3 baseline.
+# `k3[1m]` is a Claude Code-only convention, not an API model ID; Ghosty rejects it.
 # Kimi Code K2.7 remains available to all members as model = "kimi-for-coding".
 # Kimi OAuth is not supported. Legacy auth_mode = "kimi_oauth" fails closed
 # to the API-key guidance above without probing Kimi CLI credential files.
@@ -767,7 +767,7 @@ max_subagents = 10 # optional (default 64, clamped to 1-128)
 # OpenCode Zen (https://opencode.ai/docs/zen/)
 # Model-aware gateway: GPT models use Responses, Claude/Qwen use Anthropic
 # Messages, and DeepSeek/MiniMax/GLM/Kimi/Grok/free models use Chat Completions.
-# Gemini uses a Google-specific protocol that Codewhale does not implement and
+# Gemini uses a Google-specific protocol that Ghosty does not implement and
 # therefore fails closed instead of being sent with the wrong request shape.
 # Env vars: OPENCODE_ZEN_API_KEY (preferred), OPENCODE_API_KEY,
 # OPENCODE_ZEN_BASE_URL, OPENCODE_ZEN_MODEL
@@ -796,9 +796,9 @@ max_subagents = 10 # optional (default 64, clamped to 1-128)
 #
 # Auth modes:
 #   api_key (default) — console.x.ai pay-per-use key via api_key / XAI_API_KEY / keyring
-#   oauth             — `codewhale auth xai-device` uses Codewhale-owned storage.
+#   oauth             — `ghosty auth xai-device` uses Ghosty-owned storage.
 #                       Reading an existing Grok CLI file requires explicit
-#                       `codewhale auth external-consent --provider xai --mode read-only`.
+#                       `ghosty auth external-consent --provider xai --mode read-only`.
 [providers.xai]
 # api_key = "YOUR_XAI_API_KEY"
 # auth_mode = "oauth"                      # or "device_code" / "grok_cli"
@@ -875,8 +875,8 @@ max_subagents = 10 # optional (default 64, clamped to 1-128)
 # ─────────────────────────────────────────────────────────────────────────────────
 # OpenAI Codex (ChatGPT) Provider — EXPERIMENTAL
 # Run `codex login`, then explicitly grant read-only access to that exact file:
-#   codewhale auth external-consent --provider openai-codex --mode read-only
-# Codewhale never refreshes or rewrites the Codex CLI file. No API key is
+#   ghosty auth external-consent --provider openai-codex --mode read-only
+# Ghosty never refreshes or rewrites the Codex CLI file. No API key is
 # stored here. Talks to the OpenAI Responses API at /codex/responses.
 # Env var aliases: OPENAI_CODEX_ACCESS_TOKEN / CODEX_ACCESS_TOKEN (token override),
 #   OPENAI_CODEX_BASE_URL / CODEX_BASE_URL, OPENAI_CODEX_MODEL / CODEX_MODEL,
@@ -948,7 +948,7 @@ max_subagents = 10 # optional (default 64, clamped to 1-128)
 # Env-var overrides:
 #   DEEPSEEK_SEARCH_PROVIDER → search.provider
 #   DEEPSEEK_SEARCH_API_KEY  → search.api_key
-#   CODEWHALE_SEARCH_BASE_URL → search.base_url
+#   GHOSTY_SEARCH_BASE_URL → search.base_url
 #   DEEPSEEK_SEARCH_BASE_URL  → search.base_url (legacy alias)
 #   METASO_API_KEY           → metaso key fallback
 #   BAIDU_SEARCH_API_KEY     → baidu key fallback
@@ -979,7 +979,7 @@ max_subagents = 10 # optional (default 64, clamped to 1-128)
 # deny = []
 # proxy = ["github.com", ".githubusercontent.com"]
 # proxy_fake_ip_cidrs = ["198.18.0.0/15"] # requires both matching host and address
-# audit = true            # one line per call to ~/.codewhale/audit.log
+# audit = true            # one line per call to ~/.ghosty/audit.log
 
 # ─────────────────────────────────────────────────────────────────────────────────
 # Verifier preview (#2093)
@@ -1039,9 +1039,9 @@ max_subagents = 10 # optional (default 64, clamped to 1-128)
 # be asked once and can persist) before running it.
 #
 # [skills]
-# registry_url = "https://raw.githubusercontent.com/Hmbown/deepseek-skills/main/index.json"
+# registry_url = "https://raw.githubusercontent.com/blissito/ghostycode/main/index.json"
 # max_install_size_bytes = 5_242_880
-# scan_codewhale_only = false # true: ignore Claude/OpenCode/Cursor/agentskills.io skill dirs
+# scan_ghosty_only = false # true: ignore Claude/OpenCode/Cursor/agentskills.io skill dirs
 
 # ─────────────────────────────────────────────────────────────────────────────────
 # TUI
@@ -1158,7 +1158,7 @@ exponential_base = 2.0
 # There is no per-call `raw = true` escape. It was documented here, but
 # `raw = true` on a tool call does NOT bypass routing: the adaptive router
 # ignores it, and it is honoured only under the legacy
-# `CODEWHALE_CLASSIC_OUTPUT_ROUTING` switch. No tool advertises it.
+# `GHOSTY_CLASSIC_OUTPUT_ROUTING` switch. No tool advertises it.
 #
 # [workshop]
 # large_output_threshold_tokens = 4096
@@ -1175,7 +1175,7 @@ exponential_base = 2.0
 # ─────────────────────────────────────────────────────────────────────────────────
 # Harness Profiles (preview schema; runtime consumption follows later)
 # ─────────────────────────────────────────────────────────────────────────────────
-# Harness profiles let future Codewhale runtime slices select model-specific
+# Harness profiles let future Ghosty runtime slices select model-specific
 # prompt, context, tool, and subagent posture. v0.9 parses, validates, and can
 # resolve profiles for tests/status plumbing, but normal Agent and Workflow
 # runs do not silently promote or mutate behavior from these profiles yet.
@@ -1246,11 +1246,11 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # per event (RuntimeEventEnvelope schema), appended and flushed on every
 # emit; seq is monotonic per file and recovers from the last line on open.
 # UNCOMMENT `path` TO ENABLE — unset/empty = OFF = behavior unchanged.
-# Fires for interactive TUI sessions AND headless `codewhale exec` runs.
+# Fires for interactive TUI sessions AND headless `ghosty exec` runs.
 # See docs/CONFIGURATION.md → Lifecycle Outbox for the file contract.
 # [lifecycle_outbox]
-# path = "~/.codewhale/notifications/outbox.jsonl"
-# webhook_url = "https://example.com/hooks/codewhale" # optional: POST {"at", "event"} JSON per event
+# path = "~/.ghosty/notifications/outbox.jsonl"
+# webhook_url = "https://example.com/hooks/ghosty" # optional: POST {"at", "event"} JSON per event
 # webhook_token = ""            # optional: sent as `Authorization: Bearer <token>`
 #                               # delivery is best-effort: failures are logged and dropped
 
@@ -1270,7 +1270,7 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # Each turn the TUI takes a `pre-turn:<seq>` and `post-turn:<seq>` snapshot of
 # your workspace into a side-git repo at:
 #
-#     ~/.codewhale/snapshots/<project_hash>/<worktree_hash>/.git
+#     ~/.ghosty/snapshots/<project_hash>/<worktree_hash>/.git
 #
 # Your own `.git` is never touched — `--git-dir` and `--work-tree` are always
 # set together when shelling out to git. Use `/restore N` (slash command) or
@@ -1287,7 +1287,7 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # max_workspace_gb = 2  # Snapshots self-disable on first init when the
 #                         # non-excluded workspace exceeds this size in GB
 #                         # (v0.8.32). Default 2 GB protects against running
-#                         # codewhale in directories with hundreds of GB
+#                         # ghosty in directories with hundreds of GB
 #                         # of datasets / model weights / docker dumps where
 #                         # `git add -A` would hang the TUI for hours. Set
 #                         # to 0 to disable the cap (v0.8.31 behaviour);
@@ -1356,7 +1356,7 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # Configure as `[[hooks.hooks]]` under a `[hooks]` table.
 #
 # SCOPE: hooks are a TUI runtime feature. They fire from the interactive TUI
-# and the engine turn loop it drives. `codewhale exec`, the CLI subcommands,
+# and the engine turn loop it drives. `ghosty exec`, the CLI subcommands,
 # the app-server / ACP surfaces, and the `workflow` tool do NOT fire them.
 #
 # Available events (all 11): session_start, session_end, message_submit,
@@ -1365,7 +1365,7 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # See docs/HOOKS.md for the per-event payload, env var, and steering contract.
 #
 # `message_submit`, `tool_call_before`, and `shell_env` are the only events
-# whose result can change what Codewhale does. The rest are observer-only —
+# whose result can change what Ghosty does. The rest are observer-only —
 # which means their RESULT is ignored, not that the command is harmless. Every
 # hook is an arbitrary shell command running with your credentials.
 #
@@ -1401,7 +1401,7 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # `shell_env` values are TRANSMITTED to it. Later hooks override
 # earlier ones. Use this for ephemeral credentials, per-skill PATH adjustments,
 # or short-lived tokens. The resolved KEY names (NEVER values) are written to
-# `~/.codewhale/audit.log` so each session can be reconciled later. Hook
+# `~/.ghosty/audit.log` so each session can be reconciled later. Hook
 # failure / timeout simply contributes no vars — it does not abort the shell
 # call.
 #
@@ -1411,7 +1411,7 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 #
 # [[hooks.hooks]]
 # event = "session_start"
-# command = "echo 'Codewhale session started'"
+# command = "echo 'Ghosty session started'"
 #
 # # Inject ephemeral creds into every shell call. Output one
 # # KEY=VALUE per line on stdout (export prefix optional).
@@ -1429,7 +1429,7 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # [[hooks.hooks]]
 # name = "subagent-audit"
 # event = "subagent_complete"
-# command = "~/.codewhale/hooks/subagent-audit.sh"
+# command = "~/.ghosty/hooks/subagent-audit.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────────
 # Runtime API (`deepseek serve --http`) (#561)
@@ -1466,8 +1466,8 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # JSON `ToolResult` (`{"content": "...", "success": true}`) on **stdout**.
 #
 # [tools]
-# # Custom plugin directory (defaults to `~/.codewhale/tools/`)
-# plugin_dir = "~/.codewhale/tools"
+# # Custom plugin directory (defaults to `~/.ghosty/tools/`)
+# plugin_dir = "~/.ghosty/tools"
 #
 # [tools.overrides]
 # # Disable a tool entirely — removes it from the model-visible catalog.
@@ -1483,12 +1483,12 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # "fetch_url" = { type = "script", path = "cached-fetch.sh", args = ["--ttl", "300"] }
 
 # ──────────── Enterprise example: audit-logging exec_shell wrapper ──────────────
-# Drop `audit-exec-shell.sh` in `~/.codewhale/tools/` and enable with:
+# Drop `audit-exec-shell.sh` in `~/.ghosty/tools/` and enable with:
 #
 # [tools.overrides]
 # "exec_shell" = { type = "script", path = "audit-exec-shell.sh" }
 #
-# The wrapper logs every request to `~/.codewhale/audit/exec_shell.log`, then
+# The wrapper logs every request to `~/.ghosty/audit/exec_shell.log`, then
 # delegates to your own approved shell executor. Do not pipe the raw JSON
 # request into `sh -s`; parse the command field and enforce your policy first.
 #
@@ -1497,7 +1497,7 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # # name: exec_shell
 # # description: Audit-logging wrapper for exec_shell
 # # approval: required
-# LOGDIR="${HOME}/.codewhale/audit"
+# LOGDIR="${HOME}/.ghosty/audit"
 # mkdir -p "$LOGDIR"
 # LOGFILE="$LOGDIR/exec_shell.log"
 # input=$(cat)
@@ -1570,7 +1570,7 @@ default_text_model = "deepseek-ai/deepseek-v4-pro"
 # # Built-in profiles are always available: manager, operator, scout, builder,
 # # reviewer, verifier, synthesizer, general. User-defined profiles under
 # # [fleet.profiles] override or extend the built-in set by id. Precedence
-# # is Workspace (.codewhale/agents/*.toml) > Config ([fleet.profiles]) > BuiltIn.
+# # is Workspace (.ghosty/agents/*.toml) > Config ([fleet.profiles]) > BuiltIn.
 # # See /fleet setup for an in-app profile-authoring wizard.
 # [fleet.profiles.ci-linter]
 # slot = "verifier"

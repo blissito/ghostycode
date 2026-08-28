@@ -1,13 +1,13 @@
 # HarmonyOS and OpenHarmony
 
-This page covers Codewhale on HarmonyOS PC and OpenHarmony cross-build setups.
+This page covers Ghosty on HarmonyOS PC and OpenHarmony cross-build setups.
 
 ## Support Tier
 
-| Target | Codewhale tier | CI coverage | Distribution |
+| Target | Ghosty tier | CI coverage | Distribution |
 | --- | --- | --- | --- |
 | HarmonyOS PC with a glibc-compatible userspace | Tier 1 Linux ARM64 runtime | Covered by the Linux ARM64 release build | npm and release binaries |
-| `aarch64-unknown-linux-ohos` (OpenHarmony) | Tier 2 cross-build target | `codewhale-tui` is checked with a real OpenHarmony native SDK/sysroot | Build from source; no prebuilt release asset |
+| `aarch64-unknown-linux-ohos` (OpenHarmony) | Tier 2 cross-build target | `ghosty-tui` is checked with a real OpenHarmony native SDK/sysroot | Build from source; no prebuilt release asset |
 
 Tier 2 means every relevant source change is compile-checked, but maintainers do
 not promise a release binary or full device-level runtime testing. The CI job
@@ -21,13 +21,13 @@ HarmonyOS PC can use the normal Linux ARM64 package when its userspace is
 glibc-compatible:
 
 ```bash
-npm i -g codewhale
-codewhale --version
+npm i -g ghosty
+ghosty --version
 ```
 
-You can also download `codewhale-linux-arm64` and `codew-linux-arm64` from the
+You can also download `ghosty-linux-arm64` and `ghosty-tui-linux-arm64` from the
 GitHub Releases page and place both binaries on `PATH`. The
-`codewhale-tui-linux-arm64` filename is retained only for legacy updater
+`ghosty-tui-linux-arm64` filename is retained only for legacy updater
 compatibility and is not a third command.
 
 ## Cross-Compiling To OpenHarmony
@@ -42,7 +42,7 @@ On Windows PowerShell:
 $env:OHOS_NATIVE_SDK="<path-to-openharmony-native-sdk>"
 . .\scripts\ohos-env.ps1
 rustup target add aarch64-unknown-linux-ohos
-cargo build --target aarch64-unknown-linux-ohos -p codewhale-cli
+cargo build --target aarch64-unknown-linux-ohos -p ghosty-cli
 ```
 
 On Linux or macOS:
@@ -51,7 +51,7 @@ On Linux or macOS:
 export OHOS_NATIVE_SDK=/path/to/openharmony/native
 . ./scripts/ohos-env.sh
 rustup target add aarch64-unknown-linux-ohos
-cargo build --target aarch64-unknown-linux-ohos -p codewhale-cli
+cargo build --target aarch64-unknown-linux-ohos -p ghosty-cli
 ```
 
 The setup scripts export Cargo's target-specific `linker`, `AR`, `CC`, `CXX`,
@@ -111,7 +111,7 @@ Release prep runs a no-SDK dependency check:
 ```
 
 The guard asserts the Windows final-link wrapper contract, proves that OHOS
-activates the `rquickjs-sys` bindgen feature, resolves the `codewhale-tui`
+activates the `rquickjs-sys` bindgen feature, resolves the `ghosty-tui`
 dependency graph for `aarch64-unknown-linux-ohos`, and fails if unsupported
 host/UI crates re-enter that graph: `nix` 0.28/0.29, `portable-pty`, `starlark`,
 `arboard`, or `keyring`. This no-SDK check does not replace a real SDK/sysroot

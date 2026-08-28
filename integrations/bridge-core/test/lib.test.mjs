@@ -59,12 +59,12 @@ test("stripGroupPrefix supports direct chat types and prefixed group text", () =
 });
 
 test("commands map common actions while menu/start stay opt in", () => {
-  assert.deepEqual(parseCommand("/allow@CodeWhaleBot ap_1 remember", { stripBotMention: true }), {
+  assert.deepEqual(parseCommand("/allow@GhostyCodeBot ap_1 remember", { stripBotMention: true }), {
     name: "allow",
     args: "ap_1 remember"
   });
-  assert.deepEqual(parseCommand("/allow@CodeWhaleBot ap_1 remember"), {
-    name: "allow@codewhalebot",
+  assert.deepEqual(parseCommand("/allow@GhostyCodeBot ap_1 remember"), {
+    name: "allow@ghostybot",
     args: "ap_1 remember"
   });
   assert.deepEqual(commandAction(parseCommand("/status")), { kind: "status" });
@@ -103,7 +103,7 @@ test("state/message/runtime helpers preserve bridge behavior", () => {
 });
 
 test("ThreadStore supports chat state, message dedupe, and action tokens", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "codewhale-bridge-core-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "ghosty-bridge-core-"));
   try {
     const statePath = path.join(dir, "thread-map.json");
     const store = await ThreadStore.open(statePath, {
@@ -196,7 +196,7 @@ test("createRuntimeClient sends bearer auth and surfaces runtime errors", async 
 });
 
 test("ThreadStore batches rapid saves into coalesced durable writes", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "codewhale-bridge-core-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "ghosty-bridge-core-"));
   try {
     const statePath = path.join(dir, "thread-map.json");
     const store = await ThreadStore.open(statePath);
@@ -223,7 +223,7 @@ test("ThreadStore batches rapid saves into coalesced durable writes", async () =
 });
 
 test("ThreadStore persists numeric cursors", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "codewhale-bridge-core-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "ghosty-bridge-core-"));
   try {
     const statePath = path.join(dir, "thread-map.json");
     const store = await ThreadStore.open(statePath);

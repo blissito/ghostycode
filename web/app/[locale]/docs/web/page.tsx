@@ -8,13 +8,13 @@ import { buildPageMetadata } from "@/lib/page-meta";
  * code-owned, so the dictionaries carry `{token}`s rather than the literals.
  */
 const CODE_SPANS: Record<string, string> = {
-  webCommand: "codewhale web",
+  webCommand: "ghosty web",
   loopbackHost: "127.0.0.1",
   defaultUrl: "http://127.0.0.1:7878",
-  portExample: "codewhale web --port 8788",
+  portExample: "ghosty web --port 8788",
   portFlag: "--port",
   hostFlag: "--host",
-  mobileCommand: "codewhale app-server --mobile",
+  mobileCommand: "ghosty app-server --mobile",
   httpFlag: "--http",
 };
 

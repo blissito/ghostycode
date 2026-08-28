@@ -70,7 +70,7 @@ use output::{
     take_delta_from_buffer,
 };
 
-const READONLY_ENV_MARKER: &str = "CODEWHALE_INTERNAL_READONLY_ARGV";
+const READONLY_ENV_MARKER: &str = "GHOSTY_INTERNAL_READONLY_ARGV";
 
 #[cfg(unix)]
 static PENDING_PERSISTENT_PROCESS_GROUPS: std::sync::OnceLock<
@@ -113,7 +113,7 @@ pub(crate) fn abort_pending_persistent_process_groups_for_exit() {
         if let Ok(process_group_id) = i32::try_from(process_group_id) {
             // SAFETY: the id was captured from a child spawned with
             // `process_group(0)`. A negative pid targets that child's process
-            // group, never Codewhale's own group.
+            // group, never Ghosty's own group.
             unsafe {
                 libc::kill(-process_group_id, libc::SIGKILL);
             }
@@ -296,7 +296,7 @@ impl ShellCompletionEvidence {
         }
 
         serde_json::json!({
-            "schema": "codewhale.shell_completion.evidence.v1",
+            "schema": "ghosty.shell_completion.evidence.v1",
             "task_id": self.event.task_id,
             "command": self.event.command,
             "status": format!("{:?}", self.event.status),
@@ -2093,7 +2093,7 @@ impl ShellManager {
 
         // A new Unix process group that inherits the terminal is not its
         // foreground owner. Letting it read stdin triggers SIGTTIN; sharing
-        // Codewhale's group instead would make cooked-mode Ctrl+C terminate
+        // Ghosty's group instead would make cooked-mode Ctrl+C terminate
         // both parent and child. Until this path owns a complete POSIX job-
         // control lease, fail closed before spawning. Persistent PTY tools
         // already provide a safe interactive lane without taking over the
@@ -2903,7 +2903,7 @@ impl ShellManager {
         Ok(results)
     }
 
-    /// Transfer every still-running `persist:true` process out of Codewhale's
+    /// Transfer every still-running `persist:true` process out of Ghosty's
     /// ownership. This is called only by the real headless exec host after the
     /// enclosing turn has completed successfully.
     #[cfg(unix)]
@@ -4780,7 +4780,7 @@ impl ToolSpec for BashTool {
             }
             if !persistent_services_enabled_for(context) {
                 return Err(ToolError::not_available(
-                    "persistent background services (persist:true) are only available on Unix in the real headless `codewhale exec` host under an explicit danger-full-access / full shell authority. They are rejected in interactive sessions, desktop/app-server hosts, Fleet/sub-agents, restricted or external sandboxes, and TTY/interactive/stdin modes.",
+                    "persistent background services (persist:true) are only available on Unix in the real headless `ghosty exec` host under an explicit danger-full-access / full shell authority. They are rejected in interactive sessions, desktop/app-server hosts, Fleet/sub-agents, restricted or external sandboxes, and TTY/interactive/stdin modes.",
                 ));
             }
         }
@@ -5216,7 +5216,7 @@ impl ToolSpec for BashTool {
                     }
                 } else if persist && result.status == ShellStatus::Running {
                     format!(
-                        "Persistent service staged: {task_id_str}. Probe readiness with a separate command. Codewhale will transfer ownership only if this exec finishes successfully."
+                        "Persistent service staged: {task_id_str}. Probe readiness with a separate command. Ghosty will transfer ownership only if this exec finishes successfully."
                     )
                 } else if result.status == ShellStatus::Running {
                     let completion_contract = if context.owner_agent_id.is_some() {
@@ -5230,7 +5230,7 @@ impl ToolSpec for BashTool {
                         )
                     } else {
                         format!(
-                            "Background task started: {task_id_str}\n\nReturns immediately; {completion_contract} Codewhale terminates this task when the session exits. If a service must survive a successful headless exec, start it with background=true and persist=true. Keep working; call Bash action=\"wait\" task_id=\"{task_id_str}\" at a true dependency to block until completion or timeout."
+                            "Background task started: {task_id_str}\n\nReturns immediately; {completion_contract} Ghosty terminates this task when the session exits. If a service must survive a successful headless exec, start it with background=true and persist=true. Keep working; call Bash action=\"wait\" task_id=\"{task_id_str}\" at a true dependency to block until completion or timeout."
                         )
                     }
                 } else if result.status == ShellStatus::Killed && was_cancelled {

@@ -27,14 +27,14 @@ use crate::{
     },
 };
 
-const PRODUCTION_CONTROL_PLANE: &str = "https://api.codewhale.net/";
+const PRODUCTION_CONTROL_PLANE: &str = "https://api.ghosty.net/";
 const ENROLLMENT_SECRET_SLOT: &str = "cwc-remote-control-enrollment-v1";
 /// Machine-stable device identity. It outlives individual enrollments so the
 /// control plane can fold every folder enrolled from this terminal into one
 /// computer instead of one row per `/rc`.
 const DEVICE_IDENTITY_SECRET_SLOT: &str = "cwc-remote-control-device-v1";
 /// The only web origin whose session links the terminal will surface or open.
-const APP_ORIGIN_HOST: &str = "app.codewhale.net";
+const APP_ORIGIN_HOST: &str = "app.ghosty.net";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(25);
 const SYNC_INTERVAL: Duration = Duration::from_millis(1_200);
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
@@ -49,7 +49,7 @@ const MIN_TRUNCATED_MESSAGE_CHARS: usize = 32;
 const MAX_REMOTE_ERROR_MESSAGE_BYTES: usize = 4 * 1024;
 const RUNTIME_UPLOAD_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const RUNTIME_UPLOAD_MAX_BACKOFF: Duration = Duration::from_secs(5);
-const RUNTIME_CHAT_RELAY_PROTOCOL: &str = "codewhale.runtime-chat-relay.v1";
+const RUNTIME_CHAT_RELAY_PROTOCOL: &str = "ghosty.runtime-chat-relay.v1";
 const RUNTIME_CHAT_CATALOG_TIMESTAMP: &str = "1970-01-01T00:00:00Z";
 const CAPABILITIES: &[&str] = &["evidence-ledger", "fim", "git", "shell"];
 /// How long an aborted or failed relay keeps local input locked. Matches the
@@ -142,7 +142,7 @@ pub struct RemoteStart {
     pub runtime_commit: String,
     /// Directory that holds the crash-recoverable delivery journal. `None`
     /// runs memory-only and is reserved for tests; production callers must
-    /// always provide a private directory under the Codewhale home.
+    /// always provide a private directory under the Ghosty home.
     pub journal_dir: Option<PathBuf>,
     /// Observed `owner/name` from `git remote get-url origin`, when the folder
     /// is a Git checkout. This is a display receipt, never a path or GitHub App
@@ -203,13 +203,13 @@ pub struct RemoteAttachment {
 
 /// Web links the control plane advertises for the attached session. Both are
 /// optional: an older control plane omits them and the terminal then simply
-/// shows no link. Links are validated against the Codewhale app origin before
+/// shows no link. Links are validated against the Ghosty app origin before
 /// they are ever displayed or opened; the terminal never invents one.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RemoteLinks {
-    /// `https://app.codewhale.net/session?run=<runId>` for the live run.
+    /// `https://app.ghosty.net/session?run=<runId>` for the live run.
     pub run_url: Option<String>,
-    /// `https://app.codewhale.net/settings?section=workspaces` for this computer.
+    /// `https://app.ghosty.net/settings?section=workspaces` for this computer.
     pub computer_url: Option<String>,
 }
 
@@ -368,7 +368,7 @@ fn runtime_journal_session_tag(session_id: &str) -> String {
 
 fn classic_recovery_turn_id(run_id: &str, lease_id: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale.classic-recovery-turn.v1\0");
+    hasher.update(b"ghosty.classic-recovery-turn.v1\0");
     hasher.update(run_id.as_bytes());
     hasher.update(b"\0");
     hasher.update(lease_id.as_bytes());
@@ -2898,7 +2898,7 @@ impl RemoteCommand {
 /// (the session itself travels separately as `sessionRef`).
 pub fn target_ref(workspace: &Path) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale-remote-target:v2\0");
+    hasher.update(b"ghosty-remote-target:v2\0");
     hasher.update(workspace.to_string_lossy().as_bytes());
     format!("target_{}", &bytes_to_hex(&hasher.finalize())[..32])
 }
@@ -2969,7 +2969,7 @@ fn runtime_chat_envelope(
 
 fn runtime_chat_catalog_source_event_id(run_id: &str, payload_fingerprint: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale.runtime-chat-catalog.v1\0");
+    hasher.update(b"ghosty.runtime-chat-catalog.v1\0");
     hasher.update(run_id.as_bytes());
     hasher.update(b"\0");
     hasher.update(payload_fingerprint.as_bytes());
@@ -3111,7 +3111,7 @@ fn projected_error_item_id(run_id: &str, turn_id: &str, code: &str) -> String {
 
 fn bounded_remote_error_message(error: &str) -> String {
     let without_nul = error.replace('\0', " ");
-    let redacted = codewhale_config::persistence::redact_secrets(&without_nul);
+    let redacted = ghosty_config::persistence::redact_secrets(&without_nul);
     let message = redacted.trim();
     if message.is_empty() {
         return "The local model turn failed.".to_string();
@@ -3726,7 +3726,7 @@ async fn enroll_device(
         control_plane_url(base, &["api", "runner", "device", "start"], &[])?,
         json!({
             "deviceId": device_id,
-            "deviceLabel": "Codewhale terminal",
+            "deviceLabel": "Ghosty terminal",
             "targetRef": start.target_ref,
             "targetLabel": start.workspace_label,
             "runtimeVersion": start.runtime_version,
@@ -3742,14 +3742,12 @@ async fn enroll_device(
         .get("interval")
         .and_then(Value::as_u64)
         .filter(|value| (1..=30).contains(value))
-        .ok_or_else(|| {
-            "Codewhale returned an invalid device authorization interval.".to_string()
-        })?;
+        .ok_or_else(|| "Ghosty returned an invalid device authorization interval.".to_string())?;
     let expires_in = value
         .get("expiresIn")
         .and_then(Value::as_u64)
         .filter(|value| (60..=1800).contains(value))
-        .ok_or_else(|| "Codewhale returned an invalid device authorization expiry.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid device authorization expiry.".to_string())?;
     validate_authorization_url(&verification_uri, &user_code)?;
     let _ = event_tx.send(RemoteEvent::Notice(format!(
         "Authorize this terminal at {verification_uri} (code {user_code})."
@@ -3770,7 +3768,7 @@ async fn enroll_device(
             .json(&json!({ "deviceCode": device_code }))
             .send()
             .await
-            .map_err(|_| "Remote-control authorization could not reach Codewhale.".to_string())?;
+            .map_err(|_| "Remote-control authorization could not reach Ghosty.".to_string())?;
         if response.status() == StatusCode::ACCEPTED {
             continue;
         }
@@ -3791,12 +3789,12 @@ fn enrollment_from_exchange(
     start: &RemoteStart,
 ) -> Result<LiveEnrollment, String> {
     if value.get("status").and_then(Value::as_str) != Some("approved") {
-        return Err("Codewhale returned an invalid runner credential.".to_string());
+        return Err("Ghosty returned an invalid runner credential.".to_string());
     }
     let record = value
         .get("enrollment")
         .filter(|value| value.is_object())
-        .ok_or_else(|| "Codewhale returned an invalid runner credential.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid runner credential.".to_string())?;
     let enrollment_id = opaque_field(record, "id")?;
     let account_ref = opaque_field(record, "userId")?;
     let returned_device = opaque_field(record, "deviceId")?;
@@ -3825,7 +3823,7 @@ fn enrollment_from_exchange(
         .and_then(|grant| grant.get("grantId"))
         .and_then(Value::as_str)
         .filter(|value| valid_opaque_ref(value))
-        .ok_or_else(|| "Codewhale returned no grant for this session.".to_string())?
+        .ok_or_else(|| "Ghosty returned no grant for this session.".to_string())?
         .to_string();
     Ok(LiveEnrollment {
         persisted: PersistedEnrollment {
@@ -3861,7 +3859,7 @@ async fn refresh_enrollment(
         }))
         .send()
         .await
-        .map_err(|_| "Remote-control credential refresh could not reach Codewhale.".to_string())?;
+        .map_err(|_| "Remote-control credential refresh could not reach Ghosty.".to_string())?;
     if matches!(
         response.status(),
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
@@ -3875,7 +3873,7 @@ async fn refresh_enrollment(
     let record = value
         .get("enrollment")
         .filter(|value| value.is_object())
-        .ok_or_else(|| "Codewhale returned an invalid refreshed credential.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid refreshed credential.".to_string())?;
     if record.get("id").and_then(Value::as_str) != Some(persisted.runner_enrollment_id.as_str())
         || record.get("userId").and_then(Value::as_str) != Some(persisted.account_ref.as_str())
         || record.get("deviceId").and_then(Value::as_str) != Some(persisted.device_id.as_str())
@@ -3885,7 +3883,7 @@ async fn refresh_enrollment(
             != Some(persisted.runtime_commit.as_str())
         || !exact_capabilities(record.get("capabilities"))
     {
-        return Err("Codewhale returned a mismatched refreshed credential.".to_string());
+        return Err("Ghosty returned a mismatched refreshed credential.".to_string());
     }
     Ok(LiveEnrollment {
         persisted,
@@ -4015,17 +4013,17 @@ fn parse_runner_connection(
         .filter(|record| {
             record.len() == 2 && record.contains_key("runner") && record.contains_key("attachment")
         })
-        .ok_or_else(|| "Codewhale returned an invalid runner attachment response.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid runner attachment response.".to_string())?;
     let runner = response
         .get("runner")
         .and_then(Value::as_object)
-        .ok_or_else(|| "Codewhale returned an invalid runner lease.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid runner lease.".to_string())?;
     let runner_id = runner
         .get("id")
         .and_then(Value::as_str)
         .filter(|value| valid_opaque_ref(value))
         .map(ToString::to_string)
-        .ok_or_else(|| "Codewhale returned an invalid runner lease.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid runner lease.".to_string())?;
     let runner_binding_matches = runner.get("userId").and_then(Value::as_str)
         == Some(enrollment.persisted.account_ref.as_str())
         && runner.get("deviceId").and_then(Value::as_str)
@@ -4040,7 +4038,7 @@ fn parse_runner_connection(
         && runner.get("active").and_then(Value::as_bool) == Some(true)
         && exact_capabilities(runner.get("capabilities"));
     if !runner_binding_matches {
-        return Err("Codewhale returned a runner lease for a different session.".to_string());
+        return Err("Ghosty returned a runner lease for a different session.".to_string());
     }
 
     let attachment = response
@@ -4055,36 +4053,34 @@ fn parse_runner_connection(
                 && record.contains_key("runtimeChatRelayProtocol")
                 && record.contains_key("runtimeChatRelayChallenge")
         })
-        .ok_or_else(|| "Codewhale returned an invalid session attachment.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid session attachment.".to_string())?;
     let run_id = attachment
         .get("runId")
         .and_then(Value::as_str)
         .filter(|value| valid_opaque_ref(value))
         .map(ToString::to_string)
-        .ok_or_else(|| "Codewhale returned an invalid attached run.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid attached run.".to_string())?;
     let workspace_id = attachment
         .get("workspaceId")
         .and_then(Value::as_str)
         .filter(|value| valid_opaque_ref(value))
         .map(ToString::to_string)
-        .ok_or_else(|| "Codewhale returned an invalid attached workspace.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid attached workspace.".to_string())?;
     let runtime_cursor = attachment
         .get("runtimeCursor")
         .and_then(Value::as_u64)
         .filter(|value| *value <= JS_MAX_SAFE_INTEGER)
-        .ok_or_else(|| "Codewhale returned an invalid runtime event cursor.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid runtime event cursor.".to_string())?;
     let snapshot_present = attachment
         .get("snapshotPresent")
         .and_then(Value::as_bool)
-        .ok_or_else(|| "Codewhale returned an invalid snapshot receipt.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid snapshot receipt.".to_string())?;
     let runtime_chat_relay_protocol = attachment
         .get("runtimeChatRelayProtocol")
         .and_then(Value::as_str)
         .filter(|value| *value == RUNTIME_CHAT_RELAY_PROTOCOL)
         .map(ToString::to_string)
-        .ok_or_else(|| {
-            "Codewhale returned an unsupported Runtime Chat relay protocol.".to_string()
-        })?;
+        .ok_or_else(|| "Ghosty returned an unsupported Runtime Chat relay protocol.".to_string())?;
     let runtime_chat_relay_challenge = attachment
         .get("runtimeChatRelayChallenge")
         .and_then(Value::as_str)
@@ -4095,7 +4091,7 @@ fn parse_runner_connection(
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
         })
         .map(ToString::to_string)
-        .ok_or_else(|| "Codewhale returned an invalid Runtime Chat relay challenge.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid Runtime Chat relay challenge.".to_string())?;
 
     let links = parse_remote_links(runner, &run_id);
 
@@ -4132,7 +4128,7 @@ fn parse_remote_links(runner: &serde_json::Map<String, Value>, run_id: &str) -> 
     }
 }
 
-/// Parse a web link and accept it only on the Codewhale app origin (or, in
+/// Parse a web link and accept it only on the Ghosty app origin (or, in
 /// debug builds only, a loopback development origin) with no credentials,
 /// port, or fragment — the same shape `validate_authorization_url` enforces.
 fn app_link_url(value: &str) -> Option<Url> {
@@ -4222,14 +4218,14 @@ async fn list_runs(
         .get("runs")
         .and_then(Value::as_array)
         .filter(|runs| runs.len() <= MAX_RUNS)
-        .ok_or_else(|| "Codewhale returned an invalid runner run list.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid runner run list.".to_string())?;
     runs.iter()
         .map(|run| {
             run.get("id")
                 .and_then(Value::as_str)
                 .filter(|value| valid_opaque_ref(value))
                 .map(ToString::to_string)
-                .ok_or_else(|| "Codewhale returned an invalid runner run.".to_string())
+                .ok_or_else(|| "Ghosty returned an invalid runner run.".to_string())
         })
         .collect()
 }
@@ -4264,7 +4260,7 @@ async fn list_commands(
         .get("commands")
         .and_then(Value::as_array)
         .filter(|commands| commands.len() <= MAX_COMMANDS)
-        .ok_or_else(|| "Codewhale returned an invalid command list.".to_string())?;
+        .ok_or_else(|| "Ghosty returned an invalid command list.".to_string())?;
     commands
         .iter()
         .map(|item| {
@@ -4272,12 +4268,12 @@ async fn list_commands(
                 .get("seq")
                 .and_then(Value::as_u64)
                 .filter(|value| *value > since)
-                .ok_or_else(|| "Codewhale returned an invalid command sequence.".to_string())?;
+                .ok_or_else(|| "Ghosty returned an invalid command sequence.".to_string())?;
             let command = item
                 .get("command")
                 .filter(|value| value.is_object())
                 .cloned()
-                .ok_or_else(|| "Codewhale returned an invalid typed command.".to_string())?;
+                .ok_or_else(|| "Ghosty returned an invalid typed command.".to_string())?;
             Ok(ListedCommand {
                 seq,
                 command,
@@ -4370,7 +4366,7 @@ fn parse_remote_command(value: &Value, expected_run_id: &str) -> Result<RemoteCo
                 // never downgrade into the permissive Work parser.
                 let prompt: RuntimeChatPrompt =
                     serde_json::from_value(value.clone()).map_err(|_| {
-                        "Codewhale sent an invalid Runtime Chat prompt contract.".to_string()
+                        "Ghosty sent an invalid Runtime Chat prompt contract.".to_string()
                     })?;
                 prompt.validate_shape()?;
                 if prompt.run_id != expected_run_id {
@@ -4402,7 +4398,7 @@ fn parse_remote_command(value: &Value, expected_run_id: &str) -> Result<RemoteCo
                         .all(|key| record.contains_key(*key))
             });
             if !exact_approval {
-                return Err("Codewhale sent an invalid approval contract.".to_string());
+                return Err("Ghosty sent an invalid approval contract.".to_string());
             }
             let gate = value
                 .get("gate")
@@ -4436,7 +4432,7 @@ fn parse_remote_command(value: &Value, expected_run_id: &str) -> Result<RemoteCo
                             && record.contains_key("runtimeThreadId")
                     })
                     .ok_or_else(|| {
-                        "Codewhale sent an invalid Runtime Chat interrupt contract.".to_string()
+                        "Ghosty sent an invalid Runtime Chat interrupt contract.".to_string()
                     })?;
                 if record.get("action").and_then(Value::as_str) != Some("interrupt") {
                     return Err("Runtime Chat supports only an exact turn interrupt.".to_string());
@@ -4480,7 +4476,7 @@ fn parse_remote_command(value: &Value, expected_run_id: &str) -> Result<RemoteCo
                         .all(|key| record.contains_key(*key))
             });
             if !exact_legacy_control {
-                return Err("Codewhale sent an invalid run-control contract.".to_string());
+                return Err("Ghosty sent an invalid run-control contract.".to_string());
             }
             let action = match value.get("action").and_then(Value::as_str) {
                 Some("interrupt") => RemoteControlRequest::Interrupt,
@@ -4499,7 +4495,7 @@ fn parse_remote_command(value: &Value, expected_run_id: &str) -> Result<RemoteCo
                 runtime_chat: None,
             })
         }
-        _ => Err("Codewhale sent an unsupported remote command.".to_string()),
+        _ => Err("Ghosty sent an unsupported remote command.".to_string()),
     }
 }
 
@@ -4552,15 +4548,15 @@ async fn public_request(
         .json(&body)
         .send()
         .await
-        .map_err(|_| "Remote control could not reach Codewhale.".to_string())?;
+        .map_err(|_| "Remote control could not reach Ghosty.".to_string())?;
     if !response.status().is_success() {
         let status = response.status();
         let excerpt = rejection_excerpt(response).await;
         return Err(match excerpt {
             Some(reason) => {
-                format!("Codewhale rejected remote-control enrollment ({status}): {reason}.")
+                format!("Ghosty rejected remote-control enrollment ({status}): {reason}.")
             }
-            None => format!("Codewhale rejected remote-control enrollment ({status})."),
+            None => format!("Ghosty rejected remote-control enrollment ({status})."),
         });
     }
     read_bounded_json(response).await
@@ -4613,17 +4609,17 @@ async fn read_bounded_json(response: reqwest::Response) -> Result<Value, String>
         .content_length()
         .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
     {
-        return Err("Codewhale returned an oversized remote-control response.".to_string());
+        return Err("Ghosty returned an oversized remote-control response.".to_string());
     }
     let bytes = response
         .bytes()
         .await
-        .map_err(|_| "Codewhale returned an unreadable response.".to_string())?;
+        .map_err(|_| "Ghosty returned an unreadable response.".to_string())?;
     if bytes.len() > MAX_RESPONSE_BYTES {
-        return Err("Codewhale returned an oversized remote-control response.".to_string());
+        return Err("Ghosty returned an oversized remote-control response.".to_string());
     }
     serde_json::from_slice(&bytes)
-        .map_err(|_| "Codewhale returned an invalid remote-control response.".to_string())
+        .map_err(|_| "Ghosty returned an invalid remote-control response.".to_string())
 }
 
 fn runner_control_plane_base() -> Result<String, String> {
@@ -4731,13 +4727,13 @@ fn delete_persisted_enrollment() {
     }
 }
 
-/// Remote-control enrollment/device receipts deliberately use Codewhale's
+/// Remote-control enrollment/device receipts deliberately use Ghosty's
 /// permission-bounded file store even when the operator chose the OS keyring
 /// for model-provider credentials. This keeps `/rc` and desktop dogfood from
 /// triggering a Keychain access dialog while preserving provider credential
 /// custody and its explicit backend selection unchanged.
-fn remote_control_secrets() -> codewhale_secrets::Secrets {
-    codewhale_secrets::Secrets::file_backed()
+fn remote_control_secrets() -> ghosty_secrets::Secrets {
+    ghosty_secrets::Secrets::file_backed()
 }
 
 fn install_reconnected_enrollment(
@@ -4827,10 +4823,10 @@ fn access_token(value: &Value) -> Result<String, String> {
         .filter(|value| {
             (64..=8192).contains(&value.len()) && !value.chars().any(char::is_whitespace)
         })
-        .ok_or_else(|| "Codewhale returned an invalid runner access token.".to_string())?
+        .ok_or_else(|| "Ghosty returned an invalid runner access token.".to_string())?
         .to_string();
     if jwt_expiry(&token).is_none_or(|expiry| expiry <= epoch_seconds()) {
-        return Err("Codewhale returned an expired runner access token.".to_string());
+        return Err("Ghosty returned an expired runner access token.".to_string());
     }
     Ok(token)
 }
@@ -4846,10 +4842,10 @@ fn exact_capabilities(value: Option<&Value>) -> bool {
 
 fn validate_authorization_url(value: &str, user_code: &str) -> Result<(), String> {
     let url = Url::parse(value)
-        .map_err(|_| "Codewhale returned an invalid authorization URL.".to_string())?;
+        .map_err(|_| "Ghosty returned an invalid authorization URL.".to_string())?;
     let pairs = url.query_pairs().collect::<Vec<_>>();
     if url.scheme() != "https"
-        || url.host_str() != Some("app.codewhale.net")
+        || url.host_str() != Some("app.ghosty.net")
         || url.path() != "/runner/authorize"
         || url.port().is_some()
         || !url.username().is_empty()
@@ -4859,7 +4855,7 @@ fn validate_authorization_url(value: &str, user_code: &str) -> Result<(), String
         || pairs[0].0 != "user_code"
         || pairs[0].1 != user_code
     {
-        return Err("Codewhale returned an invalid authorization URL.".to_string());
+        return Err("Ghosty returned an invalid authorization URL.".to_string());
     }
     Ok(())
 }
@@ -4871,7 +4867,7 @@ fn string_field(value: &Value, field: &str) -> Result<String, String> {
         .map(str::trim)
         .filter(|value| !value.is_empty() && value.len() <= 2048)
         .map(ToString::to_string)
-        .ok_or_else(|| format!("Codewhale returned an invalid {field}."))
+        .ok_or_else(|| format!("Ghosty returned an invalid {field}."))
 }
 
 fn secret_field(value: &Value, field: &str) -> Result<String, String> {
@@ -4880,7 +4876,7 @@ fn secret_field(value: &Value, field: &str) -> Result<String, String> {
         .and_then(Value::as_str)
         .filter(|value| valid_secret(value))
         .map(ToString::to_string)
-        .ok_or_else(|| format!("Codewhale returned an invalid {field}."))
+        .ok_or_else(|| format!("Ghosty returned an invalid {field}."))
 }
 
 fn opaque_field(value: &Value, field: &str) -> Result<String, String> {
@@ -4889,7 +4885,7 @@ fn opaque_field(value: &Value, field: &str) -> Result<String, String> {
         .and_then(Value::as_str)
         .filter(|value| valid_opaque_ref(value))
         .map(ToString::to_string)
-        .ok_or_else(|| format!("Codewhale returned an invalid {field}."))
+        .ok_or_else(|| format!("Ghosty returned an invalid {field}."))
 }
 
 fn valid_opaque_ref(value: &str) -> bool {
@@ -5039,15 +5035,15 @@ mod tests {
     #[test]
     fn observed_git_repo_is_owner_name_not_a_path() {
         assert_eq!(
-            normalize_observed_git_repo("git@github.com:Hmbown/CodeWhale.git").as_deref(),
-            Some("Hmbown/CodeWhale")
+            normalize_observed_git_repo("git@github.com:blissito/ghostycode.git").as_deref(),
+            Some("blissito/ghostycode")
         );
         assert_eq!(
             normalize_observed_git_repo("https://github.com/Hmbown/cwc.git").as_deref(),
             Some("Hmbown/cwc")
         );
         assert_eq!(
-            normalize_observed_git_repo("/Volumes/VIXinSSD/CW/codewhale"),
+            normalize_observed_git_repo("/Volumes/VIXinSSD/CW/ghosty"),
             None
         );
         for private_or_untrusted in [
@@ -5068,11 +5064,11 @@ mod tests {
 
     #[test]
     fn connect_body_can_carry_an_observed_repo_without_a_path() {
-        let enrollment = fixture_enrollment("https://api.codewhale.net/");
+        let enrollment = fixture_enrollment("https://api.ghosty.net/");
         let mut start = fixture_start();
-        start.git_remote = Some("git@github.com:Hmbown/CodeWhale.git".to_string());
+        start.git_remote = Some("git@github.com:blissito/ghostycode.git".to_string());
         let body = connect_runner_body(&enrollment, &start);
-        assert_eq!(body["gitRemote"], "Hmbown/CodeWhale");
+        assert_eq!(body["gitRemote"], "blissito/ghostycode");
         assert!(body.get("workspacePath").is_none());
         assert!(body.get("path").is_none());
     }
@@ -5080,7 +5076,7 @@ mod tests {
     #[test]
     fn live_worker_rejects_reenrollment_authority_switch_before_assignment() {
         let start = fixture_start();
-        let mut current = fixture_enrollment("https://api.codewhale.net/");
+        let mut current = fixture_enrollment("https://api.ghosty.net/");
         let original_access_token = current.access_token.clone();
         let mut other_account = current.clone();
         other_account.persisted.account_ref = "account_other".to_string();
@@ -5862,7 +5858,7 @@ mod tests {
 
     #[test]
     fn connection_without_links_yields_no_urls() {
-        let enrollment = fixture_enrollment("https://api.codewhale.net/");
+        let enrollment = fixture_enrollment("https://api.ghosty.net/");
         let start = fixture_start();
         let connection =
             parse_runner_connection(&fixture_connection_response(), &enrollment, &start)
@@ -5874,38 +5870,38 @@ mod tests {
 
     #[test]
     fn connection_links_are_parsed_from_the_runner_lease() {
-        let enrollment = fixture_enrollment("https://api.codewhale.net/");
+        let enrollment = fixture_enrollment("https://api.ghosty.net/");
         let start = fixture_start();
         let mut value = fixture_connection_response();
-        value["runner"]["runUrl"] = json!("https://app.codewhale.net/session?run=run_fixture");
+        value["runner"]["runUrl"] = json!("https://app.ghosty.net/session?run=run_fixture");
         value["runner"]["computerUrl"] =
-            json!("https://app.codewhale.net/settings?section=workspaces");
+            json!("https://app.ghosty.net/settings?section=workspaces");
         let connection = parse_runner_connection(&value, &enrollment, &start)
             .expect("lease with links attaches");
         assert_eq!(
             connection.links.run_url.as_deref(),
-            Some("https://app.codewhale.net/session?run=run_fixture")
+            Some("https://app.ghosty.net/session?run=run_fixture")
         );
         assert_eq!(
             connection.links.computer_url.as_deref(),
-            Some("https://app.codewhale.net/settings?section=workspaces")
+            Some("https://app.ghosty.net/settings?section=workspaces")
         );
     }
 
     #[test]
     fn connection_links_off_origin_or_for_another_run_are_dropped_not_fatal() {
-        let enrollment = fixture_enrollment("https://api.codewhale.net/");
+        let enrollment = fixture_enrollment("https://api.ghosty.net/");
         let start = fixture_start();
         for spoofed in [
-            "http://app.codewhale.net/session?run=run_fixture",
-            "https://app.codewhale.net.evil.example/session?run=run_fixture",
+            "http://app.ghosty.net/session?run=run_fixture",
+            "https://app.ghosty.net.evil.example/session?run=run_fixture",
             "https://evil.example/session?run=run_fixture",
-            "https://user:pw@app.codewhale.net/session?run=run_fixture",
-            "https://app.codewhale.net:8443/session?run=run_fixture",
-            "https://app.codewhale.net/session?run=run_fixture#token=abc",
-            "https://app.codewhale.net/session?run=run_other",
-            "https://app.codewhale.net/session?run=run_fixture&next=https://evil.example",
-            "https://app.codewhale.net/logout?run=run_fixture",
+            "https://user:pw@app.ghosty.net/session?run=run_fixture",
+            "https://app.ghosty.net:8443/session?run=run_fixture",
+            "https://app.ghosty.net/session?run=run_fixture#token=abc",
+            "https://app.ghosty.net/session?run=run_other",
+            "https://app.ghosty.net/session?run=run_fixture&next=https://evil.example",
+            "https://app.ghosty.net/logout?run=run_fixture",
             "",
             "not a url",
         ] {
@@ -5935,21 +5931,20 @@ mod tests {
         let with_link = remote_control_banner(
             "account_fixture",
             "runner_fixture",
-            Some("https://app.codewhale.net/session?run=run_fixture"),
+            Some("https://app.ghosty.net/session?run=run_fixture"),
         );
         assert_eq!(
             with_link,
-            "WEB MIRROR · https://app.codewhale.net/session?run=run_fixture · /rc stop"
+            "WEB MIRROR · https://app.ghosty.net/session?run=run_fixture · /rc stop"
         );
         let without_link = remote_control_banner("account_fixture", "runner_fixture", None);
         assert_eq!(
             without_link,
             "WEB MIRROR · account account_fixture · runner runner_fixture · /rc stop"
         );
-        let notice =
-            remote_control_link_notice("https://app.codewhale.net/session?run=run_fixture");
+        let notice = remote_control_link_notice("https://app.ghosty.net/session?run=run_fixture");
         assert!(notice.starts_with(
-            "Remote control is live at https://app.codewhale.net/session?run=run_fixture"
+            "Remote control is live at https://app.ghosty.net/session?run=run_fixture"
         ));
         assert!(notice.contains("/rc open"));
         assert!(notice.contains("/rc link"));
@@ -5977,9 +5972,9 @@ mod tests {
                     runtime_chat_relay_challenge: "a".repeat(32),
                 },
                 links: RemoteLinks {
-                    run_url: Some("https://app.codewhale.net/session?run=run_fixture".to_string()),
+                    run_url: Some("https://app.ghosty.net/session?run=run_fixture".to_string()),
                     computer_url: Some(
-                        "https://app.codewhale.net/settings?section=workspaces".to_string(),
+                        "https://app.ghosty.net/settings?section=workspaces".to_string(),
                     ),
                 },
             })
@@ -5987,16 +5982,16 @@ mod tests {
         controller.try_next_event().unwrap();
         assert_eq!(
             controller.run_url(),
-            Some("https://app.codewhale.net/session?run=run_fixture")
+            Some("https://app.ghosty.net/session?run=run_fixture")
         );
         assert_eq!(
             controller.computer_url(),
-            Some("https://app.codewhale.net/settings?section=workspaces")
+            Some("https://app.ghosty.net/settings?section=workspaces")
         );
         assert!(
             controller
                 .status_line()
-                .contains("open https://app.codewhale.net/session?run=run_fixture")
+                .contains("open https://app.ghosty.net/session?run=run_fixture")
         );
 
         event_tx.send(RemoteEvent::Stopped).unwrap();
@@ -6079,7 +6074,7 @@ mod tests {
 
     #[test]
     fn attachment_response_validation_fails_closed() {
-        let enrollment = fixture_enrollment("https://api.codewhale.net/");
+        let enrollment = fixture_enrollment("https://api.ghosty.net/");
         let start = fixture_start();
         let valid = fixture_connection_response();
         assert!(parse_runner_connection(&valid, &enrollment, &start).is_ok());
@@ -6987,16 +6982,16 @@ mod tests {
     fn authorization_url_is_exact_and_cannot_redirect_or_add_parameters() {
         assert!(
             validate_authorization_url(
-                "https://app.codewhale.net/runner/authorize?user_code=ABCD-EFGH-JKLM",
+                "https://app.ghosty.net/runner/authorize?user_code=ABCD-EFGH-JKLM",
                 "ABCD-EFGH-JKLM",
             )
             .is_ok()
         );
         for spoofed in [
-            "http://app.codewhale.net/runner/authorize?user_code=ABCD-EFGH-JKLM",
-            "https://app.codewhale.net.evil.example/runner/authorize?user_code=ABCD-EFGH-JKLM",
-            "https://app.codewhale.net/runner/authorize?user_code=ABCD-EFGH-JKLM&next=https://evil.example",
-            "https://app.codewhale.net/runner/authorize?user_code=WRONG-CODE",
+            "http://app.ghosty.net/runner/authorize?user_code=ABCD-EFGH-JKLM",
+            "https://app.ghosty.net.evil.example/runner/authorize?user_code=ABCD-EFGH-JKLM",
+            "https://app.ghosty.net/runner/authorize?user_code=ABCD-EFGH-JKLM&next=https://evil.example",
+            "https://app.ghosty.net/runner/authorize?user_code=WRONG-CODE",
         ] {
             assert!(validate_authorization_url(spoofed, "ABCD-EFGH-JKLM").is_err());
         }
@@ -7129,7 +7124,7 @@ mod tests {
         controller.status = Status::Connecting;
         event_tx
             .send(RemoteEvent::FailedPreLease(
-                "Codewhale rejected remote-control enrollment (403): client version not accepted."
+                "Ghosty rejected remote-control enrollment (403): client version not accepted."
                     .to_string(),
             ))
             .unwrap();
@@ -7257,7 +7252,7 @@ mod tests {
                 server.uri().trim_end_matches('/')
             ))
             .expect("server url"),
-            json!({ "audience": "codewhale-runner" }),
+            json!({ "audience": "ghosty-runner" }),
         )
         .await
         .expect_err("403 must fail");

@@ -1,6 +1,6 @@
 # Mode dan Postur Izin (Modes and Permission Postures)
 
-Codewhale memiliki tiga konsep yang saling berhubungan:
+Ghosty memiliki tiga konsep yang saling berhubungan:
 
 - **Mode TUI**: jenis interaksi yang terlihat (Plan / Work / Operate).
 - **Postur Izin**: seberapa ketat antarmuka meminta persetujuan sebelum mengeksekusi alat.

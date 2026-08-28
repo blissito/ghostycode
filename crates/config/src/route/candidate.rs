@@ -170,7 +170,7 @@ pub struct ValidationReport {
 /// Immutability is compile-time enforced — this does not build:
 ///
 /// ```compile_fail
-/// use codewhale_config::route::{RouteRequest, RouteResolver};
+/// use ghosty_config::route::{RouteRequest, RouteResolver};
 ///
 /// let mut candidate = RouteResolver::new()
 ///     .resolve(&RouteRequest::default())

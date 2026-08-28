@@ -1,6 +1,6 @@
-# Codewhale Architecture
+# Ghosty Architecture
 
-This document provides an overview of the codewhale architecture for developers and contributors.
+This document provides an overview of the ghosty architecture for developers and contributors.
 
 Current boundary note (read the workspace version from `Cargo.toml`; this
 boundary has held since v0.9.1):
@@ -113,7 +113,7 @@ boundary has held since v0.9.1):
 - **`crates/workflow`** / **`crates/workflow-js`** - Workflow engine and its
   QuickJS scripting layer (renamed from the whaleflow crates).
 - **`crates/lane`** - Lane runtime: durable, attachable running instances of
-  Fleet/Workflow work (`codewhale lane list/status/attach/logs/stop`).
+  Fleet/Workflow work (`ghosty lane list/status/attach/logs/stop`).
 - **`crates/release`** / **`crates/build-support`** - Release checks and build
   plumbing.
 
@@ -213,7 +213,7 @@ drives turns through Chat Completions.
 - **`purge.rs`** - Agent-driven context purging (surgical message removal/rewriting)
 - **`pricing.rs`** - Cost estimation
 - **`prompts.rs`** - System prompt templates
-- **`runtime_api.rs`** - HTTP/SSE runtime API (`codewhale serve --http`)
+- **`runtime_api.rs`** - HTTP/SSE runtime API (`ghosty serve --http`)
 - **`runtime_threads.rs`** - Durable thread/turn/item store + replayable event timeline
 - **`task_manager.rs`** - Durable queue, worker pool, task timelines and artifacts
 
@@ -232,12 +232,12 @@ drives turns through Chat Completions.
 
 ### Crash Recovery + Offline Queue
 
-1. Before sending user input, the TUI writes a checkpoint snapshot to `~/.codewhale/sessions/checkpoints/latest.json`
+1. Before sending user input, the TUI writes a checkpoint snapshot to `~/.ghosty/sessions/checkpoints/latest.json`
 2. Startup remains fresh by default; prior sessions are resumed explicitly via `--resume`/`--continue` (or `Ctrl+R` in TUI)
-3. While degraded/offline, new prompts are queued in-memory and mirrored to `~/.codewhale/sessions/checkpoints/offline_queue.json`
+3. While degraded/offline, new prompts are queued in-memory and mirrored to `~/.ghosty/sessions/checkpoints/offline_queue.json`
 4. Queue edits (`/queue ...`) are persisted continuously so drafts and queued prompts survive restarts
 5. Successful turn completion clears the active checkpoint and writes a durable session snapshot
-6. Action-capable turns also take pre/post-turn side-git workspace snapshots under `~/.codewhale/snapshots/<project_hash>/<worktree_hash>/.git`; `/restore N` and `revert_turn` restore file state without changing conversation history or the user's `.git`
+6. Action-capable turns also take pre/post-turn side-git workspace snapshots under `~/.ghosty/snapshots/<project_hash>/<worktree_hash>/.git`; `/restore N` and `revert_turn` restore file state without changing conversation history or the user's `.git`
 
 ### Tool Execution
 
@@ -255,7 +255,7 @@ drives turns through Chat Completions.
 ### Background Tasks
 
 1. Client enqueues task (`/task add ...` or `POST /v1/tasks`)
-2. `task_manager.rs` persists task + queue entry under `~/.codewhale/tasks`
+2. `task_manager.rs` persists task + queue entry under `~/.ghosty/tasks`
 3. Worker picks queued task (bounded pool), transitions to `running`
 4. Task creates/uses a runtime thread and starts a runtime turn
 5. `runtime_threads.rs` persists thread/turn/item records + monotonic event sequence
@@ -295,7 +295,7 @@ ordinary durable tasks.
 
 ### Adding an MCP Server
 
-1. Configure in `~/.codewhale/mcp.json`
+1. Configure in `~/.ghosty/mcp.json`
 2. Server auto-discovered at startup
 3. Tools exposed to LLM automatically
 
@@ -303,8 +303,8 @@ ordinary durable tasks.
 
 1. Create skill directory with `SKILL.md`
 2. Define skill prompt and optional scripts
-3. Place in a CodeWhale-owned root (`~/.codewhale/skills/` or
-   `<workspace>/.codewhale/skills/`), or import from a compatible harness root
+3. Place in a GhostyCode-owned root (`~/.ghosty/skills/` or
+   `<workspace>/.ghosty/skills/`), or import from a compatible harness root
    through `/skills`
 
 See [SKILLS.md](SKILLS.md) for the Skills Manager, audit inventory, and the
@@ -312,7 +312,7 @@ rule that compatible roots (`.claude`, `.agents`, …) are never mutated in plac
 
 ### Adding Hooks
 
-Configure in `~/.codewhale/config.toml`:
+Configure in `~/.ghosty/config.toml`:
 
 ```toml
 [[hooks]]
@@ -337,13 +337,13 @@ command = "echo 'Running tool: $TOOL_NAME'"
 
 ## Configuration Files
 
-- `~/.codewhale/config.toml` - Main configuration (`~/.deepseek/config.toml` is still read as a legacy fallback)
+- `~/.ghosty/config.toml` - Main configuration (`~/.deepseek/config.toml` is still read as a legacy fallback)
 - `/etc/deepseek/managed_config.toml` - Optional managed defaults layer (Unix)
 - `/etc/deepseek/requirements.toml` - Optional allowed-policy constraints (Unix)
-- `~/.codewhale/mcp.json` - MCP server configuration
-- `~/.codewhale/skills/` - User skills directory
-- `~/.codewhale/sessions/` - Session history
-- `~/.codewhale/sessions/checkpoints/` - Crash checkpoint + offline queue persistence
-- `~/.codewhale/snapshots/` - Side-git pre/post-turn workspace snapshots for `/restore` and `revert_turn`
-- `~/.codewhale/tasks/` - Background task records, queue, timelines, artifacts
-- `~/.codewhale/audit.log` - Append-only audit events for credential + approval/elevation actions
+- `~/.ghosty/mcp.json` - MCP server configuration
+- `~/.ghosty/skills/` - User skills directory
+- `~/.ghosty/sessions/` - Session history
+- `~/.ghosty/sessions/checkpoints/` - Crash checkpoint + offline queue persistence
+- `~/.ghosty/snapshots/` - Side-git pre/post-turn workspace snapshots for `/restore` and `revert_turn`
+- `~/.ghosty/tasks/` - Background task records, queue, timelines, artifacts
+- `~/.ghosty/audit.log` - Append-only audit events for credential + approval/elevation actions

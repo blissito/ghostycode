@@ -241,7 +241,7 @@ fn turn_metadata_uses_planned_cross_route_limits_not_installed_limits() {
     let config = deepseek_config();
     let (mut engine, _handle, _tmp) = preview_engine(&config);
     engine.api_provider = ApiProvider::Deepseek;
-    let installed_limits = codewhale_config::route::RouteLimits {
+    let installed_limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(4_096),
         input_tokens: None,
         output_tokens: Some(512),
@@ -259,7 +259,7 @@ fn turn_metadata_uses_planned_cross_route_limits_not_installed_limits() {
     let prompt_context = NextTurnPromptContext::for_planned_turn(
         ApiProvider::Openrouter,
         "qwen/qwen3.6-flash".to_string(),
-        Some(codewhale_config::route::RouteLimits {
+        Some(ghosty_config::route::RouteLimits {
             context_tokens: Some(123_456),
             input_tokens: None,
             output_tokens: Some(4_096),
@@ -347,7 +347,7 @@ fn context_pressure_delta_matches_clone_and_push_reference() {
     let config = deepseek_config();
     let (mut engine, _handle, _tmp) = preview_engine(&config);
     engine.api_provider = ApiProvider::Deepseek;
-    let installed_limits = codewhale_config::route::RouteLimits {
+    let installed_limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(64_000),
         input_tokens: None,
         output_tokens: Some(512),
@@ -1060,7 +1060,7 @@ async fn graph_backed_todo_is_not_reinjected_into_the_first_http_body() {
     .await;
     let body_text = first_wire_body.to_string();
     assert!(
-        !body_text.contains("<codewhale:work_state>")
+        !body_text.contains("<ghosty:work_state>")
             && !body_text.contains("preserve this graph-authoritative Work item"),
         "provider requests must not receive a synthetic per-step To-do tail: {body_text}"
     );
@@ -1233,7 +1233,7 @@ async fn paused_detach_goal_context_matches_captured_first_production_body() {
         None,
         GoalStatus::Active,
     );
-    let prompt = "answer only this new question\n\nCodewhale paused custom slash command context:\nThe user is not resuming that paused command.";
+    let prompt = "answer only this new question\n\nGhosty paused custom slash command context:\nThe user is not resuming that paused command.";
     let planned = plan(&config, &identity, false, prompt).await;
     let (_, first_wire_body) = assert_preview_matches_first_wire_body(
         &mut engine,
@@ -1985,7 +1985,7 @@ async fn fixed_route_with_a_prompt_describes_the_exact_next_turn() {
     let identity = deepseek_identity();
     let (mut engine, _handle, _tmp) = preview_engine(&config);
     engine.config.features.disable(Feature::Mcp);
-    engine.active_route_limits = Some(codewhale_config::route::RouteLimits {
+    engine.active_route_limits = Some(ghosty_config::route::RouteLimits {
         context_tokens: Some(4_096),
         input_tokens: Some(3_000),
         output_tokens: Some(512),

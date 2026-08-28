@@ -1,20 +1,20 @@
 ---
 name: plugin-creator
-description: Scaffold a local Codewhale plugin bundle with a versioned manifest, namespaced Skills, and an explicit trust review.
+description: Scaffold a local Ghosty plugin bundle with a versioned manifest, namespaced Skills, and an explicit trust review.
 ---
 
 # Plugin Creator
 
-Use this skill when a user wants a local Codewhale plugin bundle. Codewhale
+Use this skill when a user wants a local Ghosty plugin bundle. Ghosty
 v0.9.1 has a deliberately bounded loader: trusted and enabled bundles may add
 declarative Skills and MCP servers through the existing engines. Other
 component kinds are inventory-only.
 
 ## Workflow
 
-1. Pick a Codewhale-owned location:
-   - User bundle: `~/.codewhale/plugins/<plugin-name>/`
-   - Workspace bundle: `<workspace>/.codewhale/plugins/<plugin-name>/`
+1. Pick a Ghosty-owned location:
+   - User bundle: `~/.ghosty/plugins/<plugin-name>/`
+   - Workspace bundle: `<workspace>/.ghosty/plugins/<plugin-name>/`
 2. Normalize the bundle name to lowercase hyphen-case.
 3. Create `plugin.toml`:
 
@@ -30,7 +30,7 @@ description = "What this bundle provides"
 path = "skills"
 ```
 
-4. Put each Skill under `skills/<skill-name>/SKILL.md`. Codewhale exposes it
+4. Put each Skill under `skills/<skill-name>/SKILL.md`. Ghosty exposes it
    as `my-plugin:<skill-name>`, never as an unqualified command.
 5. Add `[mcp_servers.<name>]` only when the bundle needs an existing MCP
    engine. Keep stdio commands and paths inside the bundle. Map local
@@ -40,7 +40,7 @@ path = "skills"
    normalized endpoint host set in `[capabilities].network_hosts`. Never place
    credentials in the manifest.
 6. Declare commands, agents, hooks, LSP, native extensions, filesystem roots,
-   or lifecycle mutation only when inventorying future work. Codewhale shows
+   or lifecycle mutation only when inventorying future work. Ghosty shows
    them as inactive and still activates reviewed Skills and MCP from the same
    bundle. A bundle that only declares those unsupported surfaces cannot be
    enabled.

@@ -36,7 +36,7 @@
 //! - Fedora: `dnf install bubblewrap`
 //! - Arch: `pacman -S bubblewrap`
 //!
-//! If bwrap is not executable, Codewhale reports no Linux OS sandbox and runs
+//! If bwrap is not executable, Ghosty reports no Linux OS sandbox and runs
 //! the command without an OS wrapper. It never labels that fallback as
 //! sandboxed.
 
@@ -155,7 +155,7 @@ pub fn build_bwrap_command(
     }
 
     // Re-apply protected descendants after all writable parents so a broad
-    // writable root cannot make .codewhale/.deepseek exceptions writable.
+    // writable root cannot make .ghosty/.deepseek exceptions writable.
     for root in read_only_mounts {
         let root = root.to_string_lossy().into_owned();
         cmd.push("--ro-bind".to_string());
@@ -338,7 +338,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let workspace = dir.path().join("workspace");
         let extra = dir.path().join("extra");
-        let protected = workspace.join(".codewhale");
+        let protected = workspace.join(".ghosty");
         std::fs::create_dir_all(&protected).expect("protected directory");
         std::fs::create_dir_all(&extra).expect("extra directory");
 

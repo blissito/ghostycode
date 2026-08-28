@@ -19,7 +19,7 @@ import type {
 } from "./facts.generated";
 import { FACTS as BUILD_FACTS } from "./facts.generated";
 
-const RAW_ROOT = "https://raw.githubusercontent.com/Hmbown/CodeWhale";
+const RAW_ROOT = "https://raw.githubusercontent.com/blissito/ghostycode";
 const KV_KEY = "facts:current";
 const LOG_KEY = "facts:drift-log";
 
@@ -39,7 +39,7 @@ async function fetchText(
   ghToken?: string,
 ): Promise<string | null> {
   const headers: Record<string, string> = {
-    "User-Agent": "codewhale-web-drift",
+    "User-Agent": "ghosty-web-drift",
   };
   if (ghToken) headers["Authorization"] = `Bearer ${ghToken}`;
   try {
@@ -54,13 +54,13 @@ async function fetchText(
 async function fetchSourceMarker(ghToken?: string): Promise<SourceMarker | null> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "codewhale-web-drift",
+    "User-Agent": "ghosty-web-drift",
     "X-GitHub-Api-Version": "2022-11-28",
   };
   if (ghToken) headers.Authorization = `Bearer ${ghToken}`;
   try {
     const response = await fetch(
-      "https://api.github.com/repos/Hmbown/CodeWhale/commits/main",
+      "https://api.github.com/repos/blissito/ghostycode/commits/main",
       { headers },
     );
     if (!response.ok) return null;
@@ -133,6 +133,7 @@ function deriveProvidersFromConfig(cfg: string): ProviderFact[] {
     OpencodeZen: { id: "opencode-zen", label: "OpenCode Zen", env: "OPENCODE_ZEN_API_KEY / OPENCODE_API_KEY" },
     Anthropic: { id: "anthropic", label: "Anthropic", env: "ANTHROPIC_API_KEY" },
     Zai: { id: "zai", label: "Z.ai", env: "ZAI_API_KEY / Z_AI_API_KEY" },
+    Easybits: { id: "easybits", label: "EasyBits", env: "EASYBITS_API_KEY" },
     Stepfun: { id: "stepfun", label: "StepFun", env: "STEPFUN_API_KEY / STEP_API_KEY" },
     Minimax: { id: "minimax", label: "MiniMax", env: "MINIMAX_API_KEY" },
     MinimaxAnthropic: { id: "minimax-anthropic", label: "MiniMax (Anthropic-compatible)", env: "MINIMAX_API_KEY" },
@@ -186,12 +187,12 @@ async function fetchLatestPublishedRelease(
 ): Promise<PublishedReleaseFact | null> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "codewhale-web-drift",
+    "User-Agent": "ghosty-web-drift",
     "X-GitHub-Api-Version": "2022-11-28",
   };
   if (ghToken) headers["Authorization"] = `Bearer ${ghToken}`;
   try {
-    const r = await fetch("https://api.github.com/repos/Hmbown/CodeWhale/releases/latest", { headers });
+    const r = await fetch("https://api.github.com/repos/blissito/ghostycode/releases/latest", { headers });
     if (!r.ok) return null;
     const j = (await r.json()) as {
       tag_name?: string;
@@ -252,7 +253,7 @@ export async function deriveFactsFromRemote(ghToken?: string): Promise<RepoFacts
     fetchText("crates/tui/src/config.rs", source.revision, ghToken),
     fetchText("crates/tui/src/config/models.rs", source.revision, ghToken),
     fetchText("crates/tui/src/sandbox/mod.rs", source.revision, ghToken),
-    fetchText("npm/codewhale/package.json", source.revision, ghToken),
+    fetchText("npm/ghosty/package.json", source.revision, ghToken),
     fetchText("LICENSE", source.revision, ghToken),
     fetchText("web/lib/facts.generated.ts", source.revision, ghToken),
     fetchLatestPublishedRelease(ghToken),

@@ -45,12 +45,12 @@ BOT_NAMES = ("claude", "codex", "cursor")
 # These identities intentionally stay out of AUTHOR_MAP because they are not
 # GitHub contributor-graph humans.
 AGENT_CONTRIBUTOR_IDENTITIES = {
-    ("codewhale agent", "codewhale-agent@hmbown.local"),
+    ("ghosty agent", "ghosty-agent@hmbown.local"),
     ("claude fable 5", "noreply@anthropic.com"),
 }
 
 # This commit is already immutable history on origin/main. Its trailer names a
-# local Codewhale automation actor, not a human contributor. It escaped the
+# local Ghosty automation actor, not a human contributor. It escaped the
 # existing gate and is now immutable on origin/main. Rewriting main would
 # invalidate every descendant, while mapping the actor to a human would
 # manufacture contributor credit. Exempt only the exact full SHA + exact actor
@@ -58,8 +58,8 @@ AGENT_CONTRIBUTOR_IDENTITIES = {
 LEGACY_AUTOMATION_TRAILER_EXCEPTIONS = {
     (
         "9a74825cd182a62465943bcbbcbcf591d1ce99ee",
-        "codewhale agent",
-        "codewhale-agent@hmbown.local",
+        "ghosty agent",
+        "ghosty-agent@hmbown.local",
     ),
 }
 

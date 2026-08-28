@@ -66,7 +66,7 @@ pub struct CredentialGeneration(String);
 impl CredentialGeneration {
     fn derive(base_url: &str, credential: &str) -> Self {
         let mut hasher = Sha256::new();
-        hasher.update(b"codewhale/turn-route/credential-generation/v1\0");
+        hasher.update(b"ghosty/turn-route/credential-generation/v1\0");
         hasher.update(
             u64::try_from(base_url.len())
                 .unwrap_or(u64::MAX)

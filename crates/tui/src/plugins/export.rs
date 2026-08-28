@@ -52,7 +52,7 @@ pub struct PluginExportReceipt {
     pub target: PathBuf,
     /// Name the bundle was published under (post-slugification).
     pub exported_name: String,
-    /// Display name preserved in `extensions["net.codewhale"]` when the
+    /// Display name preserved in `extensions["net.ghosty"]` when the
     /// published name differs from the source name.
     pub display_name: Option<String>,
     pub wrote_mcp_json: bool,

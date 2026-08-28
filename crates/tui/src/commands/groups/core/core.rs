@@ -412,7 +412,7 @@ pub fn profile_switch(_app: &mut App, arg: Option<&str>) -> CommandResult {
         Some(name) if !name.trim().is_empty() => name.trim().to_string(),
         _ => {
             return CommandResult::error(
-                "Usage: /profile <name>\n\nSwitch to a named config profile. Profiles are defined in ~/.codewhale/config.toml under [profiles] sections.",
+                "Usage: /profile <name>\n\nSwitch to a named config profile. Profiles are defined in ~/.ghosty/config.toml under [profiles] sections.",
             );
         }
     };
@@ -484,8 +484,8 @@ fn public_site_locale_segment(locale: Locale) -> &'static str {
     }
 }
 
-/// Show Codewhale documentation, community, managed-app, and provider links.
-pub fn codewhale_links(app: &mut App) -> CommandResult {
+/// Show Ghosty documentation, community, managed-app, and provider links.
+pub fn ghosty_links(app: &mut App) -> CommandResult {
     let locale = app.ui_locale;
     let active_provider = app.api_provider.as_str();
     let site_locale = public_site_locale_segment(locale);
@@ -496,22 +496,22 @@ pub fn codewhale_links(app: &mut App) -> CommandResult {
 
     let _ = writeln!(
         message,
-        "{} `https://codewhale.net/{site_locale}/docs`",
+        "{} `https://ghosty.net/{site_locale}/docs`",
         tr(locale, MessageId::LinksDocumentation)
     );
     let _ = writeln!(
         message,
-        "{} `https://codewhale.net/{site_locale}/community`",
+        "{} `https://ghosty.net/{site_locale}/community`",
         tr(locale, MessageId::LinksCommunity)
     );
     let _ = writeln!(
         message,
-        "{} `https://github.com/Hmbown/CodeWhale`",
+        "{} `https://github.com/blissito/ghostycode`",
         tr(locale, MessageId::LinksGitHub)
     );
     let _ = writeln!(
         message,
-        "{} `https://app.codewhale.net`",
+        "{} `https://app.ghosty.net`",
         tr(locale, MessageId::LinksManagedApp)
     );
     let _ = writeln!(message, "{}", tr(locale, MessageId::LinksManagedAppNote));
@@ -522,7 +522,7 @@ pub fn codewhale_links(app: &mut App) -> CommandResult {
         tr(locale, MessageId::LinksTitle)
     );
 
-    for provider in codewhale_config::provider::providers_sorted_for_display() {
+    for provider in ghosty_config::provider::providers_sorted_for_display() {
         let links = provider.credential_help();
         let active_marker = if provider.id() == active_provider {
             " <- current"
@@ -559,7 +559,7 @@ pub fn codewhale_links(app: &mut App) -> CommandResult {
                 docs_url
             );
         }
-        if provider.kind() == codewhale_config::ProviderKind::Moonshot {
+        if provider.kind() == ghosty_config::ProviderKind::Moonshot {
             let _ = writeln!(
                 message,
                 "{}",
@@ -863,7 +863,7 @@ mod tests {
         let result = help(&mut app, Some("links"));
         let msg = result.message.expect("help topic should return message");
         assert!(msg.contains("links"));
-        assert!(msg.contains("Show Codewhale, community, and provider links"));
+        assert!(msg.contains("Show Ghosty, community, and provider links"));
         assert!(msg.contains("Usage: /links"));
         assert!(msg.contains("Aliases: dashboard, api"));
     }
@@ -1575,16 +1575,16 @@ mod tests {
     }
 
     #[test]
-    fn test_codewhale_links() {
+    fn test_ghosty_links() {
         let mut app = create_test_app();
-        let result = codewhale_links(&mut app);
+        let result = ghosty_links(&mut app);
         assert!(result.message.is_some());
         let msg = result.message.unwrap();
-        assert!(msg.contains("Codewhale & community"));
-        assert!(msg.contains("https://codewhale.net/en/docs"));
-        assert!(msg.contains("https://codewhale.net/en/community"));
-        assert!(msg.contains("https://github.com/Hmbown/CodeWhale"));
-        assert!(msg.contains("https://app.codewhale.net"));
+        assert!(msg.contains("Ghosty & community"));
+        assert!(msg.contains("https://ghosty.net/en/docs"));
+        assert!(msg.contains("https://ghosty.net/en/community"));
+        assert!(msg.contains("https://github.com/blissito/ghostycode"));
+        assert!(msg.contains("https://app.ghosty.net"));
         assert!(msg.contains("separate sign-in"));
         assert!(msg.contains("not connected to the current local session"));
         assert!(msg.contains("Provider Links"));
@@ -1609,14 +1609,14 @@ mod tests {
         assert!(msg.contains("no canonical vendor credential page exists"));
         assert!(msg.contains("OPENAI_API_KEY"));
         assert!(msg.contains("XIAOMI_MIMO_TOKEN_PLAN_API_KEY"));
-        assert!(!msg.contains("https://codewhale.dev/docs/providers"));
+        assert!(!msg.contains("https://ghosty.dev/docs/providers"));
         assert!(result.action.is_none());
     }
 
     #[test]
     fn provider_links_emit_urls_as_inline_code_for_narrow_transcripts() {
         let mut app = create_test_app();
-        let result = codewhale_links(&mut app);
+        let result = ghosty_links(&mut app);
         let msg = result.message.expect("links should return a message");
 
         assert!(msg.contains("`https://platform.openai.com/api-keys`"));
@@ -1639,13 +1639,12 @@ mod tests {
 
     #[test]
     fn provider_link_metadata_marks_custom_routes_as_configuration_owned() {
-        let links =
-            codewhale_config::provider::provider_for_kind(codewhale_config::ProviderKind::Custom)
-                .credential_help();
+        let links = ghosty_config::provider::provider_for_kind(ghosty_config::ProviderKind::Custom)
+            .credential_help();
 
         assert_eq!(
             links.acquisition,
-            codewhale_config::provider::CredentialAcquisition::Configuration
+            ghosty_config::provider::CredentialAcquisition::Configuration
         );
         assert_eq!(links.docs_url, None);
         assert_eq!(links.credential_url, None);
@@ -1656,13 +1655,13 @@ mod tests {
         let mut app = create_test_app();
         app.ui_locale = Locale::ZhHans;
 
-        let msg = codewhale_links(&mut app)
+        let msg = ghosty_links(&mut app)
             .message
             .expect("links should return a message");
 
-        assert!(msg.contains("`https://codewhale.net/zh/docs`"));
-        assert!(msg.contains("`https://codewhale.net/zh/community`"));
-        assert!(msg.contains("`https://app.codewhale.net`"));
+        assert!(msg.contains("`https://ghosty.net/zh/docs`"));
+        assert!(msg.contains("`https://ghosty.net/zh/community`"));
+        assert!(msg.contains("`https://app.ghosty.net`"));
     }
 
     #[test]
@@ -1672,8 +1671,8 @@ mod tests {
         let result = home_dashboard(&mut app);
         assert!(result.message.is_some());
         let msg = result.message.unwrap();
-        assert!(msg.contains("Codewhale"));
-        assert!(!msg.contains("codewhale Home Dashboard"));
+        assert!(msg.contains("Ghosty"));
+        assert!(!msg.contains("ghosty Home Dashboard"));
         assert!(msg.contains("Model:"));
         assert!(msg.contains("Mode:"));
         assert!(msg.contains("Workspace:"));
@@ -1725,13 +1724,13 @@ mod tests {
         assert!(msg.contains("/workspace   - Switch folders or worktrees"));
         assert!(msg.contains("/restore     - Roll files back to a turn snapshot"));
         assert!(msg.contains("/tokens      - Show session spend and context"));
-        assert!(msg.contains("/links       - Codewhale, community & provider links"));
+        assert!(msg.contains("/links       - Ghosty, community & provider links"));
         assert!(msg.contains("/config      - Inspect and change settings"));
         assert!(
             !msg.lines()
                 .any(|line| line.trim_start().starts_with("/set "))
         );
-        assert!(!msg.contains("/codewhale"));
+        assert!(!msg.contains("/ghosty"));
     }
 
     #[test]
@@ -1744,7 +1743,7 @@ mod tests {
             .message
             .expect("home dashboard should return message");
         assert!(
-            msg.contains("Codewhale"),
+            msg.contains("Ghosty"),
             "missing canonical product title:\n{msg}"
         );
         assert!(msg.contains("模型"), "missing zh-Hans model label:\n{msg}");

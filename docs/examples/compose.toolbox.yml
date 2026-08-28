@@ -1,40 +1,40 @@
-# Opt-in CodeWhale toolbox workflow.
+# Opt-in GhostyCode toolbox workflow.
 #
 # Usage:
-#   CODEWHALE_IMAGE=ghcr.io/hmbown/codewhale:vX.Y.Z \
-#   CODEWHALE_TOOLBOX_IMAGE=codewhale-toolbox:my-project \
-#   CODEWHALE_HOME_VOLUME=codewhale-my-project-home \
-#   CODEWHALE_WORKSPACE="$PWD" \
-#   docker compose -f docs/examples/compose.toolbox.yml run --rm codewhale
+#   GHOSTY_IMAGE=ghcr.io/blissito/ghostycode:vX.Y.Z \
+#   GHOSTY_TOOLBOX_IMAGE=ghosty-toolbox:my-project \
+#   GHOSTY_HOME_VOLUME=ghosty-my-project-home \
+#   GHOSTY_WORKSPACE="$PWD" \
+#   docker compose -f docs/examples/compose.toolbox.yml run --rm ghosty
 #
-# Keep CODEWHALE_HOME_VOLUME distinct per project so sessions, config, skills,
+# Keep GHOSTY_HOME_VOLUME distinct per project so sessions, config, skills,
 # memory, and queued work do not bleed across workspaces.
 
 services:
-  codewhale:
-    image: ${CODEWHALE_TOOLBOX_IMAGE:-codewhale-toolbox:local}
+  ghosty:
+    image: ${GHOSTY_TOOLBOX_IMAGE:-ghosty-toolbox:local}
     build:
       context: ../..
       dockerfile: docs/examples/Dockerfile.toolbox
       args:
-        CODEWHALE_IMAGE: ${CODEWHALE_IMAGE:-ghcr.io/hmbown/codewhale:latest}
+        GHOSTY_IMAGE: ${GHOSTY_IMAGE:-ghcr.io/blissito/ghostycode:latest}
         TOOLBOX_PACKAGES: ${TOOLBOX_PACKAGES:-git openssh-client curl build-essential pkg-config python3 python3-pip nodejs npm}
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:?set DEEPSEEK_API_KEY}
       - DEEPSEEK_BASE_URL
       - DEEPSEEK_NO_COLOR
     volumes:
-      - codewhale-home:/home/codewhale/.codewhale
-      - ${CODEWHALE_WORKSPACE:?set CODEWHALE_WORKSPACE to the project directory}:/workspace
+      - ghosty-home:/home/ghosty/.ghosty
+      - ${GHOSTY_WORKSPACE:?set GHOSTY_WORKSPACE to the project directory}:/workspace
       # Mount SSH material only for projects that need it, and prefer read-only.
-      # - ${HOME}/.ssh:/home/codewhale/.ssh:ro
+      # - ${HOME}/.ssh:/home/ghosty/.ssh:ro
       # Mount local CA certificates only when starting through a command that
       # runs `sudo update-ca-certificates` inside this toolbox image.
-      # - ${CODEWHALE_CERTS_DIR:-../../docker/certs}:/usr/local/share/ca-certificates/local:ro
+      # - ${GHOSTY_CERTS_DIR:-../../docker/certs}:/usr/local/share/ca-certificates/local:ro
     working_dir: /workspace
     stdin_open: true
     tty: true
 
 volumes:
-  codewhale-home:
-    name: ${CODEWHALE_HOME_VOLUME:-codewhale-toolbox-home}
+  ghosty-home:
+    name: ${GHOSTY_HOME_VOLUME:-ghosty-toolbox-home}

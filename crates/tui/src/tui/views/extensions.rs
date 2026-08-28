@@ -1,4 +1,4 @@
-//! Unified read-only inventory for Codewhale extensions.
+//! Unified read-only inventory for Ghosty extensions.
 //!
 //! This is deliberately a projection over the existing owners of Hooks,
 //! Plugins, Marketplace catalogs, Skills, and MCP. It has no registry, trust
@@ -602,10 +602,10 @@ fn localized_skill_root(locale: Locale, kind: crate::skills::roots::SkillRootKin
     use crate::skills::roots::SkillRootKind;
 
     match kind {
-        SkillRootKind::CodeWhaleProject => {
+        SkillRootKind::GhostyCodeProject => {
             tr(locale, MessageId::ExtensionsSkillRootProject).into_owned()
         }
-        SkillRootKind::CodeWhaleGlobal => {
+        SkillRootKind::GhostyCodeGlobal => {
             tr(locale, MessageId::ExtensionsSkillRootGlobal).into_owned()
         }
         SkillRootKind::CompatibleProject(harness) => localize(

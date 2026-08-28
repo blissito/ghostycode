@@ -10,7 +10,7 @@ Workflow. It is a design boundary, not a runtime implementation.
 
 ## Decision
 
-External memory should remain optional and explicit after v0.9.0. Normal Codewhale
+External memory should remain optional and explicit after v0.9.0. Normal Ghosty
 operation must not depend on it, and Workflow must not silently enable it for
 long-running runs.
 

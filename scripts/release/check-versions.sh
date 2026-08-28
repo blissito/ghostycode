@@ -12,7 +12,7 @@
 #      `Cargo.toml`.
 #      (`npm/deepseek-tui/` still exists only as an unpublished compatibility
 #      notice and must stay private.)
-#   4. Internal `codewhale-*` path dependency pins match the workspace version.
+#   4. Internal `ghosty-*` path dependency pins match the workspace version.
 #   5. The TUI crate's packaged changelog copy matches root `CHANGELOG.md`.
 #   6. The current version has either an explicit source-candidate entry or a
 #      dated Keep a Changelog release entry and a matching compare link.
@@ -20,8 +20,8 @@
 #   8. `SECURITY.md` keeps the dedicated security contact.
 #   9. Generated website facts carry the workspace version.
 #  10. Public install and version snippets point at the current release.
-#  11. `codewhale-app-server` stays library-only; the shipped app-server
-#      entrypoint belongs to `codewhale-cli`.
+#  11. `ghosty-app-server` stays library-only; the shipped app-server
+#      entrypoint belongs to `ghosty-cli`.
 #  12. Issue-linked feature commits have a durable changelog receipt.
 #  13. `Cargo.lock` is in sync with the manifests (`cargo metadata --locked`
 #      fails if not).
@@ -66,19 +66,19 @@ fi
 
 # 3) Workspace ↔ npm package.json/version + binary pin ↔ root package lock.
 workspace_version="$(grep -E '^version = "' Cargo.toml | head -n1 | sed -E 's/^version = "([^"]+)".*/\1/')"
-npm_version="$(node -p "require('./npm/codewhale/package.json').version")"
-npm_binary_version="$(node -p "require('./npm/codewhale/package.json').codewhaleBinaryVersion ?? ''")"
+npm_version="$(node -p "require('./npm/ghosty/package.json').version")"
+npm_binary_version="$(node -p "require('./npm/ghosty/package.json').ghostyBinaryVersion ?? ''")"
 if [[ "${workspace_version}" != "${npm_version}" ]]; then
-  echo "::error::npm/codewhale/package.json version (${npm_version}) does not match workspace Cargo.toml (${workspace_version})." >&2
+  echo "::error::npm/ghosty/package.json version (${npm_version}) does not match workspace Cargo.toml (${workspace_version})." >&2
   fail=1
 fi
 if ! ./scripts/release/check-npm-binary-version.sh \
   "${workspace_version}" "${npm_binary_version}"; then
   fail=1
 fi
-lock_npm_version="$(node -p "require('./package-lock.json').packages?.['npm/codewhale']?.version ?? ''")"
+lock_npm_version="$(node -p "require('./package-lock.json').packages?.['npm/ghosty']?.version ?? ''")"
 if [[ "${workspace_version}" != "${lock_npm_version}" ]]; then
-  echo "::error::package-lock.json npm/codewhale version (${lock_npm_version:-<missing>}) does not match workspace Cargo.toml (${workspace_version})." >&2
+  echo "::error::package-lock.json npm/ghosty version (${lock_npm_version:-<missing>}) does not match workspace Cargo.toml (${workspace_version})." >&2
   echo "Run: npm install --package-lock-only --ignore-scripts" >&2
   fail=1
 fi
@@ -115,11 +115,11 @@ fi
 
 # 4) Internal path dependency pins.
 internal_dep_drift="$(
-  grep -nE 'codewhale-[a-z-]+[[:space:]]*=[[:space:]]*\{[^}]*version[[:space:]]*=[[:space:]]*"' crates/*/Cargo.toml \
+  grep -nE 'ghosty-[a-z-]+[[:space:]]*=[[:space:]]*\{[^}]*version[[:space:]]*=[[:space:]]*"' crates/*/Cargo.toml \
     | grep -v "version[[:space:]]*=[[:space:]]*\"${workspace_version}\"" || true
 )"
 if [[ -n "${internal_dep_drift}" ]]; then
-  echo "::error::Internal codewhale-* path dependency versions must match workspace version ${workspace_version}:" >&2
+  echo "::error::Internal ghosty-* path dependency versions must match workspace version ${workspace_version}:" >&2
   echo "${internal_dep_drift}" >&2
   fail=1
 fi
@@ -168,7 +168,7 @@ if [[ -z "${compare_line}" ]]; then
   echo "::error::CHANGELOG.md must include a compare link for ${workspace_version}." >&2
   fail=1
 elif [[ "${require_dated_release}" == "1" ]] &&
-  ! grep -qE "^\\[${workspace_version}\\]: https://github.com/Hmbown/CodeWhale/compare/v[0-9]+\\.[0-9]+\\.[0-9]+\\.\\.\\.v${workspace_version}$" <<<"${compare_line}"; then
+  ! grep -qE "^\\[${workspace_version}\\]: https://github.com/blissito/ghostycode/compare/v[0-9]+\\.[0-9]+\\.[0-9]+\\.\\.\\.v${workspace_version}$" <<<"${compare_line}"; then
   echo "::error::Publication requires the ${workspace_version} compare link to end at v${workspace_version}." >&2
   fail=1
 fi
@@ -199,7 +199,19 @@ if [[ -n "${previous_tag}" ]]; then
     git fetch --quiet --depth=1 origin "refs/tags/${previous_tag}:refs/tags/${previous_tag}" || true
   fi
   if git rev-parse -q --verify "refs/tags/${previous_tag}" >/dev/null; then
-    if ! ./scripts/release/check-feature-release-notes.sh "${previous_tag}" HEAD; then
+    # Ghosty vive río abajo de CodeWhale y se rebasa sobre él. Entre dos tags
+    # de Ghosty puede haber miles de commits de upstream que citan issues de
+    # upstream; sus recibos viven en el changelog de allá, no en el de aquí.
+    # El recibo se exige solo a los commits propios: desde la base de upstream
+    # (`GHOSTY_UPSTREAM_BASE`, o el merge-base con `upstream/main`) hasta HEAD.
+    receipt_base="${GHOSTY_UPSTREAM_BASE:-}"
+    if [[ -z "${receipt_base}" ]] && git rev-parse -q --verify upstream/main >/dev/null 2>&1; then
+      receipt_base="$(git merge-base upstream/main HEAD 2>/dev/null || true)"
+    fi
+    if [[ -z "${receipt_base}" ]]; then
+      receipt_base="${previous_tag}"
+    fi
+    if ! ./scripts/release/check-feature-release-notes.sh "${receipt_base}" HEAD; then
       fail=1
     fi
     while IFS= read -r line; do
@@ -231,7 +243,7 @@ if [[ -n "${previous_tag}" ]]; then
 fi
 
 # 8) Security contact guard.
-security_email="hmbown@gmail.com"
+security_email="fixtergeek@gmail.com"
 if ! grep -qF "${security_email}" SECURITY.md; then
   echo "::error::SECURITY.md must list ${security_email} as the security contact." >&2
   fail=1
@@ -268,16 +280,16 @@ for readme in README.md README.zh-CN.md README.ja-JP.md README.vi.md README.ko-K
 done
 
 # 10b) Public install/version snippets stay on the current release (#3767).
-# `codewhale --version   # X.Y.Z` verify-your-install lines across README
+# `ghosty --version   # X.Y.Z` verify-your-install lines across README
 # locales and docs/INSTALL.md, plus the docs/INSTALL.md npm-wrapper publish
 # pointer ("published at vX.Y.Z"). These drifted while this gate still passed
 # on a prior lane, so guard them explicitly. Narrowly scoped to those two
 # snippet shapes to avoid flagging unrelated prose.
 for doc in README.md README.zh-CN.md README.ja-JP.md README.vi.md README.ko-KR.md docs/INSTALL.md; do
   [[ -f "${doc}" ]] || continue
-  stale_version_comments="$(grep -nE -- "codewhale --version[[:space:]]+#[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+" "${doc}" | grep -vE -- "#[[:space:]]*${workspace_version}([^0-9]|$)" || true)"
+  stale_version_comments="$(grep -nE -- "ghosty --version[[:space:]]+#[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+" "${doc}" | grep -vE -- "#[[:space:]]*${workspace_version}([^0-9]|$)" || true)"
   if [[ -n "${stale_version_comments}" ]]; then
-    echo "::error::${doc} has 'codewhale --version # X' snippet(s) not on ${workspace_version}:" >&2
+    echo "::error::${doc} has 'ghosty --version # X' snippet(s) not on ${workspace_version}:" >&2
     echo "${stale_version_comments}" >&2
     fail=1
   fi
@@ -302,7 +314,7 @@ app_server_bins="$(
     | node -e '
 const fs = require("fs");
 const metadata = JSON.parse(fs.readFileSync(0, "utf8"));
-const pkg = metadata.packages.find((p) => p.name === "codewhale-app-server");
+const pkg = metadata.packages.find((p) => p.name === "ghosty-app-server");
 if (!pkg) {
   process.exit(2);
 }
@@ -313,14 +325,14 @@ process.stdout.write(bins.join("\n"));
 '
 )"
 if [[ -n "${app_server_bins}" ]]; then
-  echo "::error::codewhale-app-server must stay library-only; use the codewhale-cli-owned 'codewhale app-server' entrypoint instead. Unexpected binary target(s):" >&2
+  echo "::error::ghosty-app-server must stay library-only; use the ghosty-cli-owned 'ghosty app-server' entrypoint instead. Unexpected binary target(s):" >&2
   echo "${app_server_bins}" >&2
   fail=1
 fi
 
 # 13) Cargo.lock in sync.
 if ! cargo metadata --locked --format-version 1 --no-deps >/dev/null 2>&1; then
-  echo "::error::Cargo.lock is out of sync with the manifests. Run 'cargo update -p codewhale-tui' or 'cargo build' and commit the result." >&2
+  echo "::error::Cargo.lock is out of sync with the manifests. Run 'cargo update -p ghosty-tui' or 'cargo build' and commit the result." >&2
   fail=1
 fi
 

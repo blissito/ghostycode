@@ -10,7 +10,7 @@ use crate::tui::app::{App, AppAction};
 
 use super::CommandResult;
 
-const HOSTED_WORK_URL: &str = "https://app.codewhale.net/work";
+const HOSTED_WORK_URL: &str = "https://app.ghosty.net/work";
 const MAX_GIT_VALUE_BYTES: usize = 4 * 1024;
 
 pub(in crate::commands) const COMMAND_INFO: CommandInfo = CommandInfo {
@@ -289,7 +289,7 @@ mod tests {
     fn open_builds_encoded_launcher_url_without_embedded_credentials() {
         let secret = "top-secret-token";
         let temp = init_repo(
-            &format!("https://hunter:{secret}@github.com/Hmbown/CodeWhale.git"),
+            &format!("https://hunter:{secret}@github.com/blissito/ghostycode.git"),
             "feature/mobile&cloud-{url}",
         );
         let mut app = app_for(temp.path());
@@ -298,7 +298,7 @@ mod tests {
         let url = external_url(&result);
         assert_eq!(
             url,
-            "https://app.codewhale.net/work?repo=Hmbown%2FCodeWhale&branch=feature%2Fmobile%26cloud-%7Burl%7D"
+            "https://app.ghosty.net/work?repo=blissito%2Fghostycode&branch=feature%2Fmobile%26cloud-%7Burl%7D"
         );
         assert!(
             result
@@ -321,24 +321,24 @@ mod tests {
     fn supported_https_and_ssh_origins_normalize_to_namespace_and_repo() {
         for (origin, expected) in [
             (
-                "https://github.com/Hmbown/CodeWhale.git",
-                "Hmbown/CodeWhale",
+                "https://github.com/blissito/ghostycode.git",
+                "blissito/ghostycode",
             ),
             (
-                "https://user:token@github.com/Hmbown/CodeWhale",
-                "Hmbown/CodeWhale",
+                "https://user:token@github.com/blissito/ghostycode",
+                "blissito/ghostycode",
             ),
             (
-                "ssh://git@github.com/Hmbown/CodeWhale.git",
-                "Hmbown/CodeWhale",
+                "ssh://git@github.com/blissito/ghostycode.git",
+                "blissito/ghostycode",
             ),
-            ("git@github.com:Hmbown/CodeWhale.git", "Hmbown/CodeWhale"),
-            ("https://cnb.cool/whale/codewhale.git", "whale/codewhale"),
             (
-                "ssh://git@cnb.cool:2222/whale/codewhale.git",
-                "whale/codewhale",
+                "git@github.com:blissito/ghostycode.git",
+                "blissito/ghostycode",
             ),
-            ("git@cnb.cool:whale/codewhale.git", "whale/codewhale"),
+            ("https://cnb.cool/whale/ghosty.git", "whale/ghosty"),
+            ("ssh://git@cnb.cool:2222/whale/ghosty.git", "whale/ghosty"),
+            ("git@cnb.cool:whale/ghosty.git", "whale/ghosty"),
         ] {
             assert_eq!(
                 normalize_repo_slug(origin).as_deref(),
@@ -399,14 +399,14 @@ mod tests {
         let identity = Command::new("git")
             .arg("-C")
             .arg(temp.path())
-            .args(["config", "user.name", "Codewhale Test"])
+            .args(["config", "user.name", "Ghosty Test"])
             .status()
             .expect("set test name");
         assert!(identity.success());
         let identity = Command::new("git")
             .arg("-C")
             .arg(temp.path())
-            .args(["config", "user.email", "test@codewhale.invalid"])
+            .args(["config", "user.email", "test@ghosty.invalid"])
             .status()
             .expect("set test email");
         assert!(identity.success());

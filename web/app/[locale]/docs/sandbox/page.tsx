@@ -63,10 +63,10 @@ sandbox_mode = "workspace-write"
 prefer_bwrap = true            # Linux opt-in
 
 # Canonical environment overrides
-CODEWHALE_SANDBOX_MODE
-CODEWHALE_SANDBOX_BACKEND
-CODEWHALE_SANDBOX_URL
-CODEWHALE_SANDBOX_API_KEY`}</pre>
+GHOSTY_SANDBOX_MODE
+GHOSTY_SANDBOX_BACKEND
+GHOSTY_SANDBOX_URL
+GHOSTY_SANDBOX_API_KEY`}</pre>
       </section>
 
       <section id="diagnostics" className="scroll-mt-32">

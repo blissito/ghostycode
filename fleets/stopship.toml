@@ -4,7 +4,7 @@
 # only — it does NOT spawn tmux or manage worktrees (Runtime owns those).
 #
 # Load path (when wired by workflow run --fleet):
-#   1. $CODEWHALE_HOME/fleets/stopship.toml
+#   1. $GHOSTY_HOME/fleets/stopship.toml
 #   2. <workspace>/fleets/stopship.toml  (this file)
 #
 # Built-in roster members used as profile ids: scout, builder, reviewer,

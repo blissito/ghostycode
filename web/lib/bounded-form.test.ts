@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readBoundedUrlEncodedForm } from "./bounded-form";
 
 function request(body: string, headers: Record<string, string> = {}): Request {
-  return new Request("https://codewhale.net/api/admin/login", {
+  return new Request("https://ghosty.net/api/admin/login", {
     method: "POST",
     headers: {
       "content-type": "application/x-www-form-urlencoded",

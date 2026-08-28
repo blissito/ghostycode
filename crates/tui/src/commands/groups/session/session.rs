@@ -14,7 +14,7 @@ use super::CommandResult;
 ///
 /// When an explicit path is given, the session is exported there
 /// (user-visible explicit export).  Without a path, v0.8.44 saves
-/// into the managed session directory (`~/.codewhale/sessions`
+/// into the managed session directory (`~/.ghosty/sessions`
 /// or legacy `~/.deepseek/sessions`) so repo-local `session_*.json`
 /// artifacts are no longer created by default.
 pub fn save(app: &mut App, path: Option<&str>) -> CommandResult {
@@ -968,14 +968,14 @@ mod tests {
     fn test_save_with_default_path_uses_managed_sessions_dir() {
         let tmpdir = TempDir::new().unwrap();
         let _lock = crate::test_support::lock_test_env();
-        // Set CODEWHALE_HOME so the managed sessions directory lands inside the
+        // Set GHOSTY_HOME so the managed sessions directory lands inside the
         // temp dir rather than the real user home. Pre-create the directory so
         // resolve_state_dir picks it up instead of falling back to legacy.
         let home = tmpdir.path().join("home");
         let sessions_dir = home.join("sessions");
         std::fs::create_dir_all(&sessions_dir).unwrap();
-        let codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &home);
-        let previous_codewhale_home = codewhale_home.previous();
+        let ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &home);
+        let previous_ghosty_home = ghosty_home.previous();
         let mut app = create_test_app_with_tmpdir(&tmpdir);
         let result = save(&mut app, None);
         assert!(result.message.is_some());
@@ -991,7 +991,7 @@ mod tests {
         } else {
             Vec::new()
         };
-        drop(codewhale_home);
+        drop(ghosty_home);
         // Session should be saved to the managed dir, not the workspace root.
         assert!(
             !entries.is_empty(),
@@ -1002,7 +1002,7 @@ mod tests {
             .as_deref()
             .expect("current session id");
         assert!(sessions_dir.join(format!("{session_id}.json")).exists());
-        assert_eq!(std::env::var_os("CODEWHALE_HOME"), previous_codewhale_home);
+        assert_eq!(std::env::var_os("GHOSTY_HOME"), previous_ghosty_home);
     }
 
     #[test]

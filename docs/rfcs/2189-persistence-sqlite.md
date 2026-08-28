@@ -13,7 +13,7 @@
 
 **Backend**: individual JSON files + atomic writes via `write_atomic`.  
 **Paths**:
-- `~/.codewhale/sessions/{id}.json` (preferred, v0.8.44+) or `~/.deepseek/sessions/{id}.json` (fallback)
+- `~/.ghosty/sessions/{id}.json` (preferred, v0.8.44+) or `~/.deepseek/sessions/{id}.json` (fallback)
 - `~/.deepseek/sessions/checkpoints/latest.json` — crash-recovery checkpoint
 - `~/.deepseek/sessions/checkpoints/offline_queue.json` — offline/degraded-mode queue
 

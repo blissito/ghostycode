@@ -107,7 +107,7 @@ fn scale_hex_channel(digits: &str) -> Option<u8> {
 /// Ask the terminal for its background color, giving up after `timeout`.
 ///
 /// Returns `None` — never blocks past `timeout`, never panics — when:
-/// - stdin and stdout are not both TTYs (piped output, CI, `codewhale < file`),
+/// - stdin and stdout are not both TTYs (piped output, CI, `ghosty < file`),
 /// - the platform has no supported query path (non-Unix; see the module docs),
 /// - the terminal does not answer, or answers with something unparsable.
 ///

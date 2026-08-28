@@ -2,8 +2,8 @@
 //!
 //! Bare `/fleet` opens the roster/setup face for the selected Fleet. This view
 //! is only for switching between named configurations. One row per saved Fleet
-//! across both scopes: user-global (`$CODEWHALE_HOME/fleets/`) and folder
-//! (`.codewhale/fleets/`). Rows show name, scope badge, and operator summary —
+//! across both scopes: user-global (`$GHOSTY_HOME/fleets/`) and folder
+//! (`.ghosty/fleets/`). Rows show name, scope badge, and operator summary —
 //! not filesystem paths (paths belong in receipts). Same-name Fleets in both
 //! scopes are two rows, never a silent shadow. Legacy per-role profiles get
 //! one migration banner, not a pile of shadow badges.
@@ -58,7 +58,7 @@ pub struct FleetListView {
     /// Saved scope of the row being acted on (delete/select flow through
     /// confirmation state).
     pending_delete: Option<usize>,
-    fleet_config: codewhale_config::FleetConfigToml,
+    fleet_config: ghosty_config::FleetConfigToml,
     workspace: PathBuf,
 }
 
@@ -510,7 +510,7 @@ fn legacy_profile_file_count(workspace: &std::path::Path) -> usize {
             .filter(|e| e.path().extension().is_some_and(|x| x == "toml"))
             .count();
     }
-    let ws_dir = workspace.join(".codewhale").join("agents");
+    let ws_dir = workspace.join(".ghosty").join("agents");
     if let Ok(read) = std::fs::read_dir(ws_dir) {
         count += read
             .filter_map(|e| e.ok())
@@ -568,9 +568,9 @@ mod tests {
     #[test]
     fn list_renders_both_scopes_and_marks_selection() {
         let _lock = crate::test_support::lock_test_env();
-        let prev = std::env::var_os("CODEWHALE_HOME");
+        let prev = std::env::var_os("GHOSTY_HOME");
         // SAFETY: serialised by lock_test_env.
-        unsafe { std::env::set_var("CODEWHALE_HOME", sealed_home()) };
+        unsafe { std::env::set_var("GHOSTY_HOME", sealed_home()) };
         let ws = tempfile::TempDir::new().unwrap();
 
         save_in(ws.path(), FleetScope::Personal, "DeepSeek Flash");
@@ -605,8 +605,8 @@ mod tests {
         // SAFETY: serialised by lock_test_env.
         unsafe {
             match prev {
-                Some(v) => std::env::set_var("CODEWHALE_HOME", v),
-                None => std::env::remove_var("CODEWHALE_HOME"),
+                Some(v) => std::env::set_var("GHOSTY_HOME", v),
+                None => std::env::remove_var("GHOSTY_HOME"),
             }
         }
         let _ = &mut app;
@@ -615,9 +615,9 @@ mod tests {
     #[test]
     fn select_user_global_writes_receipt_naming_the_file() {
         let _lock = crate::test_support::lock_test_env();
-        let prev = std::env::var_os("CODEWHALE_HOME");
+        let prev = std::env::var_os("GHOSTY_HOME");
         // SAFETY: serialised by lock_test_env.
-        unsafe { std::env::set_var("CODEWHALE_HOME", sealed_home()) };
+        unsafe { std::env::set_var("GHOSTY_HOME", sealed_home()) };
         let ws = tempfile::TempDir::new().unwrap();
 
         save_in(ws.path(), FleetScope::Personal, "DeepSeek Flash");
@@ -648,8 +648,8 @@ mod tests {
         // SAFETY: serialised by lock_test_env.
         unsafe {
             match prev {
-                Some(v) => std::env::set_var("CODEWHALE_HOME", v),
-                None => std::env::remove_var("CODEWHALE_HOME"),
+                Some(v) => std::env::set_var("GHOSTY_HOME", v),
+                None => std::env::remove_var("GHOSTY_HOME"),
             }
         }
     }
@@ -658,7 +658,7 @@ mod tests {
     fn delete_requires_confirmation_and_removes_the_file() {
         let _lock = crate::test_support::lock_test_env();
         let home = tempfile::TempDir::new().unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
         let ws = tempfile::TempDir::new().unwrap();
 
         save_in(ws.path(), FleetScope::Workspace, "Temp Fleet");
@@ -698,9 +698,9 @@ mod tests {
     #[test]
     fn enter_selects_in_the_row_scope_without_opening_detail() {
         let _lock = crate::test_support::lock_test_env();
-        let prev = std::env::var_os("CODEWHALE_HOME");
+        let prev = std::env::var_os("GHOSTY_HOME");
         // SAFETY: serialised by lock_test_env.
-        unsafe { std::env::set_var("CODEWHALE_HOME", sealed_home()) };
+        unsafe { std::env::set_var("GHOSTY_HOME", sealed_home()) };
         let ws = tempfile::TempDir::new().unwrap();
 
         save_in(ws.path(), FleetScope::Workspace, "Folder Fleet");
@@ -725,8 +725,8 @@ mod tests {
         // SAFETY: serialised by lock_test_env.
         unsafe {
             match prev {
-                Some(v) => std::env::set_var("CODEWHALE_HOME", v),
-                None => std::env::remove_var("CODEWHALE_HOME"),
+                Some(v) => std::env::set_var("GHOSTY_HOME", v),
+                None => std::env::remove_var("GHOSTY_HOME"),
             }
         }
     }
@@ -734,9 +734,9 @@ mod tests {
     #[test]
     fn legacy_entry_opens_a_pager_instead_of_editing() {
         let _lock = crate::test_support::lock_test_env();
-        let prev = std::env::var_os("CODEWHALE_HOME");
+        let prev = std::env::var_os("GHOSTY_HOME");
         // SAFETY: serialised by lock_test_env.
-        unsafe { std::env::set_var("CODEWHALE_HOME", sealed_home()) };
+        unsafe { std::env::set_var("GHOSTY_HOME", sealed_home()) };
         let ws = tempfile::TempDir::new().unwrap();
 
         // A legacy exact fleet file (workflow schema) in the personal dir.
@@ -769,8 +769,8 @@ members = []"#,
         // SAFETY: serialised by lock_test_env.
         unsafe {
             match prev {
-                Some(v) => std::env::set_var("CODEWHALE_HOME", v),
-                None => std::env::remove_var("CODEWHALE_HOME"),
+                Some(v) => std::env::set_var("GHOSTY_HOME", v),
+                None => std::env::remove_var("GHOSTY_HOME"),
             }
         }
     }
@@ -778,9 +778,9 @@ members = []"#,
     #[test]
     fn migration_banner_appears_only_when_needed_and_migrates() {
         let _lock = crate::test_support::lock_test_env();
-        let prev = std::env::var_os("CODEWHALE_HOME");
+        let prev = std::env::var_os("GHOSTY_HOME");
         // SAFETY: serialised by lock_test_env.
-        unsafe { std::env::set_var("CODEWHALE_HOME", sealed_home()) };
+        unsafe { std::env::set_var("GHOSTY_HOME", sealed_home()) };
         let ws = tempfile::TempDir::new().unwrap();
 
         // No legacy profiles: no banner.
@@ -788,7 +788,7 @@ members = []"#,
         assert!(!view.banner_visible());
 
         // A workspace legacy role profile.
-        let agents = ws.path().join(".codewhale/agents");
+        let agents = ws.path().join(".ghosty/agents");
         std::fs::create_dir_all(&agents).unwrap();
         std::fs::write(
             agents.join("scout.toml"),
@@ -825,8 +825,8 @@ provider = "deepseek"
         // SAFETY: serialised by lock_test_env.
         unsafe {
             match prev {
-                Some(v) => std::env::set_var("CODEWHALE_HOME", v),
-                None => std::env::remove_var("CODEWHALE_HOME"),
+                Some(v) => std::env::set_var("GHOSTY_HOME", v),
+                None => std::env::remove_var("GHOSTY_HOME"),
             }
         }
     }

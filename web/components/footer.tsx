@@ -27,7 +27,7 @@ export function Footer({ locale = "en" }: { locale?: Locale }) {
         <div className="site-footer-brand">
           <Link href={homeHref} className="site-wordmark site-wordmark-footer">
             <Whale size={31} caustic />
-            <span>Codewhale</span>
+            <span>Ghosty</span>
           </Link>
           <p>{chrome.footerTagline}</p>
         </div>
@@ -47,17 +47,17 @@ export function Footer({ locale = "en" }: { locale?: Locale }) {
       <div className="site-footer-meta">
         <p>
           {chrome.footerCanonicalSource}
-          <a href={REPO_URL}>github.com/Hmbown/CodeWhale</a>
+          <a href={REPO_URL}>github.com/blissito/ghostycode</a>
           {chrome.footerReleases}
           <a href={REPO_RELEASES_URL}>{chrome.footerReleasesLink}</a>
         </p>
         <div>
-          {GITEE_ENABLED && <a href="https://gitee.com/Hmbown/CodeWhale">Gitee</a>}
-          <a href="https://cnb.cool/codewhale.net/codewhale">CNB</a>
-          <a href="https://npmmirror.com/package/codewhale">npmmirror</a>
+          {GITEE_ENABLED && <a href="https://gitee.com/blissito/ghostycode">Gitee</a>}
+          <a href="https://cnb.cool/ghosty.net/ghosty">CNB</a>
+          <a href="https://npmmirror.com/package/ghosty">npmmirror</a>
           <a href="mailto:hmbown@gmail.com">{chrome.footerSecurity}</a>
         </div>
-        <span>© {new Date().getFullYear()} Codewhale</span>
+        <span>© {new Date().getFullYear()} Ghosty</span>
       </div>
     </footer>
   );

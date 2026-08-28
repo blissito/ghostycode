@@ -1,7 +1,7 @@
 //! Persistence for locally-added marketplace catalogs (#5311).
 //!
 //! Catalogs live in one sibling JSON file next to the plugin registry's
-//! `state.json`, under the same Codewhale-owned `plugins/` root, and reuse the
+//! `state.json`, under the same Ghosty-owned `plugins/` root, and reuse the
 //! registry's audited persistence machinery: private parent directory, atomic
 //! temp-file publication, no-follow opens, and an `fd_lock` sidecar lock so a
 //! concurrent TUI cannot interleave `add`/`remove` with a read.

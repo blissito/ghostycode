@@ -1,6 +1,6 @@
 //! A real MCP client that speaks JSON-RPC to a spawned child process.
 //!
-//! `codewhale mcp-server` used to wire every configured server to an
+//! `ghosty mcp-server` used to wire every configured server to an
 //! in-memory stub, so a user's `command`/`args`/`env` were never executed and
 //! every health probe answered `{"status": "ok"}` from a hardcoded literal
 //! (#4727). A fabricated success is the worst possible answer here: it is
@@ -595,7 +595,7 @@ impl ChildProcessMcpClient {
             json!({
                 "protocolVersion": PROTOCOL_VERSION,
                 "clientInfo": {
-                    "name": "codewhale-mcp-server",
+                    "name": "ghosty-mcp-server",
                     "version": env!("CARGO_PKG_VERSION")
                 },
                 "capabilities": {
@@ -911,7 +911,7 @@ mod tests {
     #[test]
     fn spawn_fails_loudly_when_the_command_does_not_exist() {
         let err = ChildProcessMcpClient::spawn(&config(
-            "codewhale-nonexistent-mcp-server-binary",
+            "ghosty-nonexistent-mcp-server-binary",
             &["--stdio"],
         ))
         .unwrap_err();
@@ -1296,10 +1296,10 @@ while IFS= read -r line; do
       ;;
   esac
 done
-printf 'stdin closed\n' > "$CODEWHALE_MCP_TEST_MARKER"
+printf 'stdin closed\n' > "$GHOSTY_MCP_TEST_MARKER"
 "#;
         let marker = std::env::temp_dir().join(format!(
-            "codewhale-mcp-idle-drop-{}-{}.marker",
+            "ghosty-mcp-idle-drop-{}-{}.marker",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1308,7 +1308,7 @@ printf 'stdin closed\n' > "$CODEWHALE_MCP_TEST_MARKER"
         ));
         let mut child_config = config("/bin/sh", &["-c", script]);
         child_config.env.insert(
-            "CODEWHALE_MCP_TEST_MARKER".to_string(),
+            "GHOSTY_MCP_TEST_MARKER".to_string(),
             marker.to_string_lossy().into_owned(),
         );
         let client = ChildProcessMcpClient::spawn_with_timeouts(

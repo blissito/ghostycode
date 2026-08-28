@@ -18,7 +18,7 @@
 //! | High | `reasoning_effort: "high"`  | `effort: "high"`   |
 //! | Max  | `reasoning_effort: "max"`   | `effort: "max"`    |
 //!
-//! Neither wire documents a `medium`, so CodeWhale's medium rounds up to the
+//! Neither wire documents a `medium`, so GhostyCode's medium rounds up to the
 //! nearest documented tier (high), which is also the server default in
 //! thinking mode.
 //!
@@ -72,8 +72,8 @@ impl DeepseekEffortTier {
     }
 }
 
-/// Every CodeWhale-side effort spelling that maps onto a documented DeepSeek
-/// tier. The empty string is CodeWhale's "unset" effort, which means the
+/// Every GhostyCode-side effort spelling that maps onto a documented DeepSeek
+/// tier. The empty string is GhostyCode's "unset" effort, which means the
 /// default tier.
 ///
 /// Anything absent from this table is not a DeepSeek tier request: the
@@ -99,7 +99,7 @@ pub(super) const DEEPSEEK_EFFORT_ALIASES: &[(&str, DeepseekEffortTier)] = &[
     ("ultracode", DeepseekEffortTier::Max),
 ];
 
-/// The tier CodeWhale falls back to when a caller asks for something this
+/// The tier GhostyCode falls back to when a caller asks for something this
 /// table does not name (`auto`, a future provider label, a typo).
 pub(super) const DEEPSEEK_DEFAULT_EFFORT_TIER: DeepseekEffortTier = DeepseekEffortTier::High;
 

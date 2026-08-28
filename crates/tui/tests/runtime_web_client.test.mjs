@@ -424,8 +424,8 @@ test("uses the v0.9.6 Work vocabulary for the agent wire mode", () => {
 test("formats and renders exact Runtime build provenance with honest fallbacks", () => {
   const exactCommit = "abcdef0123456789abcdef0123456789abcdef01";
   const stamped = {
-    codewhale_version: "0.9.6",
-    codewhale_commit: exactCommit,
+    ghosty_version: "0.9.6",
+    ghosty_commit: exactCommit,
   };
   assert.equal(formatRuntimeProvenance(stamped), "0.9.6 · abcdef012345");
 
@@ -434,11 +434,11 @@ test("formats and renders exact Runtime build provenance with honest fallbacks",
   assert.equal(rendered.textContent, "0.9.6 · abcdef012345");
 
   assert.equal(
-    formatRuntimeProvenance({ codewhale_version: "0.9.6", codewhale_commit: "unknown" }),
+    formatRuntimeProvenance({ ghosty_version: "0.9.6", ghosty_commit: "unknown" }),
     "0.9.6 · source unknown",
   );
   assert.equal(
-    formatRuntimeProvenance({ version: "0.9.6", codewhale_commit: "too-short" }),
+    formatRuntimeProvenance({ version: "0.9.6", ghosty_commit: "too-short" }),
     "0.9.6 · source unknown",
   );
   assert.equal(formatRuntimeProvenance(null), "version unknown · source unknown");

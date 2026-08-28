@@ -68,7 +68,7 @@ the active or deferred catalog only when their implementation and host
 dependencies are available.
 
 MCP tools are dynamic. Successfully connected servers register names such as
-`mcp_<server>_<tool>` from `~/.codewhale/mcp.json`; a failed or disabled server
+`mcp_<server>_<tool>` from `~/.ghosty/mcp.json`; a failed or disabled server
 must not be presented as available. MCP and plugin tools are deferred unless a
 user explicitly names them in `[tools].always_load`.
 
@@ -244,10 +244,10 @@ catalog and alias visibility at the exact candidate SHA:
 
 ```bash
 python3 scripts/measure-runtime-contract.py
-cargo test -p codewhale-tui --lib --locked core::engine::tests::default_active_contract_keeps_discovery_and_core_tools_eager -- --exact
-cargo test -p codewhale-tui --lib --locked tools::file_tool::tests::primitive_schemas_are_separate_and_small_contract_shaped -- --exact
-cargo test -p codewhale-tui --lib --locked tools::shell::tests::lowercase_bash_schema_is_small_contract -- --exact
-cargo test --locked -p codewhale-tui --lib core::engine::tests::print_mode_tool_catalog_metrics -- --ignored --exact --nocapture
+cargo test -p ghosty-tui --lib --locked core::engine::tests::default_active_contract_keeps_discovery_and_core_tools_eager -- --exact
+cargo test -p ghosty-tui --lib --locked tools::file_tool::tests::primitive_schemas_are_separate_and_small_contract_shaped -- --exact
+cargo test -p ghosty-tui --lib --locked tools::shell::tests::lowercase_bash_schema_is_small_contract -- --exact
+cargo test --locked -p ghosty-tui --lib core::engine::tests::print_mode_tool_catalog_metrics -- --ignored --exact --nocapture
 ```
 
 Check the test names against the source before trusting a green run: `cargo test`

@@ -33,7 +33,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use codewhale_workflow::{
+use ghosty_workflow::{
     CapturedReasoningRouter, CredentialReadiness, EffectiveReasoning, EndpointIdentity,
     FleetDocument, FleetRouterRef, FleetSearchRoot, FleetSnapshot, FleetSnapshotMember,
     FleetTaskReceipt, NamedFleetError, PermissionCeiling, PreflightError, PreflightedRoute,
@@ -55,7 +55,7 @@ use crate::tui::app::ReasoningEffort;
 /// labelled so an identity can be qualified (`workspace/glm-pair`) instead of
 /// silently shadowed.
 fn personal_fleet_root() -> anyhow::Result<std::path::PathBuf> {
-    codewhale_config::codewhale_home()
+    ghosty_config::ghosty_home()
 }
 
 pub(crate) fn personal_fleet_definitions_dir() -> anyhow::Result<std::path::PathBuf> {
@@ -66,7 +66,7 @@ pub(crate) fn personal_fleet_definitions_dir() -> anyhow::Result<std::path::Path
 pub(crate) fn fleet_search_roots(workspace: &std::path::Path) -> Vec<FleetSearchRoot> {
     let mut roots = Vec::new();
     if let Ok(home) = personal_fleet_root() {
-        roots.push(FleetSearchRoot::new("codewhale_home", home));
+        roots.push(FleetSearchRoot::new("ghosty_home", home));
     }
     roots.push(FleetSearchRoot::new("workspace", workspace.to_path_buf()));
     roots
@@ -782,8 +782,8 @@ pub(crate) fn preflight_route(
         } else {
             // The discriminant only. `Missing { detail }` names the provider table
             // key, which for a custom route is the customer's own string.
-            codewhale_telemetry::session_counters()
-                .bump_error(codewhale_telemetry::ErrorCounter::AuthPreflightFailed);
+            ghosty_telemetry::session_counters()
+                .bump_error(ghosty_telemetry::ErrorCounter::AuthPreflightFailed);
             CredentialReadiness::Missing {
                 detail: format!("no credential configured for `{}`", identity.key),
             }
@@ -812,7 +812,7 @@ pub(crate) fn preflight_route(
 ///
 /// Preflight resolves a route from *configuration*; this proves the same route
 /// can be turned into a working client — the step that fails on a malformed
-/// base URL, an unusable auth mode, or a transport CodeWhale cannot construct.
+/// base URL, an unusable auth mode, or a transport GhostyCode cannot construct.
 /// Doing it at Workflow start, for every member, is what stops a Fleet from
 /// paying for a Router decision and only then discovering that the worker it
 /// decided for could never have been launched.
@@ -1583,14 +1583,14 @@ fn exact_member_profile(
         |route| route.provider_config_id().to_string(),
     );
 
-    let profile = codewhale_config::FleetProfile {
-        slot: codewhale_config::FleetSlot::Custom(member.role.clone()),
-        role: codewhale_config::FleetRole {
+    let profile = ghosty_config::FleetProfile {
+        slot: ghosty_config::FleetSlot::Custom(member.role.clone()),
+        role: ghosty_config::FleetRole {
             name: posture_role.to_string(),
             description: Some(format!("exact fleet member `{}`", member.id)),
             instructions: None,
         },
-        loadout: codewhale_config::FleetLoadout::Inherit,
+        loadout: ghosty_config::FleetLoadout::Inherit,
         model: Some(wire_model.clone()),
         // The exact provider pin is the whole point: it is what makes the
         // child client bind to this member's provider instead of the
@@ -1602,8 +1602,8 @@ fn exact_member_profile(
         // Compatibility-only profile fields stay neutral. Runtime derives
         // capability, shell, trust/approval and recursion from its role policy
         // plus the live parent after this member is selected.
-        permissions: codewhale_config::FleetProfilePermissions::default(),
-        delegation: codewhale_config::FleetDelegationHints::default(),
+        permissions: ghosty_config::FleetProfilePermissions::default(),
+        delegation: ghosty_config::FleetDelegationHints::default(),
     };
 
     AgentProfile {
@@ -1645,14 +1645,14 @@ impl StaticFleetRouter {
             identity: RouterIdentity {
                 id: "luna-low".to_string(),
                 origin: "workspace".to_string(),
-                service_kind: codewhale_workflow::REASONING_ROUTER_SERVICE_KIND.to_string(),
+                service_kind: ghosty_workflow::REASONING_ROUTER_SERVICE_KIND.to_string(),
                 legacy_inline: false,
                 provider: "openai".to_string(),
                 model: "gpt-5.6-luna".to_string(),
                 endpoint: Some(EndpointIdentity::from_base_url("https://api.openai.com/v1")),
                 call: Some(
                     router_call_plan(
-                        codewhale_workflow::RouterCallReasoning::Low,
+                        ghosty_workflow::RouterCallReasoning::Low,
                         &ReasoningCapability::tiered(),
                     )
                     .disclosure,
@@ -2018,7 +2018,7 @@ mod shell_ceiling_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codewhale_workflow::{
+    use ghosty_workflow::{
         EffectiveReasoningSource, ProviderEffectiveReasoning, RequestedReasoning,
     };
 
@@ -2057,7 +2057,7 @@ permissions = "read_only"
             write: true,
             network_tool: true,
             shell: ShellCeiling::Full,
-            delegation_depth: codewhale_config::DEFAULT_SPAWN_DEPTH,
+            delegation_depth: ghosty_config::DEFAULT_SPAWN_DEPTH,
             tools: true,
         }
     }
@@ -2844,9 +2844,9 @@ permissions = "read_only"
         }
 
         // And the resolver carries that all the way onto the receipt.
-        let resolved = codewhale_workflow::resolve_exact_member_reasoning(
+        let resolved = ghosty_workflow::resolve_exact_member_reasoning(
             "implementer",
-            &codewhale_workflow::FrozenRoute {
+            &ghosty_workflow::FrozenRoute {
                 provider: "deepseek".to_string(),
                 model: "deepseek-v4-pro".to_string(),
             },
@@ -2860,14 +2860,14 @@ permissions = "read_only"
         assert_eq!(resolved.requested(), RequestedReasoning::Low);
         assert_eq!(
             resolved.effective(),
-            codewhale_workflow::EffectiveReasoning::Tier(ReasoningTier::Low)
+            ghosty_workflow::EffectiveReasoning::Tier(ReasoningTier::Low)
         );
         assert!(!resolved.capability_normalized());
     }
 
     /// Routes whose dialect has no low tier still collapse low onto high, and
     /// the capability must say so instead of reporting a `low` the wire never
-    /// carried. CodeWhale's normalizer keeps the historic low/medium → high
+    /// carried. GhostyCode's normalizer keeps the historic low/medium → high
     /// coercion for these DeepSeek-compatible hosted routes because their own
     /// wire contracts are not verified.
     #[test]
@@ -2951,13 +2951,13 @@ permissions = "read_only"
     fn ollama_cloud_and_custom_remote_preflight_require_route_scoped_credentials() {
         let _env_lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().expect("isolated credential home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _ollama_cloud_key = crate::test_support::EnvVarGuard::remove("OLLAMA_CLOUD_API_KEY");
         let _ollama_key = crate::test_support::EnvVarGuard::remove("OLLAMA_API_KEY");
         let _cli_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
-        codewhale_secrets::Secrets::auto_detect()
+        let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
+        ghosty_secrets::Secrets::auto_detect()
             .set("ollama", "legacy-cloud-key")
             .expect("seed released Ollama Cloud slot");
 
@@ -2965,7 +2965,7 @@ permissions = "read_only"
             provider: Some("deepseek".to_string()),
             providers: Some(crate::config::ProvidersConfig {
                 ollama: crate::config::ProviderConfig {
-                    base_url: Some(codewhale_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
+                    base_url: Some(ghosty_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -3016,11 +3016,11 @@ permissions = "read_only"
     async fn legacy_ollama_cloud_fleet_start_builds_clients_from_the_frozen_source_route() {
         let _env_lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().expect("isolated credential home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _cloud_env = crate::test_support::EnvVarGuard::remove("OLLAMA_CLOUD_API_KEY");
         let _official_env = crate::test_support::EnvVarGuard::remove("OLLAMA_API_KEY");
-        codewhale_secrets::Secrets::auto_detect()
+        ghosty_secrets::Secrets::auto_detect()
             .set("ollama", "legacy-cloud-fleet-key")
             .expect("seed released Ollama Cloud slot");
 
@@ -3028,7 +3028,7 @@ permissions = "read_only"
             provider: Some("deepseek".to_string()),
             providers: Some(crate::config::ProvidersConfig {
                 ollama: crate::config::ProviderConfig {
-                    base_url: Some(codewhale_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
+                    base_url: Some(ghosty_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
                     model: Some(crate::config::DEFAULT_OLLAMA_CLOUD_MODEL.to_string()),
                     ..Default::default()
                 },
@@ -3108,7 +3108,7 @@ call_reasoning = "low"
         assert_eq!(live.client.api_provider(), ApiProvider::OllamaCloud);
         assert_eq!(
             live.client.base_url(),
-            codewhale_config::provider::OLLAMA_CLOUD_BASE_URL
+            ghosty_config::provider::OLLAMA_CLOUD_BASE_URL
         );
     }
 

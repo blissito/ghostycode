@@ -43,12 +43,12 @@ pub(super) fn import_claude_command(app: &mut App, _arg: Option<&str>) -> Comman
     // The plan is shown before anything is written; the only writes are the
     // report and an *unapplied* bundle file. Applying always goes through a
     // separate consent path (`/mcp import <name> --approve`, `config import`).
-    let imports_dir = codewhale_config::codewhale_home()
+    let imports_dir = ghosty_config::ghosty_home()
         .map(|home| home.join("imports"))
-        .unwrap_or_else(|_| std::path::PathBuf::from(".codewhale/imports"));
+        .unwrap_or_else(|_| std::path::PathBuf::from(".ghosty/imports"));
     let report_path = imports_dir.join("claude-import-report.md");
     let bundle_path = imports_dir.join("claude-portable-bundle.json");
-    let wrote_report = codewhale_config::persistence::atomic_write(
+    let wrote_report = ghosty_config::persistence::atomic_write(
         &report_path,
         import_claude::report_markdown(&plan).as_bytes(),
     )
@@ -56,7 +56,7 @@ pub(super) fn import_claude_command(app: &mut App, _arg: Option<&str>) -> Comman
     let wrote_bundle = if plan.env_safe.is_empty() {
         false
     } else {
-        codewhale_config::persistence::atomic_write(
+        ghosty_config::persistence::atomic_write(
             &bundle_path,
             import_claude::portable_bundle_json(&plan).as_bytes(),
         )
@@ -74,7 +74,7 @@ pub(super) fn import_claude_command(app: &mut App, _arg: Option<&str>) -> Comman
     }
     if wrote_bundle {
         message.push_str(&format!(
-            "\nPortable bundle (review, then `codewhale config import {}`): apply it there for the consent/rollback path.",
+            "\nPortable bundle (review, then `ghosty config import {}`): apply it there for the consent/rollback path.",
             crate::utils::display_path(&bundle_path)
         ));
     }

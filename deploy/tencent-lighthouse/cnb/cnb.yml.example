@@ -39,8 +39,8 @@ main:
             fi
 
             LIGHTHOUSE_SSH_PORT="${LIGHTHOUSE_SSH_PORT:-22}"
-            CODEWHALE_REPO_BRANCH="${CODEWHALE_REPO_BRANCH:-main}"
-            CODEWHALE_REPO_URL="${CODEWHALE_REPO_URL:-https://cnb.cool/codewhale.net/codewhale.git}"
+            GHOSTY_REPO_BRANCH="${GHOSTY_REPO_BRANCH:-main}"
+            GHOSTY_REPO_URL="${GHOSTY_REPO_URL:-https://cnb.cool/ghosty.net/ghosty.git}"
 
             install -m 700 -d ~/.ssh
             printf '%s\n' "$LIGHTHOUSE_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
@@ -48,40 +48,40 @@ main:
             ssh-keyscan -p "$LIGHTHOUSE_SSH_PORT" -H "$LIGHTHOUSE_HOST" >> ~/.ssh/known_hosts
 
             ssh -p "$LIGHTHOUSE_SSH_PORT" "$LIGHTHOUSE_SSH_TARGET" \
-              "CODEWHALE_REPO_BRANCH='$CODEWHALE_REPO_BRANCH' CODEWHALE_REPO_URL='$CODEWHALE_REPO_URL' bash -s" <<'REMOTE'
+              "GHOSTY_REPO_BRANCH='$GHOSTY_REPO_BRANCH' GHOSTY_REPO_URL='$GHOSTY_REPO_URL' bash -s" <<'REMOTE'
             set -euo pipefail
 
-            if [ ! -d /opt/whalebro/codewhale/.git ]; then
-              sudo -u codewhale git clone --branch "$CODEWHALE_REPO_BRANCH" "$CODEWHALE_REPO_URL" /opt/whalebro/codewhale
+            if [ ! -d /opt/whalebro/ghosty/.git ]; then
+              sudo -u ghosty git clone --branch "$GHOSTY_REPO_BRANCH" "$GHOSTY_REPO_URL" /opt/whalebro/ghosty
             fi
 
-            cd /opt/whalebro/codewhale
-            if [ -n "$(sudo -u codewhale git status --porcelain)" ]; then
-              echo "Refusing to deploy over a dirty /opt/whalebro/codewhale checkout." >&2
-              sudo -u codewhale git status --short
+            cd /opt/whalebro/ghosty
+            if [ -n "$(sudo -u ghosty git status --porcelain)" ]; then
+              echo "Refusing to deploy over a dirty /opt/whalebro/ghosty checkout." >&2
+              sudo -u ghosty git status --short
               exit 1
             fi
 
-            sudo -u codewhale git fetch --all --tags
-            if sudo -u codewhale git rev-parse --verify --quiet "refs/remotes/origin/$CODEWHALE_REPO_BRANCH" >/dev/null; then
-              sudo -u codewhale git checkout -B "$CODEWHALE_REPO_BRANCH" "origin/$CODEWHALE_REPO_BRANCH"
-            elif sudo -u codewhale git rev-parse --verify --quiet "refs/tags/$CODEWHALE_REPO_BRANCH" >/dev/null; then
-              sudo -u codewhale git checkout --detach "$CODEWHALE_REPO_BRANCH"
+            sudo -u ghosty git fetch --all --tags
+            if sudo -u ghosty git rev-parse --verify --quiet "refs/remotes/origin/$GHOSTY_REPO_BRANCH" >/dev/null; then
+              sudo -u ghosty git checkout -B "$GHOSTY_REPO_BRANCH" "origin/$GHOSTY_REPO_BRANCH"
+            elif sudo -u ghosty git rev-parse --verify --quiet "refs/tags/$GHOSTY_REPO_BRANCH" >/dev/null; then
+              sudo -u ghosty git checkout --detach "$GHOSTY_REPO_BRANCH"
             else
-              sudo -u codewhale git checkout "$CODEWHALE_REPO_BRANCH"
-              sudo -u codewhale git pull --ff-only
+              sudo -u ghosty git checkout "$GHOSTY_REPO_BRANCH"
+              sudo -u ghosty git pull --ff-only
             fi
 
-            sudo -iu codewhale bash -lc '
+            sudo -iu ghosty bash -lc '
               set -euo pipefail
               . "$HOME/.cargo/env"
-              cd /opt/whalebro/codewhale
+              cd /opt/whalebro/ghosty
               cargo install --path crates/cli --locked --force
-              ln -sf codewhale "$HOME/.cargo/bin/codew"
+              ln -sf ghosty "$HOME/.cargo/bin/ghosty-tui"
             '
 
             sudo bash scripts/tencent-lighthouse/install-services.sh
-            sudo systemctl restart codewhale-runtime
-            sudo systemctl restart codewhale-feishu-bridge
+            sudo systemctl restart ghosty-runtime
+            sudo systemctl restart ghosty-feishu-bridge
             sudo bash scripts/tencent-lighthouse/doctor.sh
             REMOTE

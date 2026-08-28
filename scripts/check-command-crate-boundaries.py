@@ -3,9 +3,9 @@
 
 Enforces the EPIC-006 boundary contract:
 
-1. `codewhale-command-contract` may not transitively depend on
-   `codewhale-tui` (normal edges, via `cargo metadata`).
-2. `codewhale-command-contract` source may not import the concrete `App`,
+1. `ghosty-command-contract` may not transitively depend on
+   `ghosty-tui` (normal edges, via `cargo metadata`).
+2. `ghosty-command-contract` source may not import the concrete `App`,
    widget/renderer/view/event-loop surfaces, or `ratatui`/`crossterm`.
 3. No composite `CommandContext` symbol (supertrait/struct/enum) may exist in
    the contract — the deep-dive D2 "no super-context" rule.
@@ -30,13 +30,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTRACT_DIR = REPO_ROOT / "crates" / "command-contract" / "src"
-CONTRACT_PACKAGE = "codewhale-command-contract"
-FORBIDDEN_TUI_PACKAGE = "codewhale-tui"
+CONTRACT_PACKAGE = "ghosty-command-contract"
+FORBIDDEN_TUI_PACKAGE = "ghosty-tui"
 
 # Import lines that must never appear in the contract (narrowly scoped: real
 # imports only, comments never match because they do not start with `use`).
 FORBIDDEN_IMPORT_PATTERNS = [
-    (re.compile(r"^\s*(pub\s+)?use\s+codewhale_tui\b"), "codewhale-tui import"),
+    (re.compile(r"^\s*(pub\s+)?use\s+ghosty_tui\b"), "ghosty-tui import"),
     (re.compile(r"^\s*(pub\s+)?use\s+ratatui\b"), "ratatui (widget) import"),
     (re.compile(r"^\s*(pub\s+)?use\s+crossterm\b"), "crossterm (terminal) import"),
     (re.compile(r"^\s*(pub\s+)?use\s+.*\bApp\b"), "concrete App import"),
@@ -123,7 +123,7 @@ def reaches_tui(package: str, graph: dict[str, set[str]]) -> bool:
 
 
 def check_dependency_graph(graph: dict[str, set[str]]) -> list[BoundaryViolation]:
-    """The prototype contract must not reach codewhale-tui."""
+    """The prototype contract must not reach ghosty-tui."""
     if CONTRACT_PACKAGE not in graph:
         return [
             BoundaryViolation(

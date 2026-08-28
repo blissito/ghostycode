@@ -1,7 +1,7 @@
 //! Task commands: add/list/show/cancel
 
-use codewhale_command_contract::handler::{CommandContexts, CommandHandler};
-use codewhale_command_contract::metadata::{CommandInfo, RegisterCommand};
+use ghosty_command_contract::handler::{CommandContexts, CommandHandler};
+use ghosty_command_contract::metadata::{CommandInfo, RegisterCommand};
 
 use crate::commands::CommandResult;
 use crate::tui::app::AppAction;
@@ -32,7 +32,7 @@ fn task_contextual(contexts: CommandContexts<'_>, arg: Option<&str>) -> CommandR
 }
 
 fn task(
-    workspace: &mut dyn codewhale_command_contract::facets::CommandWorkspaceContext,
+    workspace: &mut dyn ghosty_command_contract::facets::CommandWorkspaceContext,
     args: Option<&str>,
 ) -> CommandResult {
     let raw = args.unwrap_or("").trim();
@@ -80,7 +80,7 @@ mod tests {
     use std::path::PathBuf;
 
     struct FakeWorkspace;
-    impl codewhale_command_contract::facets::CommandWorkspaceContext for FakeWorkspace {
+    impl ghosty_command_contract::facets::CommandWorkspaceContext for FakeWorkspace {
         fn workspace(&self) -> PathBuf {
             PathBuf::from(".")
         }
@@ -93,7 +93,7 @@ mod tests {
     }
 
     struct FailingWorkspace;
-    impl codewhale_command_contract::facets::CommandWorkspaceContext for FailingWorkspace {
+    impl ghosty_command_contract::facets::CommandWorkspaceContext for FailingWorkspace {
         fn workspace(&self) -> PathBuf {
             PathBuf::from(".")
         }

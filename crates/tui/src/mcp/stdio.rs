@@ -77,7 +77,7 @@ impl StdioTransport {
         let reviewed_launch = if let Some(reviewed_plugin) = config.reviewed_plugin.as_ref() {
             // This is deliberately the last trust check before constructing
             // and spawning the lazy stdio child. It re-reads only the
-            // Codewhale-owned plugin bundle, never user MCP/provider config or
+            // Ghosty-owned plugin bundle, never user MCP/provider config or
             // credential files, and fails closed on any content/capability
             // drift after pool construction.
             Some(reviewed_plugin.prepare_stdio_launch(

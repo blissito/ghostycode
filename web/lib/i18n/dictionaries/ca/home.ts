@@ -6,19 +6,19 @@ import type { HomeDict } from "../types";
  * Reescriptura nativa en la direcció anglesa actual: porta el teu model,
  * tot passa a la teva màquina. El vocabulari de producte es manté literal
  * i coincideix amb el pack TUI: Plan / Work / Operate, Ask / Auto-Review /
- * Full Access, Codewhale, TUI, `codewhale exec`, Runtime API + MCP, Fleet,
+ * Full Access, Ghosty, TUI, `ghosty exec`, Runtime API + MCP, Fleet,
  * Node 18+, Rust, MIT.
  *
  * Els segells de secció (法, 行, …) són glifs compartits amb l’edició
  * anglesa — marques, no prosa.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — s’immergeix a les profunditats per tu.",
+  metaTitle: "Ghosty — s’immergeix a les profunditats per tu.",
   metaDescription:
-    "Codewhale s’immergeix a les profunditats per tu — un agent de programació de codi obert per al terminal. Porta el teu model. A la teva màquina. En Rust, amb llicència MIT.",
+    "Ghosty s’immergeix a les profunditats per tu — un agent de programació de codi obert per al terminal. Porta el teu model. A la teva màquina. En Rust, amb llicència MIT.",
 
   kicker: "Codi obert · Porta el teu model · Al teu terminal",
-  heroTitleA: "Codewhale s’immergeix a les profunditats",
+  heroTitleA: "Ghosty s’immergeix a les profunditats",
   heroTitleB: "perquè tu no ho hagis de fer.",
   heroIntro:
     "{brand} és un agent de programació de codi obert per al teu terminal. Dóna-li un model i una tasca: llegeix el teu codi, edita fitxers, executa les seves pròpies comprovacions i s’atura quan la feina és feta o quan et necessita. Porta el model que vulguis, o barreja’ls: fixa un model diferent per a cada rol.",
@@ -41,8 +41,8 @@ export const home: HomeDict = {
 
   shotSession: "Sessió actual",
   screenshotAlt:
-    "Sessió de terminal actual de Codewhale amb el mode Operate, la balena, el compositor i el peu de pàgina",
-  figcaption: "Sessió actual de Codewhale · mode Operate · postura de permisos Ask",
+    "Sessió de terminal actual de Ghosty amb el mode Operate, la balena, el compositor i el peu de pàgina",
+  figcaption: "Sessió actual de Ghosty · mode Operate · postura de permisos Ask",
 
   proofHeading: "Un intèrpret d’ordres submarí. Qualsevol model. A la teva màquina.",
   proofBody:
@@ -68,7 +68,7 @@ export const home: HomeDict = {
   receiptReport: "comprovacions superades · resguard desat",
 
   sealStart: "起",
-  startHeading: "Nou a Codewhale? Quatre passos de principi a fi.",
+  startHeading: "Nou a Ghosty? Quatre passos de principi a fi.",
   startLede:
     "Instal·lar → primera sessió sense claus → connectar un proveïdor → configurar la teva Fleet. Els termes es defineixen a la pàgina de vocabulari.",
   startGuideLink: "Llegeix la guia d’inici →",
@@ -88,7 +88,7 @@ export const home: HomeDict = {
   surfacesHeading: "Fes servir el runtime on passa la feina.",
   surfaces: [
     ["TUI", "Treball interactiu al terminal"],
-    ["codewhale exec", "Scripts i CI"],
+    ["ghosty exec", "Scripts i CI"],
     ["Client web", "Client de navegador, només loopback"],
     ["Runtime API + MCP", "Integracions locals"],
     ["Fleet", "Feina multiagent durable"],

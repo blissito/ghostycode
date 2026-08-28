@@ -4,9 +4,9 @@
 .entire/
 .cursor/
 .plans/
-.codewhale-worktrees/
+.ghosty-worktrees/
 docs/superpowers/
-codewhale-inference/
+ghosty-inference/
 /extensions/vscode/out/
 *.pdb
 *.exe
@@ -81,10 +81,10 @@ project_overhaul_prompt.md
 .wrangler/
 
 # Local runtime state
-# Ignore everything under any .codewhale/ (snapshots, auto-generated
+# Ignore everything under any .ghosty/ (snapshots, auto-generated
 # instructions.md, etc.) at any depth EXCEPT the committed repo authority policy.
-**/.codewhale/*
-!**/.codewhale/constitution.json
+**/.ghosty/*
+!**/.ghosty/constitution.json
 .deepseek/
 **/session_*.json
 *.db
@@ -148,10 +148,13 @@ scratchpad/
 operations9.md
 OPERATIONS_0_9_0.md
 operations_0_9_0.md
-CODEWHALE_0_9_0_CUTOVER.md
+GHOSTY_0_9_0_CUTOVER.md
 
 # Hepha project metadata (local only, not upstream)
 .hepha/
 
 # Ralph agent scratch (local only)
 .ralph/
+
+# Estado local de Ghosty en este workspace (constitución/instrucciones viven en ~/.ghosty)
+.ghosty/

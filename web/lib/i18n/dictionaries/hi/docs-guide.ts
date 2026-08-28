@@ -5,7 +5,7 @@ import type { DocsGuideDict } from "../types";
  * touch more leading than the Latin reference, short of the CJK treatment.
  */
 export const docsGuide: DocsGuideDict = {
-  metaTitle: "शुरुआत कैसे करें · Codewhale दस्तावेज़ीकरण",
+  metaTitle: "शुरुआत कैसे करें · Ghosty दस्तावेज़ीकरण",
   metaDescription:
     "इंस्टॉल से लेकर आपकी आदर्श Fleet तक का पूरा रास्ता: इंस्टॉल, बिना कुंजी पहला सेशन, प्रोवाइडर कनेक्शन और Fleet सेटअप।",
   bodyClassName: "text-ink-soft leading-loose",

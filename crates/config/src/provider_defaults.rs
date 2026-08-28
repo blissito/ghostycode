@@ -6,6 +6,7 @@
 //! `crate::DEFAULT_*` references keep resolving.
 
 pub(crate) const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-pro";
+pub(crate) const DEFAULT_EASYBITS_MODEL: &str = "deepseek-v4-pro";
 pub(crate) const DEFAULT_DEEPSEEK_ANTHROPIC_MODEL: &str = DEFAULT_DEEPSEEK_MODEL;
 pub(crate) const DEFAULT_NVIDIA_NIM_MODEL: &str = "deepseek-ai/deepseek-v4-pro";
 pub(crate) const DEFAULT_NVIDIA_NIM_FLASH_MODEL: &str = "deepseek-ai/deepseek-v4-flash";
@@ -14,6 +15,8 @@ pub(crate) const DEFAULT_NVIDIA_NIM_FLASH_MODEL: &str = "deepseek-ai/deepseek-v4
 // models. Default to OpenAI's own flagship instead (#5588).
 pub(crate) const DEFAULT_OPENAI_MODEL: &str = "gpt-5.6";
 pub(crate) const DEFAULT_DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com/beta";
+/// EasyBits revende DeepSeek: mismo wire, base URL propia.
+pub(crate) const DEFAULT_EASYBITS_BASE_URL: &str = "https://www.easybits.cloud/api/v2/llm/v1";
 pub(crate) const DEFAULT_DEEPSEEK_ANTHROPIC_BASE_URL: &str = "https://api.deepseek.com/anthropic";
 pub(crate) const DEFAULT_NVIDIA_NIM_BASE_URL: &str = "https://integrate.api.nvidia.com/v1";
 pub(crate) const DEFAULT_OPENAI_CODEX_MODEL: &str = "gpt-5.6";
@@ -162,7 +165,7 @@ pub(crate) const DEFAULT_LONGCAT_MODEL: &str = "LongCat-2.0";
 pub(crate) const DEFAULT_LONGCAT_BASE_URL: &str = "https://api.longcat.chat/openai/v1";
 // OpenCode Go Chat Completions defaults. The Go catalog also contains models
 // served only through Anthropic Messages; those are deliberately not listed by
-// this provider until Codewhale can route wire formats per model.
+// this provider until Ghosty can route wire formats per model.
 pub(crate) const DEFAULT_OPENCODE_GO_MODEL: &str = "deepseek-v4-pro";
 pub(crate) const DEFAULT_OPENCODE_GO_BASE_URL: &str = "https://opencode.ai/zen/go/v1";
 pub(crate) const OPENCODE_GO_GROK_4_5_MODEL: &str = "grok-4.5";

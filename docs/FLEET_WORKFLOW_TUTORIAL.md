@@ -27,12 +27,12 @@ mechanics.
 Run Fleet from the workspace you want workers to inspect or modify:
 
 ```sh
-codewhale fleet init
+ghosty fleet init
 ```
 
-This creates the workspace ledger at `.codewhale/fleet.jsonl`. Worker logs and
-bounded artifacts live under `.codewhale/fleet/`; host adapter logs live under
-`.codewhale/fleet-host/`.
+This creates the workspace ledger at `.ghosty/fleet.jsonl`. Worker logs and
+bounded artifacts live under `.ghosty/fleet/`; host adapter logs live under
+`.ghosty/fleet-host/`.
 
 If you want named reusable workers, open the TUI and run:
 
@@ -42,8 +42,8 @@ If you want named reusable workers, open the TUI and run:
 
 Pick a role, choose whether that profile inherits the operator route or pins a
 specific provider/model, choose where the profile lives (**This project** →
-`.codewhale/agents/<role>.toml`, or **Personal** →
-`$CODEWHALE_HOME/agents/<role>.toml`, available across repositories while a
+`.ghosty/agents/<role>.toml`, or **Personal** →
+`$GHOSTY_HOME/agents/<role>.toml`, available across repositories while a
 same-id project profile remains the higher-priority override), then review the
 exact file, permissions/tools/route posture, and save. The save control names
 its effect ("Save to this project" / "Save as Personal profile"), and
@@ -52,14 +52,14 @@ specs can reference either resolved profile with `worker.agent_profile` or the
 shorter `worker.profile` alias.
 
 This makes the Fleet definition cross-repository, not the authority of one
-running session. For a multi-repository operation, launch Codewhale from a
+running session. For a multi-repository operation, launch Ghosty from a
 shared parent workspace. Profile availability does not grant filesystem access;
 the session's workspace, explicit trusted paths, trust mode, and permission
 posture remain authoritative.
 
 ## 2. Write A Fleet Task Spec
 
-`codewhale fleet run` accepts JSON or TOML. The checked-in
+`ghosty fleet run` accepts JSON or TOML. The checked-in
 `docs/examples/fleet-dogfood.toml` file is the realistic manual smoke example;
 the JSON below shows the same authoring shape with one read-only reviewer and
 one bounded docs-note worker. The live Runtime policy controls secrets and
@@ -111,7 +111,7 @@ trust; Fleet identity carries neither.
       },
       "workspace": {
         "required_files": ["docs/FLEET.md"],
-        "writable_paths": [".codewhale/fleet"],
+        "writable_paths": [".ghosty/fleet"],
         "environment": {
           "allowlist": []
         }
@@ -134,7 +134,7 @@ Common task fields:
 | `id`, `name` | Stable task identity and display name. |
 | `objective`, `instructions` | The worker goal and exact operating instructions. |
 | `worker.role` | Built-in or custom role intent, such as `reviewer`, `builder`, `read-only`, or `smoke-runner`. |
-| `worker.profile` / `worker.agent_profile` | Saved Fleet roster profile resolved from project `.codewhale/agents/`, personal `$CODEWHALE_HOME/agents/`, or `[fleet.profiles]`. |
+| `worker.profile` / `worker.agent_profile` | Saved Fleet roster profile resolved from project `.ghosty/agents/`, personal `$GHOSTY_HOME/agents/`, or `[fleet.profiles]`. |
 | `worker.tools` | Tool names the task expects the worker to use. |
 | `worker.model` | Preferred explicit model pin. Route resolution still owns provider/model validation. |
 | `worker.model_class`, `worker.loadout` | Compatibility routing hints for older task specs; prefer `worker.profile` plus saved profile route pins for new specs. |
@@ -156,26 +156,26 @@ approvals, sandboxing, and tool authority are Runtime policy inputs.
 Launch the run:
 
 ```sh
-codewhale fleet run tasks.json --max-workers 4
+ghosty fleet run tasks.json --max-workers 4
 ```
 
 The command prints the run id and worker ids. In another terminal, monitor the
 ledgered state:
 
 ```sh
-codewhale fleet status
-codewhale fleet inspect <worker-id>
-codewhale fleet logs <worker-id>
-codewhale fleet artifacts <worker-id>
+ghosty fleet status
+ghosty fleet inspect <worker-id>
+ghosty fleet logs <worker-id>
+ghosty fleet artifacts <worker-id>
 ```
 
 Use typed controls when a worker needs intervention:
 
 ```sh
-codewhale fleet interrupt <worker-id>
-codewhale fleet restart <worker-id>
-codewhale fleet resume <run-id>
-codewhale fleet stop --all
+ghosty fleet interrupt <worker-id>
+ghosty fleet restart <worker-id>
+ghosty fleet resume <run-id>
+ghosty fleet stop --all
 ```
 
 `resume` is for restart recovery after a manager exit, laptop sleep, or stale
@@ -241,7 +241,7 @@ Current Workflow node wrappers are `agent`, `branch`, `sequence`, `reduce`,
 Fleet roster profile; explicit agent fields override profile defaults.
 
 The model-facing `workflow` tool can start, run, inspect, or cancel a workflow
-from inline source or a `source_path`. When Codewhale uses this path, ask it to
+from inline source or a `source_path`. When Ghosty uses this path, ask it to
 show the plan first if the workflow will launch multiple workers or touch files.
 
 ## 5. Natural Language Intake
@@ -256,7 +256,7 @@ them.
 ```
 
 After reviewing the generated spec, save it as `tasks.json` and run the Fleet
-commands above. For workflows, ask Codewhale to draft a `.workflow.js` file,
+commands above. For workflows, ask Ghosty to draft a `.workflow.js` file,
 show the plan, and use the workflow tool path only after approval.
 
 This review step is intentional. It keeps provider routing, DeepSeek or other

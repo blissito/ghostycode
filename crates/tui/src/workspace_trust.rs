@@ -8,7 +8,7 @@
 //!
 //! Threat model: this is a deliberate user opt-in to a path the workspace
 //! sandbox would otherwise refuse. The only access the trust list grants is
-//! through CodeWhale's own file tools (`read_file`, `write_file`, etc.) —
+//! through GhostyCode's own file tools (`read_file`, `write_file`, etc.) —
 //! it does not loosen the OS sandbox profile (Seatbelt/bubblewrap) used for
 //! shell commands. Sandbox-profile expansion is tracked separately so a
 //! shell tool can opt into the same paths in a future release.
@@ -158,7 +158,7 @@ fn canonicalize_or_keep(path: &Path) -> PathBuf {
 }
 
 fn trust_file_path() -> Option<PathBuf> {
-    codewhale_config::ensure_state_dir(".")
+    ghosty_config::ensure_state_dir(".")
         .ok()
         .map(|dir| dir.join(TRUST_FILE_NAME))
 }

@@ -4566,11 +4566,11 @@ mod tests {
         }
 
         let setup_intro = tr(Locale::ZhHans, MessageId::SetupStepConstitutionWhy);
-        assert!(setup_intro.contains("Codewhale"));
+        assert!(setup_intro.contains("Ghosty"));
         assert!(setup_intro.contains("宪章"));
         assert!(!setup_intro.contains("代码"));
         // The romanized-brand guard lives on `setup_intro` above: the welcome
-        // lead names commands, not the product, so asserting "Codewhale" here
+        // lead names commands, not the product, so asserting "Ghosty" here
         // would only force a brand into copy that does not need one (#5442).
         let welcome = tr(Locale::ZhHans, MessageId::OnboardWelcomeLead);
         assert!(!welcome.contains("代码"));
@@ -5103,8 +5103,8 @@ mod tests {
                 locale.tag()
             );
             assert!(
-                !description.contains("codewhale |"),
-                "{} provider description should not name codewhale as a backend: {description}",
+                !description.contains("ghosty |"),
+                "{} provider description should not name ghosty as a backend: {description}",
                 locale.tag()
             );
         }
@@ -5318,7 +5318,7 @@ mod tests {
     /// string is mixed-language copy.
     fn latin_words_in_translated_copy(value: &str) -> Vec<String> {
         const ALLOWED: &[&str] = &[
-            "codewhale",
+            "ghosty",
             "deepseek",
             "fleet",
             "plan",

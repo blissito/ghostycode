@@ -11,7 +11,7 @@
 //! hooks, missing tool) is refunded before it would have executed (#5170),
 //! so blocked calls cannot burn the budget.
 
-use codewhale_tools::ToolError;
+use ghosty_tools::ToolError;
 
 /// Countdown of tool calls one turn may still admit.
 ///

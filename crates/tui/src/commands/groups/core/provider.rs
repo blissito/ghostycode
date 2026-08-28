@@ -119,15 +119,15 @@ pub(in crate::commands) fn provider_setup_action_for_name(raw: &str) -> Result<A
     if raw.eq_ignore_ascii_case("ds4") || raw.eq_ignore_ascii_case("dwarfstar") {
         return Ok(AppAction::OpenDs4Setup);
     }
-    if let Some(template) = codewhale_config::provider_setup_template(raw) {
+    if let Some(template) = ghosty_config::provider_setup_template(raw) {
         match template.apply {
-            codewhale_config::ProviderSetupApply::FirstClass(kind) => {
+            ghosty_config::ProviderSetupApply::FirstClass(kind) => {
                 return Ok(AppAction::OpenProviderSetup {
                     provider: Some(ApiProvider::from_kind(kind)),
                 });
             }
-            codewhale_config::ProviderSetupApply::Compatible
-            | codewhale_config::ProviderSetupApply::Unpublished => {
+            ghosty_config::ProviderSetupApply::Compatible
+            | ghosty_config::ProviderSetupApply::Unpublished => {
                 return Ok(AppAction::OpenTemplateSetup {
                     template_id: template.id.to_string(),
                 });
@@ -806,9 +806,9 @@ mod tests {
     #[test]
     fn provider_fallback_status_and_reset_use_configured_chain() {
         let mut app = create_test_app();
-        app.provider_chain = Some(codewhale_config::ProviderChain::new(
-            codewhale_config::ProviderKind::Deepseek,
-            &[codewhale_config::ProviderKind::Openrouter],
+        app.provider_chain = Some(ghosty_config::ProviderChain::new(
+            ghosty_config::ProviderKind::Deepseek,
+            &[ghosty_config::ProviderKind::Openrouter],
         ));
 
         let status = provider(&mut app, Some("fallback"));
@@ -838,9 +838,9 @@ mod tests {
         let _lock = lock_test_env();
         let mut app = create_test_app();
         app.api_provider = ApiProvider::Deepseek;
-        app.provider_chain = Some(codewhale_config::ProviderChain::new(
-            codewhale_config::ProviderKind::Deepseek,
-            &[codewhale_config::ProviderKind::Openrouter],
+        app.provider_chain = Some(ghosty_config::ProviderChain::new(
+            ghosty_config::ProviderKind::Deepseek,
+            &[ghosty_config::ProviderKind::Openrouter],
         ));
         // Simulate having already fallen back to the secondary provider.
         // (Openrouter is treated as ready by default — no readiness snapshot.)

@@ -17,10 +17,10 @@ pub const WORKFLOW_SEARCH_SCHEMA_VERSION: u32 = 1;
 ///
 /// This is the answer when the host resolves no Fleet concurrency limit at
 /// all — not a second knob. 16 matches the Workflow host's live-child ceiling
-/// today (`codewhale_workflow_js::WORKFLOW_MAX_CONCURRENT`, from which the tui
+/// today (`ghosty_workflow_js::WORKFLOW_MAX_CONCURRENT`, from which the tui
 /// driver sizes its per-run admission semaphore). This crate cannot import
-/// that constant directly because `codewhale-workflow-js` depends on
-/// `codewhale-workflow`.
+/// that constant directly because `ghosty-workflow-js` depends on
+/// `ghosty-workflow`.
 ///
 /// Prefer passing the live limit: every validation entry point has a
 /// `*_with_limit` twin that takes the resolved Fleet ceiling, and the frozen
@@ -76,9 +76,9 @@ impl ResolvedSearchConcurrency {
 
     /// Resolve straight from the two config seams the host already owns:
     /// `[workflow] max_concurrent` (the per-run live-agent ceiling, see
-    /// `codewhale_config::WorkflowConfigToml::max_concurrent`) and a Fleet
+    /// `ghosty_config::WorkflowConfigToml::max_concurrent`) and a Fleet
     /// profile's `delegation.max_concurrency` hint
-    /// (`codewhale_config::FleetDelegationHints::max_concurrency`).
+    /// (`ghosty_config::FleetDelegationHints::max_concurrency`).
     ///
     /// The lower of the present values wins: a profile that asks for fewer
     /// workers than the run allows is a real bound, and a run ceiling below a

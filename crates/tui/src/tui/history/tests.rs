@@ -110,7 +110,7 @@ fn calm_options() -> TranscriptRenderOptions {
 /// Replaces five separate tests that each checked one width or one mode.
 #[test]
 fn no_width_or_render_mode_leaks_a_spillover_storage_path() {
-    let secret = "/Users/private/.codewhale/sessions/session-a/artifacts/hash.txt";
+    let secret = "/Users/private/.ghosty/sessions/session-a/artifacts/hash.txt";
 
     for width in [18_u16, 40, 80, 120] {
         for mode in [RenderMode::Live, RenderMode::Transcript] {
@@ -120,7 +120,7 @@ fn no_width_or_render_mode_leaks_a_spillover_storage_path() {
             cell.spillover_path = Some(PathBuf::from(secret));
 
             let rendered = lines_text(&cell.lines_with_mode(width, true, mode));
-            for fragment in ["/Users", ".codewhale", "sessions/", "hash.txt"] {
+            for fragment in ["/Users", ".ghosty", "sessions/", "hash.txt"] {
                 assert!(
                     !rendered.contains(fragment),
                     "storage path fragment {fragment:?} leaked at width {width} in {mode:?}: \
@@ -137,7 +137,7 @@ fn no_width_or_render_mode_leaks_a_spillover_storage_path() {
             text_display_width(&annotation) <= usize::from(width),
             "affordance exceeds width {width}: {annotation:?}"
         );
-        for fragment in ["/Users", ".codewhale", "hash.txt"] {
+        for fragment in ["/Users", ".ghosty", "hash.txt"] {
             assert!(
                 !annotation.contains(fragment),
                 "affordance leaked {fragment:?}: {annotation:?}"
@@ -1487,7 +1487,7 @@ fn error_severity_ranks_stay_visually_distinguishable() {
 fn an_error_cell_advertises_the_pager_live_and_never_inside_it() {
     let recovery = "Refusing insecure base URL 'http://192.168.1.25:8000/v1'.\n\
 Loopback hosts (localhost, 127.0.0.1, [::1]) are auto-allowed.\n\
-Set CODEWHALE_ALLOW_INSECURE_HTTP=1 only for a trusted LAN host.";
+Set GHOSTY_ALLOW_INSECURE_HTTP=1 only for a trusted LAN host.";
     let cell = HistoryCell::Error {
         message: recovery.to_string(),
         severity: crate::error_taxonomy::ErrorSeverity::Error,
@@ -1500,7 +1500,7 @@ Set CODEWHALE_ALLOW_INSECURE_HTTP=1 only for a trusted LAN host.";
     assert!(live_text.contains(&hint), "{live_text}");
     assert!(!transcript_text.contains(&hint), "{transcript_text}");
     assert!(
-        transcript_text.contains("CODEWHALE_ALLOW_INSECURE_HTTP=1"),
+        transcript_text.contains("GHOSTY_ALLOW_INSECURE_HTTP=1"),
         "the actionable instruction must survive verbatim: {transcript_text}"
     );
     assert!(

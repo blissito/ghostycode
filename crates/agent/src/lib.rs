@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use codewhale_config::{ProviderKind, opencode_go_chat_model_id};
+use ghosty_config::{ProviderKind, opencode_go_chat_model_id};
 use serde::{Deserialize, Serialize};
 
 /// High-level model family used for shared identity affordances across clients.
@@ -555,7 +555,7 @@ impl Default for ModelRegistry {
                 supports_reasoning: true,
             },
             // The first Z.ai row is the provider default. Keep this ordering
-            // aligned with `DEFAULT_ZAI_MODEL` in codewhale-config.
+            // aligned with `DEFAULT_ZAI_MODEL` in ghosty-config.
             ModelInfo {
                 id: "GLM-5.2".to_string(),
                 provider: ProviderKind::Zai,
@@ -1523,7 +1523,7 @@ impl ModelRegistry {
                 });
             }
             // OpenCode Go's catalog spans Chat Completions and Anthropic
-            // Messages, while Codewhale's provider slice intentionally speaks
+            // Messages, while Ghosty's provider slice intentionally speaks
             // Chat only. Resolve a hinted Go model through the shared Chat
             // allowlist and never fall through to a same-named global alias on
             // OpenRouter or MiniMax.
@@ -2322,7 +2322,7 @@ mod tests {
     fn zai_direct_models_resolve_when_provider_hinted() {
         let registry = ModelRegistry::default();
 
-        // Keep the agent registry fallback aligned with codewhale-config's
+        // Keep the agent registry fallback aligned with ghosty-config's
         // DEFAULT_ZAI_MODEL.
         let default = registry.resolve_ok(None, Some(ProviderKind::Zai));
         assert_eq!(default.resolved.provider, ProviderKind::Zai);

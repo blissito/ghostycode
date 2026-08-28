@@ -1,4 +1,4 @@
-//! Codewhale bundle lifecycle and legacy executable plugin-tool inventory.
+//! Ghosty bundle lifecycle and legacy executable plugin-tool inventory.
 //!
 //! `/plugin` owns declarative bundles (`plugin.toml`). Script tools under
 //! `[tools].plugin_dir` remain supported, but are labeled as legacy executable
@@ -734,14 +734,14 @@ where
 fn needs_approval_message(host: &str) -> String {
     format!(
         "Network policy requires approval for {host}.\n\
-         Add it to your allow list with `/network allow {host}` (or set [network].default = \"allow\" in ~/.codewhale/config.toml), then retry."
+         Add it to your allow list with `/network allow {host}` (or set [network].default = \"allow\" in ~/.ghosty/config.toml), then retry."
     )
 }
 
 fn network_denied_message(host: &str) -> String {
     format!(
         "Network policy denied access to {host}.\n\
-         Remove the deny entry from ~/.codewhale/config.toml under [network] or contact your administrator."
+         Remove the deny entry from ~/.ghosty/config.toml under [network] or contact your administrator."
     )
 }
 

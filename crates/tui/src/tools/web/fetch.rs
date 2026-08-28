@@ -20,9 +20,9 @@ pub(crate) const DEFAULT_MAX_BYTES: usize = 1_000_000;
 pub(crate) const HARD_MAX_BYTES: usize = 10 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
 const USER_AGENT: &str = concat!(
-    "Mozilla/5.0 (compatible; codewhale/",
+    "Mozilla/5.0 (compatible; ghosty/",
     env!("CARGO_PKG_VERSION"),
-    "; +https://github.com/Hmbown/CodeWhale)"
+    "; +https://github.com/blissito/ghostycode)"
 );
 
 #[derive(Debug, Clone)]
@@ -470,7 +470,7 @@ mod tests {
     #[test]
     fn fetch_user_agent_tracks_the_crate_version() {
         assert!(
-            USER_AGENT.contains(concat!("codewhale/", env!("CARGO_PKG_VERSION"))),
+            USER_AGENT.contains(concat!("ghosty/", env!("CARGO_PKG_VERSION"))),
             "guarded-fetch UA must never pin a stale release: {USER_AGENT}"
         );
     }

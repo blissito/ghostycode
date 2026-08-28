@@ -1,6 +1,6 @@
-# Rebrand: DeepSeek TUI → Codewhale
+# Rebrand: DeepSeek TUI → Ghosty
 
-Mulai dari versi **v0.8.41**, proyek ini dirilis dengan nama baru: `codewhale`.
+Mulai dari versi **v0.8.41**, proyek ini dirilis dengan nama baru: `ghosty`.
 
 Dokumen ini menjelaskan apa saja yang berubah, apa yang tetap sama, dan cara melakukan migrasi. Seluruh integrasi penyedia (provider) DeepSeek tidak mengalami perubahan — hanya nama merek CLI / TUI lokal yang diperbarui.
 
@@ -15,15 +15,15 @@ cargo uninstall deepseek-tui-cli 2>/dev/null || true
 cargo uninstall deepseek-tui 2>/dev/null || true
 
 # 2. Pasang dengan nama baru.
-npm install -g codewhale            # atau:
-cargo install codewhale-cli --locked
+npm install -g ghosty            # atau:
+cargo install ghosty-cli --locked
 
 # 3. Jalankan perintah baru.
-codewhale doctor
-codewhale
+ghosty doctor
+ghosty
 ```
 
-Berkas dan direktori Anda yang ada seperti `~/.deepseek/config.toml`, `~/.deepseek/sessions/`, `~/.deepseek/skills/`, `~/.deepseek/tasks/`, dan `~/.deepseek/mcp.json` **tidak akan dihapus**. Instalasi baru Codewhale mengutamakan `~/.codewhale/`, sementara direktori lama `~/.deepseek/` tetap dibaca sebagai fallback selama masa transisi. Variabel lingkungan `DEEPSEEK_*` tetap berfungsi sebagaimana mestinya.
+Berkas dan direktori Anda yang ada seperti `~/.deepseek/config.toml`, `~/.deepseek/sessions/`, `~/.deepseek/skills/`, `~/.deepseek/tasks/`, dan `~/.deepseek/mcp.json` **tidak akan dihapus**. Instalasi baru Ghosty mengutamakan `~/.ghosty/`, sementara direktori lama `~/.deepseek/` tetap dibaca sebagai fallback selama masa transisi. Variabel lingkungan `DEEPSEEK_*` tetap berfungsi sebagaimana mestinya.
 
 ---
 
@@ -31,11 +31,11 @@ Berkas dan direktori Anda yang ada seperti `~/.deepseek/config.toml`, `~/.deepse
 
 | Komponen | Sebelum | Sesudah |
 |---|---|---|
-| Perintah Terpasang | `deepseek` / `deepseek-tui` | `codewhale` / `codew` |
-| Paket Wrapper npm | `deepseek-tui` | `codewhale` |
-| Crate Crates.io | `deepseek-tui-cli` / `deepseek-tui` | `codewhale-cli` / `codewhale-tui` |
-| Aset Rilis | `deepseek-<platform>` / `deepseek-tui-<platform>` | `codewhale-<platform>` / `codew-<platform>`; `codewhale-tui-<platform>` hanya nama kompatibilitas |
-| Manifest Checksum | `deepseek-artifacts-sha256.txt` | `codewhale-artifacts-sha256.txt` |
+| Perintah Terpasang | `deepseek` / `deepseek-tui` | `ghosty` / `ghosty-tui` |
+| Paket Wrapper npm | `deepseek-tui` | `ghosty` |
+| Crate Crates.io | `deepseek-tui-cli` / `deepseek-tui` | `ghosty-cli` / `ghosty-tui` |
+| Aset Rilis | `deepseek-<platform>` / `deepseek-tui-<platform>` | `ghosty-<platform>` / `ghosty-tui-<platform>`; `ghosty-tui-<platform>` hanya nama kompatibilitas |
+| Manifest Checksum | `deepseek-artifacts-sha256.txt` | `ghosty-artifacts-sha256.txt` |
 
 ---
 

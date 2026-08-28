@@ -16,14 +16,14 @@ RUN apt-get update \
 # from the image's root user to the non-root development user below.
 ENV PATH=/usr/local/cargo/bin:${PATH}
 RUN printf '%s\n' 'export PATH=/usr/local/cargo/bin:$PATH' \
-    > /etc/profile.d/codewhale-rust.sh
+    > /etc/profile.d/ghosty-rust.sh
 RUN rustup component add rustfmt
 
-RUN groupadd --gid 1000 codewhale \
-    && useradd --create-home --shell /bin/bash --uid 1000 --gid 1000 codewhale \
-    && install -d -m 0700 -o codewhale -g codewhale /home/codewhale/.codewhale \
-    && install -d -m 0755 -o codewhale -g codewhale /home/codewhale/.cargo \
-    && install -d -m 0755 -o codewhale -g codewhale /home/codewhale/.cargo/target
+RUN groupadd --gid 1000 ghosty \
+    && useradd --create-home --shell /bin/bash --uid 1000 --gid 1000 ghosty \
+    && install -d -m 0700 -o ghosty -g ghosty /home/ghosty/.ghosty \
+    && install -d -m 0755 -o ghosty -g ghosty /home/ghosty/.cargo \
+    && install -d -m 0755 -o ghosty -g ghosty /home/ghosty/.cargo/target
 
-USER codewhale
-WORKDIR /workspaces/CodeWhale
+USER ghosty
+WORKDIR /workspaces/GhostyCode

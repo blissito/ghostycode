@@ -2,7 +2,7 @@
 //!
 //! This mirrors the CLI `speech` / `tts` command as a first-class API tool so
 //! the TUI model can generate narrated audio without shelling out to a nested
-//! CodeWhale process.
+//! GhostyCode process.
 
 use std::path::{Path, PathBuf};
 

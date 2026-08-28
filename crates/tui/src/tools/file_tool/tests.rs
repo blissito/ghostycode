@@ -22,7 +22,7 @@ async fn lowercase_read_returns_a_typed_image_block() {
     assert_eq!(rich.content_blocks.len(), 1);
     assert!(matches!(
         &rich.content_blocks[0],
-        codewhale_tools::ToolResultContentBlock::Image { mime_type, data }
+        ghosty_tools::ToolResultContentBlock::Image { mime_type, data }
             if mime_type == "image/png" && !data.is_empty()
     ));
 }

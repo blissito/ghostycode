@@ -1,4 +1,4 @@
-//! Table-driven registries for `codewhale remote-setup`.
+//! Table-driven registries for `ghosty remote-setup`.
 //!
 //! Mirrors the `ProviderKind`/`provider::Provider` registry pattern in
 //! `crates/config/src/lib.rs`: adding a cloud or a bridge is one row of data,
@@ -8,12 +8,12 @@
 //! - [`BridgeSpec`] — pure transport between a chat app and the local runtime.
 //! - [`CloudTarget`] — where the agent runs and where its secrets live.
 //! - The provider dimension is *not* duplicated here: it reads the existing
-//!   `codewhale_config::provider` registry (see [`super::bundle::ProviderInfo`]).
+//!   `ghosty_config::provider` registry (see [`super::bundle::ProviderInfo`]).
 
 /// Where a cloud target stores the runtime/provider secrets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretStore {
-    /// Secrets live in `/etc/codewhale/*.env` files on the host.
+    /// Secrets live in `/etc/ghosty/*.env` files on the host.
     EnvFile,
     /// Secrets live in a managed vault (e.g. Azure Key Vault), read at boot.
     KeyVault,
@@ -23,7 +23,7 @@ impl SecretStore {
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            SecretStore::EnvFile => "EnvFile (/etc/codewhale/*.env)",
+            SecretStore::EnvFile => "EnvFile (/etc/ghosty/*.env)",
             SecretStore::KeyVault => "Key Vault (managed identity at boot)",
         }
     }
@@ -121,8 +121,8 @@ impl Default for DeployInputs {
             bridge_slug: "telegram".to_string(),
             provider_slug: "deepseek".to_string(),
             region: String::new(),
-            instance_name: "codewhale-remote".to_string(),
-            image: "ghcr.io/hmbown/codewhale:latest".to_string(),
+            instance_name: "ghosty-remote".to_string(),
+            image: "ghcr.io/blissito/ghostycode:latest".to_string(),
         }
     }
 }
@@ -177,11 +177,11 @@ pub const TELEGRAM: BridgeSpec = BridgeSpec {
     slug: "telegram",
     display: "Telegram",
     package_dir: "integrations/telegram-bridge",
-    service_unit: "codewhale-telegram-bridge.service",
+    service_unit: "ghosty-telegram-bridge.service",
     env_template: "deploy/tencent-lighthouse/examples/telegram-bridge.env.example",
     secret_keys: &["TELEGRAM_BOT_TOKEN"],
     setup_hint: "Create a bot with @BotFather in Telegram and copy the HTTP API token.",
-    install_dir: "/opt/codewhale/telegram-bridge",
+    install_dir: "/opt/ghosty/telegram-bridge",
 };
 
 /// Feishu/Lark bridge — app id + secret are the bridge credentials.
@@ -189,11 +189,11 @@ pub const FEISHU: BridgeSpec = BridgeSpec {
     slug: "feishu",
     display: "Feishu/Lark",
     package_dir: "integrations/feishu-bridge",
-    service_unit: "codewhale-feishu-bridge.service",
+    service_unit: "ghosty-feishu-bridge.service",
     env_template: "deploy/tencent-lighthouse/examples/feishu-bridge.env.example",
     secret_keys: &["FEISHU_APP_ID", "FEISHU_APP_SECRET"],
     setup_hint: "Create a custom app in the Feishu/Lark Open Platform; copy its App ID and App Secret.",
-    install_dir: "/opt/codewhale/bridge",
+    install_dir: "/opt/ghosty/bridge",
 };
 
 /// All registered bridges. Adding a bridge is one row here.
@@ -234,7 +234,7 @@ pub const AZURE: CloudTarget = CloudTarget {
 /// DigitalOcean Droplet — native systemd, env-file secrets, cloud-init + doctl.
 ///
 /// Hunter-requested target. Modeled like Azure/Lighthouse: secrets in
-/// `/etc/codewhale/*.env`, native+systemd install driven by a cloud-init
+/// `/etc/ghosty/*.env`, native+systemd install driven by a cloud-init
 /// user-data file, and `doctl` for the create/destroy commands. The `plan()`
 /// returns `doctl` `ProvisionStep` data, but since `--apply` is stubbed in the
 /// MVP the plan is only printed inside the generated RUNBOOK.
@@ -267,7 +267,7 @@ fn lighthouse_plan(inputs: &DeployInputs) -> Vec<ProvisionStep> {
     // Lighthouse provisioning is driven by the existing CNB pipeline
     // (deploy/tencent-lighthouse/cnb/*). The "plan" here is the CNB trigger plus
     // the host-side service install the RUNBOOK walks the user through.
-    let restart_bridge = format!("codewhale-{}-bridge", inputs.bridge_slug);
+    let restart_bridge = format!("ghosty-{}-bridge", inputs.bridge_slug);
     vec![
         ProvisionStep::new(
             "Render and commit the CNB pipeline (cnb.yml + tag_deploy.yml) for this deploy",
@@ -295,7 +295,7 @@ fn lighthouse_plan(inputs: &DeployInputs) -> Vec<ProvisionStep> {
 fn azure_plan(inputs: &DeployInputs) -> Vec<ProvisionStep> {
     let rg = format!("{}-rg", inputs.instance_name);
     let vault = format!("{}-kv", inputs.instance_name);
-    let provider_secret = format!("codewhale-{}-key", inputs.provider_slug);
+    let provider_secret = format!("ghosty-{}-key", inputs.provider_slug);
     vec![
         ProvisionStep::new(
             "Create the resource group",
@@ -413,7 +413,7 @@ fn digitalocean_plan(inputs: &DeployInputs) -> Vec<ProvisionStep> {
             ],
         ),
         ProvisionStep::new(
-            "On the Droplet: write /etc/codewhale/*.env, install both systemd units, enable --now",
+            "On the Droplet: write /etc/ghosty/*.env, install both systemd units, enable --now",
             "bash",
             &["scripts/tencent-lighthouse/install-services.sh"],
         ),

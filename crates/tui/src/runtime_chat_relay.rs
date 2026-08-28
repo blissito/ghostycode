@@ -36,7 +36,7 @@ const MAX_RELAY_ID_BYTES: usize = 240;
 const MAX_OPERATION_KEY_BYTES: usize = 128;
 const STATE_FILE: &str = "runtime-chat-bindings.json";
 const SCOPE_LOCK_FILE: &str = "runtime-chat.owner.lock";
-const SAFE_CHAT_SYSTEM_PROMPT: &str = "You are Codewhale Chat. Answer the user's request directly and conversationally. This is an isolated chat-only session: no local project, workspace, memory, skill, account, credential, path, or runtime context is available or implied. Do not claim to inspect or change local files, run tools, or perform work execution.";
+const SAFE_CHAT_SYSTEM_PROMPT: &str = "You are Ghosty Chat. Answer the user's request directly and conversationally. This is an isolated chat-only session: no local project, workspace, memory, skill, account, credential, path, or runtime context is available or implied. Do not claim to inspect or change local files, run tools, or perform work execution.";
 
 #[cfg(test)]
 static TEST_STATE_PERSIST_FAILURES: std::sync::Mutex<Vec<(PathBuf, usize)>> =
@@ -257,8 +257,7 @@ impl RuntimeChatRelayHost {
         }
         let scope_lock =
             RelayScopeLock::acquire(&private_dir.join(SCOPE_LOCK_FILE)).map_err(|_| {
-                "Another Codewhale process already owns this Runtime Chat account session."
-                    .to_string()
+                "Another Ghosty process already owns this Runtime Chat account session.".to_string()
             })?;
         let state_path = private_dir.join(STATE_FILE);
         let state = load_state(&state_path).map_err(|_| {
@@ -1160,7 +1159,7 @@ impl RuntimeChatRelayHost {
 impl RuntimeChatPrompt {
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
         if self.command_type != "prompt.request" {
-            return Err("Codewhale sent an unsupported Runtime Chat command.".to_string());
+            return Err("Ghosty sent an unsupported Runtime Chat command.".to_string());
         }
         validate_relay_id(&self.run_id, "run id").map_err(public_validation_error)?;
         validate_virtual_turn_id(&self.turn_id).map_err(public_validation_error)?;
@@ -1375,7 +1374,7 @@ fn validate_owner_component(value: &str, label: &str) -> Result<(), String> {
 
 fn scoped_private_dir(root: &Path, target_ref: &str, session_id: &str) -> PathBuf {
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale.runtime-chat-scope.v1\0");
+    hasher.update(b"ghosty.runtime-chat-scope.v1\0");
     hasher.update(target_ref.as_bytes());
     hasher.update(b"\0");
     hasher.update(session_id.as_bytes());
@@ -1384,7 +1383,7 @@ fn scoped_private_dir(root: &Path, target_ref: &str, session_id: &str) -> PathBu
 
 fn owner_scope_fingerprint(account_ref: &str, target_ref: &str, session_id: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale.runtime-chat-owner.v1\0");
+    hasher.update(b"ghosty.runtime-chat-owner.v1\0");
     hasher.update(account_ref.as_bytes());
     hasher.update(b"\0");
     hasher.update(target_ref.as_bytes());
@@ -1409,7 +1408,7 @@ fn bind_owner_scope(state: &mut RelayState, owner: &str) -> Result<(), String> {
 
 fn source_event_id(native_thread_id: &str, native_seq: u64) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale.runtime-chat-source-event.v1\0");
+    hasher.update(b"ghosty.runtime-chat-source-event.v1\0");
     hasher.update(native_thread_id.as_bytes());
     hasher.update(b"\0");
     hasher.update(native_seq.to_be_bytes());
@@ -1423,7 +1422,7 @@ fn reserved_native_turn_id(
     operation_fingerprint: &str,
 ) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale.runtime-chat-native-turn.v1\0");
+    hasher.update(b"ghosty.runtime-chat-native-turn.v1\0");
     hasher.update(native_thread_id.as_bytes());
     hasher.update(b"\0");
     hasher.update(runtime_binding_id.as_bytes());
@@ -1508,7 +1507,7 @@ fn isolated_chat_execution_config(
     execution
         .skills
         .get_or_insert_with(SkillsConfig::default)
-        .scan_codewhale_only = Some(true);
+        .scan_ghosty_only = Some(true);
     Ok((execution, workspace))
 }
 
@@ -1960,9 +1959,9 @@ mod tests {
         config.base_url = Some("http://127.0.0.1:11434/v1".to_string());
         let challenge = "c".repeat(32);
         let catalog = crate::runtime_api::runtime_chat_relay_catalog(&config, &challenge).unwrap();
-        assert_eq!(catalog["protocol"], "codewhale.runtime-chat-relay.v1");
+        assert_eq!(catalog["protocol"], "ghosty.runtime-chat-relay.v1");
         assert_eq!(catalog["challenge"], challenge);
-        assert_eq!(catalog["runtime"]["service"], "codewhale-runtime-api");
+        assert_eq!(catalog["runtime"]["service"], "ghosty-runtime-api");
         assert_eq!(catalog["runtime"]["apiVersion"], "1.0");
         assert_eq!(catalog["runtime"]["capabilities"]["stable_event_ids"], true);
         assert_eq!(catalog["providers"].as_array().unwrap().len(), 1);
@@ -2063,7 +2062,7 @@ mod tests {
         assert!(execution.memory_path().starts_with(root.path()));
         assert!(execution.mcp_config_path().starts_with(root.path()));
         assert!(execution.notes_path().starts_with(root.path()));
-        assert!(execution.skills_config().scan_codewhale_only());
+        assert!(execution.skills_config().scan_ghosty_only());
 
         let prompt = dedicated_chat_system_prompt(None);
         assert_eq!(prompt, SAFE_CHAT_SYSTEM_PROMPT);

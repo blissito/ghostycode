@@ -22,7 +22,7 @@ use crate::tools::spec::{
 
 /// Bounds for `agents/wait`. Short on purpose: a blocked wait makes the
 /// session deaf to typed input, and settled children already report back as
-/// `<codewhale:subagent.done>` sentinels that start a fresh turn (#4097).
+/// `<ghosty:subagent.done>` sentinels that start a fresh turn (#4097).
 const COORD_WAIT_DEFAULT_TIMEOUT_SECS: u64 = 30;
 const COORD_WAIT_MIN_TIMEOUT_SECS: u64 = 1;
 const COORD_WAIT_MAX_TIMEOUT_SECS: u64 = 120;
@@ -833,11 +833,11 @@ fn wait_all_payload(
     timed_out: bool,
 ) -> Result<ToolResult, ToolError> {
     let note = if timed_out {
-        "Timed out with children still running. Do not poll — wait again (until=all), or end your turn; results arrive as <codewhale:subagent.done> sentinels."
+        "Timed out with children still running. Do not poll — wait again (until=all), or end your turn; results arrive as <ghosty:subagent.done> sentinels."
     } else if settled.is_empty() {
         "No sub-agents were running; nothing to join."
     } else {
-        "Every watched child has settled. Full results arrive as <codewhale:subagent.done> sentinels — synthesize from those."
+        "Every watched child has settled. Full results arrive as <ghosty:subagent.done> sentinels — synthesize from those."
     };
     let payload = json!({
         "action": "wait",

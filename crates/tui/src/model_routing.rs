@@ -1064,7 +1064,7 @@ below belongs to it; never select another provider.\n\n",
         )
     };
     prompt.push_str(&format!(
-        "You are the codewhale model-routing classifier. Return only compact JSON: \
+        "You are the ghosty model-routing classifier. Return only compact JSON: \
 {{\"provider\":\"<provider>\",\"model\":\"<model>\",\"thinking\":\"off|high|max\"}}.\n\
 Choose only provider/model pairs present in the inventory JSON. Use off only for trivial no-tool answers, \
 high for ordinary reasoning, and max for agentic, coding, multi-file, release, architecture, debugging, \
@@ -1322,7 +1322,7 @@ mod tests {
             "flattened tool-result secret leaked"
         );
         assert!(
-            prompt.contains(codewhale_config::persistence::REDACTED),
+            prompt.contains(ghosty_config::persistence::REDACTED),
             "secret should be visibly redacted"
         );
         assert!(prompt.contains("continue the investigation"));

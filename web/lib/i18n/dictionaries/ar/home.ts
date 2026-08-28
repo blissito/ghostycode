@@ -5,19 +5,19 @@ import type { HomeDict } from "../types";
  *
  * إعادة صياغة أصلية باتجاه الإنجليزية الحالي: أحضر نموذجك، وكل شيء
  * يجري على جهاك. مفردات المنتج تبقى حرفية كما في حزمة TUI:
- * Plan / Work / Operate، Ask / Auto-Review / Full Access، Codewhale،
- * TUI، `codewhale exec`، Runtime API + MCP، Fleet، Node 18+، Rust، MIT.
+ * Plan / Work / Operate، Ask / Auto-Review / Full Access، Ghosty،
+ * TUI، `ghosty exec`، Runtime API + MCP، Fleet، Node 18+، Rust، MIT.
  *
  * أختام الأقسام (法، 行، …) محارف مشتركة مع النسخة الإنجليزية —
  * علامات لا نثرًا. الأسهم تشير إلى الأمام في سياق RTL (←).
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — يغوص في الأعماق بدلًا منك.",
+  metaTitle: "Ghosty — يغوص في الأعماق بدلًا منك.",
   metaDescription:
-    "Codewhale يغوص في الأعماق بدلًا منك — وكيل برمجة مفتوح المصدر للطرفية. أحضر نموذجك. يعمل على جهازك. بـ Rust، ورخصة MIT.",
+    "Ghosty يغوص في الأعماق بدلًا منك — وكيل برمجة مفتوح المصدر للطرفية. أحضر نموذجك. يعمل على جهازك. بـ Rust، ورخصة MIT.",
 
   kicker: "مفتوح المصدر · أحضر نموذجك · يعمل في طرفيتك",
-  heroTitleA: "Codewhale يغوص في الأعماق،",
+  heroTitleA: "Ghosty يغوص في الأعماق،",
   heroTitleB: "حتى لا تضطر أنت إلى ذلك.",
   heroIntro:
     "{brand} وكيل برمجة مفتوح المصدر يعمل في طرفيتك. أعطه نموذجًا ومهمة — يقرأ شيفرتك، ويحرّر الملفات، ويشغّل فحوصه بنفسه، ويتوقف عندما تنتهي المهمة أو عندما يحتاج إليك. أحضر أي نموذج، أو امزجها: ثبّت نموذجًا مختلفًا لكل دور.",
@@ -40,8 +40,8 @@ export const home: HomeDict = {
 
   shotSession: "الجلسة الحالية",
   screenshotAlt:
-    "جلسة Codewhale الطرفية الحالية: وضع Operate، والحوت، والمحرّر، والتذييل",
-  figcaption: "جلسة Codewhale الحالية · وضع Operate · وضعية أذونات Ask",
+    "جلسة Ghosty الطرفية الحالية: وضع Operate، والحوت، والمحرّر، والتذييل",
+  figcaption: "جلسة Ghosty الحالية · وضع Operate · وضعية أذونات Ask",
 
   proofHeading: "صدفة طرفية تحت الماء. أي نموذج. على جهازك.",
   proofBody:
@@ -67,7 +67,7 @@ export const home: HomeDict = {
   receiptReport: "الفحوص ناجحة · الإيصال محفوظ",
 
   sealStart: "起",
-  startHeading: "جديد على Codewhale؟ أربع خطوات من البداية إلى النهاية.",
+  startHeading: "جديد على Ghosty؟ أربع خطوات من البداية إلى النهاية.",
   startLede:
     "ثبّت ← أول جلسة بلا مفاتيح ← اربط مزوّدًا ← جهّز أسطولك. المصطلحات معرّفة في صفحة المفردات.",
   startGuideLink: "اقرأ دليل البداية ←",
@@ -87,7 +87,7 @@ export const home: HomeDict = {
   surfacesHeading: "استخدم الـ Runtime حيث يجري العمل.",
   surfaces: [
     ["TUI", "عمل تفاعلي في الطرفية"],
-    ["codewhale exec", "سكربتات وCI"],
+    ["ghosty exec", "سكربتات وCI"],
     ["عميل الويب", "عميل متصفح محصور في loopback"],
     ["Runtime API + MCP", "تكاملات محلية"],
     ["Fleet", "عمل متعدد الوكلاء دائم"],

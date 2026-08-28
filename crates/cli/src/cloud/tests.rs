@@ -2,11 +2,11 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use clap::Parser;
-use codewhale_secrets::account::{
+use ghosty_secrets::account::{
     ACCOUNT_SESSION_SCHEMA_VERSION, AccountSession as AuthSession,
     account_auth_slot as cloud_auth_slot,
 };
-use codewhale_secrets::{InMemoryKeyringStore, KeyringStore};
+use ghosty_secrets::{InMemoryKeyringStore, KeyringStore};
 use serde_json::json;
 
 use super::*;
@@ -108,16 +108,16 @@ fn command(argv: &[&str]) -> CloudCommand {
 #[test]
 fn parses_cloud_command_matrix_and_rejects_inline_keys() {
     assert!(matches!(
-        command(&["codewhale", "account", "status"]),
+        command(&["ghosty", "account", "status"]),
         CloudCommand::Status
     ));
     assert!(matches!(
-        command(&["codewhale", "cloud", "login", "--no-open"]),
+        command(&["ghosty", "cloud", "login", "--no-open"]),
         CloudCommand::Login(CloudLoginArgs { no_open: true, .. })
     ));
     assert!(matches!(
         command(&[
-            "codewhale",
+            "ghosty",
             "cloud",
             "keys",
             "set",
@@ -134,7 +134,7 @@ fn parses_cloud_command_matrix_and_rejects_inline_keys() {
     ));
     assert!(
         Cli::try_parse_from([
-            "codewhale",
+            "ghosty",
             "cloud",
             "keys",
             "set",
@@ -145,7 +145,7 @@ fn parses_cloud_command_matrix_and_rejects_inline_keys() {
     );
     assert!(
         Cli::try_parse_from([
-            "codewhale",
+            "ghosty",
             "cloud",
             "keys",
             "set",
@@ -164,14 +164,14 @@ fn parses_cloud_command_matrix_and_rejects_inline_keys() {
 #[test]
 fn api_base_requires_https_or_literal_loopback_http() {
     assert_eq!(
-        validate_api_base("https://api.codewhale.net/")
+        validate_api_base("https://api.ghosty.net/")
             .unwrap()
             .display,
-        "https://api.codewhale.net"
+        "https://api.ghosty.net"
     );
     assert!(validate_api_base("http://127.0.0.1:8787").is_ok());
     assert!(validate_api_base("http://[::1]:8787").is_ok());
-    assert!(validate_api_base("http://api.codewhale.net").is_err());
+    assert!(validate_api_base("http://api.ghosty.net").is_err());
     assert!(validate_api_base("https://user:secret@example.test").is_err());
     assert!(validate_api_base("https://example.test/prefix").is_err());
 }
@@ -179,14 +179,14 @@ fn api_base_requires_https_or_literal_loopback_http() {
 #[test]
 fn verification_urls_are_pinned_to_the_app_or_loopback() {
     const CODE: &str = "ABCD-EFGH-JKLM";
-    const API: &str = "https://api.codewhale.net";
+    const API: &str = "https://api.ghosty.net";
     assert!(
-        validate_verification_url("https://app.codewhale.net/cli/authorize", API, CODE, false,)
+        validate_verification_url("https://app.ghosty.net/cli/authorize", API, CODE, false,)
             .is_ok()
     );
     assert!(
         validate_verification_url(
-            "https://app.codewhale.net/cli/authorize?user_code=ABCD-EFGH-JKLM",
+            "https://app.ghosty.net/cli/authorize?user_code=ABCD-EFGH-JKLM",
             API,
             CODE,
             true,
@@ -195,13 +195,13 @@ fn verification_urls_are_pinned_to_the_app_or_loopback() {
     );
     for unsafe_url in [
         "https://attacker.example/cli/authorize",
-        "https://user@app.codewhale.net/cli/authorize",
-        "https://app.codewhale.net/cli/authorize#continue",
-        "https://app.codewhale.net/cli/authorize/extra",
-        "https://app.codewhale.net/cli/other/../authorize",
-        "https://app.codewhale.net/cli/%61uthorize",
-        "https://app.codewhale.net/cli/authorize?next=https%3A%2F%2Fattacker.example",
-        "https://app.codewhale.net/cli/authorize?user_code=ABCD-EFGH-JKLM&next=evil",
+        "https://user@app.ghosty.net/cli/authorize",
+        "https://app.ghosty.net/cli/authorize#continue",
+        "https://app.ghosty.net/cli/authorize/extra",
+        "https://app.ghosty.net/cli/other/../authorize",
+        "https://app.ghosty.net/cli/%61uthorize",
+        "https://app.ghosty.net/cli/authorize?next=https%3A%2F%2Fattacker.example",
+        "https://app.ghosty.net/cli/authorize?user_code=ABCD-EFGH-JKLM&next=evil",
     ] {
         assert!(
             validate_verification_url(unsafe_url, API, CODE, unsafe_url.contains("user_code"))
@@ -264,10 +264,7 @@ fn user_codes_and_key_inputs_match_the_server_contract() {
         "x".repeat(4096)
     );
     assert!(parse_key_input(vec![b'x'; MAX_API_KEY_STDIN_BYTES as usize + 1]).is_err());
-    assert_eq!(
-        validate_label("  Codewhale\tCLI  ").unwrap(),
-        "Codewhale CLI"
-    );
+    assert_eq!(validate_label("  Ghosty\tCLI  ").unwrap(), "Ghosty CLI");
     assert!(validate_label(&"x".repeat(80)).is_ok());
     assert!(validate_label(&"x".repeat(81)).is_err());
 }
@@ -283,8 +280,8 @@ fn device_flow_handles_pending_then_authorized_without_printing_tokens() {
             json!({
                 "deviceCode": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 "userCode": "ABCD-EFGH-JKLM",
-                "verificationUri": "https://app.codewhale.net/cli/authorize",
-                "verificationUriComplete": "https://app.codewhale.net/cli/authorize?user_code=ABCD-EFGH-JKLM",
+                "verificationUri": "https://app.ghosty.net/cli/authorize",
+                "verificationUriComplete": "https://app.ghosty.net/cli/authorize?user_code=ABCD-EFGH-JKLM",
                 "expiresIn": 600,
                 "interval": 1
             }),
@@ -305,9 +302,9 @@ fn device_flow_handles_pending_then_authorized_without_printing_tokens() {
     };
     let mut sleeper = |_| {};
     run_with(
-        command(&["codewhale", "cloud", "login"]),
+        command(&["ghosty", "cloud", "login"]),
         "work",
-        "https://api.codewhale.net",
+        "https://api.ghosty.net",
         &config,
         &secrets,
         &secrets,
@@ -337,8 +334,8 @@ fn device_flow_handles_pending_then_authorized_without_printing_tokens() {
 fn cloud_sessions_are_isolated_by_profile_and_api_origin() {
     let (secrets, _) = test_secrets();
     let transport = FakeTransport::new(vec![]);
-    let default = CloudClient::new(&transport, &secrets, "default", "https://api.codewhale.net");
-    let work = CloudClient::new(&transport, &secrets, "work", "https://api.codewhale.net");
+    let default = CloudClient::new(&transport, &secrets, "default", "https://api.ghosty.net");
+    let work = CloudClient::new(&transport, &secrets, "work", "https://api.ghosty.net");
     let local = CloudClient::new(&transport, &secrets, "default", "http://127.0.0.1:8787");
     default
         .save_auth(auth("a-default", "r-default", "acct-default"))
@@ -383,7 +380,7 @@ fn status_refreshes_once_on_unauthorized_and_never_displays_tokens() {
         ),
         response(200, account("acct-refresh")),
     ]);
-    CloudClient::new(&transport, &secrets, "default", "https://api.codewhale.net")
+    CloudClient::new(&transport, &secrets, "default", "https://api.ghosty.net")
         .save_auth(auth(
             "access-old-secret",
             "refresh-old-secret",
@@ -397,7 +394,7 @@ fn status_refreshes_once_on_unauthorized_and_never_displays_tokens() {
     run_with(
         CloudCommand::Status,
         "default",
-        "https://api.codewhale.net",
+        "https://api.ghosty.net",
         &config,
         &secrets,
         &secrets,
@@ -436,9 +433,9 @@ fn account_pull_refuses_to_claim_unimplemented_local_import() {
     let mut sleeper = |_| {};
 
     let error = run_with(
-        command(&["codewhale", "account", "pull"]),
+        command(&["ghosty", "account", "pull"]),
         "default",
-        "https://api.codewhale.net",
+        "https://api.ghosty.net",
         &config,
         &secrets,
         &secrets,
@@ -473,7 +470,7 @@ fn account_pull_dry_run_is_truthful_and_read_only() {
     let config_path = config.path().to_path_buf();
     let (secrets, _) = test_secrets();
     let transport = FakeTransport::new(vec![response(200, account("acct-pull"))]);
-    CloudClient::new(&transport, &secrets, "default", "https://api.codewhale.net")
+    CloudClient::new(&transport, &secrets, "default", "https://api.ghosty.net")
         .save_auth(auth("access-secret", "refresh-secret", "acct-pull"))
         .unwrap();
     let mut output = Vec::new();
@@ -482,9 +479,9 @@ fn account_pull_dry_run_is_truthful_and_read_only() {
     let mut sleeper = |_| {};
 
     run_with(
-        command(&["codewhale", "account", "pull", "--dry-run"]),
+        command(&["ghosty", "account", "pull", "--dry-run"]),
         "default",
-        "https://api.codewhale.net",
+        "https://api.ghosty.net",
         &config,
         &secrets,
         &secrets,
@@ -521,7 +518,7 @@ fn non_terminal_refresh_responses_preserve_the_local_session() {
             response(401, json!({ "code": "access_token_expired" })),
             response(status, json!({ "code": "temporarily_unavailable" })),
         ]);
-        let client = CloudClient::new(&transport, &secrets, "default", "https://api.codewhale.net");
+        let client = CloudClient::new(&transport, &secrets, "default", "https://api.ghosty.net");
         client
             .save_auth(auth(
                 "access-old-secret",
@@ -559,7 +556,7 @@ fn refresh_transport_failure_preserves_the_local_session() {
         401,
         json!({ "code": "access_token_expired" }),
     )]);
-    let client = CloudClient::new(&transport, &secrets, "default", "https://api.codewhale.net");
+    let client = CloudClient::new(&transport, &secrets, "default", "https://api.ghosty.net");
     client
         .save_auth(auth(
             "access-old-secret",
@@ -595,7 +592,7 @@ fn terminal_refresh_auth_failures_clear_the_local_session() {
         response(401, json!({ "code": "access_token_expired" })),
         response(401, json!({ "code": "invalid_refresh_token" })),
     ]);
-    let client = CloudClient::new(&transport, &secrets, "default", "https://api.codewhale.net");
+    let client = CloudClient::new(&transport, &secrets, "default", "https://api.ghosty.net");
     client
         .save_auth(auth(
             "access-old-secret",
@@ -638,7 +635,7 @@ fn set_list_and_remove_use_account_routes_without_secret_output() {
         response(200, account("acct-keys")),
         response(204, json!(null)),
     ]);
-    CloudClient::new(&transport, &secrets, "default", "https://api.codewhale.net")
+    CloudClient::new(&transport, &secrets, "default", "https://api.ghosty.net")
         .save_auth(auth("access-secret", "refresh-secret", "acct-keys"))
         .unwrap();
     let mut output = Vec::new();
@@ -647,7 +644,7 @@ fn set_list_and_remove_use_account_routes_without_secret_output() {
     let mut sleeper = |_| {};
     for cmd in [
         command(&[
-            "codewhale",
+            "ghosty",
             "cloud",
             "keys",
             "set",
@@ -656,13 +653,13 @@ fn set_list_and_remove_use_account_routes_without_secret_output() {
             "--label",
             "Laptop",
         ]),
-        command(&["codewhale", "cloud", "keys", "list"]),
-        command(&["codewhale", "cloud", "keys", "remove", "openai"]),
+        command(&["ghosty", "cloud", "keys", "list"]),
+        command(&["ghosty", "cloud", "keys", "remove", "openai"]),
     ] {
         run_with(
             cmd,
             "default",
-            "https://api.codewhale.net",
+            "https://api.ghosty.net",
             &config,
             &secrets,
             &secrets,
@@ -677,7 +674,7 @@ fn set_list_and_remove_use_account_routes_without_secret_output() {
     let output = String::from_utf8(output).unwrap();
     assert!(output.contains("openai: set"));
     assert!(!output.contains("Laptop"));
-    assert!(output.contains("Codewhale account acct-keys"));
+    assert!(output.contains("Ghosty account acct-keys"));
     assert!(!output.contains("sk-provider-never-print"));
     assert!(!output.contains("access-secret"));
     assert!(!output.contains("refresh-secret"));
@@ -708,7 +705,7 @@ fn from_local_uses_config_without_printing_or_requiring_an_inline_key() {
         response(200, account("acct-local")),
         response(200, json!({ "ok": true })),
     ]);
-    CloudClient::new(&transport, &secrets, "work", "https://api.codewhale.net")
+    CloudClient::new(&transport, &secrets, "work", "https://api.ghosty.net")
         .save_auth(auth("access", "refresh", "acct-local"))
         .unwrap();
     let mut output = Vec::new();
@@ -717,7 +714,7 @@ fn from_local_uses_config_without_printing_or_requiring_an_inline_key() {
     let mut sleeper = |_| {};
     run_with(
         command(&[
-            "codewhale",
+            "ghosty",
             "cloud",
             "keys",
             "set",
@@ -725,7 +722,7 @@ fn from_local_uses_config_without_printing_or_requiring_an_inline_key() {
             "--from-local",
         ]),
         "work",
-        "https://api.codewhale.net",
+        "https://api.ghosty.net",
         &config,
         &secrets,
         &secrets,
@@ -774,7 +771,7 @@ fn logout_recovers_from_a_corrupt_local_session_record() {
     let (temp, config) = test_config();
     let _keep_temp = temp;
     let (secrets, store) = test_secrets();
-    let slot = cloud_auth_slot("default", "https://api.codewhale.net");
+    let slot = cloud_auth_slot("default", "https://api.ghosty.net");
     store.set(&slot, "not-json-and-not-a-token").unwrap();
     let transport = FakeTransport::new(vec![]);
     let mut output = Vec::new();
@@ -784,7 +781,7 @@ fn logout_recovers_from_a_corrupt_local_session_record() {
     run_with(
         CloudCommand::Logout,
         "default",
-        "https://api.codewhale.net",
+        "https://api.ghosty.net",
         &config,
         &secrets,
         &secrets,
@@ -805,7 +802,7 @@ fn logout_recovers_from_a_corrupt_local_session_record() {
 
 #[test]
 fn logout_clears_obsolete_or_wrong_origin_session_records() {
-    let canonical_api_base = "https://api.codewhale.net";
+    let canonical_api_base = "https://api.ghosty.net";
     for (case, schema_version, stored_api_base) in [
         (
             "obsolete schema",
@@ -815,7 +812,7 @@ fn logout_clears_obsolete_or_wrong_origin_session_records() {
         (
             "wrong origin",
             ACCOUNT_SESSION_SCHEMA_VERSION,
-            "https://other.codewhale.net",
+            "https://other.ghosty.net",
         ),
     ] {
         let (secrets, store) = test_secrets();
@@ -861,12 +858,12 @@ fn server_errors_never_echo_response_messages() {
 
 #[test]
 fn cloud_auth_slot_does_not_embed_profile_or_origin() {
-    let slot = cloud_auth_slot("private-profile", "https://api.codewhale.net");
+    let slot = cloud_auth_slot("private-profile", "https://api.ghosty.net");
     assert!(!slot.contains("private-profile"));
-    assert!(!slot.contains("api.codewhale.net"));
+    assert!(!slot.contains("api.ghosty.net"));
     assert_ne!(
         slot,
-        cloud_auth_slot("other-profile", "https://api.codewhale.net")
+        cloud_auth_slot("other-profile", "https://api.ghosty.net")
     );
 }
 
@@ -883,7 +880,7 @@ fn account_login_timeout_fails_the_command() {
     // §2.3 / #5033 class: a timed-out device login printed the timeout yet the
     // process exited 0. Pin the contract at the run_with seam — the command
     // must return Err so run_cli maps it to ExitCode::FAILURE. Verified live
-    // against a stub server: `error: Codewhale account login timed out` now
+    // against a stub server: `error: Ghosty account login timed out` now
     // exits 1.
     let (temp, config) = test_config();
     let _keep_temp = temp;
@@ -898,8 +895,8 @@ fn account_login_timeout_fails_the_command() {
                     json!({
                         "deviceCode": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                         "userCode": "ABCD-EFGH-JKLM",
-                        "verificationUri": "https://app.codewhale.net/cli/authorize",
-                        "verificationUriComplete": "https://app.codewhale.net/cli/authorize?user_code=ABCD-EFGH-JKLM",
+                        "verificationUri": "https://app.ghosty.net/cli/authorize",
+                        "verificationUriComplete": "https://app.ghosty.net/cli/authorize?user_code=ABCD-EFGH-JKLM",
                         "expiresIn": 600,
                         "interval": 1
                     }),
@@ -919,7 +916,7 @@ fn account_login_timeout_fails_the_command() {
     };
     let result = run_with(
         command(&[
-            "codewhale",
+            "ghosty",
             "cloud",
             "login",
             "--no-open",
@@ -927,7 +924,7 @@ fn account_login_timeout_fails_the_command() {
             "1",
         ]),
         "default",
-        "https://api.codewhale.net",
+        "https://api.ghosty.net",
         &config,
         &secrets,
         &secrets,

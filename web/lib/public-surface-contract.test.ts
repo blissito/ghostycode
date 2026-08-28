@@ -175,21 +175,21 @@ describe("public surface contracts", () => {
 
   it("backs product and install claims with package and documentation content", () => {
     const readme = text("README.md");
-    const npmReadme = text("npm/codewhale/README.md");
+    const npmReadme = text("npm/ghosty/README.md");
     const install = text("docs/INSTALL.md");
     const changelog = text("CHANGELOG.md");
     const license = text("LICENSE");
-    const npmArtifacts = text("npm/codewhale/scripts/artifacts.js");
-    const npmPackage = JSON.parse(text("npm/codewhale/package.json")) as {
+    const npmArtifacts = text("npm/ghosty/scripts/artifacts.js");
+    const npmPackage = JSON.parse(text("npm/ghosty/package.json")) as {
       description: string;
       bin: Record<string, string>;
     };
 
-    expect(matrix.product.name).toBe("Codewhale");
+    expect(matrix.product.name).toBe("Ghosty");
     expect(matrix.product.license).toBe("MIT");
     expect(matrix.product.description).toBe(npmPackage.description);
     expect(license).toContain("MIT License");
-    expect(matrix.install.recommended).toBe("npm install -g codewhale");
+    expect(matrix.install.recommended).toBe("npm install -g ghosty");
     expect(readme).toContain(matrix.install.recommended);
     expect(Object.keys(npmPackage.bin)).toEqual(matrix.install.binaries);
     expect(matrix.install.channels).toEqual({
@@ -214,7 +214,7 @@ describe("public surface contracts", () => {
     expect(npmReadme).toMatch(/^- Android arm64 \/ Termux \(preview;/m);
     expect(npmReadme).toContain("requires matching Android assets");
     expect(npmArtifacts).toContain("android: {");
-    for (const binary of ["codewhale-android-arm64", "codew-android-arm64"]) {
+    for (const binary of ["ghosty-android-arm64", "ghosty-tui-android-arm64"]) {
       expect(npmArtifacts).toContain(binary);
     }
     // Matched by string prefix rather than by building a RegExp from
@@ -235,7 +235,7 @@ describe("public surface contracts", () => {
     } else {
       // Dated release: intro names the version, and the version's compare
       // link points at a tag range (Unreleased may still use ...HEAD).
-      expect(changelog).toContain(`Codewhale v${FACTS.version}`);
+      expect(changelog).toContain(`Ghosty v${FACTS.version}`);
       const versionCompare = changelog
         .split("\n")
         .find((line) => line.startsWith(`[${FACTS.version}]: `));
@@ -248,48 +248,48 @@ describe("public surface contracts", () => {
   it("keeps one runtime and channel-specific command names exact", () => {
     const installDoc = text("docs/INSTALL.md");
     const installPage = text("web/app/[locale]/install/page.tsx");
-    const npmReadme = text("npm/codewhale/README.md");
+    const npmReadme = text("npm/ghosty/README.md");
     const cliCargo = text("crates/cli/Cargo.toml");
     const cargoBinaryNames = Array.from(
       cliCargo.matchAll(/\[\[bin\]\]\s+name = "([^"]+)"/g),
       (match) => match[1],
     );
 
-    expect(matrix.install.binaries).toEqual(["codewhale", "codew"]);
-    expect(cargoBinaryNames).toEqual(["codewhale"]);
+    expect(matrix.install.binaries).toEqual(["ghosty", "ghosty-tui"]);
+    expect(cargoBinaryNames).toEqual(["ghosty"]);
     expect(installDoc).toContain("One Cargo package is required");
-    expect(installDoc).toContain("`codewhale-cli` installs the `codewhale` command");
+    expect(installDoc).toContain("`ghosty-cli` installs the `ghosty` command");
     expect(installDoc).toContain("Cargo does\nnot create that alias");
-    expect(installPage).toContain("# Install the compiled runtime as codewhale");
+    expect(installPage).toContain("# Install the compiled runtime as ghosty");
     expect(installPage).toContain("Cargo installs only");
-    expect(installPage).not.toContain("codewhale-tui");
-    expect(npmReadme).toContain("installs `codewhale` plus the `codew` convenience name");
-    expect(npmReadme).not.toContain("codewhale-tui");
+    expect(installPage).not.toContain("ghosty-tui");
+    expect(npmReadme).toContain("installs `ghosty` plus the `ghosty-tui` convenience name");
+    expect(npmReadme).not.toContain("ghosty-tui");
     for (const platform of [
       "macos-arm64",
       "macos-x64",
       "linux-arm64",
       "linux-x64",
     ] as const) {
-      expect(SNIPPETS[platform], platform).toContain(`codew-${platform}`);
+      expect(SNIPPETS[platform], platform).toContain(`ghosty-tui-${platform}`);
       expect(SNIPPETS[platform], platform).toContain(
-        `sudo mv codew-${platform} /usr/local/bin/codew`,
+        `sudo mv ghosty-tui-${platform} /usr/local/bin/ghosty-tui`,
       );
-      expect(SNIPPETS[platform], platform).not.toContain("codewhale-tui");
-      expect(VERIFY[platform], platform).not.toContain("codewhale-tui");
+      expect(SNIPPETS[platform], platform).not.toContain("ghosty-tui");
+      expect(VERIFY[platform], platform).not.toContain("ghosty-tui");
     }
     for (const arch of ["x64", "arm64"] as const) {
-      expect(SNIPPETS[`windows-${arch}`], arch).toContain(`codew-windows-${arch}.exe`);
+      expect(SNIPPETS[`windows-${arch}`], arch).toContain(`ghosty-tui-windows-${arch}.exe`);
       expect(SNIPPETS[`windows-${arch}`], arch).toContain(
-        'Get-FileHash "$dest\\codew.exe"',
+        'Get-FileHash "$dest\\ghosty-tui.exe"',
       );
-      expect(SNIPPETS[`windows-${arch}`], arch).not.toContain("codewhale-tui");
-      expect(VERIFY[`windows-${arch}`], arch).not.toContain("codewhale-tui");
+      expect(SNIPPETS[`windows-${arch}`], arch).not.toContain("ghosty-tui");
+      expect(VERIFY[`windows-${arch}`], arch).not.toContain("ghosty-tui");
     }
   });
 
   it("checks Unix release assets under their manifest filenames before renaming", () => {
-    const scratch = mkdtempSync(join(tmpdir(), "codewhale-install-checksum-"));
+    const scratch = mkdtempSync(join(tmpdir(), "ghosty-install-checksum-"));
     const mockBin = join(scratch, "bin");
     const curlPath = join(mockBin, "curl");
     const checksumPath = join(mockBin, "checksum");
@@ -311,9 +311,9 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 [ -n "$output" ] || output=$(basename "$url")
-if [ "$output" = codewhale-artifacts-sha256.txt ]; then
+if [ "$output" = ghosty-artifacts-sha256.txt ]; then
   for platform in macos-arm64 macos-x64 linux-arm64 linux-x64; do
-    for binary in codewhale codew; do
+    for binary in ghosty ghosty-tui; do
       printf 'fixture-hash  %s-%s\\n' "$binary" "$platform"
     done
   done > "$output"
@@ -369,9 +369,9 @@ done
     const installPage = text("web/app/[locale]/install/page.tsx");
 
     expect(matrix.trust.audit).toContain("best-effort");
-    expect(matrix.trust.audit).toContain("$CODEWHALE_HOME");
+    expect(matrix.trust.audit).toContain("$GHOSTY_HOME");
     expect(installPage).toContain(
-      "const CONFIG_TREE = `$CODEWHALE_HOME/ (default: ~/.codewhale/)",
+      "const CONFIG_TREE = `$GHOSTY_HOME/ (default: ~/.ghosty/)",
     );
     expect(installPage).toContain(
       "best-effort credential / approval / elevation events",
@@ -505,7 +505,7 @@ done
     // The destination is now named, and named exactly — a trust claim that says
     // "an endpoint" without saying which one is not a trust claim.
     expect(matrix.trust.telemetry).toContain(
-      "https://telemetry.codewhale.net/v1/telemetry",
+      "https://telemetry.ghosty.net/v1/telemetry",
     );
     expect(matrix.trust.telemetry).toContain("no IP, country, or geo column");
     expect(matrix.trust.telemetry).toContain("three-month retention");
@@ -554,18 +554,18 @@ done
     // English and Chinese editions — same guarantee, one source.
     expect(footerProjectLinks("en", getChrome("en")).at(-1)).toEqual({
       label: "MIT license",
-      href: "https://github.com/Hmbown/CodeWhale/blob/main/LICENSE",
+      href: "https://github.com/blissito/ghostycode/blob/main/LICENSE",
     });
     expect(footerProjectLinks("zh", getChrome("zh")).at(-1)).toEqual({
       label: "MIT 许可证",
-      href: "https://github.com/Hmbown/CodeWhale/blob/main/LICENSE",
+      href: "https://github.com/blissito/ghostycode/blob/main/LICENSE",
     });
     expect(footer).toContain("href={REPO_RELEASES_URL}");
     expect(text("web/lib/i18n/links.ts")).toContain(
       'export const REPO_RELEASES_URL = `${REPO_URL}/releases`',
     );
     expect(text("web/lib/i18n/links.ts")).toContain(
-      'export const REPO_URL = "https://github.com/Hmbown/CodeWhale"',
+      'export const REPO_URL = "https://github.com/blissito/ghostycode"',
     );
     expect(footer).toContain("GITEE_ENABLED &&");
   });
@@ -583,14 +583,14 @@ done
     const readme = text("README.md");
     const homepage = text("web/app/[locale]/page.tsx");
     expect(readme).toContain("assets/screenshot.webp");
-    expect(homepage).toContain('src="/codewhale-tui.webp"');
+    expect(homepage).toContain('src="/ghosty-tui.webp"');
     // Alt text and figcaption are dictionary-backed (#4934); the screenshot
     // contract now runs through the EN reference value and the page's use of
     // it, and every routed locale must caption the same session honestly.
     expect(homepage).toContain("alt={d.screenshotAlt}");
     expect(homepage).toContain("<figcaption>{d.figcaption}</figcaption>");
     expect(getHome("en").figcaption).toBe(
-      "Codewhale session · Operate mode · permissions: Ask",
+      "Ghosty session · Operate mode · permissions: Ask",
     );
     expect(getHome("en").screenshotAlt).toContain("Operate mode");
     for (const locale of ["zh", "ja", "vi", "ko", "ru", "uk", "es", "pt-BR", "id"]) {

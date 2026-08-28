@@ -1,8 +1,8 @@
-# AUR packaging for Codewhale
+# AUR packaging for Ghosty
 
-`codewhale-bin` installs the prebuilt `codewhale` runtime and its `codew`
-convenience command from the same Linux archives published for each Codewhale
-release. It does not compile a fork or carry a separate Codewhale version.
+`ghosty-bin` installs the prebuilt `ghosty` runtime and its `ghosty-tui`
+convenience command from the same Linux archives published for each Ghosty
+release. It does not compile a fork or carry a separate Ghosty version.
 
 The AUR repository is a separate publication destination. This directory is
 the upstream source of its `PKGBUILD` and `.SRCINFO`, but the files with those
@@ -12,10 +12,10 @@ checksum manifests exist. Nothing here publishes to AUR.
 ## Render a release update
 
 From a checkout whose `Cargo.toml` has the released `X.Y.Z` workspace version,
-obtain the complete, verified `codewhale-release-assets` directory and run:
+obtain the complete, verified `ghosty-release-assets` directory and run:
 
 ```bash
-./packaging/aur/render.sh /path/to/release-assets /tmp/codewhale-bin
+./packaging/aur/render.sh /path/to/release-assets /tmp/ghosty-bin
 ```
 
 The renderer:
@@ -33,11 +33,11 @@ The renderer:
   is available.
 
 The initial AUR revision for each upstream release is `pkgrel=1`. A recipe-only
-correction may use a higher Arch package revision without changing Codewhale's
+correction may use a higher Arch package revision without changing Ghosty's
 semantic version:
 
 ```bash
-./packaging/aur/render.sh /path/to/release-assets /tmp/codewhale-bin 2
+./packaging/aur/render.sh /path/to/release-assets /tmp/ghosty-bin 2
 ```
 
 Do not invent checksums before release artifacts exist, use `SKIP`, or copy
@@ -49,23 +49,23 @@ Review the generated files, then validate them in an unprivileged clean build
 environment:
 
 ```bash
-cd /tmp/codewhale-bin
+cd /tmp/ghosty-bin
 makepkg --verifysource
 makepkg --printsrcinfo | cmp - .SRCINFO
 makepkg --cleanbuild
-namcap PKGBUILD codewhale-bin-*.pkg.tar.zst
+namcap PKGBUILD ghosty-bin-*.pkg.tar.zst
 ```
 
 Inspect the package contents before installation. They should contain
-`/usr/bin/codewhale`, `/usr/bin/codew`, the existing `codewhale-tui`
-compatibility symlink to `codewhale`, and the MIT license. After a test install,
+`/usr/bin/ghosty`, `/usr/bin/ghosty-tui`, the existing `ghosty-tui`
+compatibility symlink to `ghosty`, and the MIT license. After a test install,
 verify the canonical entrypoints report `X.Y.Z` and the compatibility symlink
 resolves to the same runtime.
 
-Publishing the generated files to the `codewhale-bin` AUR repository requires
+Publishing the generated files to the `ghosty-bin` AUR repository requires
 separate authorization from an AUR maintainer. Regenerate `.SRCINFO` whenever
 package metadata changes, and never publish this recipe before the matching
-Codewhale tag, archives, and checksum manifests are public and verified.
+Ghosty tag, archives, and checksum manifests are public and verified.
 
 Arch's `PKGBUILD(5)` contract defines architecture-specific sources and
 checksums, and the AUR requires `.SRCINFO` to accompany metadata changes:

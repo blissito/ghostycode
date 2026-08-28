@@ -1,7 +1,7 @@
 /**
  * roadmap-feed.ts — fetch the live roadmap from GitHub.
  *
- *   "Shipped"    ← last 8 published Releases on Hmbown/CodeWhale
+ *   "Shipped"    ← last 8 published Releases on blissito/ghostycode
  *   "Underway"   ← open issues with label `roadmap:underway`
  *   "Considered" ← open issues with label `roadmap:considered`
  *   "Ruled out"  ← issues (open or closed) with label `roadmap:ruled-out`
@@ -14,7 +14,7 @@
  */
 import { truncateChars } from "./truncate";
 
-const REPO = process.env.GITHUB_REPO ?? "Hmbown/CodeWhale";
+const REPO = process.env.GITHUB_REPO ?? "blissito/ghostycode";
 const KV_KEY = "roadmap:feed";
 const KV_TTL = 60 * 30;
 
@@ -43,7 +43,7 @@ async function gh<T>(url: string, ghToken?: string): Promise<T | null> {
 
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "codewhale-web-roadmap",
+    "User-Agent": "ghosty-web-roadmap",
     "X-GitHub-Api-Version": "2022-11-28",
   };
   if (ghToken) headers["Authorization"] = `Bearer ${ghToken}`;
@@ -63,7 +63,7 @@ const FALLBACK_SHIPPED: RoadmapItem[] = [
   {
     title: "v0.8.45",
     note: "Moonshot/Kimi provider support, API-key setup guidance, provider-surface sync, and current Windows install/runtime guidance",
-    href: "https://github.com/Hmbown/CodeWhale/releases/tag/v0.8.45",
+    href: "https://github.com/blissito/ghostycode/releases/tag/v0.8.45",
   },
 ];
 

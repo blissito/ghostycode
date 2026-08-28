@@ -7,12 +7,12 @@ integration tests live in its own `tests/` directory; the repository-root
 ## Harness consolidation (build-time lane #5247)
 
 `crates/tui/tests/` used to ship 26 root-level `*.rs` binaries, each linking
-the full `codewhale-tui` graph plus `cucumber`/`wiremock`/`rio-vt`. That was
-~26 large link jobs per `cargo test -p codewhale-tui` and a major share of the
+the full `ghosty-tui` graph plus `cucumber`/`wiremock`/`rio-vt`. That was
+~26 large link jobs per `cargo test -p ghosty-tui` and a major share of the
 30-minute suite in #4991.
 
 Since #5247 the remaining files are consolidated into **2 directory harnesses** (plus
-the `codewhale-tui` bin unit tests):
+the `ghosty-tui` bin unit tests):
 
 | harness | binary | what lives there | why it stays separate |
 |---|---|---|---|
@@ -30,9 +30,9 @@ harnesses above.
 Filtering still works via the module path:
 
 ```sh
-cargo test -p codewhale-tui --tests -- --list | grep adaptive_evidence
-cargo test -p codewhale-tui --test integration adaptive_evidence_acceptance -- --nocapture
-cargo test -p codewhale-tui --test cucumber tool_lifecycle -- --nocapture
+cargo test -p ghosty-tui --tests -- --list | grep adaptive_evidence
+cargo test -p ghosty-tui --test integration adaptive_evidence_acceptance -- --nocapture
+cargo test -p ghosty-tui --test cucumber tool_lifecycle -- --nocapture
 ```
 
 The shared helpers in `crates/tui/tests/support/` (`qa_harness`, `llm_client`) and fixtures in `crates/tui/tests/fixtures/` are untouched — harnesses reach them via `../support`.
@@ -99,7 +99,7 @@ feed the mock in CI.
 Quick example:
 
 ```bash
-cargo run --bin codewhale -- eval --record crates/tui/tests/fixtures
+cargo run --bin ghosty -- eval --record crates/tui/tests/fixtures
 cat crates/tui/tests/fixtures/offline-tool-loop.jsonl | jq .
 ```
 

@@ -750,409 +750,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codewhale-agent"
-version = "0.9.11"
-dependencies = [
- "codewhale-config",
- "serde",
-]
-
-[[package]]
-name = "codewhale-app-server"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "axum",
- "codewhale-agent",
- "codewhale-config",
- "codewhale-core",
- "codewhale-execpolicy",
- "codewhale-hooks",
- "codewhale-mcp",
- "codewhale-protocol",
- "codewhale-release",
- "codewhale-state",
- "codewhale-tools",
- "reqwest 0.13.4",
- "rustls",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tower",
- "tower-http 0.7.0",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "codewhale-build-support"
-version = "0.9.11"
-
-[[package]]
-name = "codewhale-cli"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "clap_complete",
- "codewhale-agent",
- "codewhale-app-server",
- "codewhale-build-support",
- "codewhale-config",
- "codewhale-execpolicy",
- "codewhale-lane",
- "codewhale-mcp",
- "codewhale-paths",
- "codewhale-release",
- "codewhale-secrets",
- "codewhale-state",
- "codewhale-telemetry",
- "codewhale-tui",
- "codewhale-workflow",
- "console",
- "dirs",
- "libc",
- "mimalloc",
- "reqwest 0.13.4",
- "rustls",
- "semver",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tempfile",
- "tokio",
- "toml 1.1.4+spec-1.1.0",
- "tracing",
- "webbrowser",
- "windows",
- "zeroize",
-]
-
-[[package]]
-name = "codewhale-command-contract"
-version = "0.9.11"
-dependencies = [
- "codewhale-core",
-]
-
-[[package]]
-name = "codewhale-config"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "codewhale-execpolicy",
- "codewhale-paths",
- "codewhale-secrets",
- "fd-lock",
- "libc",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tempfile",
- "toml 1.1.4+spec-1.1.0",
- "toml_edit 0.25.13+spec-1.1.0",
- "tracing",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "codewhale-core"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "codewhale-agent",
- "codewhale-config",
- "codewhale-execpolicy",
- "codewhale-hooks",
- "codewhale-mcp",
- "codewhale-protocol",
- "codewhale-state",
- "codewhale-tools",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "codewhale-execpolicy"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "codewhale-protocol",
- "serde",
-]
-
-[[package]]
-name = "codewhale-hooks"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "codewhale-protocol",
- "codewhale-release",
- "reqwest 0.13.4",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "wiremock",
-]
-
-[[package]]
-name = "codewhale-lane"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "chrono",
- "codewhale-config",
- "fd-lock",
- "serde",
- "serde_json",
- "tempfile",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "codewhale-mcp"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
- "tracing",
-]
-
-[[package]]
-name = "codewhale-paths"
-version = "0.9.11"
-dependencies = [
- "dirs",
-]
-
-[[package]]
-name = "codewhale-protocol"
-version = "0.9.11"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
- "uuid",
-]
-
-[[package]]
-name = "codewhale-release"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "reqwest 0.13.4",
- "rustls",
- "semver",
- "serde",
- "serde_json",
- "tempfile",
- "webpki-roots",
-]
-
-[[package]]
-name = "codewhale-secrets"
-version = "0.9.11"
-dependencies = [
- "chrono",
- "codewhale-paths",
- "keyring",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tempfile",
- "thiserror 2.0.20",
- "tracing",
-]
-
-[[package]]
-name = "codewhale-state"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "chrono",
- "codewhale-paths",
- "codewhale-protocol",
- "fd-lock",
- "rusqlite",
- "serde",
- "serde_json",
- "tracing",
-]
-
-[[package]]
-name = "codewhale-telemetry"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "chrono",
- "codewhale-build-support",
- "codewhale-config",
- "codewhale-paths",
- "codewhale-release",
- "codewhale-workflow",
- "fd-lock",
- "reqwest 0.13.4",
- "serde",
- "serde_json",
- "tempfile",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "codewhale-tools"
-version = "0.9.11"
-dependencies = [
- "anyhow",
- "async-trait",
- "codewhale-protocol",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "codewhale-tui"
-version = "0.9.11"
-dependencies = [
- "ahash",
- "anyhow",
- "arboard",
- "async-stream",
- "async-trait",
- "axum",
- "base64 0.22.1",
- "chrono",
- "clap",
- "clap_complete",
- "codewhale-build-support",
- "codewhale-command-contract",
- "codewhale-config",
- "codewhale-core",
- "codewhale-execpolicy",
- "codewhale-hooks",
- "codewhale-lane",
- "codewhale-paths",
- "codewhale-protocol",
- "codewhale-release",
- "codewhale-secrets",
- "codewhale-telemetry",
- "codewhale-tools",
- "codewhale-workflow",
- "codewhale-workflow-js",
- "colored",
- "crossterm",
- "cucumber",
- "dirs",
- "dotenvy",
- "encoding_rs",
- "fd-lock",
- "flate2",
- "futures-util",
- "globset",
- "htmd",
- "ignore",
- "image",
- "jsonschema",
- "libc",
- "lru",
- "mimalloc",
- "oauth2",
- "objc2",
- "objc2-foundation",
- "parking_lot",
- "portable-pty",
- "pretty_assertions",
- "qrcode",
- "ratatui",
- "ratatui-core",
- "regex",
- "reqwest 0.13.4",
- "rio-vt",
- "rmcp",
- "rusqlite",
- "rust-i18n",
- "rustls",
- "schemars",
- "schemaui",
- "semver",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "shell-words",
- "shellexpand",
- "shlex 1.3.0",
- "similar",
- "syntect",
- "tar",
- "tempfile",
- "thiserror 2.0.20",
- "tiny_http",
- "tokio",
- "tokio-util",
- "toml 1.1.4+spec-1.1.0",
- "toml_edit 0.25.13+spec-1.1.0",
- "tower-http 0.7.0",
- "tracing",
- "tracing-subscriber",
- "unicode-normalization",
- "unicode-segmentation",
- "unicode-width",
- "urlencoding",
- "uuid",
- "wait-timeout",
- "webbrowser",
- "windows",
- "windows-core",
- "windows-sys 0.61.2",
- "wiremock",
-]
-
-[[package]]
-name = "codewhale-workflow"
-version = "0.9.11"
-dependencies = [
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tempfile",
- "thiserror 2.0.20",
- "toml 1.1.4+spec-1.1.0",
-]
-
-[[package]]
-name = "codewhale-workflow-js"
-version = "0.9.11"
-dependencies = [
- "async-trait",
- "jsonschema",
- "rquickjs",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
-]
-
-[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2143,6 +1740,409 @@ dependencies = [
  "textwrap",
  "thiserror 2.0.20",
  "typed-builder",
+]
+
+[[package]]
+name = "ghosty-agent"
+version = "0.0.15"
+dependencies = [
+ "ghosty-config",
+ "serde",
+]
+
+[[package]]
+name = "ghosty-app-server"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "axum",
+ "ghosty-agent",
+ "ghosty-config",
+ "ghosty-core",
+ "ghosty-execpolicy",
+ "ghosty-hooks",
+ "ghosty-mcp",
+ "ghosty-protocol",
+ "ghosty-release",
+ "ghosty-state",
+ "ghosty-tools",
+ "reqwest 0.13.4",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tower",
+ "tower-http 0.7.0",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "ghosty-build-support"
+version = "0.0.15"
+
+[[package]]
+name = "ghosty-cli"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "clap_complete",
+ "console",
+ "dirs",
+ "ghosty-agent",
+ "ghosty-app-server",
+ "ghosty-build-support",
+ "ghosty-config",
+ "ghosty-execpolicy",
+ "ghosty-lane",
+ "ghosty-mcp",
+ "ghosty-paths",
+ "ghosty-release",
+ "ghosty-secrets",
+ "ghosty-state",
+ "ghosty-telemetry",
+ "ghosty-tui",
+ "ghosty-workflow",
+ "libc",
+ "mimalloc",
+ "reqwest 0.13.4",
+ "rustls",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "tokio",
+ "toml 1.1.4+spec-1.1.0",
+ "tracing",
+ "webbrowser",
+ "windows",
+ "zeroize",
+]
+
+[[package]]
+name = "ghosty-command-contract"
+version = "0.0.15"
+dependencies = [
+ "ghosty-core",
+]
+
+[[package]]
+name = "ghosty-config"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "fd-lock",
+ "ghosty-execpolicy",
+ "ghosty-paths",
+ "ghosty-secrets",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "toml 1.1.4+spec-1.1.0",
+ "toml_edit 0.25.13+spec-1.1.0",
+ "tracing",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "ghosty-core"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "ghosty-agent",
+ "ghosty-config",
+ "ghosty-execpolicy",
+ "ghosty-hooks",
+ "ghosty-mcp",
+ "ghosty-protocol",
+ "ghosty-state",
+ "ghosty-tools",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "ghosty-execpolicy"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "ghosty-protocol",
+ "serde",
+]
+
+[[package]]
+name = "ghosty-hooks"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "ghosty-protocol",
+ "ghosty-release",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "wiremock",
+]
+
+[[package]]
+name = "ghosty-lane"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "fd-lock",
+ "ghosty-config",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "ghosty-mcp"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "ghosty-paths"
+version = "0.0.15"
+dependencies = [
+ "dirs",
+]
+
+[[package]]
+name = "ghosty-protocol"
+version = "0.0.15"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "ghosty-release"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "reqwest 0.13.4",
+ "rustls",
+ "semver",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "webpki-roots",
+]
+
+[[package]]
+name = "ghosty-secrets"
+version = "0.0.15"
+dependencies = [
+ "chrono",
+ "ghosty-paths",
+ "keyring",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tracing",
+]
+
+[[package]]
+name = "ghosty-state"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "fd-lock",
+ "ghosty-paths",
+ "ghosty-protocol",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "ghosty-telemetry"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "fd-lock",
+ "ghosty-build-support",
+ "ghosty-config",
+ "ghosty-paths",
+ "ghosty-release",
+ "ghosty-workflow",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "ghosty-tools"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "ghosty-protocol",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "ghosty-tui"
+version = "0.0.15"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "arboard",
+ "async-stream",
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "clap",
+ "clap_complete",
+ "colored",
+ "crossterm",
+ "cucumber",
+ "dirs",
+ "dotenvy",
+ "encoding_rs",
+ "fd-lock",
+ "flate2",
+ "futures-util",
+ "ghosty-build-support",
+ "ghosty-command-contract",
+ "ghosty-config",
+ "ghosty-core",
+ "ghosty-execpolicy",
+ "ghosty-hooks",
+ "ghosty-lane",
+ "ghosty-paths",
+ "ghosty-protocol",
+ "ghosty-release",
+ "ghosty-secrets",
+ "ghosty-telemetry",
+ "ghosty-tools",
+ "ghosty-workflow",
+ "ghosty-workflow-js",
+ "globset",
+ "htmd",
+ "ignore",
+ "image",
+ "jsonschema",
+ "libc",
+ "lru",
+ "mimalloc",
+ "oauth2",
+ "objc2",
+ "objc2-foundation",
+ "parking_lot",
+ "portable-pty",
+ "pretty_assertions",
+ "qrcode",
+ "ratatui",
+ "ratatui-core",
+ "regex",
+ "reqwest 0.13.4",
+ "rio-vt",
+ "rmcp",
+ "rusqlite",
+ "rust-i18n",
+ "rustls",
+ "schemars",
+ "schemaui",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "shell-words",
+ "shellexpand",
+ "shlex 1.3.0",
+ "similar",
+ "syntect",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tiny_http",
+ "tokio",
+ "tokio-util",
+ "toml 1.1.4+spec-1.1.0",
+ "toml_edit 0.25.13+spec-1.1.0",
+ "tower-http 0.7.0",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "unicode-width",
+ "urlencoding",
+ "uuid",
+ "wait-timeout",
+ "webbrowser",
+ "windows",
+ "windows-core",
+ "windows-sys 0.61.2",
+ "wiremock",
+]
+
+[[package]]
+name = "ghosty-workflow"
+version = "0.0.15"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror 2.0.20",
+ "toml 1.1.4+spec-1.1.0",
+]
+
+[[package]]
+name = "ghosty-workflow-js"
+version = "0.0.15"
+dependencies = [
+ "async-trait",
+ "jsonschema",
+ "rquickjs",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
 ]
 
 [[package]]

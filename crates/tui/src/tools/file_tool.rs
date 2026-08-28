@@ -50,7 +50,7 @@ pub struct FileTool {
 
 /// Small model-facing reader with the same public contract as the small-contract built-in
 /// `read` tool. The legacy [`ReadFileTool`] remains separately registered for
-/// saved Codewhale transcripts.
+/// saved Ghosty transcripts.
 pub struct ReadTool;
 
 #[async_trait]

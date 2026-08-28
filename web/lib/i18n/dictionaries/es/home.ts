@@ -7,7 +7,7 @@ import type { HomeDict } from "../types";
  * positioning.
  *
  * The hero keeps the English slogan's structure: the whale is the subject
- * that dives ("Codewhale se sumerge …"), so the second line ("para que tú
+ * that dives ("Ghosty se sumerge …"), so the second line ("para que tú
  * no tengas que hacerlo") reads as the contrast it is instead of telling
  * the reader to dive and then not to.
  *
@@ -18,12 +18,12 @@ import type { HomeDict } from "../types";
  * literal.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — se sumerge en las profundidades para que tú no tengas que hacerlo.",
+  metaTitle: "Ghosty — se sumerge en las profundidades para que tú no tengas que hacerlo.",
   metaDescription:
-    "Codewhale se sumerge en las profundidades para que tú no tengas que hacerlo: un agente de programación de código abierto para la terminal. Trae tu propio modelo. Se ejecuta en tu máquina. Rust, MIT.",
+    "Ghosty se sumerge en las profundidades para que tú no tengas que hacerlo: un agente de programación de código abierto para la terminal. Trae tu propio modelo. Se ejecuta en tu máquina. Rust, MIT.",
 
   kicker: "Código abierto · Trae tu propio modelo · Se ejecuta en tu terminal",
-  heroTitleA: "Codewhale se sumerge en las profundidades",
+  heroTitleA: "Ghosty se sumerge en las profundidades",
   heroTitleB: "para que tú no tengas que hacerlo.",
   heroIntro:
     "{brand} es un agente de programación de código abierto para tu terminal. Dale un modelo y una tarea: lee tu código, edita archivos, ejecuta sus propias comprobaciones y se detiene cuando el trabajo está hecho o te necesita. Trae cualquier modelo, o combínalos: asigna un modelo distinto a cada rol.",
@@ -46,8 +46,8 @@ export const home: HomeDict = {
 
   shotSession: "Sesión actual",
   screenshotAlt:
-    "Sesión de terminal actual de Codewhale con el modo Operate, la ballena, el compositor y el pie de página",
-  figcaption: "Sesión actual de Codewhale · modo Operate · postura de permisos Ask",
+    "Sesión de terminal actual de Ghosty con el modo Operate, la ballena, el compositor y el pie de página",
+  figcaption: "Sesión actual de Ghosty · modo Operate · postura de permisos Ask",
 
   proofHeading: "Un shell de terminal submarino. Cualquier modelo. En tu máquina.",
   proofBody:
@@ -73,7 +73,7 @@ export const home: HomeDict = {
   receiptReport: "comprobaciones superadas · recibo guardado",
 
   sealStart: "起",
-  startHeading: "¿Nuevo en Codewhale? Cuatro pasos de principio a fin.",
+  startHeading: "¿Nuevo en Ghosty? Cuatro pasos de principio a fin.",
   startLede:
     "Instalar → primera sesión sin claves → conectar un proveedor → primer Workflow de Fleet. Los términos se definen en la página de vocabulario.",
   startGuideLink: "Leer la guía de primeros pasos →",
@@ -93,7 +93,7 @@ export const home: HomeDict = {
   surfacesHeading: "Usa el runtime donde ocurre el trabajo.",
   surfaces: [
     ["TUI", "Trabajo interactivo en la terminal"],
-    ["codewhale exec", "Scripts y CI"],
+    ["ghosty exec", "Scripts y CI"],
     ["Cliente web", "Cliente de navegador, solo loopback"],
     ["Runtime API + MCP", "Integraciones locales"],
     ["Fleet", "Trabajo multiagente duradero"],

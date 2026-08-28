@@ -1179,9 +1179,9 @@ mod tests {
         let guards = [
             "DEEPSEEK_API_KEY",
             "DEEPSEEK_API_KEY_SOURCE",
-            "CODEWHALE_CLI_API_KEY",
+            "GHOSTY_CLI_API_KEY",
             "DEEPSEEK_BASE_URL",
-            "CODEWHALE_BASE_URL",
+            "GHOSTY_BASE_URL",
         ]
         .into_iter()
         .map(EnvVarGuard::remove)

@@ -21,7 +21,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
   RUSTFLAGS: -Dwarnings
-  CODEWHALE_BUILD_SHA: ${{ github.sha }}
+  GHOSTY_BUILD_SHA: ${{ github.sha }}
 
 jobs:
   build:
@@ -34,39 +34,39 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             platform: linux-x64
-            binary: codewhale
-            primary_artifact: codewhale-linux-x64
-            alias_artifact: codew-linux-x64
+            binary: ghosty
+            primary_artifact: ghosty-linux-x64
+            alias_artifact: ghosty-tui-linux-x64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             platform: linux-arm64
-            binary: codewhale
-            primary_artifact: codewhale-linux-arm64
-            alias_artifact: codew-linux-arm64
+            binary: ghosty
+            primary_artifact: ghosty-linux-arm64
+            alias_artifact: ghosty-tui-linux-arm64
           - os: macos-latest
             target: x86_64-apple-darwin
             platform: macos-x64
-            binary: codewhale
-            primary_artifact: codewhale-macos-x64
-            alias_artifact: codew-macos-x64
+            binary: ghosty
+            primary_artifact: ghosty-macos-x64
+            alias_artifact: ghosty-tui-macos-x64
           - os: macos-latest
             target: aarch64-apple-darwin
             platform: macos-arm64
-            binary: codewhale
-            primary_artifact: codewhale-macos-arm64
-            alias_artifact: codew-macos-arm64
+            binary: ghosty
+            primary_artifact: ghosty-macos-arm64
+            alias_artifact: ghosty-tui-macos-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             platform: windows-x64
-            binary: codewhale.exe
-            primary_artifact: codewhale-windows-x64.exe
-            alias_artifact: codew-windows-x64.exe
+            binary: ghosty.exe
+            primary_artifact: ghosty-windows-x64.exe
+            alias_artifact: ghosty-tui-windows-x64.exe
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
             platform: windows-arm64
-            binary: codewhale.exe
-            primary_artifact: codewhale-windows-arm64.exe
-            alias_artifact: codew-windows-arm64.exe
+            binary: ghosty.exe
+            primary_artifact: ghosty-windows-arm64.exe
+            alias_artifact: ghosty-tui-windows-arm64.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -121,7 +121,7 @@ jobs:
         # this value: 1 MiB crashes rustc, 2 MiB and 4 MiB succeed. Unix std
         # defaults to 2 MiB and passes; windows-11-arm sat under the
         # requirement and failed every nightly from 2026-08-16 with
-        # `thread 'optimize module codewhale_tui...-cgu.13' has overflowed its
+        # `thread 'optimize module ghosty_tui...-cgu.13' has overflowed its
         # stack`, deterministically on the same codegen unit across all three
         # build attempts. This is a property of the crate's size, not of
         # Windows, so it is set for every target: at 788k lines in crates/tui
@@ -132,7 +132,7 @@ jobs:
           RUST_MIN_STACK: '16777216'
         run: |
           for attempt in 1 2 3; do
-            if cargo build --release --locked --target ${{ matrix.target }} -p codewhale-cli; then
+            if cargo build --release --locked --target ${{ matrix.target }} -p ghosty-cli; then
               exit 0
             fi
             if [ "${attempt}" -lt 3 ]; then

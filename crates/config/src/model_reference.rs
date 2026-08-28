@@ -212,7 +212,7 @@ impl ModelReferenceDatabase {
         Self::from_offerings(&snapshot.offerings)
     }
 
-    /// Build from CodeWhale's offline/stale bundled catalog snapshot (#4188).
+    /// Build from GhostyCode's offline/stale bundled catalog snapshot (#4188).
     ///
     /// Prefer a live/compiled [`CatalogSnapshot`] when available. The bundled
     /// set needs no credentials or network and remains the offline fallback

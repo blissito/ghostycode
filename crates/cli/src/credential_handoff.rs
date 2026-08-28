@@ -1,10 +1,10 @@
 use super::{runtime_overrides_for_provider, xai_auth_diagnostics};
 use anyhow::{Context, Result, bail, ensure};
-use codewhale_config::{
+use ghosty_config::{
     CliRuntimeOverrides, ConfigStore, ProviderKind, RuntimeApiKeySource,
     auth_mode_uses_kimi_imported_token,
 };
-use codewhale_secrets::Secrets;
+use ghosty_secrets::Secrets;
 use std::io::{ErrorKind, Write};
 use zeroize::Zeroizing;
 

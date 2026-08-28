@@ -76,7 +76,7 @@ function parseArgs(argv) {
 }
 
 async function appendFilesystemChecks(result, env, args) {
-  const workspace = cleanEnvValue(env.CODEWHALE_WORKSPACE ?? env.DEEPSEEK_WORKSPACE);
+  const workspace = cleanEnvValue(env.GHOSTY_WORKSPACE ?? env.DEEPSEEK_WORKSPACE);
   if (workspace) {
     await checkReadableDirectory(result, workspace, "workspace");
   }

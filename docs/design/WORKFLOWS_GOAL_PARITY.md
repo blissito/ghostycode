@@ -1,4 +1,4 @@
-# Workflows and goal mode — parity audit (Grok Build, DeepSeek Harness, Codewhale)
+# Workflows and goal mode — parity audit (Grok Build, DeepSeek Harness, Ghosty)
 
 Date: 2026-08-15. Evidence: the local Grok Build source sync at
 `/Volumes/VIXinSSD/CW/grokbuild` (SOURCE_REV
@@ -8,7 +8,7 @@ Harness `@deepseek-ai/dsh@0.1.0-rc.6` package READMEs (`dsh-goal`,
 `dsh-tool-goal`, `dsh-goal-round-driver`, `dsh-command-goal`,
 `dsh-tool-workflow`, `dsh-workflow`, `dsh-tool-ralph`, `dsh-tool-todo`,
 `dsh-schedule`) and `config/agent-presets/standard/agent.cordis.yml`, plus a
-real Codewhale dogfood run (Ollama `qwen3:4b`, isolated home) captured under
+real Ghosty dogfood run (Ollama `qwen3:4b`, isolated home) captured under
 `scratchpad/wfgoal-captures/` (`g0*-*.txt`, `w0*-*.txt`, `wf-cli-run.log`).
 Public Grok Build docs found by search:
 [Developers Digest guide](https://www.developersdigest.tech/blog/grok-build-developer-guide-2026)
@@ -67,7 +67,7 @@ Arena Mode) — official docs at x.ai/cli returned 404 for the deep pages.
   `todo_write` is the standing plan strip; `dsh-schedule` gives durable
   reminders (`after_seconds`, `at`, `every_seconds` ≥ 5 min).
 
-## What Codewhale does today (release candidate 533c530be + integration tip)
+## What Ghosty does today (release candidate 533c530be + integration tip)
 
 - `/goal <objective> [budget: N]`, `pause|resume|done|blocked|clear`,
   `declare-hunted`; state Active/Paused/Complete/Blocked with pause reasons
@@ -81,9 +81,9 @@ Arena Mode) — official docs at x.ai/cli returned 404 for the deep pages.
 - Workflows: JS authoring lowered to a typed `WorkflowSpec` (compile-only
   subset), `task()/parallel()/pipeline()/phase()/log()/budget/args`, soft-auto
   launch policy, plan-approval cards, per-run token budgets, worktree write
-  ownership, gates, per-event run journal `.codewhale/workflow-runs.jsonl`
+  ownership, gates, per-event run journal `.ghosty/workflow-runs.jsonl`
   with restart reconciliation, live workflow panel + history card,
-  `codewhale workflow run <name|--source-path> --runtime tmux|inline|vm|ci`.
+  `ghosty workflow run <name|--source-path> --runtime tmux|inline|vm|ci`.
 
 ## Dogfood findings (before this lane)
 
@@ -111,15 +111,15 @@ Arena Mode) — official docs at x.ai/cli returned 404 for the deep pages.
 
 ## Matrix
 
-| Row | Grok Build | DeepSeek Harness | Codewhale | Verdict |
+| Row | Grok Build | DeepSeek Harness | Ghosty | Verdict |
 | --- | --- | --- | --- | --- |
-| Authoring | Rhai script + meta; builtins; saved `.grok/workflows` | model-written JS script only | JS compile-only subset + structured `plan` + checked-in `.workflow.js`; `codewhale workflow run` | parity (different surface); saved-workflow *registry* with names is missing — checked-in files exist but no `/workflow list <saved>` |
-| Triggering | manual `/workflow`, `/workflow resume` | model tool; `dsh-schedule` reminders | manual `/workflow`, soft-auto launch, `codewhale workflow run`, automations (`~/.codewhale/automations`) | parity; scheduled workflow runs deliberately not added here |
+| Authoring | Rhai script + meta; builtins; saved `.grok/workflows` | model-written JS script only | JS compile-only subset + structured `plan` + checked-in `.workflow.js`; `ghosty workflow run` | parity (different surface); saved-workflow *registry* with names is missing — checked-in files exist but no `/workflow list <saved>` |
+| Triggering | manual `/workflow`, `/workflow resume` | model tool; `dsh-schedule` reminders | manual `/workflow`, soft-auto launch, `ghosty workflow run`, automations (`~/.ghosty/automations`) | parity; scheduled workflow runs deliberately not added here |
 | Goal definition | `/goal`, planner phase | `/goal`, model-inferred `create_goal` | `/goal`, model `create_goal` — now inferable (this lane) | parity |
-| Checkpoints / resume | journal replay of completed calls; run manifests; `/workflow resume` | none (documented limitation) | per-event journal + restart reconciliation; no replay-resume | partial (Codewhale ≥ DSH, < Grok Build) — follow-up |
+| Checkpoints / resume | journal replay of completed calls; run manifests; `/workflow resume` | none (documented limitation) | per-event journal + restart reconciliation; no replay-resume | partial (Ghosty ≥ DSH, < Grok Build) — follow-up |
 | Approvals inside runs | plan-approve loop | tool approvals per child | plan-approval card gated by `[workflow]` (`require_approval_for_writes` / `auto_start_read_only`); session auto-approve still bypasses the card; writes inside a running VM step follow the VM runtime contract | parity |
 | Progress / state visibility | `/workflows`, `/goal status`, tasks pane | web plan strip, `/goal` | workflow panel, work bar, `/workflow status` (now native), `/goal` (now plain, idle hint) | parity |
-| Receipts / history | run manifests | session log | `.codewhale/workflow-runs.jsonl`, `/workflow status` lists journaled runs, trophy cards | parity |
+| Receipts / history | run manifests | session log | `.ghosty/workflow-runs.jsonl`, `/workflow status` lists journaled runs, trophy cards | parity |
 | Failure handling / retry | pause kinds; strategist restructure | model judgment; ralph rounds | verifier gates, no-progress pause, blocked, `[goal] max_continuations` | parity; auto-restructure (strategist) deliberately absent |
 | Cancellation | `/workflow stop <name>` native | cancel via signal | `/workflow cancel [id]` native (this lane); Esc cancels children | parity |
 | Fan-out inside a workflow | `parallel()`, agent budget 128 | `parallel()/pipeline()`, no budget vocabulary | `parallel()/pipeline()`, 16 live / 1000 total, token budget | parity |
@@ -153,7 +153,7 @@ Arena Mode) — official docs at x.ai/cli returned 404 for the deep pages.
   per-event journal already records every task; the missing piece is a
   request-hash cache in the driver so completed leaves return their recorded
   results on re-run (Grok Build `xai-workflow/journal.rs` is the reference).
-- A saved-workflow registry (`.codewhale/workflows/*.workflow.js` with
+- A saved-workflow registry (`.ghosty/workflows/*.workflow.js` with
   `meta.name`, project + user scope, trust-checked) so `/workflow run <name>`
   and `/workflow list` work by name; the CLI already resolves `workflows/`.
 - Grok Build-style stall handling beyond no-progress pause (strategist

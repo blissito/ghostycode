@@ -171,7 +171,7 @@ pub trait McpManagedClient: Send + Sync {
 
 /// A simple in-memory MCP client for tests and embedding callers.
 ///
-/// This is **not** wired into `codewhale mcp-server`: that path spawns
+/// This is **not** wired into `ghosty mcp-server`: that path spawns
 /// [`ChildProcessMcpClient`] and reports a typed error when the configured
 /// command cannot be run. Serving canned values there made a broken
 /// integration look identical to a working one (#4727).
@@ -562,7 +562,7 @@ impl McpManager {
 
     /// Resolve a standard URI-only resource read to exactly one child server.
     ///
-    /// Older Codewhale clients supplied a non-standard `server` parameter (or
+    /// Older Ghosty clients supplied a non-standard `server` parameter (or
     /// encoded it as the authority in an `mcp://server/...` URI). Standard MCP
     /// clients send only the URI, so discover its owner from resources/list.
     /// Never pick the first HashMap entry when more than one server advertises
@@ -980,7 +980,7 @@ pub fn run_stdio_server(
     }
 
     state.lifecycle_state = "stopped".to_string();
-    let _ = writeln!(stderr, "codewhale mcp-server: stdio server exited");
+    let _ = writeln!(stderr, "ghosty mcp-server: stdio server exited");
     let mut definitions: Vec<McpServerDefinition> = state.definitions.into_values().collect();
     definitions.sort_by(|a, b| a.config.name.cmp(&b.config.name));
     Ok(definitions)
@@ -1009,7 +1009,7 @@ fn build_stdio_state(initial_definitions: Vec<McpServerDefinition>) -> StdioMcpS
         // operator; `lifecycle` carries the same text for programmatic clients.
         if let Err(err) = state.start_definition(&definition) {
             tracing::warn!("MCP server '{name}' is not available: {err:#}");
-            eprintln!("codewhale mcp-server: server '{name}' is not available: {err:#}");
+            eprintln!("ghosty mcp-server: server '{name}' is not available: {err:#}");
         }
     }
 
@@ -1037,12 +1037,12 @@ fn default_rpc_methods() -> Vec<&'static str> {
 }
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
-const MCP_SERVER_NAME: &str = "codewhale-mcp-server";
+const MCP_SERVER_NAME: &str = "ghosty-mcp-server";
 
 fn initialize_response(state: &StdioMcpState) -> Value {
     json!({
         // Standard MCP initialize result. Keep the management metadata below
-        // as additive compatibility fields for existing Codewhale clients.
+        // as additive compatibility fields for existing Ghosty clients.
         "protocolVersion": MCP_PROTOCOL_VERSION,
         "capabilities": {
             "tools": {},
@@ -1235,7 +1235,7 @@ fn stdio_resource_read_result(uri: &str, result: Value) -> Value {
                 && fields.get("_meta").is_none_or(Value::is_object) =>
         {
             // Pass through a valid standard ReadResourceResult and retain the
-            // old nested value for existing Codewhale management clients.
+            // old nested value for existing Ghosty management clients.
             fields.insert("resource".to_string(), legacy_resource);
             Value::Object(fields)
         }
@@ -1347,7 +1347,7 @@ fn dispatch_stdio_request(
             state.session_phase = McpSessionPhase::InitializeResponded;
             Ok((initialize_response(state), false))
         }
-        // Pre-standard Codewhale management alias; it intentionally requires
+        // Pre-standard Ghosty management alias; it intentionally requires
         // no MCP initialize envelope.
         "capabilities" => Ok((initialize_response(state), false)),
         "notifications/initialized" => {
@@ -2432,7 +2432,7 @@ mod tests {
     }
 
     #[test]
-    fn stdio_initialize_uses_standard_mcp_shape_and_codewhale_identity() {
+    fn stdio_initialize_uses_standard_mcp_shape_and_ghosty_identity() {
         let state = build_stdio_state(Vec::new());
         let response = initialize_response(&state);
         assert_eq!(response["protocolVersion"], MCP_PROTOCOL_VERSION);
@@ -2490,7 +2490,7 @@ mod tests {
                 .expect_err("initialized cannot precede initialize");
         assert_eq!(early_initialized.code, -32600);
 
-        // Explicit Codewhale management compatibility remains available before
+        // Explicit Ghosty management compatibility remains available before
         // MCP initialization.
         assert!(dispatch_stdio_request(&mut state, "capabilities", Value::Null).is_ok());
         assert!(dispatch_stdio_request(&mut state, "server/list", Value::Null).is_ok());
@@ -2689,7 +2689,7 @@ mod tests {
         // typo in `command` was indistinguishable from a working server.
         let mut state = build_stdio_state(vec![definition(
             "broken",
-            "codewhale-nonexistent-mcp-server-binary",
+            "ghosty-nonexistent-mcp-server-binary",
             &[],
         )]);
 

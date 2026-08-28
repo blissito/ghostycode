@@ -970,7 +970,7 @@ fn map_session_err(id: &str, err: std::io::Error, action: &str) -> ApiError {
         std::io::ErrorKind::InvalidInput => {
             ApiError::bad_request(format!("Invalid session id '{id}'"))
         }
-        // The session is open in an interactive Codewhale session, which holds
+        // The session is open in an interactive Ghosty session, which holds
         // the authoritative copy in memory. Fail closed with a typed conflict
         // rather than write something its next autosave would revert.
         std::io::ErrorKind::ResourceBusy => ApiError {

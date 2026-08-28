@@ -1,18 +1,18 @@
-//! DeepSeek Harness (`dsh`) connected through Codewhale.
+//! DeepSeek Harness (`dsh`) connected through Ghosty.
 //!
 //! A thin, reversible adapter around DSH's *documented* seams:
 //!
 //! - detection reads `dsh --version` / `--help`, `$DSH_HOME` inventory;
-//! - connection writes only under `$CODEWHALE_HOME/integrations/dsh/`: a
-//!   `--patch` overlay pinning the exact Codewhale route identity and an
-//!   append-only receipt; the Codewhale palette rides the bundle profile
+//! - connection writes only under `$GHOSTY_HOME/integrations/dsh/`: a
+//!   `--patch` overlay pinning the exact Ghosty route identity and an
+//!   append-only receipt; the Ghosty palette rides the bundle profile
 //!   via `overrideTokens`, never the overlay;
 //! - launch runs `dsh --profile <web|headless> --patch <overlay>` with the
 //!   permission posture exported as `DSH_PERMISSION_MODE`, keeping the
 //!   user's own `$DSH_HOME` (credentials, sessions, profiles) untouched;
-//! - removal deletes only Codewhale-owned files.
+//! - removal deletes only Ghosty-owned files.
 //!
-//! Codewhale never copies, prints, or embeds API keys, OAuth documents, or
+//! Ghosty never copies, prints, or embeds API keys, OAuth documents, or
 //! filesystem contents; never silently switches the model; never broadens
 //! permissions. DSH is an integrated harness surface, not a second Fleet
 //! scheduler.
@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 pub(crate) use bundle::{BundleAvailability, DshAppBundle, DshBundleRecord};
 pub(crate) use detect::{DetectEnv, DshCompatibility, DshDetection, DshRunner, ProcessRunner};
 pub(crate) use identity::{
-    CodewhaleRouteIdentity, DshAdapter, MappedIdentity, WireProtocol, map_identity, render_overlay,
+    DshAdapter, GhostyRouteIdentity, MappedIdentity, WireProtocol, map_identity, render_overlay,
     sha256_hex,
 };
 pub(crate) use receipt::{
@@ -45,14 +45,14 @@ pub(crate) use receipt::{
 };
 
 pub(crate) const INTEGRATION_DIR: &str = "integrations/dsh";
-pub(crate) const OVERLAY_FILE: &str = "codewhale.patch.yml";
+pub(crate) const OVERLAY_FILE: &str = "ghosty.patch.yml";
 pub(crate) const RECEIPT_FILE: &str = "receipt.json";
-pub(crate) const SKIN_FILE: &str = "codewhale-dsh-skin.css";
-pub(crate) const SKIN_PREVIEW_FILE: &str = "codewhale-dsh-skin-preview.html";
-pub(crate) const RELATIONSHIP_LABEL: &str = "DeepSeek Harness connected through Codewhale";
-pub(crate) const CLI_COMMAND: &str = "codewhale integrations dsh";
+pub(crate) const SKIN_FILE: &str = "ghosty-dsh-skin.css";
+pub(crate) const SKIN_PREVIEW_FILE: &str = "ghosty-dsh-skin-preview.html";
+pub(crate) const RELATIONSHIP_LABEL: &str = "DeepSeek Harness connected through Ghosty";
+pub(crate) const CLI_COMMAND: &str = "ghosty integrations dsh";
 
-/// Codewhale-owned files for this integration.
+/// Ghosty-owned files for this integration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DshPaths {
     pub(crate) root: PathBuf,
@@ -60,13 +60,13 @@ pub(crate) struct DshPaths {
     pub(crate) receipt: PathBuf,
     pub(crate) skin: PathBuf,
     pub(crate) skin_preview: PathBuf,
-    /// Codewhale-owned bundle package directory (documented DSH plugin path).
+    /// Ghosty-owned bundle package directory (documented DSH plugin path).
     pub(crate) bundle_dir: PathBuf,
 }
 
 impl DshPaths {
-    pub(crate) fn under(codewhale_home: &Path) -> Self {
-        let root = codewhale_home.join(INTEGRATION_DIR);
+    pub(crate) fn under(ghosty_home: &Path) -> Self {
+        let root = ghosty_home.join(INTEGRATION_DIR);
         Self {
             overlay: root.join(OVERLAY_FILE),
             receipt: root.join(RECEIPT_FILE),
@@ -78,7 +78,7 @@ impl DshPaths {
     }
 
     pub(crate) fn from_process() -> Result<Self> {
-        Ok(Self::under(&codewhale_config::codewhale_home()?))
+        Ok(Self::under(&ghosty_config::ghosty_home()?))
     }
 }
 
@@ -95,11 +95,11 @@ pub(crate) enum DshIntegrationState {
         version: Option<String>,
         reason: String,
     },
-    /// Installed and usable, but no Codewhale overlay exists.
+    /// Installed and usable, but no Ghosty overlay exists.
     Detected { version: String },
-    /// Overlay present and matches the current Codewhale route.
+    /// Overlay present and matches the current Ghosty route.
     Connected { version: String },
-    /// Overlay present but the current Codewhale route (or its file) drifted.
+    /// Overlay present but the current Ghosty route (or its file) drifted.
     StaleConfig { version: String, reason: String },
     /// Connected, but `dsh` is newer than the verified release.
     StaleVersion { version: String, verified: String },
@@ -134,7 +134,7 @@ pub(crate) struct DshStatusReport {
     pub(crate) record: Option<DshConnectionRecord>,
     pub(crate) overlay_present: bool,
     pub(crate) overlay_sha256_on_disk: Option<String>,
-    /// The identity Codewhale would write *now* (may be `None` when the route
+    /// The identity Ghosty would write *now* (may be `None` when the route
     /// could not be resolved).
     pub(crate) current_identity: Option<MappedIdentity>,
     pub(crate) current_identity_error: Option<String>,
@@ -185,7 +185,7 @@ fn client_or_patch_stale(
         .map(|text| sha256_hex(text.as_bytes()));
     if disk_patch_sha256 != expected_sha.as_deref() {
         return Some(
-            "bundle cordis.patch.yml was modified outside Codewhale; run `update`".to_string(),
+            "bundle cordis.patch.yml was modified outside Ghosty; run `update`".to_string(),
         );
     }
     None
@@ -194,7 +194,7 @@ fn client_or_patch_stale(
 pub(crate) fn compute_status(
     paths: &DshPaths,
     detection: DshDetection,
-    current_identity: Result<CodewhaleRouteIdentity, String>,
+    current_identity: Result<GhostyRouteIdentity, String>,
     allow_full_access: bool,
     bundle_availability: BundleAvailability,
 ) -> Result<DshStatusReport> {
@@ -266,7 +266,7 @@ pub(crate) fn compute_status(
                             != Some(record.overlay_sha256.as_str())
                         {
                             Some(
-                                "overlay file was modified outside Codewhale; run `update`"
+                                "overlay file was modified outside Ghosty; run `update`"
                                     .to_string(),
                             )
                         } else if let Some(reason) = bundle_stale {
@@ -274,7 +274,7 @@ pub(crate) fn compute_status(
                         } else {
                             match current_identity.as_ref() {
                                 Some(now) if !now.mappable() => Some(
-                                    "current Codewhale route cannot be carried by DSH; overlay is stale"
+                                    "current Ghosty route cannot be carried by DSH; overlay is stale"
                                         .to_string(),
                                 ),
                                 Some(now) => {
@@ -282,14 +282,14 @@ pub(crate) fn compute_status(
                                     match expected {
                                         Some(expected) if expected == record.overlay_sha256 => None,
                                         Some(_) => Some(format!(
-                                            "Codewhale route is now {}/{}; overlay pins {}/{}; run `update`",
+                                            "Ghosty route is now {}/{}; overlay pins {}/{}; run `update`",
                                             now.source.provider_id,
                                             now.source.model,
                                             record.identity.source.provider_id,
                                             record.identity.source.model
                                         )),
                                         None => Some(
-                                            "current Codewhale route cannot be carried by DSH; overlay is stale"
+                                            "current Ghosty route cannot be carried by DSH; overlay is stale"
                                                 .to_string(),
                                         ),
                                     }
@@ -358,7 +358,7 @@ pub(crate) struct DshPlan {
 pub(crate) fn plan(
     paths: &DshPaths,
     detection: &DshDetection,
-    identity: &CodewhaleRouteIdentity,
+    identity: &GhostyRouteIdentity,
     profile: &str,
     allow_full_access: bool,
     skin: bool,
@@ -367,7 +367,7 @@ pub(crate) fn plan(
     let mapped = map_identity(identity, allow_full_access);
     let overlay_text = render_overlay(&mapped).ok_or_else(|| match &mapped.adapter {
         DshAdapter::Unsupported { reason } => anyhow::anyhow!(
-            "current Codewhale route {}/{} cannot be carried by DSH: {reason}",
+            "current Ghosty route {}/{} cannot be carried by DSH: {reason}",
             identity.provider_id,
             identity.model
         ),
@@ -389,7 +389,7 @@ pub(crate) fn plan(
     }
     if skin {
         disclosures.push(
-            "Skin: Codewhale palette is applied through the bundle profile via overrideTokens (on by default for install-bundle). The --patch overlay path is unchanged; launch --profile web|headless stays overlay-only."
+            "Skin: Ghosty palette is applied through the bundle profile via overrideTokens (on by default for install-bundle). The --patch overlay path is unchanged; launch --profile web|headless stays overlay-only."
                 .to_string(),
         );
         if ocean {
@@ -426,7 +426,7 @@ pub(crate) fn plan(
     })
 }
 
-fn codewhale_version() -> String {
+fn ghosty_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
@@ -476,13 +476,13 @@ pub(crate) fn apply_plan(
         Some(mut b) if event == DshReceiptEvent::Update => {
             let sha = bundle::write_bundle(
                 &paths.bundle_dir,
-                &codewhale_version(),
+                &ghosty_version(),
                 &plan.overlay_text,
                 plan.skin,
                 plan.ocean,
             )?;
             b.patch_sha256 = sha.clone();
-            b.package_version = bundle::bundle_version(&codewhale_version(), &sha);
+            b.package_version = bundle::bundle_version(&ghosty_version(), &sha);
             b.updated_at = now.clone();
             Some(b)
         }
@@ -508,7 +508,7 @@ pub(crate) fn apply_plan(
     doc.push(DshReceiptEntry {
         event: event.clone(),
         at: now,
-        codewhale_version: codewhale_version(),
+        ghosty_version: ghosty_version(),
         dsh_version: detection.version.clone(),
         dsh_home: detection.dsh_home.clone(),
         overlay_sha256: Some(plan.overlay_sha256.clone()),
@@ -551,7 +551,7 @@ pub(crate) fn set_disabled(paths: &DshPaths, disabled: bool) -> Result<DshConnec
     doc.push(DshReceiptEntry {
         event: event.clone(),
         at: record.updated_at.clone(),
-        codewhale_version: codewhale_version(),
+        ghosty_version: ghosty_version(),
         dsh_version: record.dsh_version.clone(),
         dsh_home: record.dsh_home.clone(),
         overlay_sha256: Some(record.overlay_sha256.clone()),
@@ -569,13 +569,13 @@ pub(crate) fn set_disabled(paths: &DshPaths, disabled: bool) -> Result<DshConnec
     Ok(record)
 }
 
-/// Delete only Codewhale-owned files; keep the receipt history with a
+/// Delete only Ghosty-owned files; keep the receipt history with a
 /// terminal `remove` entry. Never touches `$DSH_HOME`.
 pub(crate) fn remove(paths: &DshPaths) -> Result<Vec<PathBuf>> {
     let mut doc = DshReceiptDocument::load(&paths.receipt)?;
     if doc.current.as_ref().is_some_and(|r| r.bundle.is_some()) {
         anyhow::bail!(
-            "the Codewhale bundle is still installed in DSH profile `{}`; run `{CLI_COMMAND} remove-bundle` first",
+            "the Ghosty bundle is still installed in DSH profile `{}`; run `{CLI_COMMAND} remove-bundle` first",
             bundle::BUNDLE_PROFILE
         );
     }
@@ -592,7 +592,7 @@ pub(crate) fn remove(paths: &DshPaths) -> Result<Vec<PathBuf>> {
     doc.push(DshReceiptEntry {
         event: DshReceiptEvent::Remove,
         at: now,
-        codewhale_version: codewhale_version(),
+        ghosty_version: ghosty_version(),
         dsh_version: previous.as_ref().and_then(|r| r.dsh_version.clone()),
         dsh_home: previous
             .as_ref()
@@ -605,7 +605,7 @@ pub(crate) fn remove(paths: &DshPaths) -> Result<Vec<PathBuf>> {
             .as_ref()
             .map(|r| r.identity.permission_mode.as_str().to_string()),
         note: Some(format!(
-            "removed {} Codewhale-owned file(s); $DSH_HOME untouched",
+            "removed {} Ghosty-owned file(s); $DSH_HOME untouched",
             removed.len()
         )),
     });
@@ -624,24 +624,24 @@ pub(crate) struct LaunchSpec {
     pub(crate) binary: PathBuf,
     pub(crate) args: Vec<String>,
     pub(crate) env: Vec<(String, String)>,
-    /// Variables Codewhale itself injected into this process (a `--api-key`
+    /// Variables Ghosty itself injected into this process (a `--api-key`
     /// or keyring-bridged credential) that must not leak into the child.
     pub(crate) strip_env: Vec<String>,
     pub(crate) cwd: PathBuf,
 }
 
-/// Names to strip from the child environment when Codewhale's own dispatcher
+/// Names to strip from the child environment when Ghosty's own dispatcher
 /// materialized a credential into this process. A key the user exported in
-/// their shell is theirs and is left alone; a key Codewhale bridged from
-/// `--api-key` or the keyring is Codewhale's and is not handed over.
+/// their shell is theirs and is left alone; a key Ghosty bridged from
+/// `--api-key` or the keyring is Ghosty's and is not handed over.
 pub(crate) fn launch_env_strip_list(
     api_key_source: Option<&str>,
     provider_env_vars: &[String],
 ) -> Vec<String> {
     let mut out = vec![
-        codewhale_config::CLI_API_KEY_ENV.to_string(),
-        codewhale_config::CLI_API_KEY_SOURCE_ENV.to_string(),
-        codewhale_config::LEGACY_CLI_API_KEY_SOURCE_ENV.to_string(),
+        ghosty_config::CLI_API_KEY_ENV.to_string(),
+        ghosty_config::CLI_API_KEY_SOURCE_ENV.to_string(),
+        ghosty_config::LEGACY_CLI_API_KEY_SOURCE_ENV.to_string(),
     ];
     if matches!(api_key_source, Some("cli" | "keyring")) {
         for var in provider_env_vars {
@@ -764,8 +764,8 @@ pub(crate) fn spawn_launch(spec: &LaunchSpec) -> Result<i32> {
     Ok(status.code().unwrap_or(1))
 }
 
-/// Install the Codewhale bundle into the dedicated `codewhale` DSH profile via
-/// the documented `dsh plugin --profile codewhale add <path>` (pnpm).
+/// Install the Ghosty bundle into the dedicated `ghosty` DSH profile via
+/// the documented `dsh plugin --profile ghosty add <path>` (pnpm).
 pub(crate) fn install_bundle(
     paths: &DshPaths,
     detection: &DshDetection,
@@ -798,7 +798,7 @@ pub(crate) fn install_bundle(
     let ocean = record.ocean_enabled;
     let patch_sha = bundle::write_bundle(
         &paths.bundle_dir,
-        &codewhale_version(),
+        &ghosty_version(),
         &overlay_text,
         skin,
         ocean,
@@ -828,7 +828,7 @@ pub(crate) fn install_bundle(
             .join(bundle::BUNDLE_PROFILE),
         bundle_dir: paths.bundle_dir.clone(),
         package_name: bundle::BUNDLE_PACKAGE_NAME.to_string(),
-        package_version: bundle::bundle_version(&codewhale_version(), &patch_sha),
+        package_version: bundle::bundle_version(&ghosty_version(), &patch_sha),
         patch_sha256: patch_sha.clone(),
         app_bundle: app,
         app_bundle_source: app_source,
@@ -844,7 +844,7 @@ pub(crate) fn install_bundle(
     doc.push(DshReceiptEntry {
         event: DshReceiptEvent::InstallBundle,
         at: now,
-        codewhale_version: codewhale_version(),
+        ghosty_version: ghosty_version(),
         dsh_version: detection.version.clone(),
         dsh_home: detection.dsh_home.clone(),
         overlay_sha256: Some(record.overlay_sha256.clone()),
@@ -874,8 +874,8 @@ pub(crate) fn install_bundle(
     Ok(bundle_record)
 }
 
-/// `dsh plugin --profile codewhale remove codewhale-dsh-bundle`, then delete
-/// only the Codewhale-owned bundle files. The DSH profile directory (and the
+/// `dsh plugin --profile ghosty remove ghosty-dsh-bundle`, then delete
+/// only the Ghosty-owned bundle files. The DSH profile directory (and the
 /// app bundle link dsh recorded there) is DSH-owned and is left in place.
 pub(crate) fn remove_bundle(
     paths: &DshPaths,
@@ -896,7 +896,7 @@ pub(crate) fn remove_bundle(
     doc.push(DshReceiptEntry {
         event: DshReceiptEvent::RemoveBundle,
         at: now,
-        codewhale_version: codewhale_version(),
+        ghosty_version: ghosty_version(),
         dsh_version: detection.version.clone(),
         dsh_home: detection.dsh_home.clone(),
         overlay_sha256: Some(record.overlay_sha256.clone()),
@@ -925,11 +925,11 @@ pub(crate) fn bundle_availability_now() -> BundleAvailability {
     bundle::bundle_availability(std::env::var_os("PATH").as_ref(), &ProcessRunner)
 }
 
-/// Derive the non-secret route identity from a loaded Codewhale config.
-pub(crate) fn codewhale_route_identity(
+/// Derive the non-secret route identity from a loaded Ghosty config.
+pub(crate) fn ghosty_route_identity(
     config: &crate::config::Config,
     workspace: &Path,
-) -> Result<CodewhaleRouteIdentity, String> {
+) -> Result<GhostyRouteIdentity, String> {
     let provider = config.api_provider();
     let configured_model = config.default_model();
     let route =
@@ -937,15 +937,13 @@ pub(crate) fn codewhale_route_identity(
     let candidate = &route.candidate;
     let base_url = candidate.endpoint().base_url.clone();
     let protocol = match candidate.protocol() {
-        codewhale_config::provider::WireFormat::ChatCompletions => WireProtocol::ChatCompletions,
-        codewhale_config::provider::WireFormat::Responses => WireProtocol::Responses,
-        codewhale_config::provider::WireFormat::AnthropicMessages => {
-            WireProtocol::AnthropicMessages
-        }
+        ghosty_config::provider::WireFormat::ChatCompletions => WireProtocol::ChatCompletions,
+        ghosty_config::provider::WireFormat::Responses => WireProtocol::Responses,
+        ghosty_config::provider::WireFormat::AnthropicMessages => WireProtocol::AnthropicMessages,
     };
     let keyless_local = crate::config::provider_route_is_keyless_self_hosted(provider, &base_url);
     let api_key_env = provider.env_vars().first().map(|s| (*s).to_string());
-    Ok(CodewhaleRouteIdentity {
+    Ok(GhostyRouteIdentity {
         provider_id: candidate.provider_id().as_str().to_string(),
         provider_label: provider.display_name().to_string(),
         model: candidate.wire_model_id().as_str().to_string(),

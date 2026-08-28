@@ -4,7 +4,7 @@
 //! 2025 Mario Zechner; full notice in `crate::credentials`). The idea taken is
 //! pi's: a single resolver, one precedence rule stated in a doc comment beside
 //! it, and a result that names the place it resolved from. The walk itself is
-//! CodeWhale's — it is the former body of `has_api_key_for`, moved here
+//! GhostyCode's — it is the former body of `has_api_key_for`, moved here
 //! unchanged in order so no existing decision changes, with a
 //! [`CredentialSource`] attached to each outcome.
 //!
@@ -13,7 +13,7 @@
 //! **A stored credential owns the provider: ambient/env is consulted only when
 //! nothing is stored. No silent env fallback after a failed refresh.**
 //!
-//! CodeWhale's order below is that rule instantiated over the stores it
+//! GhostyCode's order below is that rule instantiated over the stores it
 //! actually has. Reading top to bottom:
 //!
 //! 1. `auth_mode = "none"` — the route sends no credential at all.
@@ -21,18 +21,18 @@
 //! 3. `[providers.<name>] api_key_env` — a credential the route *names*.
 //! 4. An ambient provider environment variable (official endpoints only).
 //! 5. Provider-owned login state: an explicitly consented external CLI
-//!    credential file (Codex, DeepSeek Harness, Antigravity) or CodeWhale's own
+//!    credential file (Codex, DeepSeek Harness, Antigravity) or GhostyCode's own
 //!    xAI OAuth storage.
 //! 6. A keyless self-hosted / loopback route.
 //! 7. `[providers.<name>] api_key` in the config file.
-//! 8. CodeWhale's durable secret store.
+//! 8. GhostyCode's durable secret store.
 //! 9. The root `api_key` compatibility slot.
-//! 10. The user-global `~/.codewhale/config.toml`.
+//! 10. The user-global `~/.ghosty/config.toml`.
 //!
 //! Two departures from pi are deliberate and load-bearing here:
 //!
 //! * Ambient env outranks the secret store for a *named* binding (step 3) and
-//!   for official-endpoint provider variables (step 4). That is CodeWhale's
+//!   for official-endpoint provider variables (step 4). That is GhostyCode's
 //!   existing, documented behavior and users depend on it; changing it is not
 //!   in this lane's scope. It is stated here so it is at least *visible*.
 //! * External CLI credential files are only ever consulted through
@@ -120,7 +120,7 @@ pub(crate) fn resolve_credential_source_with(
         // Kimi CLI credentials are never imported; the route needs its own key.
         probed.push(CredentialProbe::with_fix(
             "Kimi CLI credentials (never imported)",
-            "codewhale auth set --provider moonshot",
+            "ghosty auth set --provider moonshot",
         ));
         return CredentialResolution::missing(probed);
     }
@@ -131,7 +131,7 @@ pub(crate) fn resolve_credential_source_with(
         let granted = config
             .external_credential_read_grant(
                 provider,
-                codewhale_config::ExternalCredentialSource::CodexCli,
+                ghosty_config::ExternalCredentialSource::CodexCli,
                 &path,
             )
             .is_ok_and(|grant| crate::oauth::stored_credentials_present(&grant));
@@ -144,7 +144,7 @@ pub(crate) fn resolve_credential_source_with(
             probed.push(external_grant_probe(
                 "Codex CLI",
                 &path,
-                "codewhale auth external-consent --provider openai-codex --mode read-only",
+                "ghosty auth external-consent --provider openai-codex --mode read-only",
                 ctx,
             ));
             CredentialResolution::missing(probed)
@@ -162,11 +162,11 @@ pub(crate) fn resolve_credential_source_with(
         });
     }
     if provider == ApiProvider::Antigravity && !config.provider_uses_custom_endpoint(provider) {
-        let path = codewhale_config::default_agy_credentials_path();
+        let path = ghosty_config::default_agy_credentials_path();
         if config
             .external_credential_read_grant(
                 provider,
-                codewhale_config::ExternalCredentialSource::AgyCli,
+                ghosty_config::ExternalCredentialSource::AgyCli,
                 &path,
             )
             .is_ok_and(|grant| {
@@ -184,7 +184,7 @@ pub(crate) fn resolve_credential_source_with(
         probed.push(external_grant_probe(
             "Antigravity CLI",
             &path,
-            "codewhale auth external-consent --provider antigravity --mode read-only",
+            "ghosty auth external-consent --provider antigravity --mode read-only",
             ctx,
         ));
     }
@@ -193,11 +193,11 @@ pub(crate) fn resolve_credential_source_with(
         ApiProvider::Deepseek | ApiProvider::DeepseekAnthropic
     ) && !config.provider_uses_custom_endpoint(provider)
     {
-        let path = codewhale_config::default_dsh_credentials_path();
+        let path = ghosty_config::default_dsh_credentials_path();
         if config
             .external_credential_read_grant(
                 provider,
-                codewhale_config::ExternalCredentialSource::DshCli,
+                ghosty_config::ExternalCredentialSource::DshCli,
                 &path,
             )
             .is_ok_and(|grant| {
@@ -215,7 +215,7 @@ pub(crate) fn resolve_credential_source_with(
         probed.push(external_grant_probe(
             "DeepSeek Harness",
             &path,
-            "codewhale auth external-consent --provider deepseek --mode read-only",
+            "ghosty auth external-consent --provider deepseek --mode read-only",
             ctx,
         ));
     }
@@ -245,7 +245,7 @@ pub(crate) fn resolve_credential_source_with(
         if let Ok(table) = provider_config_table_name(provider) {
             probed.push(CredentialProbe::with_fix(
                 format!("[{table}] api_key"),
-                format!("add api_key to [{table}] in ~/.codewhale/config.toml"),
+                format!("add api_key to [{table}] in ~/.ghosty/config.toml"),
             ));
         }
     }
@@ -284,7 +284,7 @@ pub(crate) fn resolve_credential_source_with(
                     "secret store \"{slot}\" (not read: inactive provider, no api-key marker)"
                 ),
                 format!(
-                    "codewhale auth set --provider {} writes the marker that makes this slot readable while inactive",
+                    "ghosty auth set --provider {} writes the marker that makes this slot readable while inactive",
                     provider.as_str()
                 ),
             ));
@@ -308,8 +308,8 @@ pub(crate) fn resolve_credential_source_with(
         return CredentialResolution::found(CredentialSource::UserGlobalConfig);
     }
     probed.push(CredentialProbe::with_fix(
-        "~/.codewhale/config.toml",
-        format!("codewhale auth set --provider {}", provider.as_str()),
+        "~/.ghosty/config.toml",
+        format!("ghosty auth set --provider {}", provider.as_str()),
     ));
 
     CredentialResolution::missing(probed)
@@ -318,7 +318,7 @@ pub(crate) fn resolve_credential_source_with(
 fn secret_store_probe(slot: &str, provider: ApiProvider) -> CredentialProbe {
     CredentialProbe::with_fix(
         format!("secret store \"{slot}\""),
-        format!("codewhale auth set --provider {}", provider.as_str()),
+        format!("ghosty auth set --provider {}", provider.as_str()),
     )
 }
 
@@ -419,7 +419,7 @@ mod tests {
             "the durable slot must be named: {checked}"
         );
         assert!(
-            checked.contains("~/.codewhale/config.toml"),
+            checked.contains("~/.ghosty/config.toml"),
             "the user-global config must be named: {checked}"
         );
         assert_eq!(

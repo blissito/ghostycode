@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preview the Codewhale empty-state whale mark: before vs after.
+"""Preview the Ghosty empty-state whale mark: before vs after.
 
 Reads the live art constants out of `crates/tui/src/tui/underwater.rs` so the
 preview cannot drift from what the TUI actually renders, and prints them beside
@@ -211,7 +211,7 @@ def main() -> None:
     colour = not args.plain and sys.stdout.isatty()
 
     after = parse_art()
-    print("Codewhale empty-state whale mark — CURRENT (main) vs NEW (Signal Cut)\n")
+    print("Ghosty empty-state whale mark — CURRENT (main) vs NEW (Signal Cut)\n")
     for variant in ("classic", "uwu"):
         label = "classic" if variant == "classic" else "uwu"
         print(f"== {label} ==\n")
@@ -219,7 +219,7 @@ def main() -> None:
         after_spout, after_body = after[variant]
         block("BEFORE", paint(variant, before_spout, before_body, colour, old=True))
         block("AFTER", paint(variant, after_spout, after_body, colour))
-        block("AFTER, CODEWHALE_ASCII_SAFE=1", ascii_rows(after_spout, after_body))
+        block("AFTER, GHOSTY_ASCII_SAFE=1", ascii_rows(after_spout, after_body))
         widths = (
             max(len(r) for r in [before_spout] + before_body),
             max(len(r) for r in [after_spout] + after_body),

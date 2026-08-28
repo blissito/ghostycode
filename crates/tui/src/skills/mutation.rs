@@ -1,4 +1,4 @@
-//! Unique skill mutation controller for CodeWhale-owned roots.
+//! Unique skill mutation controller for GhostyCode-owned roots.
 //!
 //! All install / import / update / remove / trust writes go through this
 //! module. Compatible harness roots, built-ins, and plugin snapshots are
@@ -25,7 +25,7 @@ use super::roots::{
     SkillRootCatalog, SkillRootDescriptor, SkillRootKind, SkillScope, safe_display_path,
 };
 
-/// Project vs global CodeWhale-owned install target.
+/// Project vs global GhostyCode-owned install target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkillTargetScope {
     Project,
@@ -141,18 +141,18 @@ fn owned_anchor<'a>(
 
 /// Return whether `path` is an existing real directory, rejecting links and
 /// non-directory components. `symlink_metadata` is intentional: following a
-/// link before checking it would turn a lexical CodeWhale-owned root into an
+/// link before checking it would turn a lexical GhostyCode-owned root into an
 /// attacker-selected write target.
 fn checked_real_directory(path: &Path) -> Result<bool> {
     match fs::symlink_metadata(path) {
         Ok(meta) if meta.file_type().is_symlink() => {
             bail!(
-                "refusing to mutate symlinked CodeWhale skills path component {}",
+                "refusing to mutate symlinked GhostyCode skills path component {}",
                 path.display()
             )
         }
         Ok(meta) if !meta.is_dir() => bail!(
-            "refusing to mutate through non-directory CodeWhale skills path component {}",
+            "refusing to mutate through non-directory GhostyCode skills path component {}",
             path.display()
         ),
         Ok(_) => Ok(true),
@@ -162,16 +162,16 @@ fn checked_real_directory(path: &Path) -> Result<bool> {
 }
 
 /// Validate the complete owned-root chain without following a symlink in the
-/// workspace/home anchor, `.codewhale`, or `skills` component.
+/// workspace/home anchor, `.ghosty`, or `skills` component.
 fn validate_owned_target_chain(
     anchor: &Path,
     skills_dir: &Path,
     require_existing: bool,
 ) -> Result<()> {
-    let expected = anchor.join(".codewhale").join("skills");
+    let expected = anchor.join(".ghosty").join("skills");
     if skills_dir != expected {
         bail!(
-            "refusing to mutate non-canonical CodeWhale skills root {}",
+            "refusing to mutate non-canonical GhostyCode skills root {}",
             skills_dir.display()
         );
     }
@@ -184,14 +184,11 @@ fn validate_owned_target_chain(
         return Ok(());
     }
 
-    let codewhale_dir = anchor.join(".codewhale");
-    let codewhale_exists = checked_real_directory(&codewhale_dir)?;
-    if !codewhale_exists {
+    let ghosty_dir = anchor.join(".ghosty");
+    let ghosty_exists = checked_real_directory(&ghosty_dir)?;
+    if !ghosty_exists {
         if require_existing {
-            bail!(
-                "owned skill parent {} does not exist",
-                codewhale_dir.display()
-            );
+            bail!("owned skill parent {} does not exist", ghosty_dir.display());
         }
         return Ok(());
     }
@@ -247,9 +244,9 @@ fn prepare_owned_target(
         bail!("owned skill anchor {} does not exist", anchor.display());
     }
 
-    let codewhale_dir = anchor.join(".codewhale");
-    if !checked_real_directory(&codewhale_dir)? {
-        create_owned_directory(&codewhale_dir)?;
+    let ghosty_dir = anchor.join(".ghosty");
+    if !checked_real_directory(&ghosty_dir)? {
+        create_owned_directory(&ghosty_dir)?;
     }
     validate_owned_target_chain(anchor, &skills_dir, false)?;
     if !checked_real_directory(&skills_dir)? {
@@ -264,8 +261,8 @@ fn target_scope_for_root(root: &SkillRootDescriptor) -> Result<SkillTargetScope>
         bail!("refusing to mutate non-owned root {}", root.path.display());
     }
     match root.kind {
-        SkillRootKind::CodeWhaleProject => Ok(SkillTargetScope::Project),
-        SkillRootKind::CodeWhaleGlobal => Ok(SkillTargetScope::Global),
+        SkillRootKind::GhostyCodeProject => Ok(SkillTargetScope::Project),
+        SkillRootKind::GhostyCodeGlobal => Ok(SkillTargetScope::Global),
         _ => bail!("refusing to mutate non-owned root {}", root.path.display()),
     }
 }
@@ -346,7 +343,7 @@ fn validate_owned_skill_path(
     Ok(skills_dir)
 }
 
-/// Resolve the on-disk CodeWhale-owned skills directory for a target scope.
+/// Resolve the on-disk GhostyCode-owned skills directory for a target scope.
 pub fn resolve_owned_target(
     workspace: &Path,
     home: Option<&Path>,
@@ -354,8 +351,8 @@ pub fn resolve_owned_target(
 ) -> Result<PathBuf> {
     let catalog = SkillRootCatalog::build(workspace, home, None);
     let kind = match target {
-        SkillTargetScope::Project => SkillRootKind::CodeWhaleProject,
-        SkillTargetScope::Global => SkillRootKind::CodeWhaleGlobal,
+        SkillTargetScope::Project => SkillRootKind::GhostyCodeProject,
+        SkillTargetScope::Global => SkillRootKind::GhostyCodeGlobal,
     };
     let root = catalog
         .owned_writable_roots()
@@ -370,7 +367,7 @@ pub fn resolve_owned_target(
     Ok(root.path.clone())
 }
 
-/// Execute a mutation request against CodeWhale-owned roots only.
+/// Execute a mutation request against GhostyCode-owned roots only.
 pub async fn execute(
     request: SkillMutationRequest,
     ctx: &MutationContext<'_>,
@@ -470,8 +467,8 @@ fn resolve_owned_skill_by_name(
 
     if let Some(scope) = scope {
         let want = match scope {
-            SkillTargetScope::Project => SkillRootKind::CodeWhaleProject,
-            SkillTargetScope::Global => SkillRootKind::CodeWhaleGlobal,
+            SkillTargetScope::Project => SkillRootKind::GhostyCodeProject,
+            SkillTargetScope::Global => SkillRootKind::GhostyCodeGlobal,
         };
         matches.retain(|s| s.root.kind == want);
     }
@@ -495,7 +492,7 @@ fn resolve_owned_skill_by_name(
                      import it with /skills (refusing to write external harness directories)"
                 );
             }
-            bail!("skill '{name}' not found in CodeWhale-owned project/global roots");
+            bail!("skill '{name}' not found in GhostyCode-owned project/global roots");
         }
         [only] => {
             let DigestState::Known(digest) = &only.digest else {
@@ -507,7 +504,7 @@ fn resolve_owned_skill_by_name(
             })
         }
         _ => bail!(
-            "skill '{name}' exists in both project and global CodeWhale roots; \
+            "skill '{name}' exists in both project and global GhostyCode roots; \
              specify --project or --global"
         ),
     }
@@ -676,8 +673,8 @@ fn import_external(
     let anchor = owned_anchor(ctx.workspace, ctx.home, target)?;
 
     let want_kind = match target {
-        SkillTargetScope::Project => SkillRootKind::CodeWhaleProject,
-        SkillTargetScope::Global => SkillRootKind::CodeWhaleGlobal,
+        SkillTargetScope::Project => SkillRootKind::GhostyCodeProject,
+        SkillTargetScope::Global => SkillRootKind::GhostyCodeGlobal,
     };
     let existing_in_target: Vec<&AuditedSkill> = owned_snap
         .skills
@@ -861,18 +858,18 @@ async fn update_skill(
 ) -> Result<SkillMutationReceipt> {
     let (skill, path) = find_audited_skill(ctx, &skill_id)?;
     if !skill.root.is_writable_owned() {
-        bail!("refusing to update skill outside CodeWhale-owned roots");
+        bail!("refusing to update skill outside GhostyCode-owned roots");
     }
-    if skill.source_kind != SkillSourceKind::CodeWhaleManaged {
-        bail!("only CodeWhale managed skills can be updated");
+    if skill.source_kind != SkillSourceKind::GhostyCodeManaged {
+        bail!("only GhostyCode managed skills can be updated");
     }
     let skills_dir = validate_owned_skill_path(ctx, &skill, &path)?;
     // Imported skills carry `import:…` provenance and must not hit the registry.
     ensure_remote_updatable(&path)?;
     let before = verify_expected_digest(&path, expected_digest.as_deref())?;
     let scope = match skill.root.kind {
-        SkillRootKind::CodeWhaleProject => SkillScope::Project,
-        SkillRootKind::CodeWhaleGlobal => SkillScope::Global,
+        SkillRootKind::GhostyCodeProject => SkillScope::Project,
+        SkillRootKind::GhostyCodeGlobal => SkillScope::Global,
         _ => SkillScope::Logical,
     };
 
@@ -939,16 +936,16 @@ fn remove_skill(
 ) -> Result<SkillMutationReceipt> {
     let (skill, path) = find_audited_skill(ctx, &skill_id)?;
     if !skill.root.is_writable_owned() {
-        bail!("refusing to remove skill outside CodeWhale-owned roots");
+        bail!("refusing to remove skill outside GhostyCode-owned roots");
     }
-    if skill.source_kind != SkillSourceKind::CodeWhaleManaged {
-        bail!("only CodeWhale managed skills can be removed");
+    if skill.source_kind != SkillSourceKind::GhostyCodeManaged {
+        bail!("only GhostyCode managed skills can be removed");
     }
     let skills_dir = validate_owned_skill_path(ctx, &skill, &path)?;
     let before = verify_expected_digest(&path, expected_digest.as_deref())?;
     let scope = match skill.root.kind {
-        SkillRootKind::CodeWhaleProject => SkillScope::Project,
-        SkillRootKind::CodeWhaleGlobal => SkillScope::Global,
+        SkillRootKind::GhostyCodeProject => SkillScope::Project,
+        SkillRootKind::GhostyCodeGlobal => SkillScope::Global,
         _ => SkillScope::Logical,
     };
     let package_name = on_disk_package_name(&skill_id)?;
@@ -972,18 +969,18 @@ fn trust_skill(
 ) -> Result<SkillMutationReceipt> {
     let (skill, path) = find_audited_skill(ctx, &skill_id)?;
     if !skill.root.is_writable_owned() {
-        bail!("refusing to trust skill outside CodeWhale-owned roots");
+        bail!("refusing to trust skill outside GhostyCode-owned roots");
     }
-    if skill.source_kind != SkillSourceKind::CodeWhaleManaged {
-        bail!("only CodeWhale managed skills can be trusted");
+    if skill.source_kind != SkillSourceKind::GhostyCodeManaged {
+        bail!("only GhostyCode managed skills can be trusted");
     }
     validate_owned_skill_path(ctx, &skill, &path)?;
     let before = verify_expected_digest(&path, Some(&expected_digest))?;
     validate_owned_skill_path(ctx, &skill, &path)?;
     write_trust_v2(&path, &expected_digest)?;
     let scope = match skill.root.kind {
-        SkillRootKind::CodeWhaleProject => SkillScope::Project,
-        SkillRootKind::CodeWhaleGlobal => SkillScope::Global,
+        SkillRootKind::GhostyCodeProject => SkillScope::Project,
+        SkillRootKind::GhostyCodeGlobal => SkillScope::Global,
         _ => SkillScope::Logical,
     };
     Ok(SkillMutationReceipt {
@@ -1057,8 +1054,8 @@ mod tests {
             resolve_owned_target(&workspace, Some(&home), SkillTargetScope::Project).unwrap();
         let global =
             resolve_owned_target(&workspace, Some(&home), SkillTargetScope::Global).unwrap();
-        assert_eq!(project, workspace.join(".codewhale").join("skills"));
-        assert_eq!(global, home.join(".codewhale").join("skills"));
+        assert_eq!(project, workspace.join(".ghosty").join("skills"));
+        assert_eq!(global, home.join(".ghosty").join("skills"));
     }
 
     #[cfg(unix)]
@@ -1077,15 +1074,15 @@ mod tests {
 
             let outside_parent = tmp.path().join("outside-parent");
             fs::create_dir_all(&outside_parent).unwrap();
-            std::os::unix::fs::symlink(&outside_parent, anchor.join(".codewhale")).unwrap();
+            std::os::unix::fs::symlink(&outside_parent, anchor.join(".ghosty")).unwrap();
             let err = resolve_owned_target(&workspace, Some(&home), target).unwrap_err();
             assert!(err.to_string().contains("symlinked"), "got: {err}");
 
-            fs::remove_file(anchor.join(".codewhale")).unwrap();
-            fs::create_dir(anchor.join(".codewhale")).unwrap();
+            fs::remove_file(anchor.join(".ghosty")).unwrap();
+            fs::create_dir(anchor.join(".ghosty")).unwrap();
             let outside_root = tmp.path().join("outside-root");
             fs::create_dir_all(&outside_root).unwrap();
-            std::os::unix::fs::symlink(&outside_root, anchor.join(".codewhale").join("skills"))
+            std::os::unix::fs::symlink(&outside_root, anchor.join(".ghosty").join("skills"))
                 .unwrap();
             let err = resolve_owned_target(&workspace, Some(&home), target).unwrap_err();
             assert!(err.to_string().contains("symlinked"), "got: {err}");
@@ -1099,11 +1096,11 @@ mod tests {
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
         let outside = tmp.path().join("outside");
-        fs::create_dir_all(workspace.join(".codewhale")).unwrap();
+        fs::create_dir_all(workspace.join(".ghosty")).unwrap();
         fs::create_dir_all(&home).unwrap();
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("SENTINEL"), "untouched").unwrap();
-        std::os::unix::fs::symlink(&outside, workspace.join(".codewhale").join("skills")).unwrap();
+        std::os::unix::fs::symlink(&outside, workspace.join(".ghosty").join("skills")).unwrap();
 
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
@@ -1141,7 +1138,7 @@ mod tests {
             "from-claude",
             "import me",
         );
-        std::os::unix::fs::symlink(&outside_parent, workspace.join(".codewhale")).unwrap();
+        std::os::unix::fs::symlink(&outside_parent, workspace.join(".ghosty")).unwrap();
 
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
@@ -1185,11 +1182,11 @@ mod tests {
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
         let outside_root = tmp.path().join("outside-root");
-        fs::create_dir_all(workspace.join(".codewhale")).unwrap();
+        fs::create_dir_all(workspace.join(".ghosty")).unwrap();
         fs::create_dir_all(&home).unwrap();
         fs::create_dir_all(&outside_root).unwrap();
         let digest = write_managed_skill(&outside_root, "managed");
-        std::os::unix::fs::symlink(&outside_root, workspace.join(".codewhale").join("skills"))
+        std::os::unix::fs::symlink(&outside_root, workspace.join(".ghosty").join("skills"))
             .unwrap();
 
         let network = NetworkPolicy::default();
@@ -1226,7 +1223,7 @@ mod tests {
         fs::create_dir_all(&home).unwrap();
         fs::create_dir_all(&outside_root).unwrap();
         let digest = write_managed_skill(&outside_root, "managed");
-        std::os::unix::fs::symlink(&outside_parent, workspace.join(".codewhale")).unwrap();
+        std::os::unix::fs::symlink(&outside_parent, workspace.join(".ghosty")).unwrap();
 
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
@@ -1263,11 +1260,7 @@ mod tests {
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
 
-        write_skill(
-            &workspace.join(".codewhale").join("skills"),
-            "manual",
-            "body",
-        );
+        write_skill(&workspace.join(".ghosty").join("skills"), "manual", "body");
         let err = resolve_owned_skill_by_name(&c, "manual", Some(SkillTargetScope::Project));
         // Manual skill resolves, but remove/trust should fail source_kind check.
         let resolved = err.unwrap();
@@ -1292,7 +1285,7 @@ mod tests {
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
 
-        fs::create_dir_all(workspace.join(".codewhale").join("skills")).unwrap();
+        fs::create_dir_all(workspace.join(".ghosty").join("skills")).unwrap();
         write_skill(
             &workspace.join(".claude").join("skills"),
             "from-claude",
@@ -1328,7 +1321,7 @@ mod tests {
         assert_eq!(receipt.outcome, SkillMutationOutcome::Imported);
         assert!(
             workspace
-                .join(".codewhale")
+                .join(".ghosty")
                 .join("skills")
                 .join("from-claude")
                 .join("SKILL.md")
@@ -1355,7 +1348,7 @@ mod tests {
         let c = ctx(&workspace, &home, &network);
 
         let content = "---\nname: shared\ndescription: d\n---\nbody\n";
-        let owned = workspace.join(".codewhale").join("skills").join("shared");
+        let owned = workspace.join(".ghosty").join("skills").join("shared");
         let external = workspace.join(".claude").join("skills").join("shared");
         fs::create_dir_all(&owned).unwrap();
         fs::create_dir_all(&external).unwrap();
@@ -1396,7 +1389,7 @@ mod tests {
         let home = tmp.path().join("home");
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         write_skill(&root, "managed", "body");
         let digest = package_digest::compute_package_digest(&root.join("managed")).unwrap();
         write_installed_from_v2(
@@ -1432,7 +1425,7 @@ mod tests {
         let home = tmp.path().join("home");
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         write_skill(&root, "managed", "body");
         let digest = package_digest::compute_package_digest(&root.join("managed")).unwrap();
         write_installed_from_v2(
@@ -1465,7 +1458,7 @@ mod tests {
         let home = tmp.path().join("home");
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         write_skill(&root, "Hello_World", "body");
         let digest = package_digest::compute_package_digest(&root.join("Hello_World")).unwrap();
         write_installed_from_v2(
@@ -1498,7 +1491,7 @@ mod tests {
         let home = tmp.path().join("home");
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         let dir_name = "Hello_World";
         write_skill(&root, dir_name, "body");
         let digest = package_digest::compute_package_digest(&root.join(dir_name)).unwrap();
@@ -1543,7 +1536,7 @@ mod tests {
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
 
-        fs::create_dir_all(workspace.join(".codewhale").join("skills")).unwrap();
+        fs::create_dir_all(workspace.join(".ghosty").join("skills")).unwrap();
         write_skill(
             &workspace.join(".claude").join("skills"),
             "from-claude",
@@ -1573,10 +1566,7 @@ mod tests {
         )
         .unwrap();
 
-        let owned = workspace
-            .join(".codewhale")
-            .join("skills")
-            .join("from-claude");
+        let owned = workspace.join(".ghosty").join("skills").join("from-claude");
         assert!(ensure_remote_updatable(&owned).is_err());
         assert!(!install::is_registry_updatable_spec(
             "import:<workspace>/.claude/skills/from-claude"
@@ -1592,7 +1582,7 @@ mod tests {
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
 
-        let owned_root = workspace.join(".codewhale").join("skills");
+        let owned_root = workspace.join(".ghosty").join("skills");
         write_skill(&owned_root, "Hello_World", "original-owned");
         let original_digest =
             package_digest::compute_package_digest(&owned_root.join("Hello_World")).unwrap();
@@ -1669,7 +1659,7 @@ mod tests {
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
 
-        let owned_root = workspace.join(".codewhale").join("skills");
+        let owned_root = workspace.join(".ghosty").join("skills");
         write_skill(&owned_root, "shared", "original-owned");
         let original_digest =
             package_digest::compute_package_digest(&owned_root.join("shared")).unwrap();
@@ -1736,7 +1726,7 @@ mod tests {
         let home = tmp.path().join("home");
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         write_skill(&root, "managed", "body");
         let digest = package_digest::compute_package_digest(&root.join("managed")).unwrap();
         write_installed_from_v2(
@@ -1769,12 +1759,8 @@ mod tests {
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
 
-        write_skill(
-            &workspace.join(".codewhale").join("skills"),
-            "dup",
-            "project",
-        );
-        write_skill(&home.join(".codewhale").join("skills"), "dup", "global");
+        write_skill(&workspace.join(".ghosty").join("skills"), "dup", "project");
+        write_skill(&home.join(".ghosty").join("skills"), "dup", "global");
 
         let err = resolve_owned_skill_by_name(&c, "dup", None).unwrap_err();
         assert!(
@@ -1799,7 +1785,7 @@ mod tests {
         let network = NetworkPolicy::default();
         let c = ctx(&workspace, &home, &network);
 
-        fs::create_dir_all(workspace.join(".codewhale").join("skills")).unwrap();
+        fs::create_dir_all(workspace.join(".ghosty").join("skills")).unwrap();
         write_skill(
             &workspace.join(".claude").join("skills"),
             "only-ext",

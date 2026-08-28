@@ -7,8 +7,8 @@
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
-use codewhale_config::ToolAskRule;
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use ghosty_config::ToolAskRule;
 use ratatui::layout::Rect;
 
 use crate::config::ApprovalDefaultSelection;

@@ -54,10 +54,10 @@ use crate::tui::views::{
     ActionHint, EmptyState, ListDetailLayout, ModalKind, ModalView, ViewAction, ViewEvent,
     centered_modal_area, render_modal_footer, render_modal_surface,
 };
-use codewhale_config::catalog::{CatalogOffering, CatalogSnapshot};
-use codewhale_config::provider::{CredentialAcquisition, WireFormat};
-use codewhale_config::route::{PricingSku, RequestProtocol};
-use codewhale_config::{
+use ghosty_config::catalog::{CatalogOffering, CatalogSnapshot};
+use ghosty_config::provider::{CredentialAcquisition, WireFormat};
+use ghosty_config::route::{PricingSku, RequestProtocol};
+use ghosty_config::{
     AGNES_TEMPLATE_ID, ProviderSetupApply, ProviderSetupTemplate, SENSENOVA_TEMPLATE_ID,
     provider_setup_template, provider_setup_templates,
 };
@@ -76,7 +76,7 @@ const LM_STUDIO_BASE_URL: &str = "http://127.0.0.1:1234/v1";
 enum Stage {
     List,
     /// Explicit xAI acquisition choice. xAI supports both an API key and the
-    /// Codewhale-owned device OAuth flow; neither path may impersonate the other.
+    /// Ghosty-owned device OAuth flow; neither path may impersonate the other.
     XaiAuthChoice,
     KeyEntry,
     /// Explicit disabled/read-only/managed external-credential policy choice.
@@ -135,7 +135,7 @@ impl StepfunBillingRoute {
 
 /// Whether the StepFun billing-route choice applies to `base_url`.
 ///
-/// Only the two endpoints Codewhale can classify are offered. A hand-edited
+/// Only the two endpoints Ghosty can classify are offered. A hand-edited
 /// endpoint (regional proxy, gateway, anything unrecognized) is a deliberate
 /// user choice, so the stage is skipped rather than silently rewriting it.
 fn stepfun_route_is_selectable(provider: ApiProvider, base_url: &str) -> bool {
@@ -227,7 +227,7 @@ pub struct ProviderDashboardRow {
     pub(crate) readiness: ResolvedProviderReadiness,
     pub maturity: ProviderMaturity,
     pub messages: Vec<String>,
-    external_credential_status: Option<codewhale_config::ExternalCredentialConsentStatus>,
+    external_credential_status: Option<ghosty_config::ExternalCredentialConsentStatus>,
     pub is_active: bool,
     has_key: bool,
     /// Human-readable name of the place this row's credential resolved from,
@@ -582,8 +582,8 @@ impl ProviderDashboardRow {
         let request_concurrency =
             ProviderRequestConcurrencySummary::for_row(provider, config, runtime_status, is_active);
 
-        let compatibility_kind = (provider == ApiProvider::DeepseekCN)
-            .then_some(codewhale_config::ProviderKind::Deepseek);
+        let compatibility_kind =
+            (provider == ApiProvider::DeepseekCN).then_some(ghosty_config::ProviderKind::Deepseek);
         let Some(kind) = provider.kind().or(compatibility_kind) else {
             return Self {
                 provider,
@@ -1079,7 +1079,7 @@ fn bundled_reasoning_catalog() -> &'static CatalogSnapshot {
         // hand-maintained per-row seed, so provider reasoning rows (GLM-5.2,
         // etc.) cannot drift from the catalog and every bundled provider with
         // reasoning facts is covered, not just GLM.
-        offerings: codewhale_config::catalog::bundled_catalog_offerings(),
+        offerings: ghosty_config::catalog::bundled_catalog_offerings(),
     })
 }
 
@@ -1464,24 +1464,24 @@ fn compact_base_url(base_url: &str) -> String {
 pub(crate) fn external_consent_target_for_provider(
     provider: ApiProvider,
 ) -> Option<(
-    codewhale_config::ProviderKind,
-    codewhale_config::ExternalCredentialSource,
+    ghosty_config::ProviderKind,
+    ghosty_config::ExternalCredentialSource,
     std::path::PathBuf,
 )> {
     let (consent_provider, source, path) = match provider {
         ApiProvider::OpenaiCodex => (
-            codewhale_config::ProviderKind::OpenaiCodex,
-            codewhale_config::ExternalCredentialSource::CodexCli,
+            ghosty_config::ProviderKind::OpenaiCodex,
+            ghosty_config::ExternalCredentialSource::CodexCli,
             crate::oauth::auth_file_path(),
         ),
         ApiProvider::Xai => (
-            codewhale_config::ProviderKind::Xai,
-            codewhale_config::ExternalCredentialSource::GrokCli,
+            ghosty_config::ProviderKind::Xai,
+            ghosty_config::ExternalCredentialSource::GrokCli,
             crate::xai_oauth::auth_file_path(),
         ),
         _ => return None,
     };
-    let path = codewhale_config::resolve_external_credential_path(path).ok()?;
+    let path = ghosty_config::resolve_external_credential_path(path).ok()?;
     Some((consent_provider, source, path))
 }
 
@@ -1529,7 +1529,7 @@ fn codex_external_file_is_fresh(path: &std::path::Path) -> bool {
         return now + 60 < exp;
     }
     // If we cannot parse expiry, fail closed — external Codex credentials are
-    // never refreshed by Codewhale, so an opaque token must be treated as stale.
+    // never refreshed by Ghosty, so an opaque token must be treated as stale.
     false
 }
 
@@ -2017,8 +2017,8 @@ impl ProviderPickerView {
     fn selected_external_consent_target(
         &self,
     ) -> Option<(
-        codewhale_config::ProviderKind,
-        codewhale_config::ExternalCredentialSource,
+        ghosty_config::ProviderKind,
+        ghosty_config::ExternalCredentialSource,
         std::path::PathBuf,
     )> {
         external_consent_target_for_provider(self.selected_provider())
@@ -2800,7 +2800,7 @@ impl ProviderPickerView {
             let owner_path = self
                 .tr(MessageId::ProviderExternalOwnerPath)
                 .replace("{owner}", status.owner)
-                .replace("{path}", &codewhale_config::quote_os_path(&status.path));
+                .replace("{path}", &ghosty_config::quote_os_path(&status.path));
             let mut owner_path_spans = vec![Span::styled(
                 owner_path,
                 Style::default().fg(palette::TEXT_MUTED),
@@ -2809,7 +2809,7 @@ impl ProviderPickerView {
                 let warning = self
                     .tr(MessageId::ProviderExternalPinnedPathWarning)
                     .replace("{owner}", status.owner)
-                    .replace("{path}", &codewhale_config::quote_os_path(&status.path));
+                    .replace("{path}", &ghosty_config::quote_os_path(&status.path));
                 owner_path_spans.push(Span::styled(
                     " | ",
                     Style::default().fg(palette::TEXT_MUTED),
@@ -2821,13 +2821,13 @@ impl ProviderPickerView {
             }
             lines.push(Line::from(owner_path_spans));
             let semantics = match status.access {
-                codewhale_config::ExternalCredentialAccess::Disabled => {
+                ghosty_config::ExternalCredentialAccess::Disabled => {
                     self.tr(MessageId::ProviderExternalDisabledDetail)
                 }
-                codewhale_config::ExternalCredentialAccess::ReadOnly => {
+                ghosty_config::ExternalCredentialAccess::ReadOnly => {
                     self.tr(MessageId::ProviderExternalReadOnlySemantics)
                 }
-                codewhale_config::ExternalCredentialAccess::Managed => {
+                ghosty_config::ExternalCredentialAccess::Managed => {
                     self.tr(MessageId::ProviderExternalManagedDetail)
                 }
             };
@@ -2985,7 +2985,7 @@ impl ProviderPickerView {
                     Style::default().fg(palette::TEXT_MUTED),
                 )),
                 Line::from(Span::styled(
-                    "CLI: codewhale auth external-consent --provider openai-codex; no token is stored here.",
+                    "CLI: ghosty auth external-consent --provider openai-codex; no token is stored here.",
                     Style::default().fg(palette::TEXT_MUTED),
                 )),
             ]
@@ -3179,7 +3179,7 @@ impl ProviderPickerView {
             )),
             Line::from(format!(
                 "{exact_path_label}: {}",
-                codewhale_config::quote_os_path(&path)
+                ghosty_config::quote_os_path(&path)
             )),
             Line::from(""),
             Line::from(format!(
@@ -3188,7 +3188,7 @@ impl ProviderPickerView {
             )),
             Line::from(self.tr(MessageId::ProviderExternalRejectUnsafe)),
             Line::from(format!(
-                "{revoke_label}: codewhale auth external-revoke --provider {}",
+                "{revoke_label}: ghosty auth external-revoke --provider {}",
                 provider.as_str()
             )),
         ])
@@ -4966,11 +4966,10 @@ mod tests {
     fn setup_provider_key_entry_matrix_keeps_hosted_codex_and_local_hints_distinct() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = tempfile::TempDir::new().expect("tempdir");
-        let codewhale_home = tmp.path().join(".codewhale");
+        let ghosty_home = tmp.path().join(".ghosty");
         let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path());
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", tmp.path());
-        let _codewhale_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
         let _deepseek_key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _deepseek_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
         let _codex_key = crate::test_support::EnvVarGuard::remove("OPENAI_CODEX_ACCESS_TOKEN");
@@ -5080,18 +5079,18 @@ mod tests {
     fn ollama_cloud_row_requires_credentials_and_is_not_labeled_local() {
         let _env_lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().expect("isolated credential home");
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-        let _backend = EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _home = EnvVarGuard::set("GHOSTY_HOME", temp.path());
+        let _backend = EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _ollama_cloud_key = EnvVarGuard::remove("OLLAMA_CLOUD_API_KEY");
         let _ollama_key = EnvVarGuard::remove("OLLAMA_API_KEY");
         let _cli_source = EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        let _cli_key = EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_key = EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
 
         let mut config = Config {
             provider: Some("ollama".to_string()),
             providers: Some(crate::config::ProvidersConfig {
                 ollama: crate::config::ProviderConfig {
-                    base_url: Some(codewhale_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
+                    base_url: Some(ghosty_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -5641,8 +5640,8 @@ mod tests {
     fn protected_self_hosted_row_requires_its_configured_auth_mode() {
         let _env_lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().expect("isolated credential home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _vllm_key = crate::test_support::EnvVarGuard::remove("VLLM_API_KEY");
         let _vllm_base_url = crate::test_support::EnvVarGuard::remove("VLLM_BASE_URL");
         let config = Config {
@@ -5787,8 +5786,8 @@ mod tests {
                 kind: Some("openai-compatible".to_string()),
                 base_url: Some("https://gateway.example.test/v1".to_string()),
                 model: Some("private-model".to_string()),
-                auth: Some(codewhale_config::ProviderAuthSourceToml {
-                    source: codewhale_config::AuthSourceKind::Command,
+                auth: Some(ghosty_config::ProviderAuthSourceToml {
+                    source: ghosty_config::AuthSourceKind::Command,
                     command: vec!["secret-tool".to_string(), "lookup".to_string()],
                     timeout_ms: Some(2_000),
                     secret_id: None,
@@ -6011,15 +6010,15 @@ mod tests {
         assert_eq!(picker.custom_provider_id, "sensenova");
         assert_eq!(
             picker.custom_provider_base_url,
-            codewhale_config::SENSENOVA_BASE_URL
+            ghosty_config::SENSENOVA_BASE_URL
         );
         assert_eq!(
             picker.custom_provider_model,
-            codewhale_config::SENSENOVA_DEFAULT_MODEL
+            ghosty_config::SENSENOVA_DEFAULT_MODEL
         );
         assert_eq!(
             picker.custom_provider_api_key_env,
-            codewhale_config::SENSENOVA_API_KEY_ENV
+            ghosty_config::SENSENOVA_API_KEY_ENV
         );
         let rendered = render_text(&picker, 100, 20);
         assert!(rendered.contains("SenseNova"), "{rendered}");
@@ -6110,7 +6109,7 @@ mod tests {
             .expect("SenseNova row hitbox");
         assert_eq!(
             provider_setup_templates()[idx].id,
-            codewhale_config::SENSENOVA_TEMPLATE_ID
+            ghosty_config::SENSENOVA_TEMPLATE_ID
         );
         let click = template_list_click(rect.x, rect.y);
         assert!(matches!(picker.handle_mouse(click), ViewAction::None));
@@ -6121,7 +6120,7 @@ mod tests {
         assert_eq!(picker.custom_provider_id, "sensenova");
         assert_eq!(
             picker.custom_provider_base_url,
-            codewhale_config::SENSENOVA_BASE_URL
+            ghosty_config::SENSENOVA_BASE_URL
         );
     }
 
@@ -6603,15 +6602,15 @@ mod tests {
         let tmp = tempfile::TempDir::new().expect("tempdir");
         let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path());
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", tmp.path());
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _ms_key = crate::test_support::EnvVarGuard::remove("MODELSTUDIO_API_KEY");
         let _dashscope_key = crate::test_support::EnvVarGuard::remove("DASHSCOPE_API_KEY");
         let _cli_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
 
         // One saved key on the Token Plan variant, marked by the save path.
-        codewhale_secrets::Secrets::auto_detect()
+        ghosty_secrets::Secrets::auto_detect()
             .set("modelstudio-token-plan", "ms-family-key")
             .expect("seed family slot");
         let config = Config {
@@ -6973,15 +6972,14 @@ mod tests {
 
     #[test]
     fn onboarding_catalog_honors_typed_credentials_for_every_builtin_provider() {
-        use codewhale_config::provider::CredentialAcquisition;
+        use ghosty_config::provider::CredentialAcquisition;
 
         let _global_env = crate::test_support::lock_test_env();
         let home = tempfile::tempdir().expect("isolated provider catalog home");
         let _home = EnvVarGuard::set("HOME", home.path().to_string_lossy().as_ref());
-        let _codewhale_home =
-            EnvVarGuard::set("CODEWHALE_HOME", home.path().to_string_lossy().as_ref());
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", home.path().to_string_lossy().as_ref());
         let _codex_home = EnvVarGuard::set("CODEX_HOME", home.path().to_string_lossy().as_ref());
-        let _secret_backend = EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _secret_backend = EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let mut key_envs = ApiProvider::all()
             .iter()
             .flat_map(|provider| provider.env_vars().iter().copied())
@@ -7108,9 +7106,8 @@ mod tests {
         let _global_env = crate::test_support::lock_test_env();
         let home = tempfile::tempdir().expect("isolated credential draft home");
         let _home = EnvVarGuard::set("HOME", home.path().to_string_lossy().as_ref());
-        let _codewhale_home =
-            EnvVarGuard::set("CODEWHALE_HOME", home.path().to_string_lossy().as_ref());
-        let _secret_backend = EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", home.path().to_string_lossy().as_ref());
+        let _secret_backend = EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _openrouter_key = EnvVarGuard::remove("OPENROUTER_API_KEY");
         let config = Config::default();
         let draft = ["violet", "otter", "draft", "7361"].join("-");
@@ -7860,8 +7857,8 @@ mod tests {
             picker.handle_key(key(KeyCode::Enter)),
             ViewAction::EmitAndClose(ViewEvent::ProviderPickerExternalConsentConfirmed {
                 provider: ApiProvider::OpenaiCodex,
-                consent_provider: codewhale_config::ProviderKind::OpenaiCodex,
-                source: codewhale_config::ExternalCredentialSource::CodexCli,
+                consent_provider: ghosty_config::ProviderKind::OpenaiCodex,
+                source: ghosty_config::ExternalCredentialSource::CodexCli,
                 ..
             })
         ));
@@ -7905,7 +7902,7 @@ mod tests {
         let rendered = render_text(&picker, 96, 20);
         assert!(rendered.contains("xAI API key"));
         assert!(rendered.contains("Native device OAuth"));
-        assert!(rendered.contains("Codewhale-owned storage"));
+        assert!(rendered.contains("Ghosty-owned storage"));
         picker.handle_key(key(KeyCode::Char('2')));
         assert!(matches!(
             picker.handle_key(key(KeyCode::Enter)),
@@ -8006,16 +8003,16 @@ mod tests {
         let grok_raw = "grok-external-file-must-not-be-read";
         std::fs::write(&codex_path, codex_raw).expect("write Codex trap");
         std::fs::write(&grok_path, grok_raw).expect("write Grok trap");
-        let owned_home = temp.path().join("codewhale-owned");
+        let owned_home = temp.path().join("ghosty-owned");
 
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &owned_home);
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &owned_home);
         let _codex_path =
             crate::test_support::EnvVarGuard::set("OPENAI_CODEX_AUTH_FILE", &codex_path);
         let _grok_path = crate::test_support::EnvVarGuard::set("GROK_AUTH_PATH", &grok_path);
         let _codex_access = crate::test_support::EnvVarGuard::remove("OPENAI_CODEX_ACCESS_TOKEN");
         let _legacy_codex_access = crate::test_support::EnvVarGuard::remove("CODEX_ACCESS_TOKEN");
         let _xai_key = crate::test_support::EnvVarGuard::remove("XAI_API_KEY");
-        let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
         let _cli_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
 
         let config = Config {
@@ -8024,9 +8021,9 @@ mod tests {
                 openai_codex: crate::config::ProviderConfig {
                     auth_mode: Some("oauth".to_string()),
                     external_credentials: Some(
-                        codewhale_config::ExternalCredentialConsentToml::read_only(
-                            codewhale_config::ProviderKind::OpenaiCodex,
-                            codewhale_config::ExternalCredentialSource::CodexCli,
+                        ghosty_config::ExternalCredentialConsentToml::read_only(
+                            ghosty_config::ProviderKind::OpenaiCodex,
+                            ghosty_config::ExternalCredentialSource::CodexCli,
                             codex_path.clone(),
                         ),
                     ),
@@ -8035,9 +8032,9 @@ mod tests {
                 xai: crate::config::ProviderConfig {
                     auth_mode: Some("oauth".to_string()),
                     external_credentials: Some(
-                        codewhale_config::ExternalCredentialConsentToml::read_only(
-                            codewhale_config::ProviderKind::Xai,
-                            codewhale_config::ExternalCredentialSource::GrokCli,
+                        ghosty_config::ExternalCredentialConsentToml::read_only(
+                            ghosty_config::ProviderKind::Xai,
+                            ghosty_config::ExternalCredentialSource::GrokCli,
                             grok_path.clone(),
                         ),
                     ),
@@ -8079,7 +8076,7 @@ mod tests {
             assert!(visible.contains("External: access=read_only"), "{visible}");
             assert!(visible.contains("Owner/path:"), "{visible}");
             assert!(
-                visible.contains("revoke: codewhale auth external-revoke"),
+                visible.contains("revoke: ghosty auth external-revoke"),
                 "{visible}"
             );
             assert!(

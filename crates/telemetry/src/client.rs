@@ -1,6 +1,6 @@
 //! Transport. One POST, or — with no endpoint — a local file.
 //!
-//! The shipped default endpoint is `codewhale_config::DEFAULT_TELEMETRY_ENDPOINT`,
+//! The shipped default endpoint is `ghosty_config::DEFAULT_TELEMETRY_ENDPOINT`,
 //! the first-party ingest service documented in `docs/TELEMETRY.md`. That
 //! default decides only *where* a batch goes, never *whether* one exists: this
 //! module is reached only by a session that resolved telemetry on after every
@@ -74,7 +74,7 @@ pub(crate) fn send_with_transport(
 
 /// A single first-party POST.
 ///
-/// The client is built through `codewhale_release::platform_blocking_http_client_builder`,
+/// The client is built through `ghosty_release::platform_blocking_http_client_builder`,
 /// never by hand: `reqwest` is pinned workspace-wide with `rustls-no-provider`,
 /// so a construction that skips the provider install silently never connects on
 /// some platforms — indistinguishable from fail-open, which means no test that
@@ -85,13 +85,13 @@ pub(crate) fn send_with_transport(
 /// body is discarded and only the status class is read: this client must never
 /// be made to depend on a server response.
 fn post(endpoint: &str, app_version: &str, body: String) -> SendOutcome {
-    let client = codewhale_release::platform_blocking_http_client_builder()
+    let client = ghosty_release::platform_blocking_http_client_builder()
         .timeout(SEND_TIMEOUT)
         // No cookie store exists to disable: `reqwest` is pinned workspace-wide
         // without the `cookies` feature, so there is no jar to carry state
         // between batches even if a server tried to set one.
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent(format!("codewhale-telemetry/{app_version}"))
+        .user_agent(format!("ghosty-telemetry/{app_version}"))
         .build();
     let Ok(client) = client else {
         return SendOutcome::Dropped;

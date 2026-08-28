@@ -69,8 +69,8 @@ class CheckCoauthorTrailersTests(unittest.TestCase):
         merge = mod.Commit(
             sha="feedface" * 5,
             parents="1111111111111111111111111111111111111111 2222222222222222222222222222222222222222",
-            author_name="CodeWhale Bot",
-            author_email="bot@codewhale.net",
+            author_name="GhostyCode Bot",
+            author_email="bot@ghosty.net",
             subject="Merge PR #5423: test(tui): isolate background verifier from rustup",
             body="Merge PR #5423\n\nHarvested from PR #5423 by @wuisabel-gif",
         )
@@ -99,13 +99,13 @@ class CheckCoauthorTrailersTests(unittest.TestCase):
         errors = mod.validate([merge], self.aliases, False)
         self.assertEqual(errors, [])
 
-    def test_codewhale_agent_trailer_is_a_recognized_contributor(self) -> None:
+    def test_ghosty_agent_trailer_is_a_recognized_contributor(self) -> None:
         # The immutable-history exception predates the general agent-contributor
         # rule; the identity is now allowed on every commit, not only the legacy
         # SHA. Lookalike identities remain rejected (see
         # test_agent_contributor_allowance_is_exact_not_a_wildcard).
         for sha in ("9a74825cd182a62465943bcbbcbcf591d1ce99ee", "deadbeef" * 5):
-            body = "Co-authored-by: CodeWhale Agent <codewhale-agent@hmbown.local>"
+            body = "Co-authored-by: GhostyCode Agent <ghosty-agent@hmbown.local>"
             errors = mod.validate(
                 [
                     mod.Commit(
@@ -130,7 +130,7 @@ class CheckCoauthorTrailersTests(unittest.TestCase):
             author_email="1+maintainer@users.noreply.github.com",
             subject="legacy automation commit",
             body=(
-                "Co-authored-by: CodeWhale Agent <codewhale-agent@hmbown.local>\n"
+                "Co-authored-by: GhostyCode Agent <ghosty-agent@hmbown.local>\n"
                 "Co-authored-by: Unknown Person <unknown@example.com>"
             ),
         )

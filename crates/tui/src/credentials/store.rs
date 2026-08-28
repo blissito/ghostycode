@@ -9,7 +9,7 @@
 //! read-modify-write whose closure sees the current credential, so a refresh
 //! and a concurrent login cannot clobber each other.
 //!
-//! CodeWhale already serializes the xAI OAuth refresh that way, but not
+//! GhostyCode already serializes the xAI OAuth refresh that way, but not
 //! through this store: `xai_oauth` holds `with_xai_oauth_lifecycle_lock`
 //! across the token-file read, the refresh request, and the write-back, so
 //! two concurrent near-expiry observers share one rotated epoch rather than
@@ -61,7 +61,7 @@ pub(crate) trait CredentialStore: Send + Sync {
     /// unchanged. Mutual exclusion is per provider id. Yields the post-write
     /// credential.
     ///
-    /// Not yet on any production write path: CodeWhale's two credential writes
+    /// Not yet on any production write path: GhostyCode's two credential writes
     /// (`save_api_key_for_identity`, logout) already interleave a config-file
     /// mutation and a compensating rollback between their snapshot and their
     /// store write, so they take [`with_provider_write_lock`] around the whole
@@ -90,7 +90,7 @@ pub(crate) trait CredentialStore: Send + Sync {
 ///
 /// pi serializes through a per-provider promise chain; the Rust equivalent is
 /// a registry of per-id mutexes. This is process-local: it does not serialize
-/// against another `codewhale` process writing the same slot, which is a real
+/// against another `ghosty` process writing the same slot, which is a real
 /// remaining gap and is called out in the module docs.
 fn provider_lock(provider_id: &str) -> Arc<Mutex<()>> {
     static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
@@ -215,21 +215,21 @@ impl CredentialStore for InMemoryCredentialStore {
     }
 }
 
-/// Adapter over CodeWhale's existing durable secret store.
+/// Adapter over GhostyCode's existing durable secret store.
 ///
 /// This changes no on-disk format: it reads and writes exactly the slots
-/// `codewhale_secrets::Secrets` already owns. Its value is that every write now
+/// `ghosty_secrets::Secrets` already owns. Its value is that every write now
 /// goes through `modify` under the provider's lock, so a save racing a rotate
 /// no longer interleaves.
 pub(crate) struct SecretStoreCredentials {
-    secrets: codewhale_secrets::Secrets,
+    secrets: ghosty_secrets::Secrets,
     /// Slots to probe for `list`. The backing keyring exposes no key
     /// enumeration, so the caller supplies the known slot names.
     known_slots: Vec<String>,
 }
 
 impl SecretStoreCredentials {
-    pub(crate) fn new(secrets: codewhale_secrets::Secrets, known_slots: Vec<String>) -> Self {
+    pub(crate) fn new(secrets: ghosty_secrets::Secrets, known_slots: Vec<String>) -> Self {
         Self {
             secrets,
             known_slots,

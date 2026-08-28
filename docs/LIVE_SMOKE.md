@@ -33,10 +33,10 @@ Treat these as investigation starting points, not proven failure classes:
 ## Isolation rules these snippets follow
 
 1. `env -i` clears the inherited environment, so your ambient `HOME`,
-   `CODEWHALE_HOME`, and `*_API_KEY` values are not forwarded. Only variables
+   `GHOSTY_HOME`, and `*_API_KEY` values are not forwarded. Only variables
    listed explicitly on the `env` line survive.
-2. Only `CODEWHALE_HOME` points at the task-specific throwaway directory, so
-   Codewhale config, sessions, and the bundled skill install land in scratch
+2. Only `GHOSTY_HOME` points at the task-specific throwaway directory, so
+   Ghosty config, sessions, and the bundled skill install land in scratch
    state. `HOME` is intentionally left unset; the smoke run never repurposes it.
 3. You name the credential variable yourself (`CW_SMOKE_CRED_VAR`). Nothing is
    guessed from the provider.
@@ -52,14 +52,14 @@ niceties and both exist on macOS and mainstream Linux.
 ## Step 1 — create the throwaway state (both runs)
 
 ```sh
-CW_SMOKE_CODEWHALE_HOME="$(mktemp -d)" || exit 1
-mkdir -p "$CW_SMOKE_CODEWHALE_HOME/tmp"
-echo "scratch Codewhale state: $CW_SMOKE_CODEWHALE_HOME"
+CW_SMOKE_GHOSTY_HOME="$(mktemp -d)" || exit 1
+mkdir -p "$CW_SMOKE_GHOSTY_HOME/tmp"
+echo "scratch Ghosty state: $CW_SMOKE_GHOSTY_HOME"
 ```
 
 ## Step 2 — name the credential variable
 
-`CW_SMOKE_CRED_VAR` must be the variable name the provider expects. Codewhale
+`CW_SMOKE_CRED_VAR` must be the variable name the provider expects. Ghosty
 reads `MOONSHOT_API_KEY` (or `KIMI_API_KEY`) for the Moonshot/Kimi route and
 `DEEPSEEK_API_KEY` for the DeepSeek route.
 
@@ -89,8 +89,8 @@ CW_SMOKE_PROMPT="Reply with exactly: SMOKE OK"
 
 env -i \
   PATH="$PATH" \
-  TMPDIR="$CW_SMOKE_CODEWHALE_HOME/tmp" \
-  CODEWHALE_HOME="$CW_SMOKE_CODEWHALE_HOME" \
+  TMPDIR="$CW_SMOKE_GHOSTY_HOME/tmp" \
+  GHOSTY_HOME="$CW_SMOKE_GHOSTY_HOME" \
   CW_SMOKE_CRED_VAR="$CW_SMOKE_CRED_VAR" \
   sh -c '
     CW_SMOKE_STTY_STATE="$(stty -g)" || exit 1
@@ -115,7 +115,7 @@ env -i \
 
     export "$CW_SMOKE_CRED_VAR=$CW_SMOKE_CRED"
     unset CW_SMOKE_CRED
-    exec codewhale exec \
+    exec ghosty exec \
       --provider "$1" --model "$2" --reasoning-effort "$3" --json "$4"
   ' sh "$CW_SMOKE_PROVIDER" "$CW_SMOKE_MODEL" "$CW_SMOKE_EFFORT" "$CW_SMOKE_PROMPT"
 ```
@@ -144,7 +144,7 @@ tool-catalog and reasoning receipts, use the streaming form (still inside the
 same `env -i` wrapper, substituting the `exec` line):
 
 ```sh
-    exec codewhale exec --auto --max-turns 3 \
+    exec ghosty exec --auto --max-turns 3 \
       --output-format stream-json \
       --provider "$1" --model "$2" --reasoning-effort "$3" "$4"
 ```
@@ -178,8 +178,8 @@ raw provider error bodies (they can echo request headers).
 ## Step 6 — clean up
 
 ```sh
-rm -rf "$CW_SMOKE_CODEWHALE_HOME"
-unset CW_SMOKE_CODEWHALE_HOME CW_SMOKE_CRED_VAR \
+rm -rf "$CW_SMOKE_GHOSTY_HOME"
+unset CW_SMOKE_GHOSTY_HOME CW_SMOKE_CRED_VAR \
       CW_SMOKE_PROVIDER CW_SMOKE_MODEL CW_SMOKE_EFFORT CW_SMOKE_PROMPT
 ```
 

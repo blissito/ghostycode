@@ -332,28 +332,148 @@ const COMPLETION_RELEASE_MS: u128 = 560;
 /// `▞`, so the tail reads as one continuous animal instead of a bar with a
 /// shape floating past it. The belly carries one cyan current cut. The glyph
 /// vocabulary is the one `whales::art` uses for the six-role portraits.
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 const IDLE_WHALE_SPOUT_ROW: &str = "    ˚";
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 const IDLE_WHALE_ROWS: [&str; 3] = ["  ▗▄▄▟▄▄▄▄▄▖  ▚△▞", " ▐█·████████▙▄▄▞", "  ▝▀▀▀▀▀▀▀▀▘"];
 
 /// Soft variant: same silhouette, one body cell shorter, blush around the eye
 /// and a sparkle beside the spout.
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 const UWU_IDLE_WHALE_SPOUT_ROW: &str = "    ˚✦";
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 const UWU_IDLE_WHALE_ROWS: [&str; 3] = ["  ▗▄▄▟▄▄▄▄▖  ▚△▞", " ▐█░·░█████▙▄▄▞", "  ▝▀▀▀▀▀▀▀▘"];
 
 /// The belly row is the mark's cyan current cut, not gold body mass; it holds
 /// still while the caustic sweep travels across the gold rows above it.
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 const IDLE_WHALE_CURRENT_ROW: usize = 2;
 
+/// Mascota de GhostyCode: un fantasma en bloques con los ojos tallados por los
+/// espacios. Las filas superior e inferior son fijas; la del medio la construye
+/// [`ghost_eyes_row`] por frame para que parpadee y mire alrededor mientras
+/// está en reposo. Portado del árbol previo al rebase sobre upstream.
+pub const GHOST_TOP: &str = " ▄████▄ ";
+pub const GHOST_BOTTOM: &str = "▐█▀██▀█▌";
+
+/// Halo tenue sobre la cabeza. Además de quedar bonito, mantiene la marca en
+/// cuatro filas —las mismas que ocupaba la de upstream— para que el resto de
+/// la pantalla vacía (título, contexto, prompt) caiga en las mismas filas del
+/// degradado de agua y ningún snapshot se mueva.
+pub const GHOST_HALO: &str = "   ˚    ";
+
+/// Cadencia de la animación de ojos. Un frame cada ~180 ms mantiene el gesto
+/// suave —un parpadeo lento, nunca un spinner.
+pub const GHOST_ANIM_FRAME_MS: u64 = 180;
+
+/// Línea de tiempo de los ojos como tramos `(glifo, frames)`. El fantasma
+/// descansa mirando a la izquierda (`◐`) la mayor parte del tiempo; entre
+/// reposos aparecen parpadeos (`─`, a veces dobles), miradas al frente, de
+/// lado, arriba y abajo (`● ◑ ◓ ◒`), una sonrisa con los ojos (`◠`), sorpresa
+/// (`◉`), un gesto travieso de reojo (`◔`), corazones (`♥`), una cabezada de
+/// sueño (`˘ ·`) y un brillo (`✧`). Todos los glifos ocupan exactamente una
+/// celda, así que la mascota nunca se desplaza. Determinista, sin RNG, para
+/// que los snapshots puedan fijar un frame de reposo.
+const GHOST_EYE_TIMELINE: &[(&str, u64)] = &[
+    ("◐", 16), // reposo: mirando a la izquierda
+    ("─", 2),  // parpadeo
+    ("◐", 14),
+    ("◑", 5), // mira a la derecha
+    ("◐", 12),
+    ("─", 2), // parpadeo
+    ("◐", 10),
+    ("●", 5), // al frente
+    ("◐", 12),
+    ("◕", 6), // contento
+    ("◐", 10),
+    ("─", 1), // parpadeo doble, rápido
+    ("◐", 2),
+    ("─", 1),
+    ("◐", 12),
+    ("◓", 4), // mira arriba
+    ("◐", 12),
+    ("◒", 4), // mira abajo
+    ("◐", 14),
+    ("◠", 7), // sonrisa con los ojos (^ ^)
+    ("◐", 12),
+    ("◉", 3), // ¡sorpresa!
+    ("●", 3),
+    ("◐", 12),
+    ("◔", 4), // travieso, de reojo
+    ("◑", 3),
+    ("◐", 12),
+    ("♥", 5), // enamorado
+    ("◐", 14),
+    ("˘", 8), // se queda dormido...
+    ("·", 6),
+    ("˘", 8),
+    ("─", 2), // ...y despierta parpadeando
+    ("◐", 16),
+    ("✧", 3), // brillo en los ojos
+    ("◕", 4),
+    ("◐", 14),
+];
+
+fn ghost_eye(tick: u64) -> &'static str {
+    let total: u64 = GHOST_EYE_TIMELINE.iter().map(|(_, frames)| *frames).sum();
+    if total == 0 {
+        return "◐";
+    }
+    let mut pos = tick % total;
+    for (glyph, frames) in GHOST_EYE_TIMELINE {
+        if pos < *frames {
+            return glyph;
+        }
+        pos -= *frames;
+    }
+    "◐"
+}
+
+/// Fila de ojos para el frame `tick`. Mismo marco y ancho que las filas fijas.
+pub fn ghost_eyes_row(tick: u64) -> String {
+    let eye = ghost_eye(tick);
+    format!("▐ {eye}  {eye} ▌")
+}
+
+/// Frame actual de la animación de ojos.
+///
+/// Reloj propio y global, arrancado la primera vez que se consulta. No usa
+/// `ocean_started_at` a propósito: upstream solo lo arranca cuando las
+/// animaciones decorativas están permitidas, y en Ghostty / VS Code / SSH
+/// `low_motion` las apaga —el tick se quedaría en 0 y el fantasma parecería
+/// muerto justo en las terminales más usadas. Los ojos van a ~5.5 fps, muy
+/// por debajo del umbral de parpadeo que `low_motion` intenta evitar.
+pub fn ghost_anim_tick(_app: &App) -> u64 {
+    use std::sync::OnceLock;
+    static EPOCH: OnceLock<Instant> = OnceLock::new();
+    let epoch = EPOCH.get_or_init(Instant::now);
+    (epoch.elapsed().as_millis() / u128::from(GHOST_ANIM_FRAME_MS)) as u64
+}
+
+/// Las cuatro filas del fantasma (halo + cuerpo) para el frame actual.
+pub fn ghost_rows(app: &App) -> [String; 4] {
+    [
+        GHOST_HALO.to_string(),
+        GHOST_TOP.to_string(),
+        ghost_eyes_row(ghost_anim_tick(app)),
+        GHOST_BOTTOM.to_string(),
+    ]
+}
+
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 const IDLE_SHIMMER_CYCLE_MS: u128 = 4_000;
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 const IDLE_SHIMMER_SWEEP_FRACTION: f32 = 0.32;
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 const IDLE_SHIMMER_BAND_HALF_WIDTH: f32 = 0.38;
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 const IDLE_SHIMMER_STRENGTH: f32 = 0.33;
 
 /// The build-version string the header renders. An unstamped local build uses
 /// the build script's development marker while CI/release carries its source
 /// stamp; the header always reports that real build provenance.
 fn shell_build_version() -> Cow<'static, str> {
-    Cow::Borrowed(env!("CODEWHALE_BUILD_VERSION"))
+    Cow::Borrowed(env!("GHOSTY_BUILD_VERSION"))
 }
 
 impl ShellPhase {
@@ -1346,7 +1466,7 @@ fn render_header_with_git_status(
     // The build version used to close this cluster. It was already the first
     // thing the header sacrificed — present only on `Wide`, gone below 110
     // columns — which is the layout admitting it was never load-bearing. It is
-    // a fact you check deliberately (`codewhale --version`, `codewhale
+    // a fact you check deliberately (`ghosty --version`, `ghosty
     // doctor`, the launch screen) exactly once, and the half of it that *is*
     // worth reading mid-session — "your build is stale" — already has its own
     // chip on the left. Fifteen columns of the primary chrome on every screen
@@ -1526,6 +1646,7 @@ pub(crate) fn ensure_idle_welcome_started(app: &mut App, area: Rect) {
 /// 1.3s crossing the mark and parks off-screen for the remainder, so the brand
 /// has a clear moment of life without becoming looping chrome.
 #[must_use]
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 fn idle_mark_shine_opacity(diagonal: f32, elapsed_ms: u128) -> f32 {
     let cycle_progress = (elapsed_ms % IDLE_SHIMMER_CYCLE_MS) as f32 / IDLE_SHIMMER_CYCLE_MS as f32;
     let sweep_progress = (cycle_progress / IDLE_SHIMMER_SWEEP_FRACTION).min(1.0);
@@ -1541,6 +1662,7 @@ fn idle_mark_shine_opacity(diagonal: f32, elapsed_ms: u128) -> f32 {
 }
 
 #[must_use]
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 fn idle_mark_color(base: Color, highlight: Color, opacity: f32) -> Color {
     if opacity <= 0.0 {
         return base;
@@ -1553,10 +1675,12 @@ fn idle_mark_color(base: Color, highlight: Color, opacity: f32) -> Color {
     }
 }
 
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 fn idle_whale_is_uwu(app: &App) -> bool {
     app.ui_theme.name == "uwu"
 }
 
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 fn idle_whale_spout_row(app: &App) -> &'static str {
     if idle_whale_is_uwu(app) {
         UWU_IDLE_WHALE_SPOUT_ROW
@@ -1565,6 +1689,7 @@ fn idle_whale_spout_row(app: &App) -> &'static str {
     }
 }
 
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 fn idle_whale_rows(app: &App) -> [&'static str; 3] {
     if idle_whale_is_uwu(app) {
         UWU_IDLE_WHALE_ROWS
@@ -1577,10 +1702,12 @@ fn idle_whale_rows(app: &App) -> [&'static str; 3] {
 /// the same Whale Teams ink the `/fleet` portraits use, so every theme gets
 /// the brand cyan lifted to the secondary-chrome contrast floor rather than a
 /// per-theme guess.
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 fn idle_whale_current_color(app: &App) -> Color {
     crate::tui::whales::WhaleInk::from_theme(&app.ui_theme).current
 }
 
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 fn idle_whale_row_spans(
     text: &'static str,
     row: usize,
@@ -1633,6 +1760,7 @@ fn idle_whale_row_spans(
 }
 
 #[must_use]
+#[allow(dead_code)] // marca de upstream (ballena); GhostyCode dibuja su fantasma
 fn idle_whale_block_width(spout: &str, rows: &[&str]) -> usize {
     std::iter::once(spout)
         .chain(rows.iter().copied())
@@ -1717,48 +1845,17 @@ pub fn empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
     let width = usize::from(area.width);
     let mut lines = vec![Line::from(""); usize::from(area.height / 4)];
     if empty_state_mark_visible(area) {
-        let animated = idle_mark_animation_enabled(app);
-        let elapsed_ms = app
-            .ocean_started_at
-            .map(|started| started.elapsed().as_millis())
-            .unwrap_or(0);
-        let spout = idle_whale_spout_row(app);
-        let rows = idle_whale_rows(app);
-        let current = idle_whale_current_color(app);
-        let mut mark = vec![vec![Span::styled(spout, Style::default().fg(current))]];
-        // Soft uwu: sakura blush/sparkle glyphs; classic keeps body peach + text eye.
-        let highlight = if idle_whale_is_uwu(app) {
-            app.ui_theme.accent_primary
-        } else {
-            app.ui_theme.text_body
-        };
-        mark.extend(rows.iter().enumerate().map(|(row, text)| {
-            // The belly cut is water, not chrome: it holds the flat brand cyan
-            // while the caustic sweep travels across the gold body above it.
-            let is_current = row == IDLE_WHALE_CURRENT_ROW;
-            idle_whale_row_spans(
-                text,
-                row,
-                elapsed_ms,
-                animated && !is_current,
-                if is_current {
-                    current
-                } else {
-                    app.ui_theme.accent_action
-                },
-                app.ui_theme.text_body,
-                highlight,
-            )
-        }));
-        // The spout, head, belly, peduncle, and flukes are one drawing. Give
-        // every row the same outer inset so the authored offsets survive;
-        // centering each row independently shears the silhouette apart.
-        let block_inset =
-            " ".repeat(width.saturating_sub(idle_whale_block_width(spout, &rows)) / 2);
-        for row in mark {
-            let mut spans = vec![Span::raw(block_inset.clone())];
-            spans.extend(row);
-            lines.push(Line::from(spans));
+        // El fantasma de GhostyCode ocupa el sitio de la marca de upstream.
+        // Sus ojos se animan con el mismo reloj de idle que upstream ya late,
+        // así que no hace falta un timer propio.
+        let rows = ghost_rows(app);
+        let block_width = rows.iter().map(|r| r.width()).max().unwrap_or(0);
+        let block_inset = " ".repeat(width.saturating_sub(block_width) / 2);
+        for row in rows {
+            lines.push(Line::from(vec![
+                Span::raw(block_inset.clone()),
+                Span::styled(row, Style::default().fg(app.ui_theme.accent_primary)),
+            ]));
         }
         lines.push(Line::from(""));
     }
@@ -1784,7 +1881,7 @@ pub fn empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
         app.mcp_configured_count,
         width,
     );
-    let brand = "Codewhale";
+    let brand = "Ghosty";
     let brand_inset = " ".repeat(width.saturating_sub(brand.width()) / 2);
     lines.push(Line::from(Span::styled(
         format!("{brand_inset}{brand}"),
@@ -1873,7 +1970,7 @@ mod empty_state_caption_tests {
     use super::{empty_state_caption, shorten_workspace};
     use unicode_width::UnicodeWidthStr;
 
-    const DEEP: &str = "/private/tmp/claude-501/-Volumes-VIXinSSD-CW-codewhale/34267917-11f4-4d15-911a-2a8acd5c49e1/scratchpad/surface/ws2";
+    const DEEP: &str = "/private/tmp/claude-501/-Volumes-VIXinSSD-CW-ghosty/34267917-11f4-4d15-911a-2a8acd5c49e1/scratchpad/surface/ws2";
 
     #[test]
     fn caption_stays_narrow_enough_to_actually_centre() {
@@ -2014,7 +2111,7 @@ mod header_tests {
         assert!(filesystem_scope_notice(&app).is_none());
         let line = header_line(&app, 120);
         assert!(!line.contains("files:"), "{line:?}");
-        assert!(line.starts_with("cw"), "{line:?}");
+        assert!(line.starts_with("ghosty"), "{line:?}");
         assert!(line.contains("work"), "{line:?}");
         assert!(line.contains("ask"), "{line:?}");
     }
@@ -2067,14 +2164,14 @@ mod header_tests {
     #[test]
     fn the_build_version_is_not_permanent_chrome() {
         // It was already `Wide`-only, which is the layout admitting it was
-        // never load-bearing; `codewhale --version`, `codewhale doctor` and
+        // never load-bearing; `ghosty --version`, `ghosty doctor` and
         // the launch screen are where a version is actually looked up, and
         // the half worth reading mid-session is the update chip.
         let app = app();
         for width in [60u16, 80, 120, 200] {
             let line = header_line(&app, width);
             assert!(
-                !line.contains(concat!("v", env!("CODEWHALE_BUILD_VERSION"))),
+                !line.contains(concat!("v", env!("GHOSTY_BUILD_VERSION"))),
                 "width {width}: {line:?}",
             );
         }

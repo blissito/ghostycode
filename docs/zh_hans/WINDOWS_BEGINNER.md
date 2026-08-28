@@ -1,4 +1,4 @@
-# Codewhale Beginner Guide for Windows (简体中文)
+# Ghosty Beginner Guide for Windows (简体中文)
 
 > 本文面向**完全没接触过 AI 编程智能体、使用 Windows 系统**的初学者。所有命令和路径均已在 Windows 环境实际验证。
 >
@@ -10,10 +10,10 @@
 
 | 问题 | 一句话答案 |
 |---|---|
-| Codewhale 是什么？ | 装在你自己电脑上的"编程智能体"，能读文件、改代码、跑命令、自己验证结果 |
+| Ghosty 是什么？ | 装在你自己电脑上的"编程智能体"，能读文件、改代码、跑命令、自己验证结果 |
 | 要花钱吗？ | 软件开源免费，但模型要你自己带 API key（默认 DeepSeek） |
 | 在哪干活？ | 在哪个文件夹启动它，它就只动哪个文件夹（工作区） |
-| 第一步做什么？ | 装好后建一个空文件夹 → `cd` 进去 → 运行 `codewhale` |
+| 第一步做什么？ | 装好后建一个空文件夹 → `cd` 进去 → 运行 `ghosty` |
 | 会不会乱动我的文件？ | 默认 Ask 模式：每一步操作都会弹窗问你，不批不动 |
 | 做小工具要用哪个模式？ | Plan（先出方案）+ Act（再动手），Ask 权限，全程足够 |
 | 用哪个模型？ | 默认 auto：简单任务自动用 flash（便宜快），复杂自动升 pro |
@@ -24,7 +24,7 @@
 | 操作问题 | 解决办法 |
 |---|---|
 | 双击运行提示找不到 VCRUNTIME140_1.dll | 装 VC++ 运行库（见 2.4 节） |
-| 终端里输入 codewhale 提示"不是命令" | 环境变量没配好或终端没重开（见 2.3 节） |
+| 终端里输入 ghosty 提示"不是命令" | 环境变量没配好或终端没重开（见 2.3 节） |
 | 提示"禁止运行脚本" | 执行一次 PowerShell 执行策略命令（见第 3 节） |
 | 配置了 pro 却显示在用 flash | auto 路由正常现象，不是 bug（见 7.2 节） |
 | 界面停在奇怪的模式 | 按 `Tab` 切回，或输入 `/mode act` |
@@ -39,19 +39,19 @@
 ### 1.1 它不是聊天机器人，是"能干活的智能体"
 
 - **聊天机器人**：只回答你的问题，不动你电脑上的任何东西
-- **Codewhale**：给它一个任务，它能读你的文件、修改代码、在终端里运行命令、自己检查结果，做完或需要你拍板时才停下
+- **Ghosty**：给它一个任务，它能读你的文件、修改代码、在终端里运行命令、自己检查结果，做完或需要你拍板时才停下
 
-它运行在**你自己的电脑**上（开源，项目地址 `https://github.com/Hmbown/CodeWhale`），所以它能动你的真实文件。
+它运行在**你自己的电脑**上（开源，项目地址 `https://github.com/blissito/ghostycode`），所以它能动你的真实文件。
 
 ### 1.2 模型由你自己带（自带 API key）
 
-Codewhale 不是开箱即用的服务，你需要一个模型提供商的 API key。**默认是 DeepSeek**，设置命令：
+Ghosty 不是开箱即用的服务，你需要一个模型提供商的 API key。**默认是 DeepSeek**，设置命令：
 
 ```powershell
-codewhale auth set --provider deepseek
+ghosty auth set --provider deepseek
 ```
 
-除 DeepSeek 外，Codewhale 内置支持以下**全部厂商**（`provider` 后面的英文 ID 是配置和命令行里要用的名字，来自官方文档）：
+除 DeepSeek 外，Ghosty 内置支持以下**全部厂商**（`provider` 后面的英文 ID 是配置和命令行里要用的名字，来自官方文档）：
 
 **国内厂商（中国大陆可直接访问）**
 
@@ -97,7 +97,7 @@ codewhale auth set --provider deepseek
 
 | Provider ID | 说明 |
 |---|---|
-| `ollama` | 本地跑开源模型（如 codewhale-coder） |
+| `ollama` | 本地跑开源模型（如 ghosty-coder） |
 | `sglang` | 自建推理服务（localhost:30000） |
 | `vllm` | 自建推理服务（localhost:8000） |
 
@@ -120,7 +120,7 @@ codewhale auth set --provider deepseek
 
 **第一步：改配置文件，指定中国区地址**
 
-编辑 `C:\Users\你的用户名\.codewhale\config.toml`，在文件里加入（或找到）`[providers.moonshot]` 段：
+编辑 `C:\Users\你的用户名\.ghosty\config.toml`，在文件里加入（或找到）`[providers.moonshot]` 段：
 
 ```toml
 [providers.moonshot]
@@ -135,12 +135,12 @@ base_url = "https://api.moonshot.cn/v1"
 在 PowerShell 里执行：
 
 ```powershell
-codewhale auth set --provider moonshot --api-key "你的中国区Kimi API key"
+ghosty auth set --provider moonshot --api-key "你的中国区Kimi API key"
 ```
 
 > 实测发现：添加 base_url 后，**必须重新输入一遍密钥**才能真正生效。
 
-**第三步：在 Codewhale 里切换**
+**第三步：在 Ghosty 里切换**
 
 1. 输入 `/provider` 打开厂商选择器 → 选 **moonshot**（可能显示 missing key，不用管，继续选）
 2. 如果提示输入 key，就粘贴你的中国区 key
@@ -163,13 +163,13 @@ codewhale auth set --provider moonshot --api-key "你的中国区Kimi API key"
 - **不要用 `/model auto`**：Kimi 没有便宜的"flash 档"，auto 只会落在默认模型上，直接固定模型更实在
 - **deepseek 不受影响**：切回用 `/provider deepseek` + `/model deepseek-v4-pro`，随时可换
 - **Kimi Code 会员模型别混用**："k3"（即 `kimi-k3` 的简写）/ `kimi-for-coding` 是 Kimi Code 会员平台专属模型（入口 `api.kimi.com/coding/v1`），与普通 API 入口的 `kimi-k3` 不同，普通中国区 API key 不要用这些 ID
-- **改动 base_url 后要重启 Codewhale** 才生效
+- **改动 base_url 后要重启 Ghosty** 才生效
 
 ### 1.3 工作区（workspace）概念
 
 **在哪个目录启动，它就操作哪个目录。**
 
-- 终端里 `cd` 到你的项目文件夹，再运行 `codewhale`
+- 终端里 `cd` 到你的项目文件夹，再运行 `ghosty`
 - 它只在这个目录里干活，目录外访问需要额外信任
 - **做小工具的第一步：先建一个空文件夹**，比如 `C:\Users\你的用户名\Desktop\my-tools`
 
@@ -182,39 +182,39 @@ codewhale auth set --provider moonshot --api-key "你的中国区Kimi API key"
 打开官方发布页：
 
 ```
-https://github.com/Hmbown/CodeWhale/releases
+https://github.com/blissito/ghostycode/releases
 ```
 
-在最新版本的文件列表中，普通 Windows 电脑（Intel/AMD 处理器）**推荐下载 `codewhale-windows-x64-portable.zip`（Windows 便携版）**。
+在最新版本的文件列表中，普通 Windows 电脑（Intel/AMD 处理器）**推荐下载 `ghosty-windows-x64-portable.zip`（Windows 便携版）**。
 
 - **便携版 = 解压即用，不需要安装脚本**：不用装 npm、Scoop、Cargo，也不用双击安装程序
 - 下载后解压到一个文件夹，里面就是可直接运行的程序（本说明按当前 zip 内容列出）：
-  - `codewhale.exe` — 主程序
-  - `codew.exe` — 同一二进制的短命令名
-  - `codewhale.bat` — 启动器：已安装 Windows Terminal 时用它打开，否则回退到直接运行 exe
+  - `ghosty.exe` — 主程序
+  - `ghosty-tui.exe` — 同一二进制的短命令名
+  - `ghosty.bat` — 启动器：已安装 Windows Terminal 时用它打开，否则回退到直接运行 exe
 
-文件名带 **arm64** 的是给 ARM 架构设备用的，普通电脑不要选。如果你更习惯传统安装方式，也可以下载 **`CodeWhaleSetup.exe`**（Windows 安装器）：它会安装到 `%LOCALAPPDATA%\Programs\CodeWhale\bin` 并自动加入用户 PATH，开始菜单快捷方式指向 `codewhale.bat`，无需手动配置环境变量；因为安装包未签名，双击会弹 Windows SmartScreen 提示，点"更多信息 → 仍要运行"即可。注意：发布页里的 `codewhale-windows-x64.exe` 是**纯命令行程序，不是安装器**，双击只会打开默认 cmd 窗口，请改用 zip 里的 `codewhale.bat` 或安装器的开始菜单项。
+文件名带 **arm64** 的是给 ARM 架构设备用的，普通电脑不要选。如果你更习惯传统安装方式，也可以下载 **`GhostyCodeSetup.exe`**（Windows 安装器）：它会安装到 `%LOCALAPPDATA%\Programs\GhostyCode\bin` 并自动加入用户 PATH，开始菜单快捷方式指向 `ghosty.bat`，无需手动配置环境变量；因为安装包未签名，双击会弹 Windows SmartScreen 提示，点"更多信息 → 仍要运行"即可。注意：发布页里的 `ghosty-windows-x64.exe` 是**纯命令行程序，不是安装器**，双击只会打开默认 cmd 窗口，请改用 zip 里的 `ghosty.bat` 或安装器的开始菜单项。
 
 ![GitHub 发布页，选择 windows-x64 版本](images/github-release-page.png)
 
-### 2.2 第二步：放到固定目录【codewhale-windows-x64-portable.zip】
+### 2.2 第二步：放到固定目录【ghosty-windows-x64-portable.zip】
 
-把便携版 zip 解压后的文件夹放到一个固定位置，比如 `D:\codewhale`（解压后里面就是 `codewhale.exe`、`codew.exe`、`codewhale.bat`，完整路径为 `D:\codewhale\codewhale.exe`）。放好后**不要再移动它**，否则下面的环境变量会失效。从资源管理器启动时请双击 `codewhale.bat`，不要双击 `codewhale.exe`。
+把便携版 zip 解压后的文件夹放到一个固定位置，比如 `D:\ghosty`（解压后里面就是 `ghosty.exe`、`ghosty-tui.exe`、`ghosty.bat`，完整路径为 `D:\ghosty\ghosty.exe`）。放好后**不要再移动它**，否则下面的环境变量会失效。从资源管理器启动时请双击 `ghosty.bat`，不要双击 `ghosty.exe`。
 
-> 升级方法：以后出新版本，在终端运行 `codewhale update` 即可（想先看有没有新版：`codewhale update --check`），它会自动下载、校验并替换程序文件，完成后重启 Codewhale。配置和对话记录都保留。网络受限时也可以下载新版 portable zip 解压覆盖同目录下的程序文件。
+> 升级方法：以后出新版本，在终端运行 `ghosty update` 即可（想先看有没有新版：`ghosty update --check`），它会自动下载、校验并替换程序文件，完成后重启 Ghosty。配置和对话记录都保留。网络受限时也可以下载新版 portable zip 解压覆盖同目录下的程序文件。
 
-### 2.3 第三步：加入环境变量【codewhale-windows-x64-portable.zip】
+### 2.3 第三步：加入环境变量【ghosty-windows-x64-portable.zip】
 
-加了环境变量，才能在任何文件夹里直接输入 `codewhale` 启动它。
+加了环境变量，才能在任何文件夹里直接输入 `ghosty` 启动它。
 
 1. 打开 Windows【设置】→【系统】→【系统信息】，点击右侧的【高级系统设置】
 
 ![打开高级系统设置](images/windows-system-info.png)
 
 2. 在弹出的【系统属性】窗口点【环境变量(N)…】
-3. 在"用户变量"里找到 **Path**，点【编辑(E)…】→【新建(N)】，填入程序所在目录 `D:\codewhale`，一路点【确定】保存
+3. 在"用户变量"里找到 **Path**，点【编辑(E)…】→【新建(N)】，填入程序所在目录 `D:\ghosty`，一路点【确定】保存
 
-![把 D:\codewhale 加入 Path 环境变量](images/env-path-setting.png)
+![把 D:\ghosty 加入 Path 环境变量](images/env-path-setting.png)
 
 > 注意：改完环境变量后，**已经打开的终端窗口要关掉重开**才会生效。
 
@@ -223,27 +223,27 @@ https://github.com/Hmbown/CodeWhale/releases
 第一次双击运行如果弹出"**由于找不到 VCRUNTIME140_1.dll，无法继续执行代码**"，说明系统缺少运行库，安装微软官方运行库即可：
 
 1. 下载地址：`https://aka.ms/vs/17/release/vc_redist.x64.exe`（64 位系统选 x64，32 位选 x86）
-2. 双击安装，完成后重新启动 `codewhale.exe`
+2. 双击安装，完成后重新启动 `ghosty.exe`
 
 ![VCRUNTIME140_1.dll 报错及解决办法](images/vc-runtime-dll-error.png)
 
-> 离线/内网备选：从其他已装该运行库的电脑复制 `C:\Windows\System32\VCRUNTIME140_1.dll` 到本机同目录，或放到 `codewhale.exe` 同级目录下。
+> 离线/内网备选：从其他已装该运行库的电脑复制 `C:\Windows\System32\VCRUNTIME140_1.dll` 到本机同目录，或放到 `ghosty.exe` 同级目录下。
 
 ### 2.5 第五步：安装 Windows Terminal（不要用 cmd）
 
-Codewhale 需要在终端里运行。**建议使用 Windows Terminal（即"终端"），不要用系统自带的 cmd（命令提示符）**。Codewhale 是 TUI（终端用户界面）软件，依赖终端渲染能力——cmd 功能有限，可能出现显示异常或崩溃；Windows Terminal 支持更多颜色、Unicode 字符和 GPU 渲染，运行 Codewhale 更稳定流畅：
+Ghosty 需要在终端里运行。**建议使用 Windows Terminal（即"终端"），不要用系统自带的 cmd（命令提示符）**。Ghosty 是 TUI（终端用户界面）软件，依赖终端渲染能力——cmd 功能有限，可能出现显示异常或崩溃；Windows Terminal 支持更多颜色、Unicode 字符和 GPU 渲染，运行 Ghosty 更稳定流畅：
 
 ```
 https://learn.microsoft.com/zh-cn/windows/terminal/install
 ```
 
-装好后打开 Windows Terminal，输入 `codewhale` 回车，能进入界面就说明安装成功。
+装好后打开 Windows Terminal，输入 `ghosty` 回车，能进入界面就说明安装成功。
 
 ---
 
 ## 3. 首次启动设置
 
-第一次运行 `codewhale` 会走一个简短的设置流程：
+第一次运行 `ghosty` 会走一个简短的设置流程：
 
 1. 选择语言
 2. 配置模型 / API key（DeepSeek 是默认服务商）
@@ -254,7 +254,7 @@ https://learn.microsoft.com/zh-cn/windows/terminal/install
 
 **Windows 常见问题：PowerShell 执行策略**
 
-Codewhale 需要运行临时 PowerShell 脚本，如果系统提示"禁止运行脚本"，在 PowerShell 里执行一次：
+Ghosty 需要运行临时 PowerShell 脚本，如果系统提示"禁止运行脚本"，在 PowerShell 里执行一次：
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
@@ -269,7 +269,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
 ## 4. 给新手的"做小工具"最短路径
 
 1. 建一个文件夹，比如 `C:\Users\你的用户名\Desktop\my-tools`
-2. 在 Windows Terminal 里 `cd` 进去，运行 `codewhale`
+2. 在 Windows Terminal 里 `cd` 进去，运行 `ghosty`
 3. 保持 **Plan + Ask**，发一条："我是新手，想做一个 XX 小工具。先帮我看看这个目录，然后给我一个实现方案，先不要改任何文件。"
 4. 方案满意后，说"按方案实现，每步改动前告诉我"——它会开始写代码，你逐个批准
 5. 让它"运行并验证给我看"，确认可用后，小工具就做好了
@@ -368,7 +368,7 @@ default_text_model = "deepseek-v4-pro"
 
 ## 8. 配置文件在哪
 
-- 全局配置：`C:\Users\你的用户名\.codewhale\config.toml`
+- 全局配置：`C:\Users\你的用户名\.ghosty\config.toml`
 - 界面编辑：输入 `/config` 打开配置编辑器
 - 查看哪些配置能改、能保存：`/config audit`
 
@@ -422,7 +422,7 @@ default_text_model = "deepseek-v4-pro"
 /export file 对话记录.md
 ```
 
-文件会生成在你**当前工作目录**（启动 Codewhale 的文件夹）下。
+文件会生成在你**当前工作目录**（启动 Ghosty 的文件夹）下。
 
 ### 基本格式
 
@@ -450,7 +450,7 @@ default_text_model = "deepseek-v4-pro"
 开头是元信息，然后是你的全部对话：
 
 ```markdown
-# Codewhale conversation export
+# Ghosty conversation export
 
 - Exported: 2026-08-02T...   （导出时间）
 - Session: xxxx              （会话 ID）

@@ -1,4 +1,4 @@
-# codewhale Operations Runbook
+# ghosty Operations Runbook
 
 This runbook covers practical debugging and incident response for the local CLI/TUI runtime.
 
@@ -6,14 +6,14 @@ This runbook covers practical debugging and incident response for the local CLI/
 
 1. Confirm binary + config:
    - `cargo run -- --version`
-   - `cat ~/.codewhale/config.toml` (or inspect configured profile)
+   - `cat ~/.ghosty/config.toml` (or inspect configured profile)
 2. Enable verbose logs:
-   - `RUST_LOG=codewhale_tui=debug cargo run`
-   - For HTTP retries/reconnects: `RUST_LOG=codewhale_tui::client=debug cargo run`
+   - `RUST_LOG=ghosty_tui=debug cargo run`
+   - For HTTP retries/reconnects: `RUST_LOG=ghosty_tui::client=debug cargo run`
 3. Capture current state:
-   - `ls ~/.codewhale/sessions`
-   - `ls ~/.codewhale/sessions/checkpoints`
-   - `ls ~/.codewhale/tasks`
+   - `ls ~/.ghosty/sessions`
+   - `ls ~/.ghosty/sessions/checkpoints`
+   - `ls ~/.ghosty/tasks`
 
 ## Incident: Turn Hangs or Stream Stops
 
@@ -22,7 +22,7 @@ Symptoms:
 - partial assistant output with no completion
 
 Checks:
-1. Inspect retry/health logs (`codewhale_tui::client`)
+1. Inspect retry/health logs (`ghosty_tui::client`)
 2. Verify endpoint connectivity:
    - `curl -sS https://api.deepseek.com/beta/models -H "Authorization: Bearer $DEEPSEEK_API_KEY"`
 3. Confirm no local sandbox/permission deadlock in tool output
@@ -38,7 +38,7 @@ Actions:
 
 Expected behavior:
 - New prompts are queued while offline mode is active
-- Queue state persists to `~/.codewhale/sessions/checkpoints/offline_queue.json`
+- Queue state persists to `~/.ghosty/sessions/checkpoints/offline_queue.json`
 
 Checks:
 1. Open queue in TUI: `/queue list`
@@ -52,11 +52,11 @@ Actions:
 ## Incident: Crash Recovery Needed
 
 Expected behavior:
-- Checkpoint stored at `~/.codewhale/sessions/checkpoints/latest.json`
+- Checkpoint stored at `~/.ghosty/sessions/checkpoints/latest.json`
 - Startup begins a fresh session unless `--resume`/`--continue` is supplied
 
 Actions:
-1. Resume prior work explicitly via `codewhale --resume <id>` or `Ctrl+R` in TUI
+1. Resume prior work explicitly via `ghosty --resume <id>` or `Ctrl+R` in TUI
 2. If checkpoint inspection is needed, inspect `latest.json` for schema mismatch/details
 3. If schema is newer than binary supports, upgrade binary or remove stale checkpoint
 
@@ -66,9 +66,9 @@ Symptoms:
 - Errors like `schema vX is newer than supported vY`
 
 Affected stores:
-- sessions (`~/.codewhale/sessions/*.json`)
+- sessions (`~/.ghosty/sessions/*.json`)
 - runtime thread/turn/item records
-- tasks (`~/.codewhale/tasks/tasks/*.json`)
+- tasks (`~/.ghosty/tasks/tasks/*.json`)
 
 Actions:
 1. Confirm binary version and migration expectations
@@ -80,7 +80,7 @@ Actions:
 ## Incident: MCP/Tool Execution Failures
 
 Checks:
-1. Validate `~/.codewhale/mcp.json` schema and server command paths
+1. Validate `~/.ghosty/mcp.json` schema and server command paths
 2. Confirm server process can start manually
 3. Check sandbox denials in TUI history / logs
 

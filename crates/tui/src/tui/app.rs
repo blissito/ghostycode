@@ -11,7 +11,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Color;
 use serde_json::Value;
 
-use codewhale_config::{ProviderChain, route::RouteLimits};
+use ghosty_config::{ProviderChain, route::RouteLimits};
 
 use crate::artifacts::ArtifactRecord;
 use crate::client::{CacheWarmupKey, PromptInspection};
@@ -145,13 +145,12 @@ pub(crate) fn resolve_skills_dir(
     global_skills_dir: &Path,
     config: &Config,
 ) -> PathBuf {
-    if config.skills_config().scan_codewhale_only() {
+    if config.skills_config().scan_ghosty_only() {
         if config.skills_dir.is_some() {
             return global_skills_dir.to_path_buf();
         }
-        if let Some(codewhale_skills_dir) = crate::skills::codewhale_workspace_skills_dir(workspace)
-        {
-            return codewhale_skills_dir;
+        if let Some(ghosty_skills_dir) = crate::skills::ghosty_workspace_skills_dir(workspace) {
+            return ghosty_skills_dir;
         }
         return global_skills_dir.to_path_buf();
     }
@@ -442,7 +441,7 @@ impl AgentCurrentActivity {
 pub(crate) fn bound_agent_activity_text(value: &str) -> String {
     let mut visible = String::with_capacity(value.len());
     crate::tui::osc8::strip_ansi_into(value, &mut visible);
-    let redacted = codewhale_config::persistence::redact_secrets(&visible);
+    let redacted = ghosty_config::persistence::redact_secrets(&visible);
     crate::tui::history::summarize_tool_output(&redacted)
 }
 
@@ -1384,7 +1383,7 @@ pub struct App {
     pub(crate) last_effective_reasoning_effort: Option<EffectiveReasoningEffort>,
     pub workspace: PathBuf,
     /// Effective `[workflow]` table for this session (`/workflow settings`).
-    pub workflow_config: codewhale_config::WorkflowConfigToml,
+    pub workflow_config: ghosty_config::WorkflowConfigToml,
     /// Effective `[goal] max_continuations` backstop; `0` means unlimited.
     pub goal_max_continuations: u32,
     /// Typed engine lifecycle state for the cancellable between-turn wait.
@@ -1415,7 +1414,7 @@ pub struct App {
     pub legacy_plugin_tools_dir: Option<PathBuf>,
     pub mcp_config_path: PathBuf,
     pub skills_dir: PathBuf,
-    pub skills_scan_codewhale_only: bool,
+    pub skills_scan_ghosty_only: bool,
     /// Whether the optional project context pack was enabled when this
     /// session loaded its configuration. Context diagnostics consult this
     /// source of truth even before the first system prompt is assembled.
@@ -1694,7 +1693,7 @@ pub struct App {
     pub hooks: HookExecutor,
     /// Lifecycle event outbox (`[lifecycle_outbox]` config). Disabled
     /// (all emits no-ops) when no path is configured.
-    pub lifecycle_outbox: codewhale_hooks::LifecycleOutbox,
+    pub lifecycle_outbox: ghosty_hooks::LifecycleOutbox,
     #[allow(dead_code)]
     pub yolo: bool,
     /// One-shot YOLO→Act+Bypass migration notice for this session (#0.8.68 M6).
@@ -1989,7 +1988,7 @@ pub struct App {
                 u64,
                 String,
                 crate::localization::Locale,
-                Result<Box<codewhale_config::UserConstitution>, String>,
+                Result<Box<ghosty_config::UserConstitution>, String>,
             )>,
         >,
     >,
@@ -2510,13 +2509,13 @@ impl App {
     fn discover_cached_skills(
         workspace: &std::path::Path,
         skills_dir: &std::path::Path,
-        scan_codewhale_only: bool,
+        scan_ghosty_only: bool,
         plugins: &crate::plugins::PluginRegistry,
     ) -> Vec<(String, String)> {
         crate::skills::discover_for_workspace_and_dir_with_mode_and_plugins(
             workspace,
             skills_dir,
-            crate::skills::SkillDiscoveryMode::from_codewhale_only(scan_codewhale_only),
+            crate::skills::SkillDiscoveryMode::from_ghosty_only(scan_ghosty_only),
             Some(plugins),
         )
         .into_enabled()
@@ -2532,7 +2531,7 @@ impl App {
         let cached_skills = Self::discover_cached_skills(
             &self.workspace,
             &skills_dir,
-            self.skills_scan_codewhale_only,
+            self.skills_scan_ghosty_only,
             self.plugin_registry.as_ref(),
         );
         self.hotbar_actions.replace_skills(&cached_skills);

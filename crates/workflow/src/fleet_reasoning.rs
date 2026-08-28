@@ -97,7 +97,7 @@ pub struct ReasoningCapability {
     /// `[off, low, medium, high, max]` order.
     ///
     /// `min_tier`/`max_tier` can only describe a floor and a ceiling. Real
-    /// routes also **collapse interior tiers**: CodeWhale's own route
+    /// routes also **collapse interior tiers**: GhostyCode's own route
     /// normalizer coerces `low` and `medium` to `high` on every non-Codex
     /// route while leaving `off` alone, which is a hole rather than a clamp and
     /// is therefore inexpressible as min/max. Recording the map is what keeps
@@ -584,7 +584,7 @@ impl ResolvedReasoning {
         self.requested
     }
 
-    /// The tier the selector landed on. This is a CodeWhale-side selector
+    /// The tier the selector landed on. This is a GhostyCode-side selector
     /// value; it is not automatically what the provider is told.
     #[must_use]
     pub const fn effective(&self) -> EffectiveReasoning {
@@ -2529,7 +2529,7 @@ mod tests {
     }
 
     /// A route that *collapses* interior tiers cannot be described by a floor
-    /// and a ceiling. CodeWhale's own route normalizer coerces `low` and
+    /// and a ceiling. GhostyCode's own route normalizer coerces `low` and
     /// `medium` to `high` on every non-Codex route while leaving `off` alone,
     /// so a receipt that reported the requested `low` would name a request
     /// nobody made.

@@ -76,7 +76,7 @@ jobs:
               ? 'This repository currently limits automated PR intake to contributors listed in `.github/APPROVED_CONTRIBUTORS`. This is a maintainer-safety control for code review and CI load, not a judgment on the contribution. A maintainer can grant recurring PR access with `/lgtm` after review; once the generated allowlist PR is merged, this pull request can be reopened or resubmitted.'
               : 'This repository is observing a maintainer-managed PR intake gate in dry-run mode, so this pull request is staying open. This note helps maintainers prepare the allowlist before any enforcement is considered.';
 
-            const marker = '<!-- codewhale-pr-gate -->';
+            const marker = '<!-- ghosty-pr-gate -->';
             const { data: comments } = await github.rest.issues.listComments({
               owner,
               repo,

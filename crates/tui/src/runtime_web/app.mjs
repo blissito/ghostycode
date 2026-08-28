@@ -879,7 +879,7 @@ function startBrowserClient() {
         // The status line is enough when the response is not JSON.
       }
       if (response.status === 401) {
-        message = "This browser session is not authenticated. Restart `codewhale web` to open a fresh one-time session.";
+        message = "This browser session is not authenticated. Restart `ghosty web` to open a fresh one-time session.";
       }
       throw new Error(message);
     }
@@ -1399,7 +1399,7 @@ function startBrowserClient() {
     const empty = element("div", "empty-state");
     const mark = document.createElement("img");
     mark.className = "empty-mark";
-    mark.src = "/assets/codewhale-192.png";
+    mark.src = "/assets/ghosty-192.png";
     mark.alt = "";
     empty.append(mark);
     empty.append(element("h2", "", title));
@@ -1449,7 +1449,7 @@ function startBrowserClient() {
     if (item.kind === "user_message" || item.kind === "agent_message") {
       const role = item.kind === "user_message" ? "user" : "agent";
       card.className = `message ${role} ${item.status === "in_progress" ? "in-progress" : ""}`.trim();
-      setTextIfChanged(card.querySelector('[data-item-part="label"]'), role === "user" ? "You" : "Codewhale");
+      setTextIfChanged(card.querySelector('[data-item-part="label"]'), role === "user" ? "You" : "Ghosty");
       setTextIfChanged(card.querySelector('[data-item-part="body"]'), detail);
       return true;
     }
@@ -1598,7 +1598,7 @@ function startBrowserClient() {
     const title = element("h2", "", approval.tool_name || "Tool request");
     title.id = titleId;
     card.append(title);
-    card.append(element("p", "", approval.intent_summary || approval.description || "Codewhale is waiting for permission."));
+    card.append(element("p", "", approval.intent_summary || approval.description || "Ghosty is waiting for permission."));
     const actions = element("div", "attention-actions");
     const rememberLabel = element("label", "remember-field");
     const remember = document.createElement("input");
@@ -1651,7 +1651,7 @@ function startBrowserClient() {
     card.setAttribute("role", "group");
     card.setAttribute("aria-labelledby", titleId);
     card.append(element("p", "eyebrow", "Input required"));
-    const title = element("h2", "", "Codewhale has a question");
+    const title = element("h2", "", "Ghosty has a question");
     title.id = titleId;
     card.append(title);
     const questions = Array.isArray(envelope.request?.questions) ? envelope.request.questions : [];
@@ -2230,9 +2230,9 @@ export function modeLabel(mode) {
 
 export function formatRuntimeProvenance(runtimeInfo) {
   const version = String(
-    runtimeInfo?.codewhale_version || runtimeInfo?.version || "",
+    runtimeInfo?.ghosty_version || runtimeInfo?.version || "",
   ).trim() || "version unknown";
-  const commit = String(runtimeInfo?.codewhale_commit || "").trim();
+  const commit = String(runtimeInfo?.ghosty_commit || "").trim();
   const source = /^[0-9a-f]{40}$/i.test(commit)
     ? commit.slice(0, 12)
     : "source unknown";

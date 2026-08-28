@@ -107,7 +107,7 @@ async fn cancel_started(manager: &SharedSubAgentManager, result: &crate::tools::
 async fn issue_5305_first_personal_profile_receipt_precedes_status_poll() {
     let _env_lock = crate::test_support::lock_test_env();
     let home = tempfile::tempdir().expect("home tempdir");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
     let _codex_token =
         crate::test_support::EnvVarGuard::set("OPENAI_CODEX_ACCESS_TOKEN", "test-token");
     write_personal_consultant(home.path());
@@ -135,7 +135,7 @@ async fn issue_5305_first_personal_profile_receipt_precedes_status_poll() {
 async fn issue_5305_receipt_survives_status_peek_and_immutable_config_changes() {
     let _env_lock = crate::test_support::lock_test_env();
     let home = tempfile::tempdir().expect("home tempdir");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
     let _codex_token =
         crate::test_support::EnvVarGuard::set("OPENAI_CODEX_ACCESS_TOKEN", "test-token");
     write_personal_consultant(home.path());
@@ -178,7 +178,7 @@ async fn issue_5305_receipt_survives_status_peek_and_immutable_config_changes() 
 async fn issue_5305_explicit_profile_matches_type_resolution_and_conflicts_refuse() {
     let _env_lock = crate::test_support::lock_test_env();
     let home = tempfile::tempdir().expect("home tempdir");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
     let _codex_token =
         crate::test_support::EnvVarGuard::set("OPENAI_CODEX_ACCESS_TOKEN", "test-token");
     write_personal_consultant(home.path());
@@ -228,7 +228,7 @@ async fn issue_5305_explicit_profile_matches_type_resolution_and_conflicts_refus
 async fn issue_5305_unbuildable_route_refuses_before_worktree_admission() {
     let _env_lock = crate::test_support::lock_test_env();
     let home = tempfile::tempdir().expect("home tempdir");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
     let agents = home.path().join("agents");
     std::fs::create_dir_all(&agents).expect("agents");
     std::fs::write(
@@ -322,7 +322,7 @@ fn issue_5305_builtin_inheritance_and_redaction_are_bounded() {
     assert!(encoded.len() <= CHILD_ROUTE_RECEIPT_MAX_BYTES);
     assert_eq!(receipt.profile_origin.as_deref(), Some("built-in"));
     assert_eq!(receipt.route_source, "run.model");
-    for forbidden in ["test-key", "127.0.0.1", "codewhale-test-stub", "/"] {
+    for forbidden in ["test-key", "127.0.0.1", "ghosty-test-stub", "/"] {
         assert!(
             !encoded.contains(forbidden),
             "receipt leaked {forbidden}: {encoded}"

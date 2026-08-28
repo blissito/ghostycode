@@ -56,7 +56,7 @@
 | `Shift-Home` / `Shift-End` | 把选区扩展到行首 / 行尾 |
 | `Ctrl-Shift-Home` / `Ctrl-Shift-End` | 把选区扩展到草稿开头 / 结尾 |
 | `Ctrl-Shift-A` / `Cmd-A` | 选择整个草稿（参见下方说明） |
-| `Ctrl-Shift-U` | 从键盘运行 `/update install`：无需离开 TUI 即可检查并安装最新的 CodeWhale 版本。托管安装（Homebrew/npm/cargo）保留其包管理器门槛；已是最新版本时显示更新器的 "Already up to date." 结果，不做任何更改 |
+| `Ctrl-Shift-U` | 从键盘运行 `/update install`：无需离开 TUI 即可检查并安装最新的 GhostyCode 版本。托管安装（Homebrew/npm/cargo）保留其包管理器门槛；已是最新版本时显示更新器的 "Already up to date." 结果，不做任何更改 |
 | 鼠标拖动 | 选择 composer 文本；点击移动光标 |
 | `Cmd-V` / `Ctrl-Shift-V` | 终端本地粘贴（在支持时以括号粘贴形式到达） |
 | `Ctrl-V` | 在本地或转发的图形会话中直接粘贴剪贴板 |
@@ -137,11 +137,11 @@ Hotbar 触发语义刻意只限 `Alt-1` 到 `Alt-8`。在 macOS 键盘上，这�
 | `Alt-[` / `Alt-]` | 在工具输出块之间跳转 |
 | `Esc Esc` | 回溯到上一条用户消息（`←`/`→` 步进，`Enter` 回退） |
 | `Esc` | 将焦点返回 composer |
-| 鼠标拖动 | 在 Codewhale 中选择 transcript 文本 |
-| `Ctrl-C` | 复制活动的 Codewhale 选区 |
+| 鼠标拖动 | 在 Ghosty 中选择 transcript 文本 |
+| `Ctrl-C` | 复制活动的 Ghosty 选区 |
 | `Cmd-click`（macOS）/ `Ctrl-click`（Linux/Windows） | 在支持的终端中打开 OSC 8 链接（归终端处理） |
 
-对于终端原生选择，按住 `Shift` 拖动（终端支持程度不一），然后使用终端自己的复制命令：通常是 macOS 上的 `Cmd-C` 或 Linux/Windows 上的 `Ctrl-Shift-C`。这些命令由本地终端处理，并刻意与 Codewhale 的 `Ctrl-C` 选择绑定分开。在 SSH 上，Codewhale 通过 OSC 52 发回复制请求，或在 tmux 内运行时通过 tmux 的 `load-buffer -w` 路径。
+对于终端原生选择，按住 `Shift` 拖动（终端支持程度不一），然后使用终端自己的复制命令：通常是 macOS 上的 `Cmd-C` 或 Linux/Windows 上的 `Ctrl-Shift-C`。这些命令由本地终端处理，并刻意与 Ghosty 的 `Ctrl-C` 选择绑定分开。在 SSH 上，Ghosty 通过 OSC 52 发回复制请求，或在 tmux 内运行时通过 tmux 的 `load-buffer -w` 路径。
 
 ## Work bar（`Alt-W` 获得焦点后）
 
@@ -211,5 +211,5 @@ Hotbar 触发语义刻意只限 `Alt-1` 到 `Alt-8`。在 macOS 键盘上，这�
 - **Ctrl-S 是暂存，不是历史搜索。** 在此修订中修复——`Alt-R` 才是历史搜索。
 - **移除了幽灵 `Alt+Up`。** "Edit last queued message" 绑定曾列在 README 中，但从未存在于按键分发代码中。
 - **composer 为空时裸 Up/Down 方向键滚动 transcript（v0.8.13）。** 以前 `should_scroll_with_arrows` 门被硬编码为 false，意味着即使 composer 为空，裸方向键也总是导航 composer 历史。虚拟终端（Ghostty、Codex、Kitty 协议）中的用户尤其受影响，因为他们无法使用 Cmd+Up / Alt+Up 快捷键。
-- **可配置键位（#436）和 `tui.toml`（#437）仍然延期。** `TuiPrefs` 结构体和加载器存在于 `settings.rs` 中，但未在启动时接线。允许 `~/.codewhale/tui.toml` 覆盖单个条目的命名绑定注册表仍然待办。
+- **可配置键位（#436）和 `tui.toml`（#437）仍然延期。** `TuiPrefs` 结构体和加载器存在于 `settings.rs` 中，但未在启动时接线。允许 `~/.ghosty/tui.toml` 覆盖单个条目的命名绑定注册表仍然待办。
 - **未发现其他损坏的绑定。** 上面列出的每个其他组合都解析为 `crates/tui/src/tui/ui.rs`（按键事件分发）或 `crates/tui/src/tui/app.rs`（模式 + 状态转换）中的实时处理器。

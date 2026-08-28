@@ -1,11 +1,11 @@
 ---
-name: codew-release-qa-sweep
-description: "Use before claiming CodeWhale release work is done: run the full gate sweep and list the manual QA targets."
+name: ghosty-tui-release-qa-sweep
+description: "Use before claiming GhostyCode release work is done: run the full gate sweep and list the manual QA targets."
 ---
 
-# CodeWhale Release QA Sweep
+# GhostyCode Release QA Sweep
 
-Run this before claiming any CodeWhale release work is "done." A green automated
+Run this before claiming any GhostyCode release work is "done." A green automated
 gate sweep plus the three manual QA targets is the evidence bar. No sweep, no
 "done" — report exactly what was run and the result of each step.
 
@@ -31,23 +31,23 @@ cargo fmt --all --check
 git diff --check
 
 # 2. Library/protocol/cli/flow/state tests, locked
-cargo test -p codewhale-config -p codewhale-protocol -p codewhale-cli \
-  -p codewhale-workflow -p codewhale-state --locked
+cargo test -p ghosty-config -p ghosty-protocol -p ghosty-cli \
+  -p ghosty-workflow -p ghosty-state --locked
 
 # 3. TUI test binaries, locked
-cargo test -p codewhale-tui --bins --locked
+cargo test -p ghosty-tui --bins --locked
 
 # 4. TUI debug build, locked
-cargo build -p codewhale-tui --locked
+cargo build -p ghosty-tui --locked
 
 # 5. Release build for the shipped binaries, locked
-cargo build --release --locked -p codewhale-cli -p codewhale-tui
+cargo build --release --locked -p ghosty-cli -p ghosty-tui
 
 # 6. Version-drift gate (workspace ↔ npm ↔ Cargo.lock ↔ changelog ↔ README)
 ./scripts/release/check-versions.sh
 
 # 7. Binary smoke
-./target/release/codewhale --version
+./target/release/ghosty --version
 ```
 
 If you are validating a PR for landing, also test mergeability against the

@@ -891,7 +891,7 @@ fn bundled_asset_pricing_is_honest() {
 
 #[test]
 fn live_offerings_normalize_models_dev_provider_aliases() {
-    // Live Models.dev ids that must map onto CodeWhale kinds (#4186/#4187).
+    // Live Models.dev ids that must map onto GhostyCode kinds (#4186/#4187).
     let raw = r#"{
       "models": {},
       "providers": {

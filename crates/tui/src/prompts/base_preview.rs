@@ -35,7 +35,7 @@ pub const PREVIEW_TITLE: &str = "Effective Base Prompt";
 
 /// Bytes-per-token divisor for the coarse, deterministic token estimate.
 /// Shared with the constitution's own projection so the two agree.
-pub(crate) const APPROX_BYTES_PER_TOKEN: usize = codewhale_config::APPROX_BYTES_PER_TOKEN;
+pub(crate) const APPROX_BYTES_PER_TOKEN: usize = ghosty_config::APPROX_BYTES_PER_TOKEN;
 
 /// Deterministic size measures for a run of prompt bytes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -72,7 +72,7 @@ impl Measures {
 pub enum SegmentProvenance {
     /// A compile-time constant shipped in the binary.
     Bundled { symbol: &'static str },
-    /// A file under `$CODEWHALE_HOME` that replaced a bundled constant, plus the
+    /// A file under `$GHOSTY_HOME` that replaced a bundled constant, plus the
     /// opt-in environment gate that allowed it.
     ConfigOverride {
         path: String,
@@ -354,7 +354,7 @@ fn classify(index: usize, text: &str, sources: &PreviewSources<'_>) -> SegmentPr
         .clone()
         .unwrap_or(BasePromptSource::Bundled);
     let mut parts = vec![base.provenance().label()];
-    if text.contains("<codewhale_user_constitution") {
+    if text.contains("<ghosty_user_constitution") {
         parts.push(match sources.user_constitution_path {
             Some(path) => SegmentProvenance::UserGlobalConstitution {
                 path: display_path(path, sources),
@@ -546,7 +546,7 @@ mod tests {
             &prompt,
             &PreviewSources {
                 base_prompt: Some(BasePromptSource::ConfigOverride {
-                    path: "/home/u/.codewhale/prompts/constitution.md".to_string(),
+                    path: "/home/u/.ghosty/prompts/constitution.md".to_string(),
                 }),
                 ..PreviewSources::default()
             },
@@ -574,7 +574,7 @@ mod tests {
     #[test]
     fn constitution_block_provenance_never_invents_a_path() {
         let prompt = blocks(&[
-            "# Constitution\n\n<codewhale_user_constitution source=\"user-global\">\nx\n</codewhale_user_constitution>",
+            "# Constitution\n\n<ghosty_user_constitution source=\"user-global\">\nx\n</ghosty_user_constitution>",
         ]);
         let unknown = preview(&prompt, &PreviewSources::default());
         let label = unknown.segments[0].provenance.label();
@@ -584,7 +584,7 @@ mod tests {
         let known = preview(
             &prompt,
             &PreviewSources {
-                user_constitution_path: Some(Path::new("/home/u/.codewhale/constitution.json")),
+                user_constitution_path: Some(Path::new("/home/u/.ghosty/constitution.json")),
                 ..PreviewSources::default()
             },
         );
@@ -616,7 +616,7 @@ mod tests {
 
     #[test]
     fn home_paths_are_masked_in_display_only() {
-        let raw = "constitution at /Users/someone/.codewhale/constitution.json";
+        let raw = "constitution at /Users/someone/.ghosty/constitution.json";
         let prompt = blocks(&[raw]);
         let preview = preview(
             &prompt,
@@ -625,7 +625,7 @@ mod tests {
                 ..PreviewSources::default()
             },
         );
-        assert!(preview.segments[0].text.contains("~/.codewhale"));
+        assert!(preview.segments[0].text.contains("~/.ghosty"));
         assert!(!preview.segments[0].text.contains("/Users/someone"));
         assert_eq!(preview.segments[0].measures.byte_len, raw.len());
     }

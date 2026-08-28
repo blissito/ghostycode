@@ -59,7 +59,7 @@ pub fn lines(app: &App, content_width: usize) -> Vec<Line<'static>> {
     lines.push(Line::from(""));
     // Prose on this screen wraps like prose on every other onboarding screen.
     // It used to be pushed as one unwrapped line, so at 40 columns the trust
-    // question rendered as "Should Codewhale work with the instruc" — severed
+    // question rendered as "Should Ghosty work with the instruc" — severed
     // mid-word, with nothing marking the cut. Asking someone to grant
     // filesystem trust while the question itself is truncated is the worst
     // place in the product for this to happen.
@@ -171,7 +171,7 @@ mod tests {
         }
         assert!(rail.contains("trust and continue"), "{rail}");
         assert!(rail.contains("continue without trusting"), "{rail}");
-        assert!(rail.contains("quit Codewhale"), "{rail}");
+        assert!(rail.contains("quit Ghosty"), "{rail}");
     }
 }
 

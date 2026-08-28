@@ -714,14 +714,14 @@ mod tests {
                     "type": "web_search_call",
                     "action": {
                         "type": "open_page",
-                        "url": "https://github.com/Hmbown/CodeWhale"
+                        "url": "https://github.com/blissito/ghostycode"
                     }
                 },
                 {
                     "type": "message",
                     "content": [{
                         "type": "output_text",
-                        "text": "Official repository: https://github.com/Hmbown/CodeWhale",
+                        "text": "Official repository: https://github.com/blissito/ghostycode",
                         "annotations": []
                     }]
                 }
@@ -732,12 +732,12 @@ mod tests {
 
         assert_eq!(
             parsed.answer.as_deref(),
-            Some("Official repository: https://github.com/Hmbown/CodeWhale")
+            Some("Official repository: https://github.com/blissito/ghostycode")
         );
         assert_eq!(parsed.citations.len(), 1);
         assert_eq!(
             parsed.citations[0].url,
-            "https://github.com/Hmbown/CodeWhale"
+            "https://github.com/blissito/ghostycode"
         );
     }
 

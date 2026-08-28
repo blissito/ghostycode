@@ -2,9 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use codewhale_command_contract::facets::CommandMediaContext;
-use codewhale_command_contract::handler::{CommandContexts, CommandHandler};
-use codewhale_command_contract::metadata::{CommandInfo, RegisterCommand};
+use ghosty_command_contract::facets::CommandMediaContext;
+use ghosty_command_contract::handler::{CommandContexts, CommandHandler};
+use ghosty_command_contract::metadata::{CommandInfo, RegisterCommand};
 
 use crate::commands::CommandResult;
 
@@ -86,14 +86,14 @@ mod tests {
         fn attach_media(
             &mut self,
             path: &Path,
-        ) -> Result<codewhale_command_contract::facets::MediaAttachmentReceipt, String> {
+        ) -> Result<ghosty_command_contract::facets::MediaAttachmentReceipt, String> {
             if path.extension().and_then(|ext| ext.to_str()) == Some("png") {
-                Ok(codewhale_command_contract::facets::MediaAttachmentReceipt {
+                Ok(ghosty_command_contract::facets::MediaAttachmentReceipt {
                     kind: "image".to_string(),
                     path: path.to_path_buf(),
                 })
             } else if path.extension().and_then(|ext| ext.to_str()) == Some("mp4") {
-                Ok(codewhale_command_contract::facets::MediaAttachmentReceipt {
+                Ok(ghosty_command_contract::facets::MediaAttachmentReceipt {
                     kind: "video".to_string(),
                     path: path.to_path_buf(),
                 })

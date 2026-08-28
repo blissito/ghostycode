@@ -7,13 +7,13 @@ import type { DocsTroubleshootingDict } from "../types";
  * never mixed into a structural move.
  */
 export const docsTroubleshooting: DocsTroubleshootingDict = {
-  metaTitle: "Troubleshooting · Codewhale Docs",
+  metaTitle: "Troubleshooting · Ghosty Docs",
   metaDescription:
     "Quick triage for common issues: hung turns, the offline queue, crash recovery, schema errors, MCP failures, and Docker notes.",
   bodyClassName: "text-ink-soft leading-relaxed",
   overviewTitle: "Troubleshooting",
   overviewLead:
-    "Start with quick triage: confirm the binary and config (codewhale --version, ~/.codewhale/config.toml), enable verbose logs with RUST_LOG=deepseek_cli=debug when needed (RUST_LOG=deepseek_cli::client=debug for HTTP retries/reconnects), and capture the current state of ~/.codewhale/sessions and ~/.codewhale/tasks.",
+    "Start with quick triage: confirm the binary and config (ghosty --version, ~/.ghosty/config.toml), enable verbose logs with RUST_LOG=deepseek_cli=debug when needed (RUST_LOG=deepseek_cli::client=debug for HTTP retries/reconnects), and capture the current state of ~/.ghosty/sessions and ~/.ghosty/tasks.",
   incidents: [
     [
       "Turn hangs or the stream stops",
@@ -21,11 +21,11 @@ export const docsTroubleshooting: DocsTroubleshootingDict = {
     ],
     [
       "Network outage / offline behavior",
-      "New prompts queue while offline, persisted to ~/.codewhale/sessions/checkpoints/offline_queue.json. Inspect with /queue list, restore connectivity, then re-send queued entries (/queue edit <n> plus Enter, or the normal input flow); the queue file clears when the queue empties.",
+      "New prompts queue while offline, persisted to ~/.ghosty/sessions/checkpoints/offline_queue.json. Inspect with /queue list, restore connectivity, then re-send queued entries (/queue edit <n> plus Enter, or the normal input flow); the queue file clears when the queue empties.",
     ],
     [
       "Crash recovery",
-      "The checkpoint lives at ~/.codewhale/sessions/checkpoints/latest.json; startup begins a fresh session unless --resume/--continue is supplied. Resume explicitly with codewhale --resume <id> or Ctrl+R in the TUI; if the checkpoint schema is newer than the binary supports, upgrade the binary or remove the stale checkpoint.",
+      "The checkpoint lives at ~/.ghosty/sessions/checkpoints/latest.json; startup begins a fresh session unless --resume/--continue is supplied. Resume explicitly with ghosty --resume <id> or Ctrl+R in the TUI; if the checkpoint schema is newer than the binary supports, upgrade the binary or remove the stale checkpoint.",
     ],
     [
       "Persistent state schema errors",
@@ -33,12 +33,12 @@ export const docsTroubleshooting: DocsTroubleshootingDict = {
     ],
     [
       "MCP / tool execution failures",
-      "Validate the ~/.codewhale/mcp.json schema and server command paths, confirm the server process starts manually, and check sandbox denials in TUI history/logs. Use /mcp validate for diagnostics, temporarily disable a failing server to isolate the issue, and re-enable after verification.",
+      "Validate the ~/.ghosty/mcp.json schema and server command paths, confirm the server process starts manually, and check sandbox denials in TUI history/logs. Use /mcp validate for diagnostics, temporarily disable a failing server to isolate the issue, and re-enable after verification.",
     ],
   ],
   dockerTitle: "Docker notes",
   dockerLead:
-    "Each release publishes a multi-arch Linux image to GitHub Container Registry. The default image is a conservative runtime image: it runs as the non-root codewhale user (UID/GID 1000:1000), grants no passwordless sudo, and keeps user state in a volume mounted at /home/codewhale/.codewhale. Pin a release tag instead of latest for reproducible installs.",
+    "Each release publishes a multi-arch Linux image to GitHub Container Registry. The default image is a conservative runtime image: it runs as the non-root ghosty user (UID/GID 1000:1000), grants no passwordless sudo, and keeps user state in a volume mounted at /home/ghosty/.ghosty. Pin a release tag instead of latest for reproducible installs.",
   dockerToolboxNote:
     "When a project needs apt-get, compiler toolchains, or package managers inside the container, do not change the default image contract — build an explicit toolbox image from docs/examples/Dockerfile.toolbox, and use one named state volume per project so sessions, config, and the offline queue do not bleed across workspaces. Never bake API keys or SSH private keys into custom images.",
   sourceNote:

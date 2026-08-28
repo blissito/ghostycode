@@ -6,4 +6,4 @@
 //! (`"thread-…"` / `"session-…"`) so existing `state.json` / `threads/`
 //! files need no migration.
 
-pub use codewhale_protocol::ids::{SessionId, ThreadId};
+pub use ghosty_protocol::ids::{SessionId, ThreadId};

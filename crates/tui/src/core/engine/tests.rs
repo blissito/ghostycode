@@ -3643,7 +3643,7 @@ async fn started_nonretryable_continuation_failure_blocks_goal_with_bounded_reas
     assert!(blocker.contains("resume the goal"), "{blocker}");
     assert!(!blocker.contains(leaked_secret), "{blocker}");
     assert!(
-        blocker.contains(codewhale_config::persistence::REDACTED),
+        blocker.contains(ghosty_config::persistence::REDACTED),
         "{blocker}"
     );
     assert!(
@@ -5116,8 +5116,8 @@ fn empty_allowed_tools_surface_is_empty_and_sends_no_tools_field() {
 fn structured_state_block_carries_stable_state_without_work() {
     let state = StructuredState {
         mode_label: "Agent".to_string(),
-        workspace: PathBuf::from("/workspace/codewhale"),
-        cwd: Some(PathBuf::from("/workspace/codewhale")),
+        workspace: PathBuf::from("/workspace/ghosty"),
+        cwd: Some(PathBuf::from("/workspace/ghosty")),
         working_set_summary: None,
         subagent_snapshots: Vec::new(),
     };
@@ -5141,8 +5141,8 @@ fn env_only_auth_error_gets_recovery_hint() {
 
     assert!(message.contains("DEEPSEEK_API_KEY"));
     assert!(message.contains("no saved config key is present"));
-    assert!(message.contains("codewhale auth status"));
-    assert!(message.contains("codewhale auth set --provider deepseek"));
+    assert!(message.contains("ghosty auth status"));
+    assert!(message.contains("ghosty auth set --provider deepseek"));
 }
 
 #[test]
@@ -5163,7 +5163,7 @@ fn config_auth_error_does_not_blame_env() {
 
 #[test]
 fn plugin_tools_dir_honors_missing_custom_directory_without_fallback() {
-    let missing = PathBuf::from("definitely-missing-codewhale-plugin-dir");
+    let missing = PathBuf::from("definitely-missing-ghosty-plugin-dir");
     let tools_config = crate::config::ToolsConfig {
         plugin_dir: Some(missing.to_string_lossy().to_string()),
         ..Default::default()
@@ -5257,18 +5257,17 @@ fn parallel_batch_indices(batch: &ToolExecutionBatch) -> Vec<usize> {
     }
 }
 
-fn ask_rule_engine(command: &str) -> codewhale_execpolicy::ExecPolicyEngine {
-    codewhale_execpolicy::ExecPolicyEngine::with_rulesets(vec![
-        codewhale_execpolicy::Ruleset::user(vec![], vec![])
-            .with_ask_rules(vec![codewhale_execpolicy::ToolAskRule::exec_shell(command)]),
+fn ask_rule_engine(command: &str) -> ghosty_execpolicy::ExecPolicyEngine {
+    ghosty_execpolicy::ExecPolicyEngine::with_rulesets(vec![
+        ghosty_execpolicy::Ruleset::user(vec![], vec![])
+            .with_ask_rules(vec![ghosty_execpolicy::ToolAskRule::exec_shell(command)]),
     ])
 }
 
-fn file_ask_rule_engine(tool: &str, path: &str) -> codewhale_execpolicy::ExecPolicyEngine {
-    codewhale_execpolicy::ExecPolicyEngine::with_rulesets(vec![
-        codewhale_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(vec![
-            codewhale_execpolicy::ToolAskRule::file_path(tool, path),
-        ]),
+fn file_ask_rule_engine(tool: &str, path: &str) -> ghosty_execpolicy::ExecPolicyEngine {
+    ghosty_execpolicy::ExecPolicyEngine::with_rulesets(vec![
+        ghosty_execpolicy::Ruleset::user(vec![], vec![])
+            .with_ask_rules(vec![ghosty_execpolicy::ToolAskRule::file_path(tool, path)]),
     ])
 }
 
@@ -8414,11 +8413,11 @@ fn exec_shell_ask_rule_decision_ignores_unmatched_command() {
 
 #[test]
 fn exec_shell_allow_rule_decision_allows_only_exact_command_in_scoped_repo() {
-    let rule = codewhale_execpolicy::ToolAskRule::exec_shell("cargo test")
+    let rule = ghosty_execpolicy::ToolAskRule::exec_shell("cargo test")
         .into_exact_workspace_allow("/repo");
     let config = EngineConfig {
-        exec_policy_engine: codewhale_execpolicy::ExecPolicyEngine::with_rulesets(vec![
-            codewhale_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(vec![rule]),
+        exec_policy_engine: ghosty_execpolicy::ExecPolicyEngine::with_rulesets(vec![
+            ghosty_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(vec![rule]),
         ]),
         ..EngineConfig::default()
     };
@@ -8572,13 +8571,13 @@ fn apply_patch_allow_requires_every_touched_path_to_match() {
     let rules = ["src/a.rs", "src/b.rs"]
         .into_iter()
         .map(|path| {
-            codewhale_execpolicy::ToolAskRule::file_path("apply_patch", path)
+            ghosty_execpolicy::ToolAskRule::file_path("apply_patch", path)
                 .into_exact_workspace_allow("/repo")
         })
         .collect();
     let config = EngineConfig {
-        exec_policy_engine: codewhale_execpolicy::ExecPolicyEngine::with_rulesets(vec![
-            codewhale_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(rules),
+        exec_policy_engine: ghosty_execpolicy::ExecPolicyEngine::with_rulesets(vec![
+            ghosty_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(rules),
         ]),
         ..EngineConfig::default()
     };
@@ -8732,8 +8731,7 @@ async fn runtime_goal_updates_emit_ui_snapshot() {
             "verified with focused tests".to_string(),
             crate::tools::goal::GoalCompletionVerification {
                 status: "passed".to_string(),
-                check: "cargo test -p codewhale-tui runtime_goal_updates_emit_ui_snapshot"
-                    .to_string(),
+                check: "cargo test -p ghosty-tui runtime_goal_updates_emit_ui_snapshot".to_string(),
                 summary: "focused runtime goal snapshot test passed".to_string(),
                 ..Default::default()
             },
@@ -9602,7 +9600,7 @@ async fn measure_production_mode_tool_catalogs() -> serde_json::Value {
     fs::create_dir_all(&home).expect("create isolated home");
     let _home = EnvVarGuard::set("HOME", &home);
     let _userprofile = EnvVarGuard::set("USERPROFILE", &home);
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty"));
     // Interpreter-backed advanced tools are intentionally excluded from this
     // cross-platform built-in profile. The production planner still owns that
     // decision; a deliberately nonexistent PATH root makes its real dependency
@@ -9611,7 +9609,7 @@ async fn measure_production_mode_tool_catalogs() -> serde_json::Value {
     // The macOS Vision OCR probe is a framework check that ignores PATH, so
     // the profile neutralizes it explicitly: every host presents no local OCR
     // capability here, matching the no-host-interpreters PATH pin above.
-    let _ocr = EnvVarGuard::set("CODEWHALE_LOCAL_OCR_UNAVAILABLE", "1");
+    let _ocr = EnvVarGuard::set("GHOSTY_LOCAL_OCR_UNAVAILABLE", "1");
 
     let api_config = Config {
         api_key: Some("local-runtime-contract-fixture".to_string()),
@@ -9639,7 +9637,7 @@ async fn measure_production_mode_tool_catalogs() -> serde_json::Value {
         let route = TurnRouteContext {
             provider: ApiProvider::Deepseek,
             model: DEFAULT_TEXT_MODEL.to_string(),
-            capabilities: codewhale_config::route::RouteCapabilities::default(),
+            capabilities: ghosty_config::route::RouteCapabilities::default(),
             limits: None,
             client: engine.deepseek_client.clone(),
             api_config: Box::new(api_config.clone()),
@@ -9772,8 +9770,8 @@ fn print_mode_runtime_contract_metrics() {
     fs::create_dir_all(&home).expect("create isolated home");
     let _home = EnvVarGuard::set("HOME", &home);
     let _userprofile = EnvVarGuard::set("USERPROFILE", &home);
-    let codewhale_home = home.join(".codewhale");
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = home.join(".ghosty");
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     // Keep the model-visible shell fact stable across developer and CI hosts
     // while exercising the exact-path contract used at runtime.
     let _shell = EnvVarGuard::set("SHELL", "/bin/bash");
@@ -9833,7 +9831,7 @@ fn representative_prompt(
         PromptSessionContext {
             user_memory_block,
             goal_objective,
-            skills_scan_codewhale_only: true,
+            skills_scan_ghosty_only: true,
             mode: AppMode::Agent,
             ..PromptSessionContext::default()
         },
@@ -9906,14 +9904,14 @@ fn measure_representative_runtime_context()
     let tmp = tempdir().expect("tempdir");
     let workspace = tmp.path().join("workspace");
     let home = tmp.path().join("home");
-    let skills_dir = workspace.join(".codewhale").join("skills");
+    let skills_dir = workspace.join(".ghosty").join("skills");
     fs::create_dir_all(&workspace).expect("create isolated workspace");
     fs::create_dir_all(&home).expect("create isolated home");
 
     let _home = EnvVarGuard::set("HOME", &home);
     let _userprofile = EnvVarGuard::set("USERPROFILE", &home);
-    let codewhale_home = home.join(".codewhale");
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = home.join(".ghosty");
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     // Keep the model-visible shell fact stable across developer and CI hosts
     // while exercising the exact-path contract used at runtime.
     let _shell = EnvVarGuard::set("SHELL", "/bin/bash");
@@ -10135,7 +10133,7 @@ fn measure_unchanged_prompt_skill_discovery() -> (
     let tmp = tempdir().expect("tempdir");
     let workspace = tmp.path().join("workspace");
     let home = tmp.path().join("home");
-    let skills_dir = workspace.join(".codewhale").join("skills");
+    let skills_dir = workspace.join(".ghosty").join("skills");
     let skill = skills_dir.join("receipt-demo");
     fs::create_dir_all(&skill).expect("create skill directory");
     fs::create_dir_all(&home).expect("create isolated home");
@@ -10147,8 +10145,8 @@ fn measure_unchanged_prompt_skill_discovery() -> (
 
     let _home = EnvVarGuard::set("HOME", &home);
     let _userprofile = EnvVarGuard::set("USERPROFILE", &home);
-    let codewhale_home = home.join(".codewhale");
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = home.join(".ghosty");
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
 
     crate::skills::clear_skill_discovery_cache();
     crate::skills::reset_discovery_metrics();
@@ -10663,7 +10661,7 @@ async fn run_shell_command_op_executes_without_approval_modal() {
     let _guard = lock_test_env();
     let tmp = tempdir().expect("tempdir");
     let audit_path = tmp.path().join("tool-audit.jsonl");
-    let _audit = EnvVarGuard::set("CODEWHALE_TOOL_AUDIT_LOG", &audit_path);
+    let _audit = EnvVarGuard::set("GHOSTY_TOOL_AUDIT_LOG", &audit_path);
     let (mut engine, handle) = Engine::new(EngineConfig::default(), &Config::default());
     engine.session.allow_shell = false;
     engine.config.allow_shell = false;
@@ -11602,7 +11600,7 @@ async fn full_access_auto_approves_non_bypassable_registered_tools() {
 async fn full_access_permission_allow_cannot_bypass_repo_law() {
     let _lock = lock_test_env();
     let workspace = tempdir().expect("tempdir");
-    let law_dir = workspace.path().join(".codewhale");
+    let law_dir = workspace.path().join(".ghosty");
     fs::create_dir_all(&law_dir).expect("create law directory");
     fs::write(
         law_dir.join("constitution.json"),
@@ -11615,15 +11613,15 @@ async fn full_access_permission_allow_cannot_bypass_repo_law() {
     )
     .expect("write repo law fixture");
     let target = workspace.path().join("CHANGELOG.md");
-    let allow_rule = codewhale_execpolicy::ToolAskRule::file_path("write_file", "CHANGELOG.md")
+    let allow_rule = ghosty_execpolicy::ToolAskRule::file_path("write_file", "CHANGELOG.md")
         .into_exact_workspace_allow(workspace.path().to_string_lossy().into_owned());
     let engine_config = EngineConfig {
         model: crate::config::DEFAULT_TEXT_MODEL.to_string(),
         workspace: workspace.path().to_path_buf(),
         snapshots_enabled: false,
         subagents_enabled: false,
-        exec_policy_engine: codewhale_execpolicy::ExecPolicyEngine::with_rulesets(vec![
-            codewhale_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(vec![allow_rule]),
+        exec_policy_engine: ghosty_execpolicy::ExecPolicyEngine::with_rulesets(vec![
+            ghosty_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(vec![allow_rule]),
         ]),
         ..EngineConfig::default()
     };
@@ -11846,7 +11844,7 @@ async fn full_access_permission_allow_cannot_bypass_background_catastrophic_floo
     // sentinel. The policy-level sibling tests exercise real destructive
     // command shapes directly without ever dispatching them to a shell.
     let command = format!("echo \"rm -rf /\" > \"{}\"", victim.display());
-    let allow_rule = codewhale_execpolicy::ToolAskRule::exec_shell(command.clone())
+    let allow_rule = ghosty_execpolicy::ToolAskRule::exec_shell(command.clone())
         .into_exact_workspace_allow(workspace.path().to_string_lossy().into_owned());
     let tool_input = json!({
         "action": "run",
@@ -11915,8 +11913,8 @@ async fn full_access_permission_allow_cannot_bypass_background_catastrophic_floo
         workspace: workspace.path().to_path_buf(),
         snapshots_enabled: false,
         subagents_enabled: false,
-        exec_policy_engine: codewhale_execpolicy::ExecPolicyEngine::with_rulesets(vec![
-            codewhale_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(vec![allow_rule]),
+        exec_policy_engine: ghosty_execpolicy::ExecPolicyEngine::with_rulesets(vec![
+            ghosty_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(vec![allow_rule]),
         ]),
         ..EngineConfig::default()
     };
@@ -13195,8 +13193,8 @@ fn turn_tool_context_uses_planned_authority_and_route_not_installed_session() {
     let route = TurnRouteContext {
         provider: ApiProvider::Deepseek,
         model: "planned-next-model".to_string(),
-        capabilities: codewhale_config::route::RouteCapabilities::default(),
-        limits: Some(codewhale_config::route::RouteLimits {
+        capabilities: ghosty_config::route::RouteCapabilities::default(),
+        limits: Some(ghosty_config::route::RouteLimits {
             context_tokens: Some(123_456),
             input_tokens: None,
             output_tokens: Some(4_096),
@@ -13647,7 +13645,7 @@ fn messages_with_turn_metadata_returns_stored_session_messages() {
 
 // === To-do state reaches the model through its own tool results ===
 //
-// Codewhale has one To-do list. The model learns what is on it the way it
+// Ghosty has one To-do list. The model learns what is on it the way it
 // learns anything else: from the result its own `work_update` call returned,
 // which is ordinary persisted history. No request re-states the list, on any
 // step. The complete list stays visible in the UI, which is a different
@@ -13745,7 +13743,7 @@ async fn a_non_empty_todo_adds_nothing_to_the_request_messages() {
             !text.contains("write the renderer"),
             "request re-stated an item: {text}"
         );
-        assert!(!text.contains("codewhale:work"), "{text}");
+        assert!(!text.contains("ghosty:work"), "{text}");
     }
 }
 
@@ -13844,7 +13842,7 @@ async fn provider_request_bodies_never_carry_the_todo_list() {
             "a provider request restated the To-do list: {body}"
         );
         assert!(!body.contains("To-do ("), "{body}");
-        assert!(!body.contains("codewhale:work"), "{body}");
+        assert!(!body.contains("ghosty:work"), "{body}");
     }
 
     handle.send(Op::Shutdown).await.expect("shutdown engine");
@@ -13857,7 +13855,7 @@ async fn provider_request_bodies_never_carry_the_todo_list() {
 fn turn_start_structured_state_carries_no_todo_section() {
     let state = StructuredState {
         mode_label: "Agent".to_string(),
-        workspace: PathBuf::from("/workspace/codewhale"),
+        workspace: PathBuf::from("/workspace/ghosty"),
         cwd: None,
         working_set_summary: None,
         subagent_snapshots: Vec::new(),
@@ -13891,7 +13889,7 @@ async fn fork_state_block_reuses_the_snapshot_body() {
 
     let state = StructuredState {
         mode_label: "Agent".to_string(),
-        workspace: PathBuf::from("/workspace/codewhale"),
+        workspace: PathBuf::from("/workspace/ghosty"),
         cwd: None,
         working_set_summary: None,
         subagent_snapshots: Vec::new(),
@@ -14594,9 +14592,9 @@ async fn sync_session_projects_persisted_subagent_handoff_for_headless_restore()
     let (engine, handle) = Engine::new(config, &Config::default());
     let payload = concat!(
         "Child result retained.\nCheckpoint: engine restore is covered.\n",
-        "<codewhale:subagent.done>{\"agent_id\":\"agent_headless\",",
+        "<ghosty:subagent.done>{\"agent_id\":\"agent_headless\",",
         "\"status\":\"completed\",\"summary_location\":\"previous_line\"}",
-        "</codewhale:subagent.done>",
+        "</ghosty:subagent.done>",
     );
     let messages = vec![
         Message {
@@ -15281,7 +15279,7 @@ fn route_context_budget_uses_shared_budget_service() {
 #[test]
 fn route_context_budget_prefers_resolved_route_limits() {
     let _lock = lock_test_env();
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(128_000),
         input_tokens: None,
         output_tokens: Some(32_768),
@@ -15302,7 +15300,7 @@ fn route_context_budget_prefers_resolved_route_limits() {
 #[test]
 fn route_input_limit_blocks_oversized_preflight_before_transport() {
     let _lock = lock_test_env();
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(1_000_000),
         input_tokens: Some(128_000),
         output_tokens: Some(64_000),
@@ -15341,7 +15339,7 @@ fn kimi_catalog_output_ceiling_does_not_collapse_input_budget() {
     // context window and provider output ceiling. That ceiling must not be
     // reserved as though every normal turn requested 262K of output; the
     // integrated Kimi route cap is 32K.
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(262_144),
         input_tokens: None,
         output_tokens: Some(262_144),
@@ -15359,7 +15357,7 @@ fn kimi_catalog_output_ceiling_does_not_collapse_input_budget() {
 #[test]
 fn effective_max_output_tokens_for_route_caps_to_route_output_limit() {
     let _lock = lock_test_env();
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(1_000_000),
         input_tokens: None,
         output_tokens: Some(8_192),
@@ -15378,7 +15376,7 @@ fn effective_max_output_tokens_for_route_caps_to_route_output_limit() {
 #[test]
 fn effective_max_output_tokens_for_route_caps_to_context_window() {
     let _lock = lock_test_env();
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(32_000),
         input_tokens: None,
         output_tokens: None,
@@ -15400,7 +15398,7 @@ fn effective_max_output_tokens_for_route_caps_to_context_window() {
 #[test]
 fn effective_max_output_tokens_for_route_keeps_tiny_window_positive() {
     let _lock = lock_test_env();
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(2_048),
         input_tokens: None,
         output_tokens: None,
@@ -15419,7 +15417,7 @@ fn effective_max_output_tokens_for_route_keeps_tiny_window_positive() {
 #[test]
 fn codex_route_without_output_metadata_uses_oauth_capability_floor() {
     let _lock = lock_test_env();
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(272_000),
         input_tokens: None,
         output_tokens: None,
@@ -15457,17 +15455,17 @@ fn effective_max_output_tokens_caps_api_request_for_large_window_models() {
 #[test]
 fn reasoning_max_does_not_add_a_second_deepseek_v4_output_reservation() {
     let _lock = lock_test_env();
-    let _codewhale = EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+    let _ghosty = EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
     let _deepseek = EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(327_680),
         input_tokens: None,
         output_tokens: None,
     };
     let cap =
         effective_max_output_tokens_for_route(ApiProvider::Vllm, "DeepSeek-V4-Flash", Some(limits));
-    let request = codewhale_core::request::prepare_primary_turn_request(
-        codewhale_core::request::PrimaryTurnRequest {
+    let request = ghosty_core::request::prepare_primary_turn_request(
+        ghosty_core::request::PrimaryTurnRequest {
             model: "DeepSeek-V4-Flash".to_string(),
             messages: Vec::new(),
             max_tokens: cap,
@@ -15657,7 +15655,7 @@ fn evidence_bounded_preview_is_not_recompacted() {
 fn codex_tool_retention_uses_oauth_route_window_not_asmall_contract_model_window() {
     let content = "route-effective context\n".repeat(900);
     let output = ToolResult::success(content.clone());
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(272_000),
         input_tokens: None,
         output_tokens: None,
@@ -15820,14 +15818,14 @@ fn task_gate_run_results_are_structured_before_context_insertion() {
             "gate": {
                 "id": "gate_abcd1234",
                 "gate": "clippy",
-                "command": "cargo clippy -p codewhale-tui --all-targets --all-features --locked -- -D warnings",
+                "command": "cargo clippy -p ghosty-tui --all-targets --all-features --locked -- -D warnings",
                 "cwd": "/repo",
                 "exit_code": 1,
                 "status": "failed",
                 "classification": "compile_failure",
                 "duration_ms": 5000,
                 "summary": "warning promoted to error in verifier.rs",
-                "log_path": "/repo/.codewhale/runtime/gate.log",
+                "log_path": "/repo/.ghosty/runtime/gate.log",
                 "recorded_at": "2026-06-01T12:00:00Z"
             },
             "stdout_summary": "",
@@ -15840,9 +15838,9 @@ fn task_gate_run_results_are_structured_before_context_insertion() {
 
     assert!(context.contains("[task_gate_run result summarized for context]"));
     assert!(context.contains("gate: clippy, status: failed, exit_code: 1"));
-    assert!(context.contains("cargo clippy -p codewhale-tui"));
+    assert!(context.contains("cargo clippy -p ghosty-tui"));
     assert!(context.contains("summary: warning promoted to error"));
-    assert!(context.contains("log_path: /repo/.codewhale/runtime/gate.log"));
+    assert!(context.contains("log_path: /repo/.ghosty/runtime/gate.log"));
 }
 
 #[test]
@@ -16234,7 +16232,7 @@ fn turn_metadata_is_byte_identical_across_identical_consecutive_turns() {
     let prompt_context = NextTurnPromptContext::for_planned_turn(
         ApiProvider::Deepseek,
         "deepseek-v4-flash".to_string(),
-        Some(codewhale_config::route::RouteLimits {
+        Some(ghosty_config::route::RouteLimits {
             context_tokens: Some(10_000),
             input_tokens: None,
             output_tokens: Some(512),
@@ -16509,7 +16507,7 @@ fn turn_metadata_names_the_effective_sandbox_posture() {
         "{external_meta}"
     );
     assert!(
-        external_meta.contains("isolation unverified by Codewhale"),
+        external_meta.contains("isolation unverified by Ghosty"),
         "{external_meta}"
     );
     assert!(
@@ -17942,7 +17940,7 @@ fn filter_tool_call_delta_strips_bracket_marker() {
 fn filter_tool_call_delta_strips_deepseek_xml_marker() {
     let mut in_block = false;
     let visible = filter_tool_call_delta(
-        "before <codewhale:tool_call name=\"x\">payload</codewhale:tool_call> after",
+        "before <ghosty:tool_call name=\"x\">payload</ghosty:tool_call> after",
         &mut in_block,
     );
     assert!(!in_block);
@@ -18458,7 +18456,7 @@ fn sleep_resume_respects_budget_and_cancellation() {
 // Terminal-Bench 2.1 on the 0.9.4 bundle forfeited tasks when the DeepSeek
 // stream dropped mid-response ("error decoding response body" after partial
 // content): the #103 policy surfaced the warning and failed the turn, and
-// `codewhale exec` exited 1. In a headless host no operator watches the
+// `ghosty exec` exited 1. In a headless host no operator watches the
 // partial deltas and the fragment is never committed, so the turn loop now
 // re-issues the request instead (bounded by MAX_STREAM_RETRIES), exactly
 // like the #2990 sleep-resume.
@@ -20404,7 +20402,7 @@ async fn bootstrap_and_retry_mcp_use_the_engine_owned_pool() {
     let config_path = tmp.path().join("mcp.json");
     std::fs::write(
         &config_path,
-        r#"{"servers":{"disabled":{"command":"node","disabled":true},"alpha":{"command":"codewhale-mcp-missing-alpha-9f8e7d6c"},"beta":{"command":"codewhale-mcp-missing-beta-9f8e7d6c"}}}"#,
+        r#"{"servers":{"disabled":{"command":"node","disabled":true},"alpha":{"command":"ghosty-mcp-missing-alpha-9f8e7d6c"},"beta":{"command":"ghosty-mcp-missing-beta-9f8e7d6c"}}}"#,
     )
     .expect("MCP config");
     let engine_config = EngineConfig {
@@ -20787,7 +20785,7 @@ async fn background_completion_after_a_turn_is_delivered_once_on_the_next_turn()
         &std::fs::read(evidence_path).expect("read exact completion evidence"),
     )
     .expect("parse completion evidence");
-    assert_eq!(evidence["schema"], "codewhale.shell_completion.evidence.v1");
+    assert_eq!(evidence["schema"], "ghosty.shell_completion.evidence.v1");
     assert_eq!(evidence["stdout"]["encoding"], "utf-8");
     assert_eq!(evidence["stdout"]["content"], stdout_body);
     assert_eq!(evidence["stderr"]["encoding"], "utf-8");

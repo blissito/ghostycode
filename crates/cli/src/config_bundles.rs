@@ -1,7 +1,7 @@
-//! Portable config bundles: `codewhale config import` / `config export --portable`.
+//! Portable config bundles: `ghosty config import` / `config export --portable`.
 //!
 //! A bundle is a TOML or JSON document carrying a portable subset of a
-//! CodeWhale configuration (preferences, harness profiles, provider
+//! GhostyCode configuration (preferences, harness profiles, provider
 //! non-secret settings, project/global sections) between machines. The
 //! envelope is versioned and strict (`deny_unknown_fields`), secrets are
 //! rejected by key name and value shape (never echoed), parsing is bounded,
@@ -9,7 +9,7 @@
 //!
 //! Security contract:
 //! - No secret ever round-trips: fields whose key matches
-//!   [`codewhale_config::is_sensitive_config_key`] are rejected on import and
+//!   [`ghosty_config::is_sensitive_config_key`] are rejected on import and
 //!   dropped on export, and bare credential-shaped values are rejected by
 //!   value shape. Rejection messages name the field, never the value.
 //! - Input size is capped (5 MiB, matching the skill installer's cap).
@@ -25,14 +25,14 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 
-use codewhale_config::{ConfigToml, is_sensitive_config_key};
+use ghosty_config::{ConfigToml, is_sensitive_config_key};
 
 /// Maximum accepted bundle size, both for reads and remote fetches.
 /// Matches the skill installer's 5 MiB cap.
 pub const MAX_BUNDLE_BYTES: u64 = 5 * 1024 * 1024;
 
 /// Envelope `kind` value required by every bundle.
-pub const BUNDLE_KIND: &str = "codewhale.portable-config";
+pub const BUNDLE_KIND: &str = "ghosty.portable-config";
 
 /// Envelope `schema_version` accepted by this build.
 pub const BUNDLE_SCHEMA_VERSION: u64 = 1;
@@ -328,13 +328,13 @@ fn string_secret_reason(text: &str) -> Option<String> {
             "value has the shape of a credential (prefix {prefix:?} redacted)"
         ));
     }
-    if text.contains(codewhale_config::persistence::REDACTED) {
+    if text.contains(ghosty_config::persistence::REDACTED) {
         // A placeholder is the residue of redaction, never a real setting;
         // exporting it would carry nothing and importing it would write the
         // placeholder into the live document.
         return Some("value contains a redaction placeholder".to_string());
     }
-    if codewhale_config::persistence::redact_secrets(text) != text {
+    if ghosty_config::persistence::redact_secrets(text) != text {
         return Some("value contains credential-shaped text".to_string());
     }
     None
@@ -645,9 +645,9 @@ fn section_applies(section: &str, scope: BundleScope) -> bool {
 /// Which document an import/export targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BundleScope {
-    /// The user-global config (`~/.codewhale/config.toml` by default).
+    /// The user-global config (`~/.ghosty/config.toml` by default).
     Global,
-    /// The workspace-scoped config (`<repo>/.codewhale/config.toml`).
+    /// The workspace-scoped config (`<repo>/.ghosty/config.toml`).
     Project,
 }
 
@@ -662,7 +662,7 @@ impl BundleScope {
 }
 
 fn validate_scope_target(scope: BundleScope, target: &Path) -> Result<()> {
-    let workspace_scoped = codewhale_config::config_path_is_workspace_scoped(target);
+    let workspace_scoped = ghosty_config::config_path_is_workspace_scoped(target);
     match (scope, workspace_scoped) {
         (BundleScope::Project, false) => bail!(
             "--project requires a workspace config ({} is the user-global document)",
@@ -738,7 +738,7 @@ pub fn fetch_bundle(url: &str) -> Result<Vec<u8>> {
     validate_bundle_url(&current_url)?;
     let initial_scheme = current_url.scheme().to_string();
 
-    let client = codewhale_release::platform_blocking_http_client_builder()
+    let client = ghosty_release::platform_blocking_http_client_builder()
         .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS))
         // Redirect targets must pass the same scheme/host policy as the
         // initial request, so redirects are followed explicitly below.
@@ -1008,7 +1008,7 @@ pub struct ImportReceipt {
 /// construction: it carries only key paths and counts, never values.
 pub fn apply_bundle(
     bundle: &PortableBundle,
-    store: &mut codewhale_config::ConfigStore,
+    store: &mut ghosty_config::ConfigStore,
     scope: BundleScope,
     workspace: &Path,
 ) -> Result<ImportReceipt> {
@@ -1017,7 +1017,7 @@ pub fn apply_bundle(
 
 fn apply_bundle_with<F>(
     bundle: &PortableBundle,
-    store: &mut codewhale_config::ConfigStore,
+    store: &mut ghosty_config::ConfigStore,
     scope: BundleScope,
     workspace: &Path,
     apply: F,
@@ -1025,7 +1025,7 @@ fn apply_bundle_with<F>(
 where
     F: FnOnce(
         &PortableBundle,
-        &mut codewhale_config::ConfigStore,
+        &mut ghosty_config::ConfigStore,
         BundleScope,
         &Path,
         &mut bool,
@@ -1134,7 +1134,7 @@ fn rollback_import_target(
 
 fn apply_entries(
     bundle: &PortableBundle,
-    store: &mut codewhale_config::ConfigStore,
+    store: &mut ghosty_config::ConfigStore,
     scope: BundleScope,
     workspace: &Path,
     target_written: &mut bool,
@@ -1336,7 +1336,7 @@ pub fn require_import_consent(yes: bool, plan: &ImportPlan) -> Result<()> {
 // CLI surface
 // ---------------------------------------------------------------------------
 
-/// Arguments for `codewhale config import`.
+/// Arguments for `ghosty config import`.
 #[derive(Debug, clap::Args)]
 pub struct ImportArgs {
     /// Bundle source: a file path, an HTTPS URL, or `-` for stdin.
@@ -1352,7 +1352,7 @@ pub struct ImportArgs {
     project: bool,
 }
 
-/// Arguments for `codewhale config export --portable`.
+/// Arguments for `ghosty config export --portable`.
 #[derive(Debug, clap::Args)]
 pub struct ExportArgs {
     /// Emit a portable, secret-free bundle (required flag; plain `export`
@@ -1371,7 +1371,7 @@ pub struct ExportArgs {
 /// Run `config import`.
 pub fn run_import(
     args: &ImportArgs,
-    store: &mut codewhale_config::ConfigStore,
+    store: &mut ghosty_config::ConfigStore,
     workspace: &Path,
 ) -> Result<()> {
     let scope = if args.project {
@@ -1461,7 +1461,7 @@ pub fn run_import(
 }
 
 /// Run `config export --portable`.
-pub fn run_export(args: &ExportArgs, store: &codewhale_config::ConfigStore) -> Result<()> {
+pub fn run_export(args: &ExportArgs, store: &ghosty_config::ConfigStore) -> Result<()> {
     if !args.portable {
         bail!("config export requires --portable; plain export is not defined yet");
     }
@@ -1474,13 +1474,13 @@ pub fn run_export(args: &ExportArgs, store: &codewhale_config::ConfigStore) -> R
     let metadata = BundleMetadata {
         name: None,
         created_at: Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-        generator: Some(format!("codewhale {}", env!("CARGO_PKG_VERSION"))),
+        generator: Some(format!("ghosty {}", env!("CARGO_PKG_VERSION"))),
     };
     let bundle = export_bundle(&store.config, scope, metadata)?;
     let body = serialize_bundle(&bundle)?;
     match &args.out {
         Some(path) => {
-            codewhale_config::persistence::atomic_write(path, body.as_bytes())
+            ghosty_config::persistence::atomic_write(path, body.as_bytes())
                 .with_context(|| format!("writing bundle to {}", path.display()))?;
             println!("wrote portable bundle to {}", path.display());
         }
@@ -1499,13 +1499,13 @@ pub fn run_export(args: &ExportArgs, store: &codewhale_config::ConfigStore) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codewhale_config::ConfigStore;
+    use ghosty_config::ConfigStore;
     use std::io::Write;
     use std::net::{Ipv4Addr, TcpListener};
 
     const VALID_TOML: &str = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [metadata]
 name = "team-baseline"
@@ -1526,7 +1526,7 @@ output_mode = "plain"
     fn valid_bundle_parses_and_validates() {
         let bundle = sample_bundle();
         assert_eq!(bundle.schema_version, 1);
-        assert_eq!(bundle.kind, "codewhale.portable-config");
+        assert_eq!(bundle.kind, "ghosty.portable-config");
         assert_eq!(bundle.metadata.name.as_deref(), Some("team-baseline"));
         assert_eq!(bundle.preferences.entries.len(), 2);
     }
@@ -1535,7 +1535,7 @@ output_mode = "plain"
     fn unknown_envelope_fields_fail_the_parse() {
         let text = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 sneaky_extra = true
 "#;
         let err = parse_bundle_str(text, "test.toml").expect_err("unknown field must fail");
@@ -1550,14 +1550,14 @@ kind = \"something-else\"\n";
         let err = parse_bundle_str(bad_kind, "t.toml").expect_err("kind must match");
         assert!(err.to_string().contains("kind"), "{err:#}");
 
-        let bad_version = "schema_version = 99\nkind = \"codewhale.portable-config\"\n";
+        let bad_version = "schema_version = 99\nkind = \"ghosty.portable-config\"\n";
         let err = parse_bundle_str(bad_version, "t.toml").expect_err("schema version must match");
         assert!(err.to_string().contains("schema_version"), "{err:#}");
     }
 
     #[test]
     fn json_bundles_parse_when_the_document_is_json() {
-        let json = r#"{"schema_version": 1, "kind": "codewhale.portable-config",
+        let json = r#"{"schema_version": 1, "kind": "ghosty.portable-config",
             "preferences": {"verbosity": "quiet"}}"#;
         let bundle = parse_bundle_str(json, "bundle.json").expect("json bundle");
         assert_eq!(bundle.preferences.entries.len(), 1);
@@ -1574,7 +1574,7 @@ kind = \"something-else\"\n";
     fn credential_keys_are_rejected_by_name() {
         let text = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 api_key = "value-is-never-echoed"
@@ -1597,7 +1597,7 @@ openai_api_key = "also-secret"
     fn credential_shaped_values_are_rejected_under_benign_names() {
         let text = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [preferences]
 note = "sk-abcdefghij0123456789"
@@ -1614,7 +1614,7 @@ note = "sk-abcdefghij0123456789"
         let text = format!(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [preferences.with_key.nested]
 password = "nested-password-must-not-leak"
@@ -1643,14 +1643,14 @@ note = "{shaped_value}"
 
     #[test]
     fn json_bundles_with_duplicate_keys_fail_before_parse() {
-        let duplicate = r#"{"schema_version":1,"kind":"codewhale.portable-config","preferences":{"verbosity":"quiet","verbosity":"loud"}}"#;
+        let duplicate = r#"{"schema_version":1,"kind":"ghosty.portable-config","preferences":{"verbosity":"quiet","verbosity":"loud"}}"#;
         let error = parse_bundle_str(duplicate, "dup.json").expect_err("duplicate key must fail");
         let rendered = format!("{error:#}");
         assert!(rendered.contains("duplicate key"), "{rendered}");
         assert!(rendered.contains("preferences.verbosity"), "{rendered}");
         assert!(!rendered.contains("loud"), "{rendered}");
 
-        let nested_array = r#"{"schema_version":1,"kind":"codewhale.portable-config","preferences":{"list":[{"a":1,"a":2}]}}"#;
+        let nested_array = r#"{"schema_version":1,"kind":"ghosty.portable-config","preferences":{"list":[{"a":1,"a":2}]}}"#;
         let error = parse_bundle_str(nested_array, "dup-array.json")
             .expect_err("nested duplicate must fail");
         assert!(
@@ -1658,7 +1658,7 @@ note = "{shaped_value}"
             "{error:#}"
         );
 
-        let clean = r#"{"schema_version":1,"kind":"codewhale.portable-config","preferences":{"verbosity":"quiet","profiles":{"verbosity":"loud"}}}"#;
+        let clean = r#"{"schema_version":1,"kind":"ghosty.portable-config","preferences":{"verbosity":"quiet","profiles":{"verbosity":"loud"}}}"#;
         parse_bundle_str(clean, "clean.json").expect("same key under different parents is fine");
     }
 
@@ -1668,7 +1668,7 @@ note = "{shaped_value}"
         let text = format!(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global.network]
 default = "prompt"
@@ -1713,11 +1713,11 @@ proxy = ["{proxy_url}"]
 
     #[test]
     fn redaction_placeholders_are_rejected_on_import_and_export() {
-        let placeholder = codewhale_config::persistence::REDACTED;
+        let placeholder = ghosty_config::persistence::REDACTED;
         let text = format!(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [preferences]
 verbosity = "quiet"
@@ -1789,7 +1789,7 @@ note = "prefix {placeholder} suffix"
         let text = format!(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [preferences]
 "{api_dot}" = "opaque-api-value"
@@ -1854,7 +1854,7 @@ tokenizer = "bpe"
         let store = isolated_store();
         let bundle_text = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [preferences]
 verbosity = "quiet"
@@ -1896,7 +1896,7 @@ output_mode = "plain"
         let store = isolated_store();
         let text = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 api_key = "never-echoed"
@@ -1913,7 +1913,7 @@ api_key = "never-echoed"
         let before = std::fs::read(store.path()).expect("config before import");
         let text = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [preferences]
 verbosity = "quiet"
@@ -1992,7 +1992,7 @@ verbosity = "verbose"
         let first_bundle = parse_bundle_str(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 verbosity = "verbose"
@@ -2012,7 +2012,7 @@ verbosity = "verbose"
         let second_bundle = parse_bundle_str(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 output_mode = "plain"
@@ -2120,7 +2120,7 @@ output_mode = "plain"
 
         let text = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [project]
 approval_policy = "unless-allowed"
@@ -2144,7 +2144,7 @@ approval_policy = "unless-allowed"
         // earlier entries were applied.
         let text = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [preferences]
 log_level = "debug"
@@ -2156,7 +2156,7 @@ providers_deepseek_wire = "not-a-real-key-so-this-errors"
         // Simpler deterministic failure: make the target file read-only.
         let text_ok = r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [preferences]
 log_level = "debug"
@@ -2310,7 +2310,7 @@ safety_posture = "strict"
         let bundle = parse_bundle_str(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [preferences.snapshots]
 enabled = false
@@ -2357,7 +2357,7 @@ enabled = false
         let opt_in_bundle = parse_bundle_str(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 telemetry = true
@@ -2385,7 +2385,7 @@ telemetry = true
         let opt_out_bundle = parse_bundle_str(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 telemetry = false
@@ -2449,7 +2449,7 @@ command = "/synthetic/local-foo-lsp"
 args = ["--stdio"]
 
 [hook_sinks]
-unix_socket_path = "/synthetic/local-codewhale.sock"
+unix_socket_path = "/synthetic/local-ghosty.sock"
 "#
         );
         std::fs::write(&path, target).expect("seed local-authority config");
@@ -2457,7 +2457,7 @@ unix_socket_path = "/synthetic/local-codewhale.sock"
         let bundle = parse_bundle_str(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 provider = "acme_gateway"
@@ -2541,7 +2541,7 @@ include_warnings = true
                 .hook_sinks
                 .as_ref()
                 .and_then(|sinks| sinks.unix_socket_path.as_deref()),
-            Some(Path::new("/synthetic/local-codewhale.sock"))
+            Some(Path::new("/synthetic/local-ghosty.sock"))
         );
 
         let reloaded = ConfigStore::load(Some(path)).expect("merged config reloads");
@@ -2732,7 +2732,7 @@ oauth_credential_generation = "synthetic-owned-generation.toml"
                 ),
             ),
         ] {
-            let text = format!("schema_version = 1\nkind = \"codewhale.portable-config\"\n{body}");
+            let text = format!("schema_version = 1\nkind = \"ghosty.portable-config\"\n{body}");
             let bundle = parse_bundle_str(&text, name).expect("authority bundle parses");
             assert_eq!(find_rejected_entries(&bundle).len(), 1, "{name}");
             let error = apply_bundle(&bundle, &mut store, BundleScope::Global, dir.path())
@@ -2794,7 +2794,7 @@ consent_version = 1
         let bundle = parse_bundle_str(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 telemetry_endpoint = "https://synthetic.invalid/telemetry"
@@ -2805,7 +2805,7 @@ baseUrl = "https://synthetic.invalid/provider/v1"
 model = "safe-model"
 
 [global.hook_sinks]
-unix_socket_path = "/synthetic/import-codewhale.sock"
+unix_socket_path = "/synthetic/import-ghosty.sock"
 "#,
             "machine-local-paths.toml",
         )
@@ -2848,7 +2848,7 @@ base_url = "https://synthetic.invalid/provider/v1"
 model = "safe-model"
 
 [hook_sinks]
-unix_socket_path = "/synthetic/export-codewhale.sock"
+unix_socket_path = "/synthetic/export-ghosty.sock"
 "#,
         )
         .expect("machine-local config parses");
@@ -2858,7 +2858,7 @@ unix_socket_path = "/synthetic/export-codewhale.sock"
         for forbidden in [
             "synthetic.invalid",
             "/synthetic/export-mcp.json",
-            "/synthetic/export-codewhale.sock",
+            "/synthetic/export-ghosty.sock",
             "telemetry_endpoint",
             "mcp_config_path",
             "unix_socket_path",
@@ -2891,7 +2891,7 @@ unix_socket_path = "/synthetic/export-codewhale.sock"
         let bundle = parse_bundle_str(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 instructions = "/synthetic/import-instructions.md"
@@ -3174,7 +3174,7 @@ args = ["--stdio"]
 "#,
             ),
         ] {
-            let text = format!("schema_version = 1\nkind = \"codewhale.portable-config\"\n{body}");
+            let text = format!("schema_version = 1\nkind = \"ghosty.portable-config\"\n{body}");
             let bundle = parse_bundle_str(&text, name).expect("LSP bundle parses");
             assert_eq!(find_rejected_entries(&bundle).len(), 1, "{name}");
             apply_bundle(&bundle, &mut store, BundleScope::Global, dir.path())
@@ -3238,7 +3238,7 @@ label = "safe-nested-hooks-label"
         let bundle = parse_bundle_str(
             r#"
 schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [global]
 managed_config_path = "/synthetic/import-managed-config.toml"
@@ -3299,7 +3299,7 @@ label = "safe-nested-workspace-label"
         validate_scope_target(BundleScope::Global, &global_path)
             .expect("global config accepts global scope");
 
-        let project_path = dir.path().join(".codewhale").join("config.toml");
+        let project_path = dir.path().join(".ghosty").join("config.toml");
         std::fs::create_dir(dir.path().join(".git")).expect("checkout marker");
         validate_scope_target(BundleScope::Project, &project_path)
             .expect("workspace config accepts project scope");
@@ -3532,7 +3532,7 @@ label = "safe-nested-workspace-label"
         let unique = dir.join("home").join(std::process::id().to_string());
         std::fs::create_dir_all(&unique).expect("unique home");
         // SAFETY: test-only env mutation, serialized by the lock above.
-        unsafe { std::env::set_var("CODEWHALE_HOME", &unique) };
+        unsafe { std::env::set_var("GHOSTY_HOME", &unique) };
         let path = unique.join("config.toml");
         std::fs::write(&path, "# test config\n").expect("seed config file");
         ConfigStore::load(Some(path)).expect("store loads")

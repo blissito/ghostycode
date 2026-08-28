@@ -2,7 +2,7 @@
 //!
 //! These tests ensure that deprecated colors are not used directly in
 //! user-visible code. Backward-compatible DeepSeek aliases should point
-//! at the current Codewhale semantic tokens instead of stale brand RGBs.
+//! at the current Ghosty semantic tokens instead of stale brand RGBs.
 
 use ratatui::style::Color;
 

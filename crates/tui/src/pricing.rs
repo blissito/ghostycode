@@ -6,7 +6,7 @@
 //! reliable balance endpoint exists.
 
 use chrono::{DateTime, Datelike, FixedOffset, TimeZone, Timelike, Utc, Weekday};
-use codewhale_config::pricing::{
+use ghosty_config::pricing::{
     Currency, LIVE_PRICING_MAX_AGE_SECS, LivePricingDefect, OfferingPricing, PricingProvenance,
     TokenClass, TokenUsage,
 };
@@ -159,7 +159,7 @@ enum CacheWritePolicy {
     DocumentedAsInputRate(&'static str),
     /// No published cache-write rate was found for this row. A turn that
     /// actually wrote to cache fails closed rather than being billed at a rate
-    /// CodeWhale made up.
+    /// GhostyCode made up.
     Unpublished,
 }
 
@@ -219,7 +219,7 @@ pub(crate) const XIAOMI_TOKEN_PLAN_BILLING_SURFACE: &str = "xiaomi-mimo-token-pl
 /// Xiaomi MiMo's ordinary public per-token API.
 pub(crate) const XIAOMI_PAYG_BILLING_SURFACE: &str = "xiaomi-mimo-payg";
 /// An OAuth/subscription-brokered endpoint (Codex, Claude OAuth, Grok OAuth,
-/// OpenCode Go). Never per-token metered from CodeWhale's side.
+/// OpenCode Go). Never per-token metered from GhostyCode's side.
 pub(crate) const OAUTH_SUBSCRIPTION_BILLING_SURFACE: &str = "oauth-subscription";
 /// A loopback / self-hosted endpoint with no provider bill at all.
 pub(crate) const LOCAL_BILLING_SURFACE: &str = "local-no-bill";
@@ -228,7 +228,7 @@ pub(crate) const FIRST_PARTY_PAYG_BILLING_SURFACE: &str = "first-party-payg";
 /// An aggregator/reseller endpoint: metered, but priced by the aggregator's own
 /// catalog rather than by the upstream model owner's published rates.
 pub(crate) const AGGREGATOR_BILLING_SURFACE: &str = "aggregator-payg";
-/// A reachable endpoint CodeWhale could not match to any known billing surface.
+/// A reachable endpoint GhostyCode could not match to any known billing surface.
 /// Distinct from "not classified yet": this is a positive statement that the
 /// surface is unknown, and it fails closed everywhere it is consumed.
 pub(crate) const UNCLASSIFIED_BILLING_SURFACE: &str = "unclassified";
@@ -308,7 +308,7 @@ pub fn endpoint_metering_for_billing_surface(billing_surface: Option<&str>) -> E
 /// A base URL reduced to the non-secret parts a billing classification may
 /// depend on: scheme, host, normalized path. `None` when the URL carries
 /// embedded credentials, a query, a fragment, a non-default port, or is not
-/// HTTPS — any of which means CodeWhale cannot vouch for which surface it is.
+/// HTTPS — any of which means GhostyCode cannot vouch for which surface it is.
 struct EndpointShape {
     host: String,
     path: String,
@@ -341,7 +341,7 @@ fn host_of(url: &str) -> Option<String> {
 /// Reduce a concrete request endpoint to non-secret billing provenance.
 ///
 /// Every reachable endpoint now gets a positive classification, including
-/// [`UNCLASSIFIED_BILLING_SURFACE`] for one CodeWhale cannot place. `None` is
+/// [`UNCLASSIFIED_BILLING_SURFACE`] for one GhostyCode cannot place. `None` is
 /// reserved for "no endpoint was supplied", which is a different failure and is
 /// also treated as unknown downstream. Nothing here consults credentials or
 /// echoes a URL, so the result is safe to persist and log.
@@ -355,7 +355,7 @@ pub(crate) fn billing_surface_for_route(
         ApiProvider::Ollama | ApiProvider::Sglang | ApiProvider::Vllm => {
             return Some(LOCAL_BILLING_SURFACE);
         }
-        // Ollama Cloud publishes plan/account terms, not a Codewhale-owned
+        // Ollama Cloud publishes plan/account terms, not a Ghosty-owned
         // per-token rate. Hosted is not local/free, but it is also not proof
         // of PAYG dollars: keep it in money coverage as unclassified until an
         // authoritative billing surface is available.
@@ -1113,7 +1113,7 @@ pub enum UnpricedReason {
     /// endpoint with no provider bill. Only this reason excuses a turn from
     /// money coverage, and only exact evidence may produce it (#4318).
     NotMoneyMetered,
-    /// The route may or may not meter money and CodeWhale could not establish
+    /// The route may or may not meter money and GhostyCode could not establish
     /// which. Distinct from [`Self::NotMoneyMetered`] on purpose: an unknown
     /// basis is counted as *possibly missing spend*, never waved through as a
     /// subscription. A cross-provider child route with no dispatch config is
@@ -1152,7 +1152,7 @@ pub enum UnpricedReason {
     /// A catalog row contains a NaN, infinite, or negative rate. The whole row
     /// is rejected at the trust boundary rather than partially billed.
     InvalidPricingRow,
-    /// The row is denominated in a currency CodeWhale does not carry. No
+    /// The row is denominated in a currency GhostyCode does not carry. No
     /// conversion is invented.
     UnsupportedCurrency,
     /// Provider telemetry assigns more cache-hit/miss/write tokens than the
@@ -1469,7 +1469,7 @@ pub(crate) fn audit_turn_cost_for_provider_on_endpoint_at(
         let classes = pricing.unpriced_used_classes(&classes);
         if classes.is_empty() {
             // Every used class is priced, so the only way the estimate failed
-            // is a currency CodeWhale does not carry. Never convert.
+            // is a currency GhostyCode does not carry. Never convert.
             return TurnCostAudit::unpriced(UnpricedReason::UnsupportedCurrency)
                 .with_live_defect(live_defect);
         }
@@ -1484,7 +1484,7 @@ pub(crate) fn audit_turn_cost_for_provider_on_endpoint_at(
     let hand_row = provider_owned_hand_pricing_at(provider, &catalog_model, recorded_at);
 
     // An unverifiable live row with no bundled fallback and no hand row is a
-    // route CodeWhale cannot price truthfully. Say which, rather than reporting
+    // route GhostyCode cannot price truthfully. Say which, rather than reporting
     // the unverified rate or a bare "no pricing row".
     match (live_defect, hand_row) {
         (Some(defect), None) => TurnCostAudit::unverified_live(defect),
@@ -1496,12 +1496,12 @@ pub(crate) fn audit_turn_cost_for_provider_on_endpoint_at(
 /// Keeping this distinct from the ordinary `None` projection prevents a bad
 /// published row from becoming indistinguishable from an absent price.
 fn invalid_catalog_pricing_audit(
-    offering: &codewhale_config::catalog::CatalogOffering,
+    offering: &ghosty_config::catalog::CatalogOffering,
 ) -> Option<TurnCostAudit> {
     offering
         .cost
         .as_ref()
-        .is_some_and(|cost| !codewhale_config::pricing::catalog_cost_is_valid(cost))
+        .is_some_and(|cost| !ghosty_config::pricing::catalog_cost_is_valid(cost))
         .then(|| TurnCostAudit::unpriced(UnpricedReason::InvalidPricingRow))
 }
 
@@ -1509,11 +1509,11 @@ fn invalid_catalog_pricing_audit(
 enum VerifiedOffering {
     /// The row is authoritative as-is (bundled, user override, or a live row
     /// proven fresh and endpoint-matched).
-    Usable(codewhale_config::catalog::CatalogOffering),
+    Usable(ghosty_config::catalog::CatalogOffering),
     /// The live row could not be verified, so the bundled published row is used
     /// instead. The defect is retained as the receipt for why.
     DegradedToBundled {
-        offering: codewhale_config::catalog::CatalogOffering,
+        offering: ghosty_config::catalog::CatalogOffering,
         defect: LivePricingDefect,
     },
     /// The live row could not be verified and no bundled row exists.
@@ -1526,7 +1526,7 @@ enum VerifiedOffering {
 /// live row as authoritative.
 ///
 /// `endpoint_fingerprint` is the non-secret SHA-256 digest of the base URL the turn
-/// was actually served on (see [`codewhale_config::catalog::base_url_fingerprint`]).
+/// was actually served on (see [`ghosty_config::catalog::base_url_fingerprint`]).
 /// Callers that do not know the endpoint pass `None`, which cannot *confirm* a
 /// live row — so those callers degrade to the bundled snapshot rather than
 /// billing against a rate whose endpoint scope is unproven.
@@ -1542,7 +1542,7 @@ fn verified_catalog_offering(
     };
     // Models.dev is a capabilities catalog. A live overlay from that fetch
     // must never be treated as a rate source — leftover `cost` fields are
-    // not provider prices, and `https://api.codewhale.net/session` 503
+    // not provider prices, and `https://api.ghosty.net/session` 503
     // (`control_plane_not_attached`) is not a healthy live price list
     // (#5241). Prefer the bundled snapshot (curated in-repo rates, when
     // present) and otherwise ignore live cost so hand/bundled fallbacks
@@ -1579,8 +1579,8 @@ fn verified_catalog_offering(
 /// Drop any cost on a Models.dev live overlay so leftover price fields cannot
 /// be billed as `provider_live` (#5241).
 fn capabilities_only_offering(
-    mut offering: codewhale_config::catalog::CatalogOffering,
-) -> codewhale_config::catalog::CatalogOffering {
+    mut offering: ghosty_config::catalog::CatalogOffering,
+) -> ghosty_config::catalog::CatalogOffering {
     offering.cost = None;
     offering
 }
@@ -1717,7 +1717,7 @@ pub(crate) fn audit_turn_cost_for_route_on_endpoint_at(
 /// - [`BillingPresentation::Subscription`] and [`BillingPresentation::Local`]
 ///   are exact evidence that money is the wrong unit, so those turns are
 ///   `NotMoneyMetered` and drop out of the coverage denominator.
-/// - [`BillingPresentation::Unknown`] is *not* such evidence. It means CodeWhale
+/// - [`BillingPresentation::Unknown`] is *not* such evidence. It means GhostyCode
 ///   could not establish the basis, so the turn is `UnknownBillingBasis`: still
 ///   unpriced, but counted as spend the total may be missing.
 ///
@@ -1961,7 +1961,7 @@ fn hosted_deepseek_v4_pro_standard_pricing() -> ModelPricing {
 fn effective_offering_pricing(
     provider: ApiProvider,
     model: &str,
-    offering: &codewhale_config::catalog::CatalogOffering,
+    offering: &ghosty_config::catalog::CatalogOffering,
     classes: &TokenUsage,
 ) -> Option<OfferingPricing> {
     let mut pricing = OfferingPricing::from_catalog_offering(offering)?;
@@ -1987,7 +1987,7 @@ fn effective_offering_pricing(
 fn catalog_cost_estimate_for_route(
     provider: ApiProvider,
     model: &str,
-    offering: &codewhale_config::catalog::CatalogOffering,
+    offering: &ghosty_config::catalog::CatalogOffering,
     usage: &Usage,
 ) -> Option<CostEstimate> {
     let classes = token_usage_for_pricing(usage);
@@ -2013,7 +2013,7 @@ fn catalog_cost_estimate_for_route(
 /// undercounted.
 ///
 /// `Usage::reasoning_tokens` is deliberately **not** added to the billable
-/// output. Every provider CodeWhale normalizes reports reasoning as a *subset*
+/// output. Every provider GhostyCode normalizes reports reasoning as a *subset*
 /// of the completion count it already bills — OpenAI Responses nests
 /// `reasoning_tokens` under `output_tokens_details` while `output_tokens` is
 /// the total, and Chat Completions nests it under `completion_tokens_details`
@@ -2145,10 +2145,10 @@ mod tests {
 
     #[test]
     fn malformed_catalog_row_has_an_explicit_runtime_reason() {
-        let offering = codewhale_config::catalog::CatalogOffering {
+        let offering = ghosty_config::catalog::CatalogOffering {
             provider: "openrouter".to_string(),
             wire_model_id: "openai/gpt-5.5".to_string(),
-            cost: Some(codewhale_config::models_dev::ModelsDevCost {
+            cost: Some(ghosty_config::models_dev::ModelsDevCost {
                 input: Some(f64::NAN),
                 output: Some(30.0),
                 cache_read: Some(0.05),
@@ -2760,7 +2760,7 @@ mod tests {
                 "{base_url}"
             );
         }
-        // Endpoints CodeWhale cannot place now classify *positively* as
+        // Endpoints GhostyCode cannot place now classify *positively* as
         // unclassified rather than returning `None`. Both fail closed
         // identically, but "we looked and could not place this" is a different
         // fact from "no endpoint was supplied", and the audit reports it as
@@ -3443,11 +3443,11 @@ mod tests {
 
     #[test]
     fn catalog_pricing_uses_its_cache_write_rate() {
-        let offering = codewhale_config::catalog::CatalogOffering {
+        let offering = ghosty_config::catalog::CatalogOffering {
             provider: "anthropic".to_string(),
             wire_model_id: "catalog-priced-model".to_string(),
             endpoint_key: "chat".to_string(),
-            cost: Some(codewhale_config::models_dev::ModelsDevCost {
+            cost: Some(ghosty_config::models_dev::ModelsDevCost {
                 input: Some(10.0),
                 output: Some(50.0),
                 cache_read: Some(1.0),
@@ -4488,18 +4488,18 @@ mod tests {
         let now = Utc::now();
         let fetched_at = u64::try_from(now.timestamp()).expect("timestamp");
         crate::provider_lake::set_live_snapshot(
-            codewhale_config::catalog::CatalogSnapshot {
-                offerings: vec![codewhale_config::catalog::CatalogOffering {
+            ghosty_config::catalog::CatalogSnapshot {
+                offerings: vec![ghosty_config::catalog::CatalogOffering {
                     provider: "fireworks".to_string(),
                     wire_model_id: "accounts/fireworks/models/deepseek-v4-flash-0731".to_string(),
                     endpoint_key: "chat".to_string(),
-                    cost: Some(codewhale_config::models_dev::ModelsDevCost {
+                    cost: Some(ghosty_config::models_dev::ModelsDevCost {
                         input: Some(99.0),
                         output: Some(199.0),
                         cache_read: Some(9.0),
                         cache_write: None,
                     }),
-                    source: codewhale_config::catalog::CatalogSource::Live {
+                    source: ghosty_config::catalog::CatalogSource::Live {
                         base_url_fingerprint: "models-dev-capabilities".to_string(),
                         fetched_at,
                     },
@@ -4539,18 +4539,18 @@ mod tests {
         let now = Utc::now();
         let fetched_at = u64::try_from(now.timestamp()).expect("timestamp");
         crate::provider_lake::set_live_snapshot(
-            codewhale_config::catalog::CatalogSnapshot {
-                offerings: vec![codewhale_config::catalog::CatalogOffering {
+            ghosty_config::catalog::CatalogSnapshot {
+                offerings: vec![ghosty_config::catalog::CatalogOffering {
                     provider: "opencode-zen".to_string(),
                     wire_model_id: "deepseek-v4-flash".to_string(),
                     endpoint_key: "chat".to_string(),
-                    cost: Some(codewhale_config::models_dev::ModelsDevCost {
+                    cost: Some(ghosty_config::models_dev::ModelsDevCost {
                         input: Some(99.0),
                         output: Some(199.0),
                         cache_read: Some(9.0),
                         cache_write: None,
                     }),
-                    source: codewhale_config::catalog::CatalogSource::Live {
+                    source: ghosty_config::catalog::CatalogSource::Live {
                         base_url_fingerprint: "other-endpoint".to_string(),
                         fetched_at,
                     },
@@ -4580,22 +4580,21 @@ mod tests {
         crate::provider_lake::clear_live_snapshot();
         let now = Utc::now();
         let fetched_at = u64::try_from(now.timestamp()).expect("timestamp");
-        let fingerprint = codewhale_config::catalog::base_url_fingerprint(
-            crate::config::DEFAULT_FIREWORKS_BASE_URL,
-        );
+        let fingerprint =
+            ghosty_config::catalog::base_url_fingerprint(crate::config::DEFAULT_FIREWORKS_BASE_URL);
         crate::provider_lake::set_live_snapshot(
-            codewhale_config::catalog::CatalogSnapshot {
-                offerings: vec![codewhale_config::catalog::CatalogOffering {
+            ghosty_config::catalog::CatalogSnapshot {
+                offerings: vec![ghosty_config::catalog::CatalogOffering {
                     provider: "fireworks".to_string(),
                     wire_model_id: "accounts/fireworks/models/kimi-k3".to_string(),
                     endpoint_key: "chat".to_string(),
-                    cost: Some(codewhale_config::models_dev::ModelsDevCost {
+                    cost: Some(ghosty_config::models_dev::ModelsDevCost {
                         input: Some(9.0),
                         output: Some(18.0),
                         cache_read: Some(1.0),
                         cache_write: None,
                     }),
-                    source: codewhale_config::catalog::CatalogSource::Live {
+                    source: ghosty_config::catalog::CatalogSource::Live {
                         base_url_fingerprint: fingerprint.clone(),
                         fetched_at,
                     },
@@ -4637,18 +4636,18 @@ mod tests {
         let now = Utc::now();
         let fetched_at = u64::try_from(now.timestamp()).expect("timestamp");
         crate::provider_lake::set_live_snapshot(
-            codewhale_config::catalog::CatalogSnapshot {
-                offerings: vec![codewhale_config::catalog::CatalogOffering {
+            ghosty_config::catalog::CatalogSnapshot {
+                offerings: vec![ghosty_config::catalog::CatalogOffering {
                     provider: "openai".to_string(),
                     wire_model_id: "gpt-5.5".to_string(),
                     endpoint_key: "chat".to_string(),
-                    cost: Some(codewhale_config::models_dev::ModelsDevCost {
+                    cost: Some(ghosty_config::models_dev::ModelsDevCost {
                         input: Some(99.0),
                         output: Some(199.0),
                         cache_read: Some(9.0),
                         cache_write: None,
                     }),
-                    source: codewhale_config::catalog::CatalogSource::Live {
+                    source: ghosty_config::catalog::CatalogSource::Live {
                         base_url_fingerprint: "models-dev-capabilities".to_string(),
                         fetched_at,
                     },

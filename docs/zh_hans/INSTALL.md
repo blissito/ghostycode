@@ -1,4 +1,4 @@
-# 安装 Codewhale
+# 安装 Ghosty
 
 > 本文翻译自英文版 [INSTALL.md](../INSTALL.md)，与英文修订 `1563ce351`（2026-08-18）同步。
 
@@ -11,37 +11,37 @@
 在 macOS 和 Linux 上，网站安装器是最短的安装/更新路径：
 
 ```bash
-curl -fsSL https://codewhale.net/install.sh | sh
+curl -fsSL https://ghosty.net/install.sh | sh
 ```
 
-它会下载匹配的 `codewhale` 和 `codew` 发布二进制，对照 `codewhale-artifacts-sha256.txt` 校验，默认安装到 `~/.local/bin`，并暴露 `codew` 便捷命令。
+它会下载匹配的 `ghosty` 和 `ghosty-tui` 发布二进制，对照 `ghosty-artifacts-sha256.txt` 校验，默认安装到 `~/.local/bin`，并暴露 `ghosty-tui` 便捷命令。
 
 ---
 
 ## 1. 支持平台
 
-已发布的 Codewhale 版本会为受支持的平台/架构组合提供配套的 `codewhale` 和 `codew` 预编译二进制。下表是 v0.9.11 候选版的预期矩阵；Android/Termux 为预览状态，等待真机 QA。Linux ARM64 自 v0.8.8 起可用。Linux RISC-V 预编译暂时暂停，因为锁定的 `rquickjs-sys` 依赖没有提供 `riscv64gc-unknown-linux-gnu` 绑定。
+已发布的 Ghosty 版本会为受支持的平台/架构组合提供配套的 `ghosty` 和 `ghosty-tui` 预编译二进制。下表是 v0.9.11 候选版的预期矩阵；Android/Termux 为预览状态，等待真机 QA。Linux ARM64 自 v0.8.8 起可用。Linux RISC-V 预编译暂时暂停，因为锁定的 `rquickjs-sys` 依赖没有提供 `riscv64gc-unknown-linux-gnu` 绑定。
 
 | 平台 | 架构 | npm install | `cargo install` | GitHub 发布资源 |
 | ------------ | ------------ | :---------: | :-------------: | ----------------------------------------------------- |
-| Linux | x64 (x86_64) | ✅ | ✅ | `codewhale-linux-x64`, `codew-linux-x64` |
-| Linux | arm64 | ✅ | ✅ | `codewhale-linux-arm64`, `codew-linux-arm64` |
-| Android / Termux | arm64 (aarch64) | ⚠️⁴ 预览版 | ⚠️⁴ 预览版 | `codewhale-android-arm64.tar.gz` 发布时的预览压缩包 |
+| Linux | x64 (x86_64) | ✅ | ✅ | `ghosty-linux-x64`, `ghosty-tui-linux-x64` |
+| Linux | arm64 | ✅ | ✅ | `ghosty-linux-arm64`, `ghosty-tui-linux-arm64` |
+| Android / Termux | arm64 (aarch64) | ⚠️⁴ 预览版 | ⚠️⁴ 预览版 | `ghosty-android-arm64.tar.gz` 发布时的预览压缩包 |
 | Linux | riscv64 | ❌¹ | ❌³ | 暂时不支持，待上游绑定落地 |
-| macOS | x64 | ✅ | ✅ | `codewhale-macos-x64`, `codew-macos-x64` |
-| macOS | arm64 (M 系列) | ✅ | ✅ | `codewhale-macos-arm64`, `codew-macos-arm64` |
-| Windows | x64 | ✅ | ✅ | `codewhale-windows-x64.exe`, `codew-windows-x64.exe` |
-| Windows | arm64 | ✅ | ✅ | `codewhale-windows-arm64.exe`, `codew-windows-arm64.exe` |
+| macOS | x64 | ✅ | ✅ | `ghosty-macos-x64`, `ghosty-tui-macos-x64` |
+| macOS | arm64 (M 系列) | ✅ | ✅ | `ghosty-macos-arm64`, `ghosty-tui-macos-arm64` |
+| Windows | x64 | ✅ | ✅ | `ghosty-windows-x64.exe`, `ghosty-tui-windows-x64.exe` |
+| Windows | arm64 | ✅ | ✅ | `ghosty-windows-arm64.exe`, `ghosty-tui-windows-arm64.exe` |
 | Linux x64 或 arm64 上的 musl（Alpine） | 原生架构 | ✅（静态） | ✅ | 匹配的静态 Linux 资源 |
 | 其他 Linux（其他架构上的 musl） | — | ❌¹ | ✅² | 从源码构建 |
-| FreeBSD 14+ / OpenBSD | x64, arm64 | ❌ | ✅² | `cargo install codewhale-cli --locked`（无预编译；见 § FreeBSD） |
+| FreeBSD 14+ / OpenBSD | x64, arm64 | ❌ | ✅² | `cargo install ghosty-cli --locked`（无预编译；见 § FreeBSD） |
 
 ¹ npm 包会以明确错误退出，并引导你到这里。
 ² 前提是你的工具链能编译较新的 Rust workspace；见下文[从源码构建](#7-从源码构建)。
 ³ RISC-V 源码构建目前需要上游 `rquickjs-sys` 的 RISC-V 绑定，或启用 bindgen 的依赖构建。
-⁴ v0.9.11 源码候选版的 npm 包装器能识别 Android arm64，并解析匹配的 `codewhale` 和 `codew` Android 资源。npm 安装仅对 GitHub Release 已发布的、匹配的包版本有效。在 #4236 和 #4242 跟踪的真机编译、启动、审批、文件工具与更新检查完成之前，Android/Termux 路径仍为预览。
+⁴ v0.9.11 源码候选版的 npm 包装器能识别 Android arm64，并解析匹配的 `ghosty` 和 `ghosty-tui` Android 资源。npm 安装仅对 GitHub Release 已发布的、匹配的包版本有效。在 #4236 和 #4242 跟踪的真机编译、启动、审批、文件工具与更新检查完成之前，Android/Termux 路径仍为预览。
 
-Android / Termux 与 Linux arm64 不是同一个目标。不要在 Termux 里安装 Linux 的 `codewhale-linux-arm64` 压缩包；当某个发布版或候选版发布了 Termux 专用的 Android 压缩包时请使用它，或在 Termux 内从源码构建。
+Android / Termux 与 Linux arm64 不是同一个目标。不要在 Termux 里安装 Linux 的 `ghosty-linux-arm64` 压缩包；当某个发布版或候选版发布了 Termux 专用的 Android 压缩包时请使用它，或在 Termux 内从源码构建。
 
 Linux 的 **x64 和 arm64** v0.9.11 候选版资源是**静态 musl 构建**。x64 发布路径自 v0.8.65 起使用 musl；v0.9.6 将同样的构建与静态启动检查扩展到 arm64。这些二进制没有 glibc 依赖，可在匹配的架构上跨 Ubuntu、Debian、RHEL/CentOS 和 Alpine/musl 运行。SQLite 通过 `rusqlite` 内置，因此无需单独的 `libsqlite3` 运行时包。
 
@@ -54,15 +54,15 @@ Ubuntu 22.04 自带 glibc 2.35，因此，那些较老的 arm64 二进制可能�
 version `GLIBC_2.39' not found
 ```
 
-npm 包装器、`codewhale update` 和 Unix 压缩包安装器对较旧版本仍保留 GNU 二进制预检查。v0.9.11 arm64 候选版改用 `aarch64-unknown-linux-musl`，因此没有 `GLIBC_*` 最低要求。如果你要在较旧的 arm64 发行版上安装早期版本，请使用：
+npm 包装器、`ghosty update` 和 Unix 压缩包安装器对较旧版本仍保留 GNU 二进制预检查。v0.9.11 arm64 候选版改用 `aarch64-unknown-linux-musl`，因此没有 `GLIBC_*` 最低要求。如果你要在较旧的 arm64 发行版上安装早期版本，请使用：
 
 ```bash
-cargo install codewhale-cli --locked   # 安装 codewhale
+cargo install ghosty-cli --locked   # 安装 ghosty
 ```
 
 > **Linux ARM64 说明（v0.8.7 及更早）。** v0.8.7 及更早版本**未发布** Linux ARM64 预编译；
-> 使用HarmonyOS 轻薄本、Asahi Linux、树莓派(Raspberry Pi)、AWS Graviton 等的用户会从 `npm i -g codewhale` 看到 `Unsupported architecture: arm64`。
-> v0.8.8 发布了 `codewhale-linux-arm64`，因此普通的 `npm i -g codewhale` 可在任何基于 glibc 的 ARM64 Linux 上工作。
+> 使用HarmonyOS 轻薄本、Asahi Linux、树莓派(Raspberry Pi)、AWS Graviton 等的用户会从 `npm i -g ghosty` 看到 `Unsupported architecture: arm64`。
+> v0.8.8 发布了 `ghosty-linux-arm64`，因此普通的 `npm i -g ghosty` 可在任何基于 glibc 的 ARM64 Linux 上工作。
 > 如果你还卡在 v0.8.7，直接跳到[从源码构建](#7-从源码构建)——`cargo install` 完全可用。
 > HarmonyOS PC 与 OpenHarmony 交叉构建设置，见 [HarmonyOS 与 OpenHarmony](../HarmonyOS.md)。
 
@@ -77,16 +77,16 @@ pkg update
 pkg install -y ca-certificates curl tar gzip coreutils
 ```
 
-当发布版包含 `codewhale-android-arm64.tar.gz` 时，用压缩包自带的安装器安装。传入 `PREFIX="$PREFIX"` 很重要：安装器默认安装到 `~/.local`，而 Termux 用户通常期望命令在 `$PREFIX/bin` 下。
+当发布版包含 `ghosty-android-arm64.tar.gz` 时，用压缩包自带的安装器安装。传入 `PREFIX="$PREFIX"` 很重要：安装器默认安装到 `~/.local`，而 Termux 用户通常期望命令在 `$PREFIX/bin` 下。
 
 ```bash
 cd "$HOME"
-curl -L -O https://github.com/Hmbown/CodeWhale/releases/latest/download/codewhale-android-arm64.tar.gz
-curl -L -O https://github.com/Hmbown/CodeWhale/releases/latest/download/codewhale-bundles-sha256.txt
-sha256sum -c codewhale-bundles-sha256.txt --ignore-missing
+curl -L -O https://github.com/blissito/ghostycode/releases/latest/download/ghosty-android-arm64.tar.gz
+curl -L -O https://github.com/blissito/ghostycode/releases/latest/download/ghosty-bundles-sha256.txt
+sha256sum -c ghosty-bundles-sha256.txt --ignore-missing
 
-tar xzf codewhale-android-arm64.tar.gz
-cd codewhale-android-arm64
+tar xzf ghosty-android-arm64.tar.gz
+cd ghosty-android-arm64
 PREFIX="$PREFIX" ./install.sh
 hash -r
 ```
@@ -95,58 +95,58 @@ hash -r
 
 ```bash
 pkg install -y rust clang pkg-config make git
-cargo install codewhale-cli --locked   # 安装 codewhale
+cargo install ghosty-cli --locked   # 安装 ghosty
 ```
 
 正确的首次运行设置流程已实现，但其 Android 交互仍属于上文提到的预览 QA 范围。
 临时凭证优先使用 provider 环境变量。
-`codewhale auth set` 可用，但 Termux 构建没有受支持的 OS 钥匙串集成（keyring integration），会退化为文件存储的密钥：写入 `~/.codewhale/config.toml`，并把密钥镜像到 `~/.codewhale/secrets/secrets.json`。两者都是纯文本文件，受 `0600` 权限保护，静态存储时未加密。
+`ghosty auth set` 可用，但 Termux 构建没有受支持的 OS 钥匙串集成（keyring integration），会退化为文件存储的密钥：写入 `~/.ghosty/config.toml`，并把密钥镜像到 `~/.ghosty/secrets/secrets.json`。两者都是纯文本文件，受 `0600` 权限保护，静态存储时未加密。
 
 ```bash
-codewhale auth set --provider deepseek
-codewhale auth status
-codewhale doctor
+ghosty auth set --provider deepseek
+ghosty auth status
+ghosty doctor
 ```
 
 维护者应对 Termux / Android arm64 候选版使用这套可重复的冒烟检查清单（smoke checklist）：
 
 ```bash
-command -v codewhale codew
-test -x "$PREFIX/bin/codewhale"
-test -x "$PREFIX/bin/codew"
+command -v ghosty ghosty-tui
+test -x "$PREFIX/bin/ghosty"
+test -x "$PREFIX/bin/ghosty-tui"
 
-codewhale --version
-codewhale doctor
-codewhale exec --auto "run pwd"
+ghosty --version
+ghosty doctor
+ghosty exec --auto "run pwd"
 ```
 
 已知限制：
 
-- 命令会继承 Android 的每应用（per-app） UID、SELinux 和 seccomp 保护，以及授予 Termux 的任何权限。Codewhale 的可选 bubblewrap 子进程沙箱仅限 Linux，未在 Android 上构建，因此已批准的命令不会获得 Codewhale 特有的文件系统限制。
-- Termux 构建没有受支持的 Android Keystore 或桌面 Secret Service 集成。用 `codewhale auth status` 确认当前生效的来源；当文件型纯文本存储不可接受时，优先使用 provider 环境变量。
-- 终端渲染因 Android 终端应用而异。TUI 始终拥有备用屏幕（alternate screen）。如果某个终端应用无法渲染全屏 TUI，请改用 `codewhale exec` 来无头运行。
+- 命令会继承 Android 的每应用（per-app） UID、SELinux 和 seccomp 保护，以及授予 Termux 的任何权限。Ghosty 的可选 bubblewrap 子进程沙箱仅限 Linux，未在 Android 上构建，因此已批准的命令不会获得 Ghosty 特有的文件系统限制。
+- Termux 构建没有受支持的 Android Keystore 或桌面 Secret Service 集成。用 `ghosty auth status` 确认当前生效的来源；当文件型纯文本存储不可接受时，优先使用 provider 环境变量。
+- 终端渲染因 Android 终端应用而异。TUI 始终拥有备用屏幕（alternate screen）。如果某个终端应用无法渲染全屏 TUI，请改用 `ghosty exec` 来无头运行。
 
 ---
 
 ## 2. 下载安全与校验和
 
-官方发布二进制只从 `https://github.com/Hmbown/CodeWhale/releases` 和名为 `codewhale` 的 npm 包发布。除非你明确信任某个镜像，请勿从仿冒的仓库、压缩包和搜索结果镜像安装发布资源。
+官方发布二进制只从 `https://github.com/blissito/ghostycode/releases` 和名为 `ghosty` 的 npm 包发布。除非你明确信任某个镜像，请勿从仿冒的仓库、压缩包和搜索结果镜像安装发布资源。
 
-每个 GitHub release 都包含校验和清单。使用 `codewhale-artifacts-sha256.txt` 校验裸二进制文件，使用 `codewhale-bundles-sha256.txt` 校验 `.tar.gz` / `.zip` 平台压缩包。如果您手动下载二进制文件，请在运行前进行验证：
+每个 GitHub release 都包含校验和清单。使用 `ghosty-artifacts-sha256.txt` 校验裸二进制文件，使用 `ghosty-bundles-sha256.txt` 校验 `.tar.gz` / `.zip` 平台压缩包。如果您手动下载二进制文件，请在运行前进行验证：
 
 ```bash
 # 在包含已下载的二进制的目录中运行。
-curl -L -O https://github.com/Hmbown/CodeWhale/releases/latest/download/codewhale-artifacts-sha256.txt
-sha256sum -c codewhale-artifacts-sha256.txt --ignore-missing
+curl -L -O https://github.com/blissito/ghostycode/releases/latest/download/ghosty-artifacts-sha256.txt
+sha256sum -c ghosty-artifacts-sha256.txt --ignore-missing
 ```
 
-在 macOS 上，用 `shasum -a 256 -c codewhale-artifacts-sha256.txt --ignore-missing` 来代替 `sha256sum`。
+在 macOS 上，用 `shasum -a 256 -c ghosty-artifacts-sha256.txt --ignore-missing` 来代替 `sha256sum`。
 
 如果杀毒软件标记了官方发布的二进制文件，请在找出确切的工件（Artifact）之前将其视为未解决的问题。请在 GitHub issue 中提供以下所有信息：
 
 - 发布标签，例如 `v0.8.36`
 - 确切的下载 URL
-- 文件名，例如 `codewhale-linux-x64`
+- 文件名，例如 `ghosty-linux-x64`
 - 你机器上文件的 SHA-256
 - 杀毒软件产品名与检测名称
 
@@ -159,39 +159,39 @@ sha256sum -c codewhale-artifacts-sha256.txt --ignore-missing
 npm 是推荐的安装方式（Node 18+；包装器适用于 v0.8.56 及更高版本）。它安装的是 注册表（registry） 上最新发布的版本，而不是未发布的源码候选版。
 
 ```bash
-npm install -g codewhale
-codewhale --version   # 打印已安装的发布版本
+npm install -g ghosty
+ghosty --version   # 打印已安装的发布版本
 ```
 
-`postinstall` 会下载匹配的 `codewhale` 和 `codew` 二进制，对照该来源的 SHA-256 清单校验，并把 `codewhale` 和 `codew` 添加到你的 `PATH` 中。
+`postinstall` 会下载匹配的 `ghosty` 和 `ghosty-tui` 二进制，对照该来源的 SHA-256 清单校验，并把 `ghosty` 和 `ghosty-tui` 添加到你的 `PATH` 中。
 
 在 **Linux x64**（包括 OpenHarmony x64）上，包装器**不会**等待缓慢的 GitHub 二进制下载或漫长的超时失败。
-除非你设置了显式的 release 基础 URL 或 `CODEWHALE_USE_CNB_MIRROR=1`，否则它会并发地从 GitHub Releases 和第一方 CNB release 获取对应精确包版本的小型 `codewhale-artifacts-sha256.txt` 清单，接受第一个对所需资源通过 HTTP 响应与清单校验的来源，取消另一个探测，并且只从该锁定来源下载二进制。
+除非你设置了显式的 release 基础 URL 或 `GHOSTY_USE_CNB_MIRROR=1`，否则它会并发地从 GitHub Releases 和第一方 CNB release 获取对应精确包版本的小型 `ghosty-artifacts-sha256.txt` 清单，接受第一个对所需资源通过 HTTP 响应与清单校验的来源，取消另一个探测，并且只从该锁定来源下载二进制。
 CNB 只发布 Linux x64；其他目标保持仅 GitHub 路径。所选来源会打印在安装进度中，并写入下载文件旁的 `<binary>.source`。校验和（checksum）或来源不匹配时按失败处理。
 
-在 Windows 上，请从 **Windows Terminal** 运行这些命令，而不是 `cmd.exe`，这样字体和颜色才能匹配受支持的 TUI。GitHub Release 还会在裸 x64 exe 旁发布 `codewhale.bat`；该启动器优先使用 `wt.exe`，在没有 Windows Terminal 时回退为直接启动。
+在 Windows 上，请从 **Windows Terminal** 运行这些命令，而不是 `cmd.exe`，这样字体和颜色才能匹配受支持的 TUI。GitHub Release 还会在裸 x64 exe 旁发布 `ghosty.bat`；该启动器优先使用 `wt.exe`，在没有 Windows Terminal 时回退为直接启动。
 
 有用的环境变量：
 
 | 变量 | 用途 |
 | ----------------------------------- | -------------------------------------------------------------------------------------- |
-| `CODEWHALE_RELEASE_BASE_URL` | 覆盖下载根目录。跳过 Linux x64 的 GitHub/CNB 竞争。 |
-| `CODEWHALE_USE_CNB_MIRROR=1` | 在 Linux x64 / OpenHarmony x64 上强制使用 CNB 第一方镜像。其他目标会失败。 |
-| `CODEWHALE_VERSION` | 固定包装器下载哪个 release（默认 `codewhaleBinaryVersion`）。 |
-| `CODEWHALE_GITHUB_REPO` | 让下载器指向某个 fork（`owner/repo`）。 |
-| `CODEWHALE_FORCE_DOWNLOAD=1` | 即使缓存的二进制标记匹配也重新下载。 |
-| `CODEWHALE_DISABLE_INSTALL=1` | 完全跳过 `postinstall` 下载（CI 冒烟、内置二进制）。 |
-| `CODEWHALE_OPTIONAL_INSTALL=1` | 遇到可重试的下载错误时不使 `npm install` 失败——在 CI 矩阵中有用。 |
-| `CODEWHALE_QUIET_INSTALL=1` | 禁止安装器进度消息，静默安装。 |
-| `CODEWHALE_DOWNLOAD_TIMEOUT_MS` | 覆盖总下载超时时间（毫秒）。 |
-| `CODEWHALE_DOWNLOAD_STALL_MS` | 覆盖无进度停滞超时时间（毫秒）。 |
+| `GHOSTY_RELEASE_BASE_URL` | 覆盖下载根目录。跳过 Linux x64 的 GitHub/CNB 竞争。 |
+| `GHOSTY_USE_CNB_MIRROR=1` | 在 Linux x64 / OpenHarmony x64 上强制使用 CNB 第一方镜像。其他目标会失败。 |
+| `GHOSTY_VERSION` | 固定包装器下载哪个 release（默认 `ghostyBinaryVersion`）。 |
+| `GHOSTY_GITHUB_REPO` | 让下载器指向某个 fork（`owner/repo`）。 |
+| `GHOSTY_FORCE_DOWNLOAD=1` | 即使缓存的二进制标记匹配也重新下载。 |
+| `GHOSTY_DISABLE_INSTALL=1` | 完全跳过 `postinstall` 下载（CI 冒烟、内置二进制）。 |
+| `GHOSTY_OPTIONAL_INSTALL=1` | 遇到可重试的下载错误时不使 `npm install` 失败——在 CI 矩阵中有用。 |
+| `GHOSTY_QUIET_INSTALL=1` | 禁止安装器进度消息，静默安装。 |
+| `GHOSTY_DOWNLOAD_TIMEOUT_MS` | 覆盖总下载超时时间（毫秒）。 |
+| `GHOSTY_DOWNLOAD_STALL_MS` | 覆盖无进度停滞超时时间（毫秒）。 |
 
-相应的 `DEEPSEEK_TUI_*` 和 `DEEPSEEK_*` 变量仍作为旧别名被接受，但规范的名称是 `CODEWHALE_*`。新的自动化与支持文档应只使用 `Codewhale` 名称。
+相应的 `DEEPSEEK_TUI_*` 和 `DEEPSEEK_*` 变量仍作为旧别名被接受，但规范的名称是 `GHOSTY_*`。新的自动化与支持文档应只使用 `Ghosty` 名称。
 
 > **中国大陆 npm 下载慢？** 如果 `npm install` 本身很慢（不只是 postinstall 的二进制下载），使用 npm 注册表镜像：
 > ```bash
 > npm config set registry https://registry.npmmirror.com
-> npm install -g codewhale
+> npm install -g ghosty
 > ```
 > 如果你更想用 Cargo 而非 npm，参见[第 4 节](#4-通过-cargo-安装任何-tier-1-rust-目标)。
 
@@ -200,15 +200,15 @@ CNB 只发布 Linux x64；其他目标保持仅 GitHub 路径。所选来源会�
 ## 4. 通过 Cargo 安装（任何 Tier-1 Rust 目标）
 
 如果 GitHub releases 缓慢、受阻，或你正在使用不受支持的架构，可以直接从 crates.io 安装。
-只需要一个 Cargo 包：`codewhale-cli` 会安装 `codewhale` 命令。npm 与预编译发布版还会把 `codew` 作为同一编译运行时的便捷名称暴露出来；Cargo 不会创建该别名，所以如果你想要更短的名字，请自行定义 shell 别名。
+只需要一个 Cargo 包：`ghosty-cli` 会安装 `ghosty` 命令。npm 与预编译发布版还会把 `ghosty-tui` 作为同一编译运行时的便捷名称暴露出来；Cargo 不会创建该别名，所以如果你想要更短的名字，请自行定义 shell 别名。
 
 ```bash
 # 需要 Rust 1.88+（https://rustup.rs）
-cargo install codewhale-cli --locked   # 安装 codewhale
-codewhale --version
+cargo install ghosty-cli --locked   # 安装 ghosty
+ghosty --version
 ```
 
-> **Linux：先安装构建时依赖。** `cargo install` 从源码编译，在 Linux 上 `codewhale-cli` crate 会链接 `libdbus-1`（D-Bus secret-service 后端用它存储凭据）。运行 `cargo install` 之前请先安装所需的系统包：
+> **Linux：先安装构建时依赖。** `cargo install` 从源码编译，在 Linux 上 `ghosty-cli` crate 会链接 `libdbus-1`（D-Bus secret-service 后端用它存储凭据）。运行 `cargo install` 之前请先安装所需的系统包：
 >
 > ```bash
 > # Debian / Ubuntu
@@ -272,13 +272,13 @@ registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
 如果你已经有支持 flake 的 Nix，运行：
 
 ```sh
-nix run github:Hmbown/CodeWhale
+nix run github:blissito/ghostycode
 ```
 
-Nix 会构建 `codewhale`（单个二进制），然后启动调度器。在 `--` 之后传参，例如：
+Nix 会构建 `ghosty`（单个二进制），然后启动调度器。在 `--` 之后传参，例如：
 
 ```sh
-nix run github:Hmbown/CodeWhale -- --help
+nix run github:blissito/ghostycode -- --help
 ```
 
 ### Flake
@@ -290,8 +290,8 @@ nix run github:Hmbown/CodeWhale -- --help
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    codewhale.url = "github:Hmbown/CodeWhale";
-    codewhale.inputs.nixpkgs.follows = "nixpkgs";
+    ghosty.url = "github:blissito/ghostycode";
+    ghosty.inputs.nixpkgs.follows = "nixpkgs";
   };
 }
 ```
@@ -300,7 +300,7 @@ nix run github:Hmbown/CodeWhale -- --help
 
 ```nix
 {
-  outputs = { self, nixpkgs, codewhale }:
+  outputs = { self, nixpkgs, ghosty }:
   let
     # 把 system "x86_64-linux" 替换成你的系统
     system = "x86_64-linux";
@@ -312,7 +312,7 @@ nix run github:Hmbown/CodeWhale -- --help
       modules = [
         # ...
         {
-          environment.systemPackages = [ codewhale.packages.${system}.default ];
+          environment.systemPackages = [ ghosty.packages.${system}.default ];
         }
       ];
     };
@@ -327,63 +327,63 @@ nix run github:Hmbown/CodeWhale -- --help
 在 Omarchy 上安装预构建的 AUR 包：
 
 ```bash
-omarchy pkg aur add codewhale-bin
-codewhale --version
+omarchy pkg aur add ghosty-bin
+ghosty --version
 ```
 
-`codewhale-bin` 打包与其他二进制安装路径相同的、经校验和固定的 Linux 发布压缩包，并提供 `codewhale` 和 `codew` 两个命令。它不携带单独的 Codewhale 版本；现有的 `codewhale-tui` 兼容命令仍是同一运行时的别名。包更新通过 `omarchy update` 到达；应用内更新器会把 pacman 拥有的二进制留给 Omarchy。
+`ghosty-bin` 打包与其他二进制安装路径相同的、经校验和固定的 Linux 发布压缩包，并提供 `ghosty` 和 `ghosty-tui` 两个命令。它不携带单独的 Ghosty 版本；现有的 `ghosty-tui` 兼容命令仍是同一运行时的别名。包更新通过 `omarchy update` 到达；应用内更新器会把 pacman 拥有的二进制留给 Omarchy。
 
-AUR 更新跟随匹配的 Codewhale 标签和发布资源，因此它可能在 GitHub 发布之后才出现——其生成的 `PKGBUILD` 和 `.SRCINFO` 需要先经过验证。发布维护者说明见 [`packaging/aur/README.md`](../../packaging/aur/README.md)。
+AUR 更新跟随匹配的 Ghosty 标签和发布资源，因此它可能在 GitHub 发布之后才出现——其生成的 `PKGBUILD` 和 `.SRCINFO` 需要先经过验证。发布维护者说明见 [`packaging/aur/README.md`](../../packaging/aur/README.md)。
 
 ---
 
 ## Homebrew
 
-formula 名为 `codewhale`。
-tap GitHub 仓库在改名之前仍是 `Hmbown/homebrew-deepseek-tui`；`brew tap Hmbown/deepseek-tui` 无论哪种情况都能继续工作。
+formula 名为 `ghosty`。
+tap GitHub 仓库在改名之前仍是 `blissito/homebrew-ghosty`；`brew tap blissito/ghostycode` 无论哪种情况都能继续工作。
 
 ```bash
-brew tap Hmbown/deepseek-tui
-brew install codewhale
+brew tap blissito/ghostycode
+brew install ghosty
 ```
 
-用 `brew upgrade codewhale` 更新。
-旧的 `deepseek-tui` formula 名下的 Cellar 安装，在一个重叠发布周期内，仍可运行 `brew upgrade deepseek-tui`；新安装应使用 `codewhale`。
+用 `brew upgrade ghosty` 更新。
+旧的 `deepseek-tui` formula 名下的 Cellar 安装，在一个重叠发布周期内，仍可运行 `brew upgrade deepseek-tui`；新安装应使用 `ghosty`。
 
 ---
 
 ## 6. 从 GitHub Releases 手动下载
 
-每个平台在 Releases 页面以**两种形式**出现（这是有意为之——见 #3208）：**裸二进制**（`codewhale-<platform>` 和 `codew-<platform>`，无扩展名）和 **`.tar.gz` / `.zip` 压缩包**（`codewhale-<platform>.tar.gz`），压缩包包含了同样的命令，还外加了 `install.sh`。
-npm 包装器和应用内 `codewhale update` 会下载匹配的运行时二进制；压缩包是最简单的手动安装方式（见[第 6 节](#6-从-github-releases-手动下载)）。下面的步骤直接使用裸二进制文件。
+每个平台在 Releases 页面以**两种形式**出现（这是有意为之——见 #3208）：**裸二进制**（`ghosty-<platform>` 和 `ghosty-tui-<platform>`，无扩展名）和 **`.tar.gz` / `.zip` 压缩包**（`ghosty-<platform>.tar.gz`），压缩包包含了同样的命令，还外加了 `install.sh`。
+npm 包装器和应用内 `ghosty update` 会下载匹配的运行时二进制；压缩包是最简单的手动安装方式（见[第 6 节](#6-从-github-releases-手动下载)）。下面的步骤直接使用裸二进制文件。
 
-从 [Releases 页面](https://github.com/Hmbown/CodeWhale/releases)抓取匹配你平台的命令组，并把它们并排放入 `PATH` 上的某个目录（例如 `~/.local/bin`）：
+从 [Releases 页面](https://github.com/blissito/ghostycode/releases)抓取匹配你平台的命令组，并把它们并排放入 `PATH` 上的某个目录（例如 `~/.local/bin`）：
 
 ```bash
 # Linux ARM64 示例
 mkdir -p ~/.local/bin
-curl -L -o ~/.local/bin/codewhale      \
-    https://github.com/Hmbown/CodeWhale/releases/latest/download/codewhale-linux-arm64
-curl -L -o ~/.local/bin/codew          \
-    https://github.com/Hmbown/CodeWhale/releases/latest/download/codew-linux-arm64
-chmod +x ~/.local/bin/codewhale ~/.local/bin/codew
-codewhale --version
+curl -L -o ~/.local/bin/ghosty      \
+    https://github.com/blissito/ghostycode/releases/latest/download/ghosty-linux-arm64
+curl -L -o ~/.local/bin/ghosty-tui          \
+    https://github.com/blissito/ghostycode/releases/latest/download/ghosty-tui-linux-arm64
+chmod +x ~/.local/bin/ghosty ~/.local/bin/ghosty-tui
+ghosty --version
 ```
 
 > **macOS Gatekeeper 说明。** 如果你用浏览器下载了二进制，macOS 可能会用"Apple 无法验证"警告拦截它们。清除两个二进制的隔离属性后重试：
 > ```bash
-> xattr -d com.apple.quarantine ~/.local/bin/codewhale ~/.local/bin/codew 2>/dev/null || true
+> xattr -d com.apple.quarantine ~/.local/bin/ghosty ~/.local/bin/ghosty-tui 2>/dev/null || true
 > ```
 
 根据每个版本的 SHA-256 清单验证完整性：
 
 ```bash
-curl -L -o /tmp/codewhale-artifacts-sha256.txt \
-    https://github.com/Hmbown/CodeWhale/releases/latest/download/codewhale-artifacts-sha256.txt
-( cd ~/.local/bin && sha256sum -c /tmp/codewhale-artifacts-sha256.txt --ignore-missing )
+curl -L -o /tmp/ghosty-artifacts-sha256.txt \
+    https://github.com/blissito/ghostycode/releases/latest/download/ghosty-artifacts-sha256.txt
+( cd ~/.local/bin && sha256sum -c /tmp/ghosty-artifacts-sha256.txt --ignore-missing )
 ```
 
-（在 macOS 上使用 `shasum -a 256 -c /tmp/codewhale-artifacts-sha256.txt --ignore-missing` 代替 `sha256sum -c`。）
+（在 macOS 上使用 `shasum -a 256 -c /tmp/ghosty-artifacts-sha256.txt --ignore-missing` 代替 `sha256sum -c`。）
 
 ### 回滚到之前的版本
 
@@ -391,89 +391,89 @@ curl -L -o /tmp/codewhale-artifacts-sha256.txt \
 
 ```bash
 # npm 包装器，仅对已发布到 npm 的版本有效
-npm install -g codewhale@X.Y.Z
+npm install -g ghosty@X.Y.Z
 
-# Cargo 路径：一个包安装 codewhale
-cargo install codewhale-cli --version X.Y.Z --locked --force
+# Cargo 路径：一个包安装 ghosty
+cargo install ghosty-cli --version X.Y.Z --locked --force
 ```
 
 手动安装时，请从确切的 release 标签下载匹配的二进制或平台压缩包，并从同一标签校验对应的校验和清单：
 
 ```bash
 # 单独的二进制
-curl -L -o codewhale-artifacts-sha256.txt \
-  https://github.com/Hmbown/CodeWhale/releases/download/vX.Y.Z/codewhale-artifacts-sha256.txt
+curl -L -o ghosty-artifacts-sha256.txt \
+  https://github.com/blissito/ghostycode/releases/download/vX.Y.Z/ghosty-artifacts-sha256.txt
 
 # 平台压缩包
-curl -L -o codewhale-bundles-sha256.txt \
-  https://github.com/Hmbown/CodeWhale/releases/download/vX.Y.Z/codewhale-bundles-sha256.txt
+curl -L -o ghosty-bundles-sha256.txt \
+  https://github.com/blissito/ghostycode/releases/download/vX.Y.Z/ghosty-bundles-sha256.txt
 ```
 
-在 Codewhale 工作区内，`/restore list [N]` 列出 side-git 文件快照，`/restore <N>` 从所选快照恢复文件。这种工作区回滚不会改变你已安装的二进制版本，也不会重写对话历史。
+在 Ghosty 工作区内，`/restore list [N]` 列出 side-git 文件快照，`/restore <N>` 从所选快照恢复文件。这种工作区回滚不会改变你已安装的二进制版本，也不会重写对话历史。
 
 ### Windows Scoop
 
-`codewhale` 包列在 Scoop 的 main bucket 中：
+`ghosty` 包列在 Scoop 的 main bucket 中：
 
 ```powershell
 scoop update
-scoop install codewhale
-codewhale --version
+scoop install ghosty
+ghosty --version
 ```
 
 Scoop 清单维护在本仓库的发布工作流之外，可能落后于 GitHub/npm/Cargo 发布。当你需要立即拿到最新版本时，请使用 npm 或手动在 GitHub release 下载。
 
 ### Windows winget（v0.9.5+）
 
-CodeWhale 为 `Hmbown.CodeWhale` 发布 winget manifest（解决 #1561）。Winget 只安装 `codewhale` + `codew` 命令。GitHub Releases 保留字节完全一致的 `codewhale-tui-*` 文件名，仅用于旧版更新器兼容；它们不是第三个已安装命令。
+GhostyCode 为 `blissito.GhostyCode` 发布 winget manifest（解决 #1561）。Winget 只安装 `ghosty` + `ghosty-tui` 命令。GitHub Releases 保留字节完全一致的 `ghosty-tui-*` 文件名，仅用于旧版更新器兼容；它们不是第三个已安装命令。
 
 ```powershell
-winget install Hmbown.CodeWhale
-codewhale --version
+winget install blissito.GhostyCode
+ghosty --version
 ```
 
-清单位于 [`packaging/winget/Hmbown.CodeWhale.yaml`](../../packaging/winget/Hmbown.CodeWhale.yaml)（也在 [`.winget/Hmbown.CodeWhale.yaml`](../../.winget/Hmbown.CodeWhale.yaml) 镜像了一份），列出 NSIS 安装器（`CodeWhaleSetup.exe`，每用户安装，把 `%LOCALAPPDATA%\Programs\CodeWhale\bin` 加入用户 PATH）和便携 ZIP 备选（`codewhale-windows-x64.zip` / `codewhale-windows-arm64.zip`）。
-winget 会自动选择匹配的架构；两者都安装单二进制文件（`codewhale.exe` + `codew.exe`）。ZIP 里还包含 `codewhale.bat`。请双击那个启动器（而不是原始 `.exe`），如此，首选窗口被设置为 Windows Terminal（如果已安装）。
+清单位于 [`packaging/winget/blissito.GhostyCode.yaml`](../../packaging/winget/blissito.GhostyCode.yaml)（也在 [`.winget/blissito.GhostyCode.yaml`](../../.winget/blissito.GhostyCode.yaml) 镜像了一份），列出 NSIS 安装器（`GhostyCodeSetup.exe`，每用户安装，把 `%LOCALAPPDATA%\Programs\GhostyCode\bin` 加入用户 PATH）和便携 ZIP 备选（`ghosty-windows-x64.zip` / `ghosty-windows-arm64.zip`）。
+winget 会自动选择匹配的架构；两者都安装单二进制文件（`ghosty.exe` + `ghosty-tui.exe`）。ZIP 里还包含 `ghosty.bat`。请双击那个启动器（而不是原始 `.exe`），如此，首选窗口被设置为 Windows Terminal（如果已安装）。
 
-通过 `winget upgrade Hmbown.CodeWhale` 或 `codewhale update` 更新。winget 包维护在本仓库的发布工作流之外，可能会比 GitHub/npm/Cargo 发布滞后一个验证周期 —— 当您需要最新版本时，请使用 npm 或 GitHub Release 资源。
-如果 `winget install` 报告哈希不匹配，请校验同一标签的 `codewhale-artifacts-sha256.txt`，并通过 `packaging/winget/generate-winget-manifest.sh` 重新生成清单（见 [`packaging/winget/README.md`](../../packaging/winget/README.md)），然后重新提交到 [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs)。
+通过 `winget upgrade blissito.GhostyCode` 或 `ghosty update` 更新。winget 包维护在本仓库的发布工作流之外，可能会比 GitHub/npm/Cargo 发布滞后一个验证周期 —— 当您需要最新版本时，请使用 npm 或 GitHub Release 资源。
+如果 `winget install` 报告哈希不匹配，请校验同一标签的 `ghosty-artifacts-sha256.txt`，并通过 `packaging/winget/generate-winget-manifest.sh` 重新生成清单（见 [`packaging/winget/README.md`](../../packaging/winget/README.md)），然后重新提交到 [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs)。
 
-> **Windows ARM64 说明。** NSIS 安装器目前只包含 x64 二进制。Windows ARM64 用户应通过 `winget install Hmbown.CodeWhale`（ARM64 ZIP）或原生 ARM64 Node.js 下的 `npm install -g codewhale` 安装，或直接下载 `codewhale-windows-arm64.zip`——所有路径都会安装原生 ARM64 二进制。
+> **Windows ARM64 说明。** NSIS 安装器目前只包含 x64 二进制。Windows ARM64 用户应通过 `winget install blissito.GhostyCode`（ARM64 ZIP）或原生 ARM64 Node.js 下的 `npm install -g ghosty` 安装，或直接下载 `ghosty-windows-arm64.zip`——所有路径都会安装原生 ARM64 二进制。
 
 ### Windows NSIS 安装器
 
 从 v0.8.50 开始，为喜欢传统双击安装的 Windows 用户提供了独立的基于 NSIS 的安装器（无需 npm、Scoop 或 Cargo）。
 
-NSIS 安装器目前包含 Windows x64 二进制。Windows ARM64 用户应通过原生 ARM64 Node.js 下的 npm 安装，或从同一 release 下载 `codewhale-windows-arm64.zip`；两条路径都会使用原生 ARM64 二进制。
+NSIS 安装器目前包含 Windows x64 二进制。Windows ARM64 用户应通过原生 ARM64 Node.js 下的 npm 安装，或从同一 release 下载 `ghosty-windows-arm64.zip`；两条路径都会使用原生 ARM64 二进制。
 
-**下载** 从 [Releases 页面](https://github.com/Hmbown/CodeWhale/releases/latest) 下载 `CodeWhaleSetup.exe`。
+**下载** 从 [Releases 页面](https://github.com/blissito/ghostycode/releases/latest) 下载 `GhostyCodeSetup.exe`。
 
 **安装** 双击安装程序。安装器会：
 
-- 把 `codewhale.exe` 和 `codew.exe` 并排安装（单二进制，没有 `codewhale-tui.exe`）到 `%LOCALAPPDATA%\Programs\CodeWhale\bin`
-- 安装 `codewhale.bat`，它在 `PATH` 上存在 Windows Terminal（`wt.exe`）时优先使用，否则直接启动 exe
+- 把 `ghosty.exe` 和 `ghosty-tui.exe` 并排安装（单二进制，没有 `ghosty-tui.exe`）到 `%LOCALAPPDATA%\Programs\GhostyCode\bin`
+- 安装 `ghosty.bat`，它在 `PATH` 上存在 Windows Terminal（`wt.exe`）时优先使用，否则直接启动 exe
 - 创建当前用户的开始菜单快捷方式，指向该启动器，而非裸 `.exe`
 - 把安装目录加入**当前用户**的 `PATH`
 - 在 Windows **应用和功能（Apps & Features）** 中注册，便于卸载
 
-卸载会移除二进制、`codewhale.bat`、开始菜单快捷方式和用户 `PATH` 条目。
+卸载会移除二进制、`ghosty.bat`、开始菜单快捷方式和用户 `PATH` 条目。
 
 **静默安装**（供 IT 管理员、SCCM、Intune 使用）：
 
 ```powershell
-CodeWhaleSetup.exe /S
+GhostyCodeSetup.exe /S
 ```
 
-安装器是每用户安装，不会请求提权。请在目标用户的环境中运行静默安装，或使用能为每个需要 Codewhale 的用户配置文件运行安装器的部署工具。
+安装器是每用户安装，不会请求提权。请在目标用户的环境中运行静默安装，或使用能为每个需要 Ghosty 的用户配置文件运行安装器的部署工具。
 
-发布版安装器目前未签名，可能触发 Windows SmartScreen。部署前请用 `codewhale-artifacts-sha256.txt` 校验 SHA-256 校验和（checksum）；如果你的环境要求签名应用包，请在内部部署管道中对安装程序进行签名。
+发布版安装器目前未签名，可能触发 Windows SmartScreen。部署前请用 `ghosty-artifacts-sha256.txt` 校验 SHA-256 校验和（checksum）；如果你的环境要求签名应用包，请在内部部署管道中对安装程序进行签名。
 
 **自行构建安装程序**（需要 [NSIS](https://nsis.sourceforge.io)）：
 
 ```powershell
 cd scripts\installer
-# 把 codewhale.exe 和 codew.exe 放到这里（单二进制，没有 codewhale-tui.exe），然后：
-makensis /DVERSION=<version> codewhale.nsi
+# 把 ghosty.exe 和 ghosty-tui.exe 放到这里（单二进制，没有 ghosty-tui.exe），然后：
+makensis /DVERSION=<version> ghosty.nsi
 ```
 
 **手动回退**——如果安装器被组策略阻止，参见 [CLASSROOM_INSTALL.md](../CLASSROOM_INSTALL.md) 指南中的分步 PowerShell 命令。
@@ -500,29 +500,29 @@ makensis /DVERSION=<version> codewhale.nsi
 ### 构建并安装
 
 ```bash
-git clone https://github.com/Hmbown/CodeWhale.git
-cd CodeWhale
+git clone https://github.com/blissito/ghostycode.git
+cd GhostyCode
 
-cargo install --path crates/cli --locked   # 安装 codewhale
+cargo install --path crates/cli --locked   # 安装 ghosty
 
-codewhale --version
+ghosty --version
 ```
 
 命令默认安装到 `~/.cargo/bin/`；请确保该目录在你的 `PATH` 上。
 
 ### FreeBSD 14+（解决 #1097）
 
-FreeBSD 没有预编译的 GitHub Release 资源——`npm install -g codewhale` 会故意失败，提示 `Unsupported platform: freebsd` 并指向 Cargo。从源码安装：
+FreeBSD 没有预编译的 GitHub Release 资源——`npm install -g ghosty` 会故意失败，提示 `Unsupported platform: freebsd` 并指向 Cargo。从源码安装：
 
 ```bash
 pkg install -y rust pkgconf git
-cargo install codewhale-cli --locked   # 安装 codewhale
-codewhale --version
-codewhale doctor
+cargo install ghosty-cli --locked   # 安装 ghosty
+ghosty --version
+ghosty doctor
 ```
 
 `rquickjs` 的 FreeBSD 绑定在构建时通过 `bindgen` 生成（见 `1582ba965`/`5eb0385e8`）。
-目前还没有单独的 `pkg install codewhale` 端口——原生端口作为 #1097 的后续工作记录在 `packaging/freebsd/` 下（欢迎贡献）。请在 release 分支上用 `cargo check --target x86_64-unknown-freebsd -p codewhale-cli --locked` 验证；7×1 发布矩阵（Linux musl x64/arm64、Android arm64、macOS x64/arm64、Windows x64/arm64）仍是 7 个目标——FreeBSD 是源码构建目标，不是预编译资源。
+目前还没有单独的 `pkg install ghosty` 端口——原生端口作为 #1097 的后续工作记录在 `packaging/freebsd/` 下（欢迎贡献）。请在 release 分支上用 `cargo check --target x86_64-unknown-freebsd -p ghosty-cli --locked` 验证；7×1 发布矩阵（Linux musl x64/arm64、Android arm64、macOS x64/arm64、Windows x64/arm64）仍是 7 个目标——FreeBSD 是源码构建目标，不是预编译资源。
 
 ### 从 x64 交叉编译到 ARM64 Linux
 
@@ -534,10 +534,10 @@ rustup target add aarch64-unknown-linux-gnu
 cargo install cross --locked
 
 # 每次构建
-cross build --release --target aarch64-unknown-linux-gnu -p codewhale-cli   # 单二进制
+cross build --release --target aarch64-unknown-linux-gnu -p ghosty-cli   # 单二进制
 ```
 
-生成的二进制位于 `target/aarch64-unknown-linux-gnu/release/codewhale`。把它复制到 ARM64 主机（例如通过 `scp`）并赋予可执行权限。这个本地 GNU 构建与可移植的 musl release 资源不同；两个可执行文件都可以复制到 `codew` 便捷名称下使用。
+生成的二进制位于 `target/aarch64-unknown-linux-gnu/release/ghosty`。把它复制到 ARM64 主机（例如通过 `scp`）并赋予可执行权限。这个本地 GNU 构建与可移植的 musl release 资源不同；两个可执行文件都可以复制到 `ghosty-tui` 便捷名称下使用。
 
 如果你没有 Docker，直接安装交叉链接器，让 Cargo 完成工作：
 
@@ -550,7 +550,7 @@ cat >> ~/.cargo/config.toml <<'EOF'
 linker = "aarch64-linux-gnu-gcc"
 EOF
 
-cargo build --release --target aarch64-unknown-linux-gnu -p codewhale-cli   # 单二进制
+cargo build --release --target aarch64-unknown-linux-gnu -p ghosty-cli   # 单二进制
 ```
 
 交叉编译时生成 `aarch64-unknown-linux-musl` 需要合适的 musl 交叉链接器。release 工作流通过在 GitHub 的原生 ARM runner 上构建并启动 musl 二进制来避免这个额外的活动部件。
@@ -592,13 +592,13 @@ $env:PATH     = "$msvc\bin\Hostx64\x64;$env:PATH"
 **构建**
 
 ```bash
-git clone https://github.com/Hmbown/CodeWhale.git
-cd CodeWhale
+git clone https://github.com/blissito/ghostycode.git
+cd GhostyCode
 set CARGO_HTTP_CHECK_REVOKE=false   # 某些中国 ISP 后面可能需要
 cargo build --release
 ```
 
-Cargo 构建的二进制出现在 `target\release\codewhale.exe`。发布打包会另外把同一可执行文件暴露为 `codew.exe`。
+Cargo 构建的二进制出现在 `target\release\ghosty.exe`。发布打包会另外把同一可执行文件暴露为 `ghosty-tui.exe`。
 
 > 不想构建？通过 npm、Cargo、GitHub Releases 或 CNB 镜像安装——参见上文各节。
 
@@ -606,13 +606,13 @@ Cargo 构建的二进制出现在 `target\release\codewhale.exe`。发布打包�
 
 ## 8. Shell 补全
 
-Codewhale 生成自己的补全脚本。每个 shell 一条命令；每个脚本同时补全 **`codewhale`** 和 `codew` 缩写。
+Ghosty 生成自己的补全脚本。每个 shell 一条命令；每个脚本同时补全 **`ghosty`** 和 `ghosty-tui` 缩写。
 
 ```bash
-codewhale completion <bash|zsh|fish|powershell|elvish>
+ghosty completion <bash|zsh|fish|powershell|elvish>
 ```
 
-`codewhale completions` 是同一命令的可用别名。
+`ghosty completions` 是同一命令的可用别名。
 
 脚本写到 stdout，因此安装它就是把输出重定向到你的 shell 加载补全的位置。
 
@@ -620,16 +620,16 @@ codewhale completion <bash|zsh|fish|powershell|elvish>
 
 ```bash
 mkdir -p ~/.local/share/bash-completion/completions
-codewhale completion bash > ~/.local/share/bash-completion/completions/codewhale
+ghosty completion bash > ~/.local/share/bash-completion/completions/ghosty
 ```
 
-仅当前 shell 生效：`source <(codewhale completion bash)`。
+仅当前 shell 生效：`source <(ghosty completion bash)`。
 
 **Zsh** —— 脚本的 `#compdef` 行已覆盖两个命令名：
 
 ```bash
 mkdir -p ~/.zfunc
-codewhale completion zsh > ~/.zfunc/_codewhale
+ghosty completion zsh > ~/.zfunc/_ghosty
 ```
 
 如果 `~/.zfunc` 不在 `fpath` 上，请把它加入 `~/.zshrc`：
@@ -643,31 +643,31 @@ autoload -Uz compinit && compinit
 
 ```fish
 mkdir -p ~/.config/fish/completions
-codewhale completion fish > ~/.config/fish/completions/codewhale.fish
+ghosty completion fish > ~/.config/fish/completions/ghosty.fish
 ```
 
 **PowerShell** —— 追加到你的 profile，使其在每个会话中加载：
 
 ```powershell
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PROFILE)
-codewhale completion powershell >> $PROFILE
+ghosty completion powershell >> $PROFILE
 ```
 
 仅当前会话生效：
 
 ```powershell
-codewhale completion powershell | Out-String | Invoke-Expression
+ghosty completion powershell | Out-String | Invoke-Expression
 ```
 
 **Elvish** —— 脚本注册两个命令名：
 
 ```elvish
-codewhale completion elvish >> ~/.config/elvish/rc.elv
+ghosty completion elvish >> ~/.config/elvish/rc.elv
 ```
 
-升级 Codewhale 后重新生成脚本——它是生成它的那个版本的命令面快照，不是实时查询。
+升级 Ghosty 后重新生成脚本——它是生成它的那个版本的命令面快照，不是实时查询。
 
-> 从 v0.9.10 或更早版本升级？那些版本生成的脚本注册的是内部 `codewhale-tui` 可执行文件，因此 `codewhale` 或 `codew` 没有任何补全（[#5526](https://github.com/Hmbown/CodeWhale/issues/5526)）。删除旧文件并用上面的命令重新生成。
+> 从 v0.9.10 或更早版本升级？那些版本生成的脚本注册的是内部 `ghosty-tui` 可执行文件，因此 `ghosty` 或 `ghosty-tui` 没有任何补全（[#5526](https://github.com/blissito/ghostycode/issues/5526)）。删除旧文件并用上面的命令重新生成。
 
 ---
 
@@ -675,53 +675,53 @@ codewhale completion elvish >> ~/.config/elvish/rc.elv
 
 ### `Unsupported architecture: arm64 on platform linux`
 
-你处于 v0.8.8 之前的版本，该版本不发布 Linux ARM64 二进制。要么升级（`npm i -g codewhale@latest`），要么按[第 4 节](#4-通过-cargo-安装任何-tier-1-rust-目标)使用 `cargo install`。
+你处于 v0.8.8 之前的版本，该版本不发布 Linux ARM64 二进制。要么升级（`npm i -g ghosty@latest`），要么按[第 4 节](#4-通过-cargo-安装任何-tier-1-rust-目标)使用 `cargo install`。
 
 ### 升级旧安装后出现 `MISSING_COMPANION_BINARY`
 
 当前的单二进制在进程内运行 TUI，不需要配套可执行文件。该错误标识的是过时的 v0.9.5 之前调度器；请用当前的 npm 包或 Cargo 二进制替换该安装，而不是下载额外的运行时：
 
 ```bash
-npm install -g codewhale
+npm install -g ghosty
 # 或
-cargo install codewhale-cli --locked --force
+cargo install ghosty-cli --locked --force
 ```
 
-### `codewhale update` 报告 `no asset found for platform codewhale-linux-aarch64`
+### `ghosty update` 报告 `no asset found for platform ghosty-linux-aarch64`
 
-这是 v0.8.7 中的 [#503](https://github.com/Hmbown/CodeWhale/issues/503)——自更新器使用了 Rust 的 `aarch64`/`x86_64` 架构名，而不是发布工件的 `arm64`/`x64`。v0.8.8 之前的临时方案：
+这是 v0.8.7 中的 [#503](https://github.com/blissito/ghostycode/issues/503)——自更新器使用了 Rust 的 `aarch64`/`x86_64` 架构名，而不是发布工件的 `arm64`/`x64`。v0.8.8 之前的临时方案：
 
 ```bash
-npm i -g codewhale@latest
+npm i -g ghosty@latest
 # 或
-cargo install codewhale-cli --locked
+cargo install ghosty-cli --locked
 ```
 
 ### 中国大陆 npm 下载慢或超时
 
-在 Linux x64 上，npm 包装器已经并行探测 GitHub Releases 和 CNB 第一方校验和清单，并且只从第一个通过校验的来源下载二进制。这条自动路径不需要 `CODEWHALE_USE_CNB_MIRROR=1`。
+在 Linux x64 上，npm 包装器已经并行探测 GitHub Releases 和 CNB 第一方校验和清单，并且只从第一个通过校验的来源下载二进制。这条自动路径不需要 `GHOSTY_USE_CNB_MIRROR=1`。
 
-如果两个第一方来源都失败，把 `CODEWHALE_RELEASE_BASE_URL` 设置为镜像的 release 资源目录（rsproxy、TUNA、腾讯云 COS、阿里云 OSS），或者完全跳过 npm，使用[第 4 节](#4-通过-cargo-安装任何-tier-1-rust-目标)的 Cargo 镜像设置。旧的 `DEEPSEEK_TUI_RELEASE_BASE_URL` 名称仍被接受。`CODEWHALE_USE_CNB_MIRROR=1` 仍只在 Linux x64 / OpenHarmony x64 上强制 CNB。
+如果两个第一方来源都失败，把 `GHOSTY_RELEASE_BASE_URL` 设置为镜像的 release 资源目录（rsproxy、TUNA、腾讯云 COS、阿里云 OSS），或者完全跳过 npm，使用[第 4 节](#4-通过-cargo-安装任何-tier-1-rust-目标)的 Cargo 镜像设置。旧的 `DEEPSEEK_TUI_RELEASE_BASE_URL` 名称仍被接受。`GHOSTY_USE_CNB_MIRROR=1` 仍只在 Linux x64 / OpenHarmony x64 上强制 CNB。
 
-### 中国大陆 无法从 GitHub 使用 `codewhale update`
+### 中国大陆 无法从 GitHub 使用 `ghosty update`
 
-`codewhale update` 通常会联系 GitHub Releases 获取元数据和二进制资源。在 GitHub 被屏蔽或不稳定的网络上，改用 CNB 源镜像，并从 release 标签安装 `codewhale-cli` 包。Cargo 会安装 `codewhale` 命令：
+`ghosty update` 通常会联系 GitHub Releases 获取元数据和二进制资源。在 GitHub 被屏蔽或不稳定的网络上，改用 CNB 源镜像，并从 release 标签安装 `ghosty-cli` 包。Cargo 会安装 `ghosty` 命令：
 
-要查看最新 release 而不下载或替换二进制，运行 `codewhale update --check`。
-
-```bash
-cargo install --git https://cnb.cool/codewhale.net/codewhale --tag vX.Y.Z codewhale-cli --locked --force   # 单二进制
-```
-
-如果你运营二进制资源镜像，`codewhale update` 可以直接使用它：
+要查看最新 release 而不下载或替换二进制，运行 `ghosty update --check`。
 
 ```bash
-CODEWHALE_RELEASE_BASE_URL=https://your-mirror.example.com/CodeWhale/vX.Y.Z/ \
-CODEWHALE_VERSION=X.Y.Z \
-codewhale update
+cargo install --git https://cnb.cool/ghosty.net/ghosty --tag vX.Y.Z ghosty-cli --locked --force   # 单二进制
 ```
 
-镜像目录必须包含 `codewhale-artifacts-sha256.txt` 和来自 GitHub release 的平台二进制。旧的 `DEEPSEEK_TUI_RELEASE_BASE_URL` 镜像变量仍作为别名受支持。
+如果你运营二进制资源镜像，`ghosty update` 可以直接使用它：
+
+```bash
+GHOSTY_RELEASE_BASE_URL=https://your-mirror.example.com/GhostyCode/vX.Y.Z/ \
+GHOSTY_VERSION=X.Y.Z \
+ghosty update
+```
+
+镜像目录必须包含 `ghosty-artifacts-sha256.txt` 和来自 GitHub release 的平台二进制。旧的 `DEEPSEEK_TUI_RELEASE_BASE_URL` 镜像变量仍作为别名受支持。
 
 ### Debian/Ubuntu：`cargo install` 报 `feature edition2024 is required`
 
@@ -733,7 +733,7 @@ The package requires the Cargo feature called `edition2024`, but that feature
 is not stabilized in this version of Cargo
 ```
 
-通过 rustup 安装当前的 stable Rust，然后重新运行[第 4 节](#4-通过-cargo-安装任何-tier-1-rust-目标)中的那条 Cargo 包安装命令。它会安装 `codewhale`。对于中国大陆网络，以下基于 rsproxy 的序列已验证可用：
+通过 rustup 安装当前的 stable Rust，然后重新运行[第 4 节](#4-通过-cargo-安装任何-tier-1-rust-目标)中的那条 Cargo 包安装命令。它会安装 `ghosty`。对于中国大陆网络，以下基于 rsproxy 的序列已验证可用：
 
 ```bash
 export RUSTUP_DIST_SERVER=https://rsproxy.cn
@@ -742,7 +742,7 @@ export RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 rustup default stable
-cargo install codewhale-cli --locked   # 安装 codewhale
+cargo install ghosty-cli --locked   # 安装 ghosty
 ```
 
 之后，`which cargo` 应指向 `~/.cargo/bin/cargo`，而不是 `/usr/bin/cargo`。
@@ -757,17 +757,17 @@ sudo apt-get install -y build-essential pkg-config libdbus-1-dev
 
 ### WSL2 / Ubuntu：构建时找不到 `dbus-1` 或 `pkg-config`
 
-WSL2 与 Ubuntu 使用相同的 Linux 源码构建路径。如果 `cargo install codewhale-cli --locked` 在编译 keyring 或 D-Bus 密钥存储 crate 时失败，请在 WSL 发行版内安装 Linux 构建依赖，然后重新运行那条 Cargo 包安装命令。它会安装 `codewhale`：
+WSL2 与 Ubuntu 使用相同的 Linux 源码构建路径。如果 `cargo install ghosty-cli --locked` 在编译 keyring 或 D-Bus 密钥存储 crate 时失败，请在 WSL 发行版内安装 Linux 构建依赖，然后重新运行那条 Cargo 包安装命令。它会安装 `ghosty`：
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y build-essential pkg-config libdbus-1-dev
-cargo install codewhale-cli --locked   # 安装 codewhale
+cargo install ghosty-cli --locked   # 安装 ghosty
 ```
 
-预编译的 npm/GitHub 二进制不需要这些构建时包；它们只在 WSL2 从源码编译 Codewhale 时才需要。
+预编译的 npm/GitHub 二进制不需要这些构建时包；它们只在 WSL2 从源码编译 Ghosty 时才需要。
 
-### 包装器装好了但找不到 `codewhale`
+### 包装器装好了但找不到 `ghosty`
 
 `npm i -g` 安装到 `$(npm prefix -g)/bin`；请确保该目录在你的 shell `PATH` 上。使用 nvm 时：`nvm use --lts && hash -r`。
 
@@ -804,7 +804,7 @@ Visual Studio Build Tools 不会把 `cl.exe` 加入全局 `PATH`。二选一：
 1. **把项目的 `target/` 目录加入杀毒软件排除列表。**
 2. **在 `cargo build` 期间暂时关闭杀毒软件。**
 3. **改用 GitHub Release 安装器/压缩包**——发布资源提供预编译二进制，完全跳过 Cargo 构建（[第 6 节](#6-从-github-releases-手动下载)）。
-4. **使用 crates.io 的 `cargo install codewhale-cli --locked`**——这会改变二进制路径，某些杀毒软件对不同的路径处理方式不同。
+4. **使用 crates.io 的 `cargo install ghosty-cli --locked`**——这会改变二进制路径，某些杀毒软件对不同的路径处理方式不同。
 
 要验证构建脚本二进制本身是否有效（未损坏），在 `target/debug/build/<crate>/build-script-build` 下找到它并手动运行：
 
@@ -816,7 +816,7 @@ target/debug/build/libsqlite3-sys-*/build-script-build
 
 ### npm 二进制下载超时
 
-如果 `codewhale` 等待几秒后打印 `connect ETIMEDOUT` 或 `EAI_AGAIN`（从 `github.com` 拉取时），说明 npm 包装器安装成功，但预编译二进制下载在你的网络上被屏蔽或不稳定。该下载与 npm registry 包下载是分开的。在 Linux x64 上，包装器先竞争小型 GitHub 和 CNB 校验和清单，不会等到完整 GitHub 二进制超时才使用有效的 CNB 清单。
+如果 `ghosty` 等待几秒后打印 `connect ETIMEDOUT` 或 `EAI_AGAIN`（从 `github.com` 拉取时），说明 npm 包装器安装成功，但预编译二进制下载在你的网络上被屏蔽或不稳定。该下载与 npm registry 包下载是分开的。在 Linux x64 上，包装器先竞争小型 GitHub 和 CNB 校验和清单，不会等到完整 GitHub 二进制超时才使用有效的 CNB 清单。
 
 使用以下路径之一：
 
@@ -824,30 +824,30 @@ target/debug/build/libsqlite3-sys-*/build-script-build
 
    ```bash
    export HTTPS_PROXY=http://your-proxy:port
-   codewhale
+   ghosty
    ```
 
-2. 在内部镜像 release 资源并设置 `CODEWHALE_RELEASE_BASE_URL`：
+2. 在内部镜像 release 资源并设置 `GHOSTY_RELEASE_BASE_URL`：
 
    ```bash
-   export CODEWHALE_RELEASE_BASE_URL=https://your-mirror.example.com/CodeWhale/
-   codewhale
+   export GHOSTY_RELEASE_BASE_URL=https://your-mirror.example.com/GhostyCode/
+   ghosty
    ```
 
-   目录必须包含 `codewhale-artifacts-sha256.txt` 和来自 GitHub release 的平台二进制。
+   目录必须包含 `ghosty-artifacts-sha256.txt` 和来自 GitHub release 的平台二进制。
 
 3. 通过 Cargo 安装，它在本地构建，不下载 GitHub release 资源。参见[第 4 节](#4-通过-cargo-安装任何-tier-1-rust-目标)。
 
-4. 从 [Releases 页面](https://github.com/Hmbown/CodeWhale/releases) 下载匹配的 `codewhale` 和 `codew` 两个二进制，放入 `PATH` 上的目录并赋予可执行权限。参见[第 6 节](#6-从-github-releases-手动下载)。
+4. 从 [Releases 页面](https://github.com/blissito/ghostycode/releases) 下载匹配的 `ghosty` 和 `ghosty-tui` 两个二进制，放入 `PATH` 上的目录并赋予可执行权限。参见[第 6 节](#6-从-github-releases-手动下载)。
 
 ---
 
 ## 10. 验证你的安装
 
 ```bash
-codewhale --version
-codewhale doctor       # 检查 API key、provider、运行时与 PATH 完整性
-codewhale doctor --json
+ghosty --version
+ghosty doctor       # 检查 API key、provider、运行时与 PATH 完整性
+ghosty doctor --json
 ```
 
 如果 `doctor` 发现问题，会以非零状态退出并打印结构化的修复提示。需要帮助时，把 JSON 输出粘贴到 GitHub issue 中。

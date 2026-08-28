@@ -1,7 +1,7 @@
 //! Shell job-center commands.
 
-use codewhale_command_contract::handler::CommandHandler;
-use codewhale_command_contract::metadata::{CommandInfo, RegisterCommand};
+use ghosty_command_contract::handler::CommandHandler;
+use ghosty_command_contract::metadata::{CommandInfo, RegisterCommand};
 
 use crate::commands::CommandResult;
 use crate::tui::app::{AppAction, ShellJobAction};

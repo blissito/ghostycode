@@ -14,8 +14,8 @@ maintainer approval.
 
 ## Inputs
 
-- Repo root: the local CodeWhale checkout (run `git rev-parse --show-toplevel`).
-- GitHub repo: `Hmbown/CodeWhale`
+- Repo root: the local GhostyCode checkout (run `git rev-parse --show-toplevel`).
+- GitHub repo: `blissito/ghostycode`
 - Required GitHub CLI: `gh`
 - An issue set: explicit numbers, or a milestone (e.g. `v0.8.62`).
 
@@ -25,7 +25,7 @@ maintainer approval.
    (a `v0.8.62: ...` title says nothing about whether code already covers it).
 
    ```bash
-   gh issue list --repo Hmbown/CodeWhale --state open \
+   gh issue list --repo blissito/ghostycode --state open \
      --milestone "v0.8.62" --limit 300 --json number,title,labels,milestone
    ```
 
@@ -34,7 +34,7 @@ maintainer approval.
    verdict.
 
    ```bash
-   gh issue view N --repo Hmbown/CodeWhale \
+   gh issue view N --repo blissito/ghostycode \
      --json number,title,state,author,labels,milestone,body,comments
    ```
 

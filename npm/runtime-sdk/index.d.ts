@@ -310,7 +310,7 @@ export class RuntimeCapabilityError extends RuntimeApiError {
   capability: string;
 }
 
-export class CodeWhaleRuntimeClient {
+export class GhostyCodeRuntimeClient {
   constructor(options?: RuntimeClientOptions);
   createFleetRun(spec: FleetRunCreateSpec): Promise<CreateFleetRunResponse>;
   startFleetRun(runId: FleetRunId): Promise<StartFleetRunResponse>;
@@ -329,4 +329,4 @@ export class CodeWhaleRuntimeClient {
   ): AsyncIterable<FleetStreamEvent>;
 }
 
-export function createRuntimeClient(options?: RuntimeClientOptions): CodeWhaleRuntimeClient;
+export function createRuntimeClient(options?: RuntimeClientOptions): GhostyCodeRuntimeClient;

@@ -26,7 +26,7 @@ env:
   RUSTFLAGS: -Dwarnings
   # Build identity is the trusted workflow SHA. Callers pass source_sha only
   # so `pin` can refuse a mismatch; it must not retarget checkout or caches.
-  CODEWHALE_BUILD_SHA: ${{ github.sha }}
+  GHOSTY_BUILD_SHA: ${{ github.sha }}
 
 jobs:
   pin:
@@ -53,7 +53,7 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     timeout-minutes: 90
-    # FreeBSD is a source-build target validated via `cargo check --target x86_64-unknown-freebsd -p codewhale-cli --locked`
+    # FreeBSD is a source-build target validated via `cargo check --target x86_64-unknown-freebsd -p ghosty-cli --locked`
     # (see packaging/freebsd/README.md and docs/INSTALL.md#freebsd). The 7×1 prebuilt matrix stays 7 targets;
     # FreeBSD has no prebuilt asset, no npm binary, and no matrix bloat — it builds from source.
     strategy:
@@ -63,59 +63,59 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             platform: linux-x64
-            cli_binary: codewhale
-            shim_binary: codew
-            cli_artifact: codewhale-linux-x64
-            shim_artifact: codew-linux-x64
-            compat_tui_artifact: codewhale-tui-linux-x64
+            cli_binary: ghosty
+            shim_binary: ghosty-tui
+            cli_artifact: ghosty-linux-x64
+            shim_artifact: ghosty-tui-linux-x64
+            compat_tui_artifact: ghosty-tui-linux-x64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             platform: linux-arm64
-            cli_binary: codewhale
-            shim_binary: codew
-            cli_artifact: codewhale-linux-arm64
-            shim_artifact: codew-linux-arm64
-            compat_tui_artifact: codewhale-tui-linux-arm64
+            cli_binary: ghosty
+            shim_binary: ghosty-tui
+            cli_artifact: ghosty-linux-arm64
+            shim_artifact: ghosty-tui-linux-arm64
+            compat_tui_artifact: ghosty-tui-linux-arm64
           - os: ubuntu-latest
             target: aarch64-linux-android
             platform: android-arm64
-            cli_binary: codewhale
-            shim_binary: codew
-            cli_artifact: codewhale-android-arm64
-            shim_artifact: codew-android-arm64
-            compat_tui_artifact: codewhale-tui-android-arm64
+            cli_binary: ghosty
+            shim_binary: ghosty-tui
+            cli_artifact: ghosty-android-arm64
+            shim_artifact: ghosty-tui-android-arm64
+            compat_tui_artifact: ghosty-tui-android-arm64
           - os: macos-latest
             target: x86_64-apple-darwin
             platform: macos-x64
-            cli_binary: codewhale
-            shim_binary: codew
-            cli_artifact: codewhale-macos-x64
-            shim_artifact: codew-macos-x64
-            compat_tui_artifact: codewhale-tui-macos-x64
+            cli_binary: ghosty
+            shim_binary: ghosty-tui
+            cli_artifact: ghosty-macos-x64
+            shim_artifact: ghosty-tui-macos-x64
+            compat_tui_artifact: ghosty-tui-macos-x64
           - os: macos-latest
             target: aarch64-apple-darwin
             platform: macos-arm64
-            cli_binary: codewhale
-            shim_binary: codew
-            cli_artifact: codewhale-macos-arm64
-            shim_artifact: codew-macos-arm64
-            compat_tui_artifact: codewhale-tui-macos-arm64
+            cli_binary: ghosty
+            shim_binary: ghosty-tui
+            cli_artifact: ghosty-macos-arm64
+            shim_artifact: ghosty-tui-macos-arm64
+            compat_tui_artifact: ghosty-tui-macos-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             platform: windows-x64
-            cli_binary: codewhale.exe
-            shim_binary: codew.exe
-            cli_artifact: codewhale-windows-x64.exe
-            shim_artifact: codew-windows-x64.exe
-            compat_tui_artifact: codewhale-tui-windows-x64.exe
+            cli_binary: ghosty.exe
+            shim_binary: ghosty-tui.exe
+            cli_artifact: ghosty-windows-x64.exe
+            shim_artifact: ghosty-tui-windows-x64.exe
+            compat_tui_artifact: ghosty-tui-windows-x64.exe
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
             platform: windows-arm64
-            cli_binary: codewhale.exe
-            shim_binary: codew.exe
-            cli_artifact: codewhale-windows-arm64.exe
-            shim_artifact: codew-windows-arm64.exe
-            compat_tui_artifact: codewhale-tui-windows-arm64.exe
+            cli_binary: ghosty.exe
+            shim_binary: ghosty-tui.exe
+            cli_artifact: ghosty-windows-arm64.exe
+            shim_artifact: ghosty-tui-windows-arm64.exe
+            compat_tui_artifact: ghosty-tui-windows-arm64.exe
     runs-on: ${{ matrix.os }}
     needs: pin
     steps:
@@ -152,7 +152,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y binutils musl-tools
           rustup target add --toolchain stable ${{ matrix.target }}
-          cargo build --profile dist --locked --target ${{ matrix.target }} -p codewhale-cli
+          cargo build --profile dist --locked --target ${{ matrix.target }} -p ghosty-cli
       - name: Configure Android NDK linker
         if: matrix.target == 'aarch64-linux-android' && runner.os == 'Linux'
         shell: bash
@@ -202,8 +202,8 @@ jobs:
       - name: Build
         if: ${{ !endsWith(matrix.target, '-unknown-linux-musl') }}
         shell: bash
-        run: cargo build --profile dist --locked --target ${{ matrix.target }} -p codewhale-cli
-      - name: Materialize codew command alias
+        run: cargo build --profile dist --locked --target ${{ matrix.target }} -p ghosty-cli
+      - name: Materialize ghosty-tui command alias
         shell: bash
         run: |
           bin_dir="target/${{ matrix.target }}/dist"
@@ -305,11 +305,11 @@ jobs:
             bash scripts/release/create-release-bundles.sh artifacts bundles
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: codewhale-bundles
+          name: ghosty-bundles
           path: |
             bundles/*.tar.gz
             bundles/*.zip
-            bundles/codewhale-bundles-sha256.txt
+            bundles/ghosty-bundles-sha256.txt
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
           overwrite: true
@@ -332,8 +332,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          Copy-Item "artifacts\codewhale-windows-x64.exe\codewhale-windows-x64.exe" "scripts\installer\codewhale.exe"
-          Copy-Item "artifacts\codew-windows-x64.exe\codew-windows-x64.exe" "scripts\installer\codew.exe"
+          Copy-Item "artifacts\ghosty-windows-x64.exe\ghosty-windows-x64.exe" "scripts\installer\ghosty.exe"
+          Copy-Item "artifacts\ghosty-tui-windows-x64.exe\ghosty-tui-windows-x64.exe" "scripts\installer\ghosty-tui.exe"
           $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
           if (!(Test-Path $makensis)) {
             $makensis = "${env:ProgramFiles}\NSIS\makensis.exe"
@@ -342,15 +342,15 @@ jobs:
             throw "makensis.exe not found after NSIS install"
           }
           Push-Location scripts\installer
-          & $makensis "/DVERSION=${{ inputs.version }}" "codewhale.nsi"
+          & $makensis "/DVERSION=${{ inputs.version }}" "ghosty.nsi"
           Pop-Location
-          if (!(Test-Path "scripts\installer\CodeWhaleSetup.exe")) {
-            throw "CodeWhaleSetup.exe was not produced"
+          if (!(Test-Path "scripts\installer\GhostyCodeSetup.exe")) {
+            throw "GhostyCodeSetup.exe was not produced"
           }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: CodeWhaleSetup.exe
-          path: scripts/installer/CodeWhaleSetup.exe
+          name: GhostyCodeSetup.exe
+          path: scripts/installer/GhostyCodeSetup.exe
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
           overwrite: true
@@ -374,7 +374,7 @@ jobs:
         run: node scripts/release/assemble-release-assets.js intermediate-artifacts release-assets
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: codewhale-release-assets
+          name: ghosty-release-assets
           path: release-assets/*
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
@@ -394,19 +394,19 @@ jobs:
           package-manager-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: codewhale-release-assets
+          name: ghosty-release-assets
           path: release-assets
       - name: Verify 34-asset bridge inventory and checksum manifests (single binary)
         run: node scripts/release/assemble-release-assets.js --verify release-assets
       - name: Test release inventory contracts
         run: |
           node --test scripts/release/assemble-release-assets.test.js
-          node --test npm/codewhale/test/artifacts.test.js npm/codewhale/test/release-assets.test.js
+          node --test npm/ghosty/test/artifacts.test.js npm/ghosty/test/release-assets.test.js
       - name: Render AUR metadata from candidate Linux archives
-        run: bash packaging/aur/render.sh release-assets "${RUNNER_TEMP}/codewhale-bin"
+        run: bash packaging/aur/render.sh release-assets "${RUNNER_TEMP}/ghosty-bin"
       - name: Smoke packed npm wrapper against candidate assets
         env:
-          CODEWHALE_SMOKE_ASSETS_DIR: ${{ github.workspace }}/release-assets
+          GHOSTY_SMOKE_ASSETS_DIR: ${{ github.workspace }}/release-assets
         run: node scripts/release/npm-wrapper-smoke.js
       - name: Record non-public candidate identity
         shell: bash
@@ -417,5 +417,5 @@ jobs:
             echo "- Source: \`${{ github.sha }}\`"
             echo "- Version metadata: \`${{ inputs.version }}\`"
             echo "- Inventory: 7 targets / 34 files (single binary; 7 legacy alias assets)"
-            echo "- Publication: none (Actions artifact \`codewhale-release-assets\` only)"
+            echo "- Publication: none (Actions artifact \`ghosty-release-assets\` only)"
           } >> "${GITHUB_STEP_SUMMARY}"

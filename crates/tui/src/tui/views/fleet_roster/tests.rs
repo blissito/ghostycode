@@ -35,7 +35,7 @@ fn view_with_overrides() -> FleetRosterView {
     // an instruction overlay.
     if let Some(reviewer) = members.iter_mut().find(|m| m.id == "reviewer") {
         reviewer.origin = ProfileOrigin::Workspace;
-        reviewer.source = PathBuf::from(".codewhale/agents/reviewer.toml");
+        reviewer.source = PathBuf::from(".ghosty/agents/reviewer.toml");
         reviewer.profile.model = Some("glm-5.2".to_string());
         reviewer.profile.role.instructions = Some("Review hard.".to_string());
         reviewer.profile.delegation.max_spawn_depth = Some(1);
@@ -317,7 +317,7 @@ fn detail_lines_carry_overlay_source_for_project_members() {
         .join("\n");
     assert!(text.contains("project"), "{text}");
     assert!(
-        text.contains("custom overlay (.codewhale/agents/reviewer.toml)"),
+        text.contains("custom overlay (.ghosty/agents/reviewer.toml)"),
         "{text}"
     );
     assert!(text.contains("model glm-5.2"), "{text}");
@@ -330,24 +330,24 @@ fn roster_loads_config_members_through_the_shared_merge() {
     let mut profiles = BTreeMap::new();
     profiles.insert(
         "docs-writer".to_string(),
-        codewhale_config::FleetProfile {
-            slot: codewhale_config::FleetSlot::from_name("scout"),
-            role: codewhale_config::FleetRole {
+        ghosty_config::FleetProfile {
+            slot: ghosty_config::FleetSlot::from_name("scout"),
+            role: ghosty_config::FleetRole {
                 name: "scout".to_string(),
                 description: Some("Writes docs.".to_string()),
                 instructions: None,
             },
-            loadout: codewhale_config::FleetLoadout::Fast,
+            loadout: ghosty_config::FleetLoadout::Fast,
             model: None,
             provider: None,
             reasoning_effort: None,
-            permissions: codewhale_config::FleetProfilePermissions::default(),
-            delegation: codewhale_config::FleetDelegationHints::default(),
+            permissions: ghosty_config::FleetProfilePermissions::default(),
+            delegation: ghosty_config::FleetDelegationHints::default(),
         },
     );
-    let config = codewhale_config::FleetConfigToml {
+    let config = ghosty_config::FleetConfigToml {
         profiles,
-        ..codewhale_config::FleetConfigToml::default()
+        ..ghosty_config::FleetConfigToml::default()
     };
     let view =
         FleetRosterView::from_parts(operator(), FleetRoster::load(&config, tmp.path()), None);
@@ -365,9 +365,9 @@ fn detail_pane_reports_shadowed_lower_layers() {
     view.shadowed.push(crate::fleet::roster::ShadowedProfile {
         id: "reviewer".to_string(),
         shadowed_origin: ProfileOrigin::Personal,
-        shadowed_source: PathBuf::from("/home/op/.codewhale/agents/reviewer.toml"),
+        shadowed_source: PathBuf::from("/home/op/.ghosty/agents/reviewer.toml"),
         winner_origin: ProfileOrigin::Workspace,
-        winner_source: PathBuf::from(".codewhale/agents/reviewer.toml"),
+        winner_source: PathBuf::from(".ghosty/agents/reviewer.toml"),
     });
     let reviewer = view.members.iter().find(|m| m.id == "reviewer").unwrap();
     let text = member_detail_lines_with_session(reviewer, None, &view.shadowed, view.locale)
@@ -385,11 +385,11 @@ fn detail_pane_reports_shadowed_lower_layers() {
         "detail lists every layer for the id: {text}"
     );
     assert!(
-        text.contains("project · .codewhale/agents/reviewer.toml (active)"),
+        text.contains("project · .ghosty/agents/reviewer.toml (active)"),
         "detail names the winning layer: {text}"
     );
     assert!(
-        text.contains("personal · /home/op/.codewhale/agents/reviewer.toml (ignored copy)"),
+        text.contains("personal · /home/op/.ghosty/agents/reviewer.toml (ignored copy)"),
         "detail names the ignored file: {text}"
     );
 }
@@ -404,9 +404,9 @@ fn roster_row_badges_personal_copy_ignored() {
             view.shadowed.push(crate::fleet::roster::ShadowedProfile {
                 id: "reviewer".to_string(),
                 shadowed_origin: ProfileOrigin::Personal,
-                shadowed_source: PathBuf::from("/home/op/.codewhale/agents/reviewer.toml"),
+                shadowed_source: PathBuf::from("/home/op/.ghosty/agents/reviewer.toml"),
                 winner_origin: ProfileOrigin::Workspace,
-                winner_source: PathBuf::from(".codewhale/agents/reviewer.toml"),
+                winner_source: PathBuf::from(".ghosty/agents/reviewer.toml"),
             });
             view
         },

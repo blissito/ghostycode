@@ -1,4 +1,4 @@
-# Codewhale agent guidance
+# Ghosty agent guidance
 
 Keep this file durable. Derive changing release, provider, branch, and flake
 state from the repository, tests, CI, and current issue tracker rather than from
@@ -26,8 +26,8 @@ instructions or memory. The nearest scoped `AGENTS.md` adds path-specific rules.
   Git operations, downloads, dependency installation, provider calls, or
   source/diff transmission. Record the missing external receipt and keep working
   locally.
-- Public name is **Codewhale**. Compatibility identifiers such as `CodeWhale`,
-  `codew`, protocol names, and storage keys change only through an explicit
+- Public name is **Ghosty**. Compatibility identifiers such as `GhostyCode`,
+  `ghosty-tui`, protocol names, and storage keys change only through an explicit
   migration.
 - Keep providers and models first-class and provider-neutral.
 - Never rewrite published history, retag a release, force-push a shared ref, or
@@ -81,9 +81,9 @@ Useful commands, selected according to risk rather than run ritualistically:
 
 ```sh
 cargo fmt --all -- --check
-cargo test -p codewhale-config -p codewhale-protocol
+cargo test -p ghosty-config -p ghosty-protocol
 cargo test --workspace
-cargo build --release -p codewhale-cli -p codewhale-tui
+cargo build --release -p ghosty-cli -p ghosty-tui
 ```
 
 `cargo nextest run` (config in `.config/nextest.toml`) is the fast way to
@@ -103,6 +103,6 @@ Community reports, PRs, logs, and reviews are evidence. Canonical human
 identities come from `.github/AUTHOR_MAP`; `Co-authored-by` credit is for
 humans and for recognized agent contributors (the exact identities listed in
 `AGENT_CONTRIBUTOR_IDENTITIES` in `scripts/check-coauthor-trailers.py`, such as
-`Codewhale Agent`); unknown bot/tool trailers are still rejected.
+`Ghosty Agent`); unknown bot/tool trailers are still rejected.
 Leave unrelated work intact and keep new enforcement dry-run unless explicitly
 approved.

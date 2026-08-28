@@ -13,7 +13,7 @@ pub const DEFAULT_DEEPSEEK_ANTHROPIC_BASE_URL: &str = "https://api.deepseek.com/
 pub const DEFAULT_NVIDIA_NIM_MODEL: &str = "deepseek-ai/deepseek-v4-pro";
 pub const DEFAULT_NVIDIA_NIM_FLASH_MODEL: &str = "deepseek-ai/deepseek-v4-flash";
 pub const DEFAULT_NVIDIA_NIM_BASE_URL: &str = "https://integrate.api.nvidia.com/v1";
-pub const DEFAULT_OPENAI_MODEL: &str = codewhale_config::provider::OPENAI_DEFAULT_MODEL;
+pub const DEFAULT_OPENAI_MODEL: &str = ghosty_config::provider::OPENAI_DEFAULT_MODEL;
 pub const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 pub const DEFAULT_ATLASCLOUD_MODEL: &str = "deepseek-ai/deepseek-v4-flash";
 pub const DEFAULT_ATLASCLOUD_BASE_URL: &str = "https://api.atlascloud.ai/v1";
@@ -114,7 +114,7 @@ pub const DEFAULT_MOONSHOT_BASE_URL: &str = "https://api.moonshot.ai/v1";
 pub const DEFAULT_KIMI_CODE_MODEL: &str = "kimi-for-coding";
 pub const DEFAULT_KIMI_CODE_BASE_URL: &str = "https://api.kimi.com/coding/v1";
 pub const KIMI_CODE_MEMBERSHIP_PLAN_CONSOLE_URL: &str =
-    codewhale_config::provider::KIMI_CODE_MEMBERSHIP_PLAN_CONSOLE_URL;
+    ghosty_config::provider::KIMI_CODE_MEMBERSHIP_PLAN_CONSOLE_URL;
 /// Official Kimi Code route model id. It is deliberately distinct from
 /// Moonshot's pay-as-you-go `kimi-k3` catalog id.
 pub const KIMI_CODE_K3_MODEL: &str = "k3";
@@ -140,7 +140,7 @@ pub const DEFAULT_VLLM_BASE_URL: &str = "http://localhost:8000/v1";
 pub const DEFAULT_OLLAMA_MODEL: &str = "deepseek-v4-flash";
 pub const DEFAULT_OLLAMA_BASE_URL: &str = "http://localhost:11434/v1";
 pub const DEFAULT_OLLAMA_CLOUD_MODEL: &str = "gpt-oss:120b";
-pub const DEFAULT_OLLAMA_CLOUD_BASE_URL: &str = codewhale_config::provider::OLLAMA_CLOUD_BASE_URL;
+pub const DEFAULT_OLLAMA_CLOUD_BASE_URL: &str = ghosty_config::provider::OLLAMA_CLOUD_BASE_URL;
 pub const DEFAULT_HUGGINGFACE_MODEL: &str = "deepseek-ai/DeepSeek-V4-Pro";
 pub const DEFAULT_HUGGINGFACE_FLASH_MODEL: &str = "deepseek-ai/DeepSeek-V4-Flash";
 pub const DEFAULT_HUGGINGFACE_BASE_URL: &str = "https://router.huggingface.co/v1";
@@ -201,6 +201,8 @@ pub const ZAI_GLM_5_3_MODEL: &str = "GLM-5.3";
 pub const ZAI_GLM_5_3_FLASH_MODEL: &str = "GLM-5.3-Flash";
 pub const ZAI_GLM_5_TURBO_MODEL: &str = "GLM-5-Turbo";
 pub const DEFAULT_ZAI_BASE_URL: &str = "https://api.z.ai/api/coding/paas/v4";
+/// EasyBits revende DeepSeek: base URL propia, catálogo de DeepSeek.
+pub const DEFAULT_EASYBITS_BASE_URL: &str = "https://www.easybits.cloud/api/v2/llm/v1";
 pub const DEFAULT_STEPFUN_MODEL: &str = "step-3.7-flash";
 pub const DEFAULT_STEPFUN_BASE_URL: &str = "https://api.stepfun.ai/v1";
 /// StepFun's Step Plan subscription endpoint. Billed against a plan allowance
@@ -230,7 +232,7 @@ pub const DEFAULT_LONGCAT_MODEL: &str = "LongCat-2.0";
 pub const DEFAULT_LONGCAT_BASE_URL: &str = "https://api.longcat.chat/openai/v1";
 pub const DEFAULT_OPENCODE_GO_MODEL: &str = "deepseek-v4-pro";
 pub const DEFAULT_OPENCODE_GO_BASE_URL: &str = "https://opencode.ai/zen/go/v1";
-pub use codewhale_config::OPENCODE_GO_CHAT_MODELS;
+pub use ghosty_config::OPENCODE_GO_CHAT_MODELS;
 pub const DEFAULT_OPENCODE_ZEN_MODEL: &str = "gpt-5.6";
 pub const DEFAULT_OPENCODE_ZEN_BASE_URL: &str = "https://opencode.ai/zen/v1";
 pub const DEFAULT_META_MODEL: &str = "muse-spark-1.2";

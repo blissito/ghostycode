@@ -1,7 +1,7 @@
 #!/bin/sh
-# Run cargo with the portable Codewhale cache topology applied.
+# Run cargo with the portable Ghosty cache topology applied.
 #
-#   scripts/dev-cargo.sh test -p codewhale-config --lib --locked
+#   scripts/dev-cargo.sh test -p ghosty-config --lib --locked
 #   scripts/dev-cargo.sh --status
 #   scripts/dev-cargo.sh --self-check
 #
@@ -21,11 +21,11 @@ case ${1:-} in
     ;;
 esac
 
-codewhale_dev_cache_apply
+ghosty_dev_cache_apply
 # Match CI / the product's 16 MiB owner-thread stack so local cargo test
 # and nextest do not abort on the default ~2 MiB (Windows ~1 MiB) stack.
 if [ -z "${RUST_MIN_STACK:-}" ]; then
   RUST_MIN_STACK=16777216
   export RUST_MIN_STACK
 fi
-codewhale_dev_cache_exec_cargo "$@"
+ghosty_dev_cache_exec_cargo "$@"

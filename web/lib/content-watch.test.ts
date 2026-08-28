@@ -120,9 +120,9 @@ describe("runSemanticDrift draft identity", () => {
 
   const finding = {
     page: "homepage",
-    claim: "Codewhale supports three modes",
+    claim: "Ghosty supports three modes",
     evidence: "CHANGELOG: modes renamed in 0.9.0",
-    suggested_replacement: "Codewhale supports Plan / Work / Operate",
+    suggested_replacement: "Ghosty supports Plan / Work / Operate",
   };
 
   beforeEach(() => {

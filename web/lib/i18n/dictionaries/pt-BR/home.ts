@@ -7,12 +7,12 @@ import type { HomeDict } from "../types";
  * localidades, como na edição de referência.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — mergulha fundo para você não precisar.",
+  metaTitle: "Ghosty — mergulha fundo para você não precisar.",
   metaDescription:
-    "O Codewhale mergulha fundo para você não precisar — um agente de código open source para o terminal. Traga seu próprio modelo. Roda na sua máquina. Rust, MIT.",
+    "O Ghosty mergulha fundo para você não precisar — um agente de código open source para o terminal. Traga seu próprio modelo. Roda na sua máquina. Rust, MIT.",
 
   kicker: "Código aberto · Traga seu próprio modelo · Roda no seu terminal",
-  heroTitleA: "O Codewhale mergulha fundo",
+  heroTitleA: "O Ghosty mergulha fundo",
   heroTitleB: "para você não precisar.",
   heroIntro:
     "O {brand} é um agente de código open source para o seu terminal. Dê a ele um modelo e uma tarefa — ele lê o seu código, edita arquivos, roda as próprias verificações e para quando o trabalho está pronto ou quando precisa de você. Traga qualquer modelo, ou misture vários: defina um modelo diferente para cada função.",
@@ -35,8 +35,8 @@ export const home: HomeDict = {
 
   shotSession: "Sessão atual",
   screenshotAlt:
-    "Sessão de terminal atual do Codewhale, mostrando o modo Operate, a baleia, o composer e o rodapé",
-  figcaption: "Sessão atual do Codewhale · modo Operate · postura de permissão Ask",
+    "Sessão de terminal atual do Ghosty, mostrando o modo Operate, a baleia, o composer e o rodapé",
+  figcaption: "Sessão atual do Ghosty · modo Operate · postura de permissão Ask",
 
   proofHeading: "Um terminal debaixo d'água. Qualquer modelo. Na sua máquina.",
   proofBody:
@@ -62,7 +62,7 @@ export const home: HomeDict = {
   receiptReport: "verificações aprovadas · recibo salvo",
 
   sealStart: "起",
-  startHeading: "Novo no Codewhale? Quatro passos de ponta a ponta.",
+  startHeading: "Novo no Ghosty? Quatro passos de ponta a ponta.",
   startLede:
     "Instalação → primeira sessão sem chave → conectar um provedor → primeiro workflow com a Fleet. Os termos estão definidos na página de vocabulário.",
   startGuideLink: "Ler o guia de primeiros passos →",
@@ -82,7 +82,7 @@ export const home: HomeDict = {
   surfacesHeading: "Use o runtime onde o trabalho acontece.",
   surfaces: [
     ["TUI", "Trabalho interativo no terminal"],
-    ["codewhale exec", "Scripts e CI"],
+    ["ghosty exec", "Scripts e CI"],
     ["Cliente web", "Cliente de navegador, somente loopback"],
     ["Runtime API + MCP", "Integrações locais"],
     ["Fleet", "Trabalho multiagente duradouro"],

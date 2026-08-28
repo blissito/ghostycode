@@ -7,7 +7,7 @@
 //!
 //! ## On-disk format
 //!
-//! `~/.codewhale/composer_stash.jsonl` — one JSON object per line:
+//! `~/.ghosty/composer_stash.jsonl` — one JSON object per line:
 //!
 //! ```jsonl
 //! {"ts":"2026-05-04T01:23:45Z","text":"draft here"}
@@ -37,12 +37,12 @@ const STASH_FILE_NAME: &str = "composer_stash.jsonl";
 /// Read-only stash facts for diagnostic output.
 ///
 /// Unlike the ordinary composer helpers, this report never creates a state
-/// directory or falls back outside an explicit `CODEWHALE_HOME` boundary. It
+/// directory or falls back outside an explicit `GHOSTY_HOME` boundary. It
 /// rejects a stash-file symlink observed during inspection; Unix opens also
 /// use `O_NOFOLLOW` for the final leaf open.
 #[derive(Debug, Clone)]
 pub(crate) struct DiagnosticStashReport {
-    /// Candidate stash path, when the Codewhale home could be resolved.
+    /// Candidate stash path, when the Ghosty home could be resolved.
     pub(crate) path: Option<PathBuf>,
     /// Whether a regular stash file was present at that path.
     pub(crate) present: bool,
@@ -71,7 +71,7 @@ pub struct StashedDraft {
 
 fn default_stash_path() -> Option<PathBuf> {
     crate::config::effective_home_dir().map(|home| {
-        let primary = home.join(".codewhale").join(STASH_FILE_NAME);
+        let primary = home.join(".ghosty").join(STASH_FILE_NAME);
         let legacy = home.join(".deepseek").join(STASH_FILE_NAME);
         if primary.exists() || !legacy.exists() {
             return primary;
@@ -84,29 +84,27 @@ fn default_stash_path() -> Option<PathBuf> {
 ///
 /// Ordinary composer reads retain their historical legacy fallback behavior.
 /// Diagnostics follow the same behavior only when no explicit
-/// `CODEWHALE_HOME` is configured; an explicit home is an isolation boundary
-/// and must not cause doctor to inspect an ambient `$HOME/.codewhale` or
+/// `GHOSTY_HOME` is configured; an explicit home is an isolation boundary
+/// and must not cause doctor to inspect an ambient `$HOME/.ghosty` or
 /// `$HOME/.deepseek` stash.
 pub(crate) fn diagnostic_stash_report() -> DiagnosticStashReport {
-    let primary = match codewhale_config::codewhale_home() {
+    let primary = match ghosty_config::ghosty_home() {
         Ok(home) => home.join(STASH_FILE_NAME),
         Err(error) => {
             return DiagnosticStashReport {
                 path: None,
                 present: false,
                 count: 0,
-                error: Some(format!(
-                    "could not resolve the Codewhale stash path: {error}"
-                )),
+                error: Some(format!("could not resolve the Ghosty stash path: {error}")),
             };
         }
     };
 
-    let explicit_home = codewhale_config::codewhale_home_is_explicit();
+    let explicit_home = ghosty_config::ghosty_home_is_explicit();
     let legacy = if explicit_home {
         None
     } else {
-        match codewhale_config::legacy_deepseek_home() {
+        match ghosty_config::legacy_deepseek_home() {
             Ok(home) => Some(home.join(STASH_FILE_NAME)),
             Err(error) => {
                 return DiagnosticStashReport {
@@ -499,7 +497,7 @@ this is not json
     #[test]
     fn diagnostic_stash_honors_an_explicit_home_without_legacy_fallback() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let primary = tmp.path().join("isolated-codewhale").join(STASH_FILE_NAME);
+        let primary = tmp.path().join("isolated-ghosty").join(STASH_FILE_NAME);
         let legacy = tmp.path().join("ambient-deepseek").join(STASH_FILE_NAME);
         std::fs::create_dir_all(legacy.parent().expect("legacy parent")).expect("legacy parent");
         std::fs::write(&legacy, r#"{"text":"ambient draft"}"#).expect("legacy stash");

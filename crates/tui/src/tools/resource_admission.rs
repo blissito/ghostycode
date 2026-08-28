@@ -1,9 +1,9 @@
 //! Cross-process admission for expensive local commands.
 //!
-//! Fleet and Workflow workers execute in separate Codewhale processes, so an
+//! Fleet and Workflow workers execute in separate Ghosty processes, so an
 //! in-process semaphore cannot protect the host. Heavy shell commands instead
 //! take one of a small number of filesystem-backed permits under
-//! `CODEWHALE_HOME`. The default of two permits is deliberately conservative
+//! `GHOSTY_HOME`. The default of two permits is deliberately conservative
 //! for the 36 GiB laptop class from #4864.
 
 use std::fs::{File, OpenOptions};
@@ -256,7 +256,7 @@ fn try_lock_slot(path: &Path) -> io::Result<Option<HeavyPermitSlot>> {
 }
 
 fn configured_heavy_command_limit() -> usize {
-    std::env::var("CODEWHALE_HEAVY_COMMAND_LIMIT")
+    std::env::var("GHOSTY_HEAVY_COMMAND_LIMIT")
         .ok()
         .and_then(|value| value.trim().parse::<usize>().ok())
         .filter(|limit| *limit > 0)
@@ -265,13 +265,13 @@ fn configured_heavy_command_limit() -> usize {
 }
 
 fn admission_root() -> PathBuf {
-    if let Some(home) = codewhale_paths::codewhale_home_override().ok().flatten() {
+    if let Some(home) = ghosty_paths::ghosty_home_override().ok().flatten() {
         return home.join("resource-admission");
     }
-    if let Some(home) = codewhale_paths::user_home() {
-        return home.join(".codewhale").join("resource-admission");
+    if let Some(home) = ghosty_paths::user_home() {
+        return home.join(".ghosty").join("resource-admission");
     }
-    std::env::temp_dir().join("codewhale-resource-admission")
+    std::env::temp_dir().join("ghosty-resource-admission")
 }
 
 /// Host free-RAM fraction in `0.0..=1.0`, or `None` when it cannot be measured.
@@ -391,18 +391,18 @@ mod tests {
     const NOMINAL_PROBE: StaticMemoryProbe = StaticMemoryProbe(Some(0.9));
 
     #[test]
-    fn whitespace_codewhale_home_uses_shared_user_home_for_admission_state() {
+    fn whitespace_ghosty_home_uses_shared_user_home_for_admission_state() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("temporary root");
         let home = tmp.path().join("home");
         let userprofile = tmp.path().join("userprofile");
         let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &userprofile);
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", " \t ");
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", " \t ");
 
         assert_eq!(
             admission_root(),
-            home.join(".codewhale").join("resource-admission")
+            home.join(".ghosty").join("resource-admission")
         );
     }
 
@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn infers_only_expensive_rust_compilation_commands() {
         for command in [
-            "cargo test -p codewhale-tui shell::tests",
+            "cargo test -p ghosty-tui shell::tests",
             "env CARGO_BUILD_JOBS=2 cargo build --workspace",
             "cargo check",
             "cargo clippy --all-targets",
@@ -553,10 +553,10 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn real_cargo_command_is_admitted_and_released() {
-        if std::env::var_os("CODEWHALE_RESOURCE_ADMISSION_RUST_ACCEPTANCE").is_none() {
+        if std::env::var_os("GHOSTY_RESOURCE_ADMISSION_RUST_ACCEPTANCE").is_none() {
             tracing::info!(
                 "skipping opt-in real-rust admission acceptance; \
-                 set CODEWHALE_RESOURCE_ADMISSION_RUST_ACCEPTANCE=1 to run"
+                 set GHOSTY_RESOURCE_ADMISSION_RUST_ACCEPTANCE=1 to run"
             );
             return;
         }

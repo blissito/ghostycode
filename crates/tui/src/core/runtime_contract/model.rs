@@ -23,7 +23,7 @@ pub trait ModelClient: Send + Sync {
     fn billing_base_url(&self) -> Option<&str> {
         None
     }
-    fn route_limits(&self) -> Option<codewhale_config::route::RouteLimits> {
+    fn route_limits(&self) -> Option<ghosty_config::route::RouteLimits> {
         None
     }
     fn effective_max_output_tokens(&self, requested_model: &str) -> u32 {
@@ -77,7 +77,7 @@ where
         LlmClient::billing_base_url(self)
     }
 
-    fn route_limits(&self) -> Option<codewhale_config::route::RouteLimits> {
+    fn route_limits(&self) -> Option<ghosty_config::route::RouteLimits> {
         LlmClient::route_limits(self)
     }
 

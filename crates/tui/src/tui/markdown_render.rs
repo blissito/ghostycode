@@ -1727,7 +1727,7 @@ fn parse_inline_spans(line: &str, base_style: Style, link_style: Style) -> Vec<I
             let after = &rest[1 + end + 1..];
             // Closing delimiter must not be immediately followed by a
             // letter, digit, or underscore (otherwise it's part of an
-            // identifier like `codewhale_tui`, not italic markup).
+            // identifier like `ghosty_tui`, not italic markup).
             if !after.starts_with(|c: char| c.is_alphanumeric() || c == '_') {
                 out.push(InlineToken::new(inner.to_string(), italic_style, None));
                 rest = after;
@@ -2519,14 +2519,14 @@ mod tests {
     #[test]
     fn underscores_inside_identifiers_render_as_literal_text() {
         // Regression for PR #1455 / @tiger-dog: previously the inline
-        // markdown parser ate the underscore in `codewhale_tui` because
+        // markdown parser ate the underscore in `ghosty_tui` because
         // it matched the `_italic_` pattern without a CommonMark-style
         // boundary check. The closing `_` followed by `t` (a letter)
         // must now be treated as part of the identifier, not as
         // markup. The same rule applies to `*` so identifiers like
         // `crate*foo` round-trip cleanly.
         let cases = [
-            "crate codewhale_tui handles approvals",
+            "crate ghosty_tui handles approvals",
             "see foo_bar_baz for details",
             "look at *not_emphasised*tail",
         ];
@@ -3283,7 +3283,7 @@ mod tests {
 
     #[test]
     fn wrapped_url_chunks_keep_visible_label_and_full_target() {
-        let url = "https://raw.githubusercontent.com/Hmbown/deepseek-skills/main/index.json";
+        let url = "https://raw.githubusercontent.com/blissito/ghostycode/main/index.json";
         let rendered = render_markdown_tagged(url, 34, Style::default());
         let visible = tagged_visible(&rendered);
         assert!(visible.len() > 1, "fixture must wrap: {visible:?}");
@@ -3469,7 +3469,7 @@ mod tests {
     fn table_pipes_inside_inline_code_stay_in_the_cell() {
         let src = "| Check | Result |\n\
                    |---|---|\n\
-                   | `strings ~/.cargo/bin/codewhale-tui | grep -c \"legacy marker\"` | 0 matches |\n";
+                   | `strings ~/.cargo/bin/ghosty-tui | grep -c \"legacy marker\"` | 0 matches |\n";
         let parsed = parse(src);
 
         let rows: Vec<&Vec<String>> = parsed
@@ -3485,7 +3485,7 @@ mod tests {
         assert_eq!(
             rows[1],
             &vec![
-                "`strings ~/.cargo/bin/codewhale-tui | grep -c \"legacy marker\"`".to_string(),
+                "`strings ~/.cargo/bin/ghosty-tui | grep -c \"legacy marker\"`".to_string(),
                 "0 matches".to_string(),
             ]
         );
@@ -3498,7 +3498,7 @@ mod tests {
         );
         let data_line = rendered_lines
             .iter()
-            .find(|line| line.contains("strings ~/.cargo/bin/codewhale-tui"))
+            .find(|line| line.contains("strings ~/.cargo/bin/ghosty-tui"))
             .expect("data row should render");
         assert_eq!(
             data_line.matches('│').count(),

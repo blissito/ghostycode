@@ -19,7 +19,7 @@ hide the `ui.rs` extraction behind a wholesale rewrite.
 - Give the new module explicit imports. Temporary parent re-exports are allowed
   only where existing sibling modules or tests still depend on them.
 - Keep `Engine::run_turn` as the only turn loop.
-- Run formatting, a `codewhale-tui` library check, and the focused tests that
+- Run formatting, a `ghosty-tui` library check, and the focused tests that
   protect the moved behavior before starting the next extraction.
 - Land conflict-prone slices only after the active owner has finished. In
   particular, the remote-control bridge must incorporate the current `/rc`

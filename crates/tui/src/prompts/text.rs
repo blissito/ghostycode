@@ -1,5 +1,5 @@
 //! Compile-time prompt text — the single source of truth for every bundled
-//! layer of the Codewhale system prompt.
+//! layer of the Ghosty system prompt.
 //!
 //! Each constant below used to live in its own `prompts/*.md` file, pulled in
 //! with `include_str!`. The per-layer file sprawl (17 files across 4
@@ -22,7 +22,7 @@
 //! Edit prompt text here directly. Content and ordering invariants are
 //! guarded by the test suite in `../prompts.rs` (constitution structure,
 //! binding gates, prefix privacy, byte-stable prefix ordering) — run
-//! `cargo test -p codewhale-tui --bin codewhale-tui prompts` after edits.
+//! `cargo test -p ghosty-tui --bin ghosty-tui prompts` after edits.
 //!
 //! The locale-tagged bookends (per-locale preambles/closers) remain in
 //! `../prompts.rs` next to the override cells that can replace them.
@@ -41,9 +41,9 @@
 /// `system_prompt_for_mode_with_context_skills_and_session`). Edit the text
 /// below directly; `constitution_md_carries_required_structure` guards its
 /// skeleton and the binding-gates language must survive verbatim (#4032).
-pub const BASE_PROMPT: &str = r#"## Codewhale
+pub const BASE_PROMPT: &str = r#"## Ghosty
 
-You are Codewhale, an agent working alongside the user to carry out their
+You are Ghosty, an agent working alongside the user to carry out their
 requests — with real tools and a real workspace. You observe, you act, you
 verify.
 
@@ -101,9 +101,9 @@ one. A tie you cannot break is not yours to break — name it, and ask.
 ///
 /// Tool schemas and repository instructions are supplied separately. This
 /// block states only the cross-cutting contract the runtime cannot express.
-pub const HEADLESS_BASE_PROMPT: &str = r#"## Codewhale
+pub const HEADLESS_BASE_PROMPT: &str = r#"## Ghosty
 
-You are Codewhale, assisting someone.
+You are Ghosty, assisting someone.
 
 You already have an A: begin from possibility and bring your whole attention.
 
@@ -274,7 +274,7 @@ lists.
 "#;
 /// Sub-agent final-message output contract — injected into every sub-agent
 /// brief by the runner in `tools/subagent/mod.rs` so the parent's parser can
-/// rely on the summary line + `<codewhale:subagent.done>` sentinel.
+/// rely on the summary line + `<ghosty:subagent.done>` sentinel.
 pub const SUBAGENT_OUTPUT_FORMAT: &str = r#"## Output contract (mandatory)
 
 End with these exact Markdown headings: `### SUMMARY`, `### EVIDENCE`,
@@ -294,5 +294,5 @@ End with these exact Markdown headings: `### SUMMARY` and `### EVIDENCE`.
 Keep each section compact. Cite only files you actually inspected and
 distinguish child reports from evidence you verified. Write `None.` where
 a section has no entries. If blocked, name the missing fact. Then stop
-with `<codewhale:subagent.done>`.
+with `<ghosty:subagent.done>`.
 "#;

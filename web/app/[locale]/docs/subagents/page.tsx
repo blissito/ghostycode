@@ -19,7 +19,7 @@ const CODE_SPANS: Record<string, string> = {
   forkContext: "fork_context: true",
   worktreeFlag: "worktree: true",
   branchPattern: "codex/agent-<name>-<id>",
-  worktreeDir: ".codewhale-worktrees/",
+  worktreeDir: ".ghosty-worktrees/",
   writeAuthority: "write_authority",
   writeRoots: "write_roots",
   exactFiles: "exact_files",

@@ -1,9 +1,9 @@
 {
-  "name": "@codewhale/weixin-bot-bridge",
+  "name": "@ghosty/weixin-bot-bridge",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Weixin iLink Bot bridge for a local codewhale serve --http runtime. Scan QR to login.",
+  "description": "Weixin iLink Bot bridge for a local ghosty serve --http runtime. Scan QR to login.",
   "main": "src/index.mjs",
   "scripts": {
     "start": "node src/index.mjs",

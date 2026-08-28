@@ -207,7 +207,7 @@ fn is_not_archived(archived: &bool) -> bool {
 ///
 /// A static registry rather than a field on `RuntimeApiState` because the
 /// embedded Runtime API runs inside the TUI process; a standalone
-/// `codewhale web` has an empty registry and is therefore never blocked, which
+/// `ghosty web` has an empty registry and is therefore never blocked, which
 /// is exactly right — there is no TUI holding anything.
 static LIVE_SESSIONS: std::sync::OnceLock<std::sync::RwLock<std::collections::HashSet<String>>> =
     std::sync::OnceLock::new();
@@ -265,7 +265,7 @@ fn is_session_uuid(name: &str) -> bool {
 /// Is this session currently owned by **this process's** interactive surface?
 ///
 /// The registry is process-local. Reclamation must not treat a missing entry
-/// here as proof that no other Codewhale process still owns the directory.
+/// here as proof that no other Ghosty process still owns the directory.
 #[must_use]
 pub fn is_live_session(session_id: &str) -> bool {
     live_sessions()
@@ -281,7 +281,7 @@ fn live_session_conflict(session_id: &str) -> std::io::Error {
     std::io::Error::new(
         std::io::ErrorKind::ResourceBusy,
         format!(
-            "session '{session_id}' is open in an interactive Codewhale session; \
+            "session '{session_id}' is open in an interactive Ghosty session; \
              change it there instead — an external write would be reverted by its next autosave"
         ),
     )
@@ -297,7 +297,7 @@ static SESSION_BOOT_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new()
 /// Identity of this running session instance (one per process boot).
 ///
 /// Mirrors the `SubAgentManager` boot id from #405: persisted records are
-/// stamped with the instance that created them, so a later Codewhale
+/// stamped with the instance that created them, so a later Ghosty
 /// instance in the same workspace can tell restored rows from its own live
 /// work (#4416).
 #[must_use]
@@ -1178,7 +1178,7 @@ impl SessionManager {
     }
 
     /// Was this session's persisted record created by a different session
-    /// instance (an earlier or sibling Codewhale process)?
+    /// instance (an earlier or sibling Ghosty process)?
     ///
     /// Mirrors `SubAgentManager::is_from_prior_session` (#405): a durable
     /// record with no stamped owner predates the marker and is classified as
@@ -1486,7 +1486,7 @@ impl SessionManager {
         })
     }
 
-    /// Load a session by ID for the standalone CodeWhale resume flow.
+    /// Load a session by ID for the standalone GhostyCode resume flow.
     ///
     /// This preserves the historical recovery behavior for existing callers.
     /// Embedding hosts performing ordinary runtime reads should use
@@ -1696,7 +1696,7 @@ impl SessionManager {
     /// *reconciliation*: directories stranded by earlier versions — or by a
     /// `remove_dir_all` that failed while the `remove_file` before it
     /// succeeded, an error `cleanup_old_sessions_keeping` deliberately
-    /// swallows — were never collected by anything. A real `~/.codewhale`
+    /// swallows — were never collected by anything. A real `~/.ghosty`
     /// held **780** such directories, each holding shell-completion evidence
     /// artifacts, which is also why traversing that tree had become slow.
     ///
@@ -1710,7 +1710,7 @@ impl SessionManager {
     ///   must outlive its missing document, since that is exactly what
     ///   recovery reads;
     /// - the session is not live in *this* process (`is_live_session`).
-    ///   That check is process-local; a second Codewhale sharing `$HOME`
+    ///   That check is process-local; a second Ghosty sharing `$HOME`
     ///   is not visible here, so reclaim also requires the session
     ///   document and checkpoint to be gone.
     ///
@@ -1894,7 +1894,7 @@ pub(crate) fn is_title_format_char(ch: char) -> bool {
 /// Drop control and bidi/zero-width format characters from a title.
 ///
 /// A session title is user- or content-derived text that later reaches an
-/// OSC 0 terminal title, `codewhale sessions` stdout, and the picker, so the
+/// OSC 0 terminal title, `ghosty sessions` stdout, and the picker, so the
 /// persisted value must not be able to carry a raw escape sequence. Ordinary
 /// text, punctuation, CJK, and emoji pass through untouched.
 pub fn sanitize_session_title(raw: &str) -> String {
@@ -1963,14 +1963,14 @@ fn paths_equivalent(lhs: &Path, rhs: &Path) -> bool {
 
 /// Resolve the default session directory path.
 ///
-/// v0.8.44: prefers `~/.codewhale/sessions`, falls back to
+/// v0.8.44: prefers `~/.ghosty/sessions`, falls back to
 /// `~/.deepseek/sessions` for existing installs. Uses the write-path resolver
 /// so the first access relocates any legacy `~/.deepseek/sessions` into
-/// `~/.codewhale/sessions` when the primary directory is missing (#3240).
+/// `~/.ghosty/sessions` when the primary directory is missing (#3240).
 /// If an older build already created an empty primary sessions directory, copy
-/// missing legacy entries into it without overwriting newer CodeWhale data.
+/// missing legacy entries into it without overwriting newer GhostyCode data.
 pub fn default_sessions_dir() -> std::io::Result<PathBuf> {
-    let dir = codewhale_config::ensure_state_dir("sessions")
+    let dir = ghosty_config::ensure_state_dir("sessions")
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e.to_string()))?;
     match merge_missing_legacy_session_entries(&dir) {
         Ok(0) => {}
@@ -1993,11 +1993,11 @@ pub fn default_sessions_dir() -> std::io::Result<PathBuf> {
 }
 
 fn merge_missing_legacy_session_entries(primary: &Path) -> io::Result<usize> {
-    if codewhale_paths::codewhale_home_is_explicit() {
+    if ghosty_paths::ghosty_home_is_explicit() {
         return Ok(0);
     }
 
-    let legacy = codewhale_config::legacy_deepseek_home()
+    let legacy = ghosty_config::legacy_deepseek_home()
         .map_err(|e| io::Error::new(io::ErrorKind::NotFound, e.to_string()))?
         .join("sessions");
     if !legacy.is_dir() || paths_equivalent(primary, &legacy) {
@@ -2848,7 +2848,7 @@ mod tests {
 
     // === orphaned per-session artifact directories ===
 
-    /// A real `~/.codewhale/sessions` held 780 directories whose session had
+    /// A real `~/.ghosty/sessions` held 780 directories whose session had
     /// long been pruned, each still holding shell-completion evidence.
     #[test]
     fn cleanup_reclaims_session_dirs_whose_session_is_gone() {
@@ -2920,7 +2920,7 @@ mod tests {
 
     #[test]
     fn only_a_real_uuid_can_gate_a_directory_removal() {
-        // Real ids from a live ~/.codewhale.
+        // Real ids from a live ~/.ghosty.
         for id in [
             "db609d23-e25f-48b0-918e-6d1e390a7cb7",
             "5bd5095c-2a10-46bb-9979-ed967d892d45",
@@ -3360,7 +3360,7 @@ mod tests {
                 content: vec![ContentBlock::ToolUse {
                     id: "call-big".to_string(),
                     name: "exec_shell".to_string(),
-                    input: serde_json::json!({"command": "cargo test -p codewhale-tui"}),
+                    input: serde_json::json!({"command": "cargo test -p ghosty-tui"}),
                     caller: None,
                     thought_signature: None,
                 }],
@@ -3485,9 +3485,9 @@ mod tests {
         let tmp = tempdir().expect("tempdir");
         let home = tmp.path().join("home");
         let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
-        let _codewhale_home = crate::test_support::EnvVarGuard::remove("CODEWHALE_HOME");
+        let _ghosty_home = crate::test_support::EnvVarGuard::remove("GHOSTY_HOME");
 
-        let primary_sessions = home.join(".codewhale").join("sessions");
+        let primary_sessions = home.join(".ghosty").join("sessions");
         let legacy_sessions = home.join(".deepseek").join("sessions");
         fs::create_dir_all(&primary_sessions).expect("primary sessions");
         fs::create_dir_all(&legacy_sessions).expect("legacy sessions");
@@ -3530,9 +3530,9 @@ mod tests {
         let tmp = tempdir().expect("tempdir");
         let home = tmp.path().join("home");
         let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
-        let _codewhale_home = crate::test_support::EnvVarGuard::remove("CODEWHALE_HOME");
+        let _ghosty_home = crate::test_support::EnvVarGuard::remove("GHOSTY_HOME");
 
-        let primary_sessions = home.join(".codewhale").join("sessions");
+        let primary_sessions = home.join(".ghosty").join("sessions");
         let legacy_sessions = home.join(".deepseek").join("sessions");
         fs::create_dir_all(&primary_sessions).expect("primary sessions");
         fs::create_dir_all(&legacy_sessions).expect("legacy sessions");
@@ -3554,14 +3554,13 @@ mod tests {
     }
 
     #[test]
-    fn explicit_codewhale_home_disables_legacy_session_copy() {
+    fn explicit_ghosty_home_disables_legacy_session_copy() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
         let home = tmp.path().join("home");
-        let explicit_home = tmp.path().join("explicit-codewhale");
+        let explicit_home = tmp.path().join("explicit-ghosty");
         let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
-        let _codewhale_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &explicit_home);
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &explicit_home);
 
         let legacy_sessions = home.join(".deepseek").join("sessions");
         fs::create_dir_all(&legacy_sessions).expect("legacy sessions");
@@ -3574,18 +3573,17 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn non_unicode_codewhale_home_is_still_an_explicit_session_boundary() {
+    fn non_unicode_ghosty_home_is_still_an_explicit_session_boundary() {
         use std::os::unix::ffi::OsStringExt;
 
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
         let home = tmp.path().join("home");
-        let explicit_home = tmp.path().join(std::ffi::OsString::from_vec(
-            b"codewhale-\xff-home".to_vec(),
-        ));
+        let explicit_home = tmp
+            .path()
+            .join(std::ffi::OsString::from_vec(b"ghosty-\xff-home".to_vec()));
         let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
-        let _codewhale_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &explicit_home);
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &explicit_home);
 
         let legacy_sessions = home.join(".deepseek").join("sessions");
         fs::create_dir_all(&legacy_sessions).expect("legacy sessions");

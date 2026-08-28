@@ -1,8 +1,8 @@
-//! Lifecycle hooks for the Codewhale **TUI runtime**.
+//! Lifecycle hooks for the Ghosty **TUI runtime**.
 //!
 //! Scope, stated plainly: every firing point in this system lives in the
 //! interactive TUI (`crates/tui/src/tui/`) and the engine turn loop it drives.
-//! `codewhale exec`, the CLI dispatcher, the app-server / ACP surfaces, and
+//! `ghosty exec`, the CLI dispatcher, the app-server / ACP surfaces, and
 //! the workflow tool do not fire these hooks. The unrelated `crates/hooks`
 //! event-sink crate is a different mechanism and shares no configuration.
 //!

@@ -8,7 +8,7 @@
 - Product commit: `8e15e51d43433f5e2e924611aed21ba4fa5b6709`
   `feat(tui): make settings MCP recovery first-class and clickable`
 
-No push, PR, merge, release, or deploy was performed. The machine `codewhale`
+No push, PR, merge, release, or deploy was performed. The machine `ghosty`
 binary was not installed or overwritten. `/Volumes/VIXinSSD/CW/cwc` was not
 edited. Occupied worktrees were not reused.
 
@@ -64,7 +64,7 @@ should be a trivial conflict: both replace `/mcp auth` with `/mcp login`.
    `Next: Connect /mcp reload · Diagnose /mcp validate`.
 
 6. **Stale Streamable HTTP OAuth recovery** now says `/mcp login <name>`
-   (CLI remains `codewhale mcp login`). Bearer-only sessions still point at
+   (CLI remains `ghosty mcp login`). Bearer-only sessions still point at
    the configured token, not a login command.
 
 7. **Hunyuan / Hy in model selection.** There is no native Tencent Hunyuan
@@ -90,13 +90,13 @@ should be a trivial conflict: both replace `/mcp auth` with `/mcp login`.
 Isolated build-dir via `scripts/dev-cache.sh`. Command:
 
 ```
-cargo nextest run -p codewhale-tui --lib --locked -E 'test(/mcp_recovery_kind|tui_reauth_hints|manager_text_names_login|config_view_tabs_are_clickable|config_view_mcp_action_rows|openrouter_hunyuan|mcp_item_action_for|message_id_list_english|shipped_complete_packs_have_raw|settings_registry_types_every|config_view_includes_expected_editable|config_view_can_edit_filtered|config_view_mouse_click_selects|auth_required_login_hint_names|manager_text_shows_failed/)'
+cargo nextest run -p ghosty-tui --lib --locked -E 'test(/mcp_recovery_kind|tui_reauth_hints|manager_text_names_login|config_view_tabs_are_clickable|config_view_mcp_action_rows|openrouter_hunyuan|mcp_item_action_for|message_id_list_english|shipped_complete_packs_have_raw|settings_registry_types_every|config_view_includes_expected_editable|config_view_can_edit_filtered|config_view_mouse_click_selects|auth_required_login_hint_names|manager_text_shows_failed/)'
 ```
 
 Result: **16 passed**, 11198 skipped. Also `cargo fmt --all -- --check` and
 `git diff --check`.
 
-Not run: full `codewhale-tui --lib` suite, clippy `-D warnings`, live TUI/PTY
+Not run: full `ghosty-tui --lib` suite, clippy `-D warnings`, live TUI/PTY
 at multiple widths, live MCP OAuth, live Hunyuan/OpenRouter calls (no provider
 money spent).
 

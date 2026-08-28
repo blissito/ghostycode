@@ -236,7 +236,7 @@ fn copy_to_clipboard(app: &mut App, label: &str, markdown: &str) -> CommandResul
     }
 }
 
-/// Write the export to a predictable last-copy file under the Codewhale home
+/// Write the export to a predictable last-copy file under the Ghosty home
 /// (#5555): a clipboard-only export on SSH/headless must never dead-end the
 /// user, so the same content lands at `<home>/exports/last-copy.md` and every
 /// failure message names it. Returns the path when the write succeeded.
@@ -264,7 +264,7 @@ fn render_conversation(app: &App) -> String {
         app.api_messages.len()
     };
     let mut out = String::new();
-    out.push_str("# Codewhale conversation export\n\n");
+    out.push_str("# Ghosty conversation export\n\n");
     let _ = writeln!(
         out,
         "- Exported: {}",
@@ -721,7 +721,7 @@ pub(super) fn sanitize_text(input: &str) -> String {
     let urls = url_regex().replace_all(&jwt, |captures: &regex::Captures<'_>| {
         redact_url_match(captures.get(0).map_or("", |value| value.as_str()))
     });
-    codewhale_config::persistence::redact_secrets(&urls)
+    ghosty_config::persistence::redact_secrets(&urls)
 }
 
 fn redact_url_match(raw: &str) -> String {

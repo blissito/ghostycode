@@ -8,20 +8,20 @@ import type { HomeDict } from "../types";
  * "LLM leverage for everyone" positioning.
  *
  * Product vocabulary stays literal and matches the TUI locale pack:
- * Plan / Work / Operate, Ask / Auto-Review / Full Access, Codewhale, TUI,
- * `codewhale exec`, Runtime API + MCP, Fleet, Node 18+, Rust, MIT.
+ * Plan / Work / Operate, Ask / Auto-Review / Full Access, Ghosty, TUI,
+ * `ghosty exec`, Runtime API + MCP, Fleet, Node 18+, Rust, MIT.
  * "Permission posture" renders as 権限 (the TUI's own wording), not ポスチャ.
  *
  * `sealCommunity` uses the Japanese form 衆 rather than the English
  * edition's simplified 众; the other seals are kanji shared with English.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — 深く潜るのはこちら。あなたは潜らなくていい。",
+  metaTitle: "Ghosty — 深く潜るのはこちら。あなたは潜らなくていい。",
   metaDescription:
-    "Codewhale が深く潜るので、あなたは潜らなくて済みます — オープンソースのターミナルコーディングエージェント。モデルは自分のものを。あなたのマシンで動く。Rust 製、MIT。",
+    "Ghosty が深く潜るので、あなたは潜らなくて済みます — オープンソースのターミナルコーディングエージェント。モデルは自分のものを。あなたのマシンで動く。Rust 製、MIT。",
 
   kicker: "オープンソース · モデルは自分で選ぶ · ターミナルで動く",
-  heroTitleA: "Codewhale は深く潜る。",
+  heroTitleA: "Ghosty は深く潜る。",
   heroTitleB: "あなたが潜る必要はない。",
   heroIntro:
     "{brand} は、ターミナルで動くオープンソースのコーディングエージェントです。モデルとタスクを渡せば、コードを読み、ファイルを編集し、自分でチェックを回して、仕事が終わるか、あなたの判断が必要になったところで止まります。モデルは何でも持ち込めます。混ぜてもいい — 役割ごとに別のモデルを固定できます。",
@@ -44,8 +44,8 @@ export const home: HomeDict = {
 
   shotSession: "現在のセッション",
   screenshotAlt:
-    "Operate モード、クジラ、入力欄、フッターが写った現在の Codewhale ターミナルセッション",
-  figcaption: "現在の Codewhale セッション · Operate モード · 権限は Ask",
+    "Operate モード、クジラ、入力欄、フッターが写った現在の Ghosty ターミナルセッション",
+  figcaption: "現在の Ghosty セッション · Operate モード · 権限は Ask",
 
   proofHeading: "水中のターミナルシェル。どんなモデルでも。あなたのマシンで。",
   proofBody:
@@ -71,7 +71,7 @@ export const home: HomeDict = {
   receiptReport: "チェック通過 · レシート保存済み",
 
   sealStart: "起",
-  startHeading: "Codewhale は初めてですか？ 4 ステップで最後まで。",
+  startHeading: "Ghosty は初めてですか？ 4 ステップで最後まで。",
   startLede:
     "インストール → キー不要の最初のセッション → プロバイダー接続 → 最初の Fleet ワークフロー。用語は用語集ページに。",
   startGuideLink: "はじめかたガイドを読む →",
@@ -91,7 +91,7 @@ export const home: HomeDict = {
   surfacesHeading: "作業のある場所で、そのままランタイムを使う。",
   surfaces: [
     ["TUI", "対話型のターミナル作業"],
-    ["codewhale exec", "スクリプトと CI"],
+    ["ghosty exec", "スクリプトと CI"],
     ["Web クライアント", "ループバック限定のブラウザクライアント"],
     ["Runtime API + MCP", "ローカル連携"],
     ["Fleet", "永続的なマルチエージェント作業"],

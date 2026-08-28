@@ -16,22 +16,22 @@ use tempfile::TempDir;
 /// Run `model resolve` against a sealed HOME containing `config`.
 ///
 /// `env_clear` plus a temporary HOME keeps this off the real
-/// `~/.codewhale/config.toml`; the suite has written to real user state before
+/// `~/.ghosty/config.toml`; the suite has written to real user state before
 /// (#4831) and this test must never be the one that does it again.
 fn resolve_with_config(config: &str, args: &[&str]) -> BTreeMap<String, String> {
     let fixture = TempDir::new().expect("fixture root");
     let home = fixture.path().join("sealed-home");
-    fs::create_dir_all(home.join(".codewhale")).expect("sealed config dir");
-    fs::write(home.join(".codewhale").join("config.toml"), config).expect("seed config");
+    fs::create_dir_all(home.join(".ghosty")).expect("sealed config dir");
+    fs::write(home.join(".ghosty").join("config.toml"), config).expect("seed config");
 
-    let mut command = Command::new(codewhale_binary());
+    let mut command = Command::new(ghosty_binary());
     command.arg("model").arg("resolve").args(args);
     let output = command
         .env_clear()
         .env("HOME", &home)
         .env("USERPROFILE", &home)
-        .env("CODEWHALE_HOME", home.join(".codewhale"))
-        .env("CODEWHALE_SECRET_BACKEND", "file")
+        .env("GHOSTY_HOME", home.join(".ghosty"))
+        .env("GHOSTY_SECRET_BACKEND", "file")
         .output()
         .expect("run model resolve");
 
@@ -55,18 +55,18 @@ fn resolve_with_config(config: &str, args: &[&str]) -> BTreeMap<String, String> 
 fn resolve_failure_with_config(config: &str, args: &[&str]) -> std::process::Output {
     let fixture = TempDir::new().expect("fixture root");
     let home = fixture.path().join("sealed-home");
-    fs::create_dir_all(home.join(".codewhale")).expect("sealed config dir");
-    fs::write(home.join(".codewhale").join("config.toml"), config).expect("seed config");
+    fs::create_dir_all(home.join(".ghosty")).expect("sealed config dir");
+    fs::write(home.join(".ghosty").join("config.toml"), config).expect("seed config");
 
-    Command::new(codewhale_binary())
+    Command::new(ghosty_binary())
         .arg("model")
         .arg("resolve")
         .args(args)
         .env_clear()
         .env("HOME", &home)
         .env("USERPROFILE", &home)
-        .env("CODEWHALE_HOME", home.join(".codewhale"))
-        .env("CODEWHALE_SECRET_BACKEND", "file")
+        .env("GHOSTY_HOME", home.join(".ghosty"))
+        .env("GHOSTY_SECRET_BACKEND", "file")
         .output()
         .expect("run failing model resolve")
 }
@@ -254,17 +254,17 @@ fn resolve_with_global_flags(
 ) -> BTreeMap<String, String> {
     let fixture = TempDir::new().expect("fixture root");
     let home = fixture.path().join("sealed-home");
-    fs::create_dir_all(home.join(".codewhale")).expect("sealed config dir");
-    fs::write(home.join(".codewhale").join("config.toml"), config).expect("seed config");
+    fs::create_dir_all(home.join(".ghosty")).expect("sealed config dir");
+    fs::write(home.join(".ghosty").join("config.toml"), config).expect("seed config");
 
-    let mut command = Command::new(codewhale_binary());
+    let mut command = Command::new(ghosty_binary());
     command.args(global).arg("model").arg("resolve").args(args);
     let output = command
         .env_clear()
         .env("HOME", &home)
         .env("USERPROFILE", &home)
-        .env("CODEWHALE_HOME", home.join(".codewhale"))
-        .env("CODEWHALE_SECRET_BACKEND", "file")
+        .env("GHOSTY_HOME", home.join(".ghosty"))
+        .env("GHOSTY_SECRET_BACKEND", "file")
         .output()
         .expect("run model resolve");
 
@@ -282,7 +282,7 @@ fn resolve_with_global_flags(
         .collect()
 }
 
-/// v0.9.1 kimi-k3 dogfood report: `codewhale --provider moonshot --model kimi-k3 model resolve`
+/// v0.9.1 kimi-k3 dogfood report: `ghosty --provider moonshot --model kimi-k3 model resolve`
 /// reported `kimi-k2.7-code`. The top-level flags are the route this process
 /// is on, not a hypothetical, so the diagnostic has to answer with the runtime
 /// resolution instead of re-deriving a registry default and ignoring `--model`.
@@ -499,11 +499,11 @@ fn explicit_glm_5_2_selection_survives_the_default_move() {
     );
 }
 
-fn codewhale_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale") {
+fn ghosty_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty") {
         return PathBuf::from(path);
     }
 
@@ -512,6 +512,6 @@ fn codewhale_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty{}", std::env::consts::EXE_SUFFIX));
     path
 }

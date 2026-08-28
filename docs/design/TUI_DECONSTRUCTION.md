@@ -21,9 +21,9 @@ No micro-crates. No "extract because the file is large." A new crate exists only
 | --- | --- |
 | `crates/tui` | UI, slash commands, process entry. Target: **&lt;150K lines**. |
 | `crates/mcp`, `crates/tools`, `crates/state` | Grow in place. One MCP client (the rmcp stack). |
-| **new** `codewhale-models` | After catalog/config consolidation (C3): client, one catalog, pricing, credentials, routing. |
-| **Decision A** | Thread store + HTTP automation either becomes `codewhale-runtime` **or** folds into `crates/app-server`. Pick one; do not ship both. |
-| `codewhale-engine` | Extracted **last**. Today the engine still lives in `tui/src/core`. |
+| **new** `ghosty-models` | After catalog/config consolidation (C3): client, one catalog, pricing, credentials, routing. |
+| **Decision A** | Thread store + HTTP automation either becomes `ghosty-runtime` **or** folds into `crates/app-server`. Pick one; do not ship both. |
+| `ghosty-engine` | Extracted **last**. Today the engine still lives in `tui/src/core`. |
 
 `crates/core` already owns request construction, bounded fragments, and thread/session types. It does not run turns. Do not rename it as a substitute for extracting the engine.
 
@@ -72,7 +72,7 @@ Off-ramp after "2e" (leaves extracted, engine still in tui) is allowed.
 
 - Incremental by default. Isolated build-dir via `scripts/dev-cache.sh`.
 - Prints the exact `cargo` / `nextest` command (`+ cargo …`).
-- `CODEWHALE_DEV_NEXTEST=0` forces libtest. There is no `CARGO_INCREMENTAL=0` requirement for ordinary targeted work.
+- `GHOSTY_DEV_NEXTEST=0` forces libtest. There is no `CARGO_INCREMENTAL=0` requirement for ordinary targeted work.
 - `--lib` does not cover `crates/tui/tests/`. Use `tui-integration` / `tui-cucumber`.
 - Full CI remains the release gate. Local `tui` is `--lib` on purpose.
 

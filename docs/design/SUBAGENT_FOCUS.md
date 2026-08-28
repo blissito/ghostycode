@@ -31,9 +31,9 @@ Observed on Claude Code's terminal UI while it ran several forked subagents:
   the permission classifier allowed something, a second line names it.
 - `↓ to manage` opens a manager for the agents (stop, inspect, return).
 
-## What Codewhale does now (default, no configuration)
+## What Ghosty does now (default, no configuration)
 
-Codewhale already had the row grammar (`crates/tui/src/tui/work_surface/`,
+Ghosty already had the row grammar (`crates/tui/src/tui/work_surface/`,
 Agents panel: `<mark> <role> <status> <objective> … <elapsed> · ↓ <tokens>`)
 and a bounded per-agent transcript pager. This lane replaces the pager with a
 **focus** model and adds the composer target and the follow-up contract.
@@ -47,7 +47,7 @@ and a bounded per-agent transcript pager. This lane replaces the pager with a
 | Composer | Chip `→ <name>` on the top-right border; empty hint `Message <name> · Esc returns to main`. Esc on an empty composer returns to the main conversation (rail selection is kept). |
 | Footer | While workers exist the hint chain gains `← for agents · ↓ to manage` (ASCII-safe: `<- for agents · v to manage`), also on the settled `✓ done` strip. Words are `MessageId::FooterHintForAgents` / `FooterHintToManage`. |
 | Manage | `↓` on an empty composer (or `/agents`) opens the register: `↑/↓ select · Enter focus · X stop · R refresh · F roster/setup · Esc close`. |
-| Receipts | Sending while focused writes one system line in the **main** transcript — `Queued for <name>` — and echoes the message in the focused view until the child's own transcript carries it. The delivery outcome arrives as one line in the focused view: `Queued for <name>: it reads the message at its next round.`, `<name> had finished; continued on a new fork (<target>) …`, or `Could not deliver to <name>: <reason>`. Approval decisions keep Codewhale's existing approval receipts (Ask / Auto-Review / Full Access wording); no separate "classifier" line is invented. |
+| Receipts | Sending while focused writes one system line in the **main** transcript — `Queued for <name>` — and echoes the message in the focused view until the child's own transcript carries it. The delivery outcome arrives as one line in the focused view: `Queued for <name>: it reads the message at its next round.`, `<name> had finished; continued on a new fork (<target>) …`, or `Could not deliver to <name>: <reason>`. Approval decisions keep Ghosty's existing approval receipts (Ask / Auto-Review / Full Access wording); no separate "classifier" line is invented. |
 
 ### Runtime contract (real work, not UI illusion)
 

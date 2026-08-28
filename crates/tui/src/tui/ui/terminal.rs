@@ -35,7 +35,7 @@ pub(crate) fn try_next_terminal_event(
     Ok(event)
 }
 
-/// Drain input that Codewhale already read before releasing the terminal.
+/// Drain input that Ghosty already read before releasing the terminal.
 ///
 /// Ordinary buffered input is discarded so it cannot leak into the child.
 /// Escape and Ctrl+C are different: they are cancellation authority. If one
@@ -105,10 +105,9 @@ pub(crate) fn require_interactive_terminal(stdin_is_tty: bool, stdout_is_tty: bo
         return Ok(());
     }
     Err(anyhow::anyhow!(
-        "Codewhale TUI requires an interactive terminal (stdin and stdout must be a TTY).\n\
-         Open a real terminal (Terminal.app, iTerm, Windows Terminal, …) and run `codew` \
-         or `codewhale` there — not from a pipe, cron job, or non-TTY launcher.\n\
-         For headless prompts use `codewhale exec \"…\"` instead."
+        "Ghosty TUI requires an interactive terminal (stdin and stdout must be a TTY).\n\
+         Open a real terminal (Terminal.app, iTerm, Windows Terminal, …) and run `ghosty` there — not from a pipe, cron job, or non-TTY launcher.\n\
+         For headless prompts use `ghosty exec \"…\"` instead."
     ))
 }
 
@@ -126,7 +125,7 @@ pub(crate) fn require_foreground_terminal_owner() -> Result<()> {
         unsafe { (libc::tcgetpgrp(libc::STDIN_FILENO), libc::getpgrp()) };
     if terminal_pgid < 0 {
         return Err(anyhow::anyhow!(
-            "Codewhale TUI could not verify foreground terminal ownership: {}",
+            "Ghosty TUI could not verify foreground terminal ownership: {}",
             io::Error::last_os_error()
         ));
     }
@@ -147,10 +146,10 @@ pub(crate) fn validate_foreground_process_group(
         return Ok(());
     }
     Err(anyhow::anyhow!(
-        "Codewhale TUI cannot start from a background or suspended terminal job \
-         (terminal foreground process group {terminal_pgid}, Codewhale process group {process_pgid}).\n\
-         Run `fg` to foreground the job or launch `codew` in a new terminal. \
-         For automated prompts use `codewhale exec \"…\"` instead."
+        "Ghosty TUI cannot start from a background or suspended terminal job \
+         (terminal foreground process group {terminal_pgid}, Ghosty process group {process_pgid}).\n\
+         Run `fg` to foreground the job or launch `ghosty` in a new terminal. \
+         For automated prompts use `ghosty exec \"…\"` instead."
     ))
 }
 
@@ -234,7 +233,7 @@ pub(crate) fn pause_terminal(
 ) -> Result<()> {
     // Focus reporting is about to be disabled. Fail closed to "focused" so
     // a child process or external editor cannot leave stale background state
-    // that later emits a surprise Codewhale notification.
+    // that later emits a surprise Ghosty notification.
     crate::tui::notifications::set_terminal_focused(true);
     // #443: pop keyboard enhancement flags before handing the terminal
     // to a child process so it doesn't inherit a half-configured input

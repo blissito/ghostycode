@@ -634,7 +634,7 @@ fn tool_use_key(name: &str, input: &serde_json::Value) -> String {
 }
 
 fn tool_args_preview(input: &serde_json::Value) -> String {
-    let redacted = codewhale_config::persistence::redact_json_secrets(input);
+    let redacted = ghosty_config::persistence::redact_json_secrets(input);
     let raw = serde_json::to_string(&redacted).unwrap_or_else(|_| redacted.to_string());
     truncate_chars(&raw, 120).to_string()
 }
@@ -1171,14 +1171,14 @@ fn retained_user_messages(messages: &[Message], max_tokens: usize) -> Vec<Messag
     selected
 }
 
-/// User-pinned facts from `/anchor` (`.codewhale/anchors.md`). These are the
+/// User-pinned facts from `/anchor` (`.ghosty/anchors.md`). These are the
 /// user's own words, re-stated after the summary because the command promises
 /// they survive compaction.
 fn user_anchors_section(workspace: Option<&std::path::Path>) -> String {
     let Some(workspace) = workspace else {
         return String::new();
     };
-    let primary = workspace.join(".codewhale").join("anchors.md");
+    let primary = workspace.join(".ghosty").join("anchors.md");
     let path = if primary.exists() {
         primary
     } else {
@@ -1725,7 +1725,7 @@ mod tests {
 
         let preview: serde_json::Value = serde_json::from_str(&tool_args_preview(&input)).unwrap();
 
-        assert_eq!(preview["api_key"], codewhale_config::persistence::REDACTED);
+        assert_eq!(preview["api_key"], ghosty_config::persistence::REDACTED);
         assert_eq!(preview["command"], "cargo test -p auth");
     }
 
@@ -1738,7 +1738,7 @@ mod tests {
         let preview: serde_json::Value = serde_json::from_str(&tool_args_preview(&input)).unwrap();
 
         assert_eq!(preview["command"], "cargo test");
-        assert_eq!(preview["api_key"], codewhale_config::persistence::REDACTED);
+        assert_eq!(preview["api_key"], ghosty_config::persistence::REDACTED);
     }
 
     #[test]
@@ -1752,12 +1752,12 @@ mod tests {
 
         assert_eq!(
             preview["meta"]["token"],
-            codewhale_config::persistence::REDACTED
+            ghosty_config::persistence::REDACTED
         );
         assert_eq!(preview["meta"]["keep"], "yes");
         assert_eq!(
             preview["steps"][0]["password"],
-            codewhale_config::persistence::REDACTED
+            ghosty_config::persistence::REDACTED
         );
         assert_eq!(preview["steps"][0]["name"], "a");
     }
@@ -1772,7 +1772,7 @@ mod tests {
         let preview: serde_json::Value = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(preview["command"], "run this");
-        assert_eq!(preview["password"], codewhale_config::persistence::REDACTED);
+        assert_eq!(preview["password"], ghosty_config::persistence::REDACTED);
         assert!(!serialized.contains("hunter"));
         assert!(!serialized.contains("two words"));
     }

@@ -1,4 +1,4 @@
-//! Runtime HTTP/SSE API for local Codewhale automation.
+//! Runtime HTTP/SSE API for local Ghosty automation.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
@@ -20,19 +20,17 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
-use codewhale_protocol::agent_mail::{
+use ghosty_protocol::agent_mail::{
     AgentMailDeliveryMode, AgentMailEnvelope, AgentMailMessageId, AgentMailSendRequest,
     AgentMailSendResponse,
 };
-use codewhale_protocol::runtime::{
+use ghosty_protocol::runtime::{
     DynamicToolCallResult, RUNTIME_API_VERSION, RUNTIME_EVENT_ENVELOPE_SCHEMA_VERSION,
     RuntimeCapabilities, RuntimeEventEnvelope, RuntimeExperimentalCapabilities,
 };
-use codewhale_secrets::account::{
-    ACCOUNT_API_BASE_ENV, DEFAULT_ACCOUNT_API_BASE, RuntimeAccountInfo,
-};
+use ghosty_secrets::account::{ACCOUNT_API_BASE_ENV, DEFAULT_ACCOUNT_API_BASE, RuntimeAccountInfo};
 #[cfg(not(test))]
-use codewhale_secrets::account::{AccountSessionStore, secure_account_session_secrets};
+use ghosty_secrets::account::{AccountSessionStore, secure_account_session_secrets};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
@@ -50,7 +48,7 @@ use crate::automation_manager::{
 use crate::config::{
     ApiProvider, Config, DEFAULT_TEXT_MODEL, normalize_model_name_for_provider, validate_route,
 };
-use crate::fleet::executor::{FleetExecutor, configured_codewhale_binary};
+use crate::fleet::executor::{FleetExecutor, configured_ghosty_binary};
 use crate::fleet::ledger::{FleetEventReplayError, FleetLedgerState, FleetTaskLedgerStatus};
 use crate::fleet::manager::{
     FleetManager, FleetStatusSnapshot, FleetWorkerInspection, FleetWorkerRuntimeProjection,
@@ -81,7 +79,7 @@ use crate::tools::subagent::{
     AgentWorkerRecord, SharedSubAgentManager, load_persisted_agent_worker_records,
     new_shared_subagent_manager_with_timeout,
 };
-use codewhale_protocol::fleet::{
+use ghosty_protocol::fleet::{
     FleetArtifactKind, FleetEventReplay, FleetRun, FleetRunId, FleetRuntimeEvent,
     FleetRuntimeTarget, FleetSecurityPolicy, FleetTaskSpec, FleetWorkerEventPayload,
     FleetWorkerSpec, FleetWorkerStatus, FleetWorkflowDescriptor, FleetWorkflowKind,
@@ -107,10 +105,10 @@ use self::sessions::{messages_from_thread_detail, session_to_detail};
 use self::workspace::collect_workspace_status;
 use self::workspace::{collect_workspace_git_metadata, workspace_status};
 
-const RUNTIME_TOKEN_ENV: &str = "CODEWHALE_RUNTIME_TOKEN";
+const RUNTIME_TOKEN_ENV: &str = "GHOSTY_RUNTIME_TOKEN";
 const LEGACY_RUNTIME_TOKEN_ENV: &str = "DEEPSEEK_RUNTIME_TOKEN";
 const LEGACY_RUNTIME_TOKEN_WARNING: &str = "Warning: DEEPSEEK_RUNTIME_TOKEN is deprecated; use \
-CODEWHALE_RUNTIME_TOKEN (the legacy alias is removed in 0.10.0).";
+GHOSTY_RUNTIME_TOKEN (the legacy alias is removed in 0.10.0).";
 
 struct RuntimeTokenEnvironment {
     token: Option<String>,
@@ -174,7 +172,7 @@ pub struct RuntimeApiState {
     web: Option<web::RuntimeWebState>,
     /// Executable used by Runtime API-owned Fleet manager loops. Stored on
     /// state so tests and embedded callers can provide a hermetic worker.
-    fleet_codewhale_binary: String,
+    fleet_ghosty_binary: String,
     /// Shared McpPool reused for explicit live MCP discovery. Passive API
     /// calls do not initialize this pool so dashboards cannot accidentally
     /// become a second stdio-process owner. The outer mutex guards only the
@@ -211,12 +209,12 @@ pub struct RuntimeApiOptions {
     /// Additional CORS origins to allow on top of the built-in defaults
     /// (`http://localhost:{3000,1420}`, `http://127.0.0.1:{3000,1420}`,
     /// `tauri://localhost`). Populated by `--cors-origin` (repeatable),
-    /// `CODEWHALE_CORS_ORIGINS` (comma-separated, `DEEPSEEK_CORS_ORIGINS`
+    /// `GHOSTY_CORS_ORIGINS` (comma-separated, `DEEPSEEK_CORS_ORIGINS`
     /// as alias), and `[runtime_api] cors_origins` in `config.toml`.
     /// Whalescale#255 / #561.
     pub cors_origins: Vec<String>,
     /// Optional bearer token required for `/v1/*` routes. If omitted here,
-    /// `run_http_server` checks `CODEWHALE_RUNTIME_TOKEN`, then
+    /// `run_http_server` checks `GHOSTY_RUNTIME_TOKEN`, then
     /// `DEEPSEEK_RUNTIME_TOKEN` as an alias.
     pub auth_token: Option<String>,
     /// Allow `/v1/*` routes without auth when no token is configured.
@@ -511,11 +509,11 @@ struct SubmitUserInputResponse {
 struct RuntimeInfoResponse {
     service: &'static str,
     runtime_api_version: &'static str,
-    codewhale_version: &'static str,
+    ghosty_version: &'static str,
     /// Full 40-character source commit embedded by the shared build script.
     /// Desktop compatibility intentionally rejects `unknown` and abbreviated
     /// values, so source archives without build provenance fail closed.
-    codewhale_commit: &'static str,
+    ghosty_commit: &'static str,
     bind_host: String,
     port: u16,
     auth_required: bool,
@@ -650,7 +648,7 @@ struct McpServerWriteRequest {
     /// Environment variable that contains a bearer token for URL-based servers.
     #[serde(default, deserialize_with = "deserialize_present_nullable")]
     bearer_token_env_var: Option<Option<String>>,
-    /// OAuth scopes requested during `codewhale mcp login`.
+    /// OAuth scopes requested during `ghosty mcp login`.
     scopes: Option<Vec<String>>,
     /// RFC 8707 resource parameter for the OAuth authorization URL.
     #[serde(default, deserialize_with = "deserialize_present_nullable")]
@@ -768,7 +766,7 @@ struct CreateFleetRunRequest {
     max_workers: Option<usize>,
     /// Optional run-wide usage ceiling (R6, #5567).
     #[serde(default)]
-    usage_ceiling: Option<codewhale_protocol::fleet::FleetUsageCeiling>,
+    usage_ceiling: Option<ghosty_protocol::fleet::FleetUsageCeiling>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -840,10 +838,10 @@ pub async fn run_http_server(
         bail!("Port must be > 0");
     }
     if options.web && options.host != "127.0.0.1" {
-        bail!("Codewhale web is loopback-only and must bind to 127.0.0.1");
+        bail!("Ghosty web is loopback-only and must bind to 127.0.0.1");
     }
     if options.web && options.insecure_no_auth {
-        bail!("Codewhale web requires Runtime authentication; remove --insecure");
+        bail!("Ghosty web requires Runtime authentication; remove --insecure");
     }
 
     let task_default_model = config.default_model();
@@ -886,7 +884,7 @@ pub async fn run_http_server(
     let (web, web_bootstrap) = if options.web {
         runtime_token
             .as_ref()
-            .context("Codewhale web requires a Runtime authentication token")?;
+            .context("Ghosty web requires a Runtime authentication token")?;
         let (web, bootstrap) = web::RuntimeWebState::new();
         (Some(web), Some(bootstrap))
     } else {
@@ -914,7 +912,7 @@ pub async fn run_http_server(
         bind_port: options.port,
         mobile_enabled: options.mobile,
         web,
-        fleet_codewhale_binary: configured_codewhale_binary(),
+        fleet_ghosty_binary: configured_ghosty_binary(),
         mcp_pool: Arc::new(Mutex::new(None)),
         #[cfg(test)]
         compat_stream_test_hook: None,
@@ -947,10 +945,10 @@ pub async fn run_http_server(
         );
     }
     if let Some(bootstrap) = web_bootstrap {
-        println!("Codewhale web enabled at http://{bound_addr}/");
+        println!("Ghosty web enabled at http://{bound_addr}/");
         let bootstrap_url = web::bootstrap_url(bound_addr, &bootstrap);
         println!(
-            "Codewhale web bootstrap (single-use, expires in {} min): {bootstrap_url}",
+            "Ghosty web bootstrap (single-use, expires in {} min): {bootstrap_url}",
             web::BOOTSTRAP_TTL.as_secs() / 60
         );
         if let Some(warning) = web_launcher_warning(crate::utils::open_url(&bootstrap_url)) {
@@ -997,11 +995,11 @@ fn web_launcher_warning(result: Result<()>) -> Option<String> {
 }
 
 fn fallback_sessions_dir() -> PathBuf {
-    if let Some(home) = codewhale_paths::codewhale_home_override().ok().flatten() {
+    if let Some(home) = ghosty_paths::ghosty_home_override().ok().flatten() {
         return home.join("sessions");
     }
-    codewhale_paths::legacy_deepseek_home()
-        .unwrap_or_else(|| PathBuf::from(codewhale_paths::LEGACY_APP_DIR))
+    ghosty_paths::legacy_deepseek_home()
+        .unwrap_or_else(|| PathBuf::from(ghosty_paths::LEGACY_APP_DIR))
         .join("sessions")
 }
 
@@ -1186,13 +1184,10 @@ pub fn build_router(state: RuntimeApiState) -> Router {
 
     Router::new()
         .route("/", get(web::web_page))
-        .route("/assets/codewhale-web.css", get(web::web_styles))
-        .route("/assets/codewhale-web.js", get(web::web_script))
-        .route("/assets/codewhale-192.png", get(web::web_icon))
-        .route(
-            "/__codewhale/bootstrap/{nonce}",
-            get(web::exchange_bootstrap),
-        )
+        .route("/assets/ghosty-web.css", get(web::web_styles))
+        .route("/assets/ghosty-web.js", get(web::web_script))
+        .route("/assets/ghosty-192.png", get(web::web_icon))
+        .route("/__ghosty/bootstrap/{nonce}", get(web::exchange_bootstrap))
         .route("/health", get(health))
         .route("/mobile", get(mobile_page))
         .route("/mobile/", get(mobile_page))
@@ -1206,7 +1201,7 @@ async fn mobile_page(State(state): State<RuntimeApiState>, req: Request) -> Resp
     if !state.mobile_enabled {
         return (
             StatusCode::NOT_FOUND,
-            "mobile control is disabled; start with `codewhale serve --mobile`",
+            "mobile control is disabled; start with `ghosty serve --mobile`",
         )
             .into_response();
     }
@@ -1236,7 +1231,7 @@ fn print_mobile_urls(addr: SocketAddr, auth_enabled: bool, generated_auth: bool,
     if auth_enabled {
         if generated_auth {
             println!(
-                "  Auth uses an unprinted generated token; restart with CODEWHALE_RUNTIME_TOKEN or --auth-token to sign in from another client."
+                "  Auth uses an unprinted generated token; restart with GHOSTY_RUNTIME_TOKEN or --auth-token to sign in from another client."
             );
         } else {
             println!("  Enter the configured runtime token in the page connection field.");
@@ -1285,7 +1280,7 @@ fn detect_lan_ip() -> Option<String> {
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
-        service: "codewhale-runtime-api",
+        service: "ghosty-runtime-api",
         mode: "local",
     })
 }
@@ -1774,7 +1769,7 @@ async fn start_fleet_run(
         .and_then(|run| run.max_workers)
         .unwrap_or_else(|| report.worker_ids.len().max(1));
     let workspace = state.workspace.clone();
-    let codewhale_binary = state.fleet_codewhale_binary.clone();
+    let ghosty_binary = state.fleet_ghosty_binary.clone();
     let execution_run_id = run_id.clone();
     tokio::spawn(async move {
         let mut executor = FleetExecutor::new(&workspace);
@@ -1783,7 +1778,7 @@ async fn start_fleet_run(
                 &execution_run_id,
                 max_workers,
                 &mut executor,
-                &codewhale_binary,
+                &ghosty_binary,
                 None,
                 Duration::from_millis(250),
             )
@@ -2087,7 +2082,7 @@ async fn restart_fleet_worker(
     let run_id = report.run_id.clone();
     let max_workers = report.max_workers;
     let workspace = state.workspace.clone();
-    let codewhale_binary = state.fleet_codewhale_binary.clone();
+    let ghosty_binary = state.fleet_ghosty_binary.clone();
     tokio::spawn(async move {
         let mut executor = FleetExecutor::new(&workspace);
         if let Err(err) = manager
@@ -2095,7 +2090,7 @@ async fn restart_fleet_worker(
                 &run_id,
                 max_workers,
                 &mut executor,
-                &codewhale_binary,
+                &ghosty_binary,
                 None,
                 Duration::from_millis(250),
             )
@@ -2379,7 +2374,7 @@ fn fleet_worker_runtime_json(runtime: &FleetWorkerRuntimeProjection) -> Value {
     })
 }
 
-fn fleet_artifact_json(artifact: &codewhale_protocol::fleet::FleetArtifactRef) -> Value {
+fn fleet_artifact_json(artifact: &ghosty_protocol::fleet::FleetArtifactRef) -> Value {
     json!({
         "kind": artifact_kind_label(&artifact.kind),
         "path": artifact.path.clone(),
@@ -2389,8 +2384,8 @@ fn fleet_artifact_json(artifact: &codewhale_protocol::fleet::FleetArtifactRef) -
     })
 }
 
-fn fleet_receipt_json(receipt: &codewhale_protocol::fleet::FleetReceipt) -> Value {
-    use codewhale_protocol::fleet::{FleetTaskFailureKind, FleetTaskResult};
+fn fleet_receipt_json(receipt: &ghosty_protocol::fleet::FleetReceipt) -> Value {
+    use ghosty_protocol::fleet::{FleetTaskFailureKind, FleetTaskResult};
 
     let result_label = match receipt.result {
         FleetTaskResult::Pass => "pass",
@@ -2445,7 +2440,7 @@ fn fleet_receipt_json(receipt: &codewhale_protocol::fleet::FleetReceipt) -> Valu
     })
 }
 
-fn fleet_event_json(event: &codewhale_protocol::fleet::FleetWorkerEvent) -> Value {
+fn fleet_event_json(event: &ghosty_protocol::fleet::FleetWorkerEvent) -> Value {
     json!({
         "seq": event.seq,
         "run_id": event.run_id.0.clone(),
@@ -2561,8 +2556,8 @@ async fn list_skills(
     let (skills_dir, mode) = {
         let config = state.config.read();
         let skills_dir = resolve_skills_dir(&config, &state.workspace);
-        let mode = crate::skills::SkillDiscoveryMode::from_codewhale_only(
-            config.skills_config().scan_codewhale_only(),
+        let mode = crate::skills::SkillDiscoveryMode::from_ghosty_only(
+            config.skills_config().scan_ghosty_only(),
         );
         (skills_dir, mode)
     };
@@ -2633,8 +2628,8 @@ async fn set_skill_enabled(
     let (skills_dir, mode) = {
         let config = state.config.read();
         let skills_dir = resolve_skills_dir(&config, &state.workspace);
-        let mode = crate::skills::SkillDiscoveryMode::from_codewhale_only(
-            config.skills_config().scan_codewhale_only(),
+        let mode = crate::skills::SkillDiscoveryMode::from_ghosty_only(
+            config.skills_config().scan_ghosty_only(),
         );
         (skills_dir, mode)
     };
@@ -2981,8 +2976,8 @@ async fn audit_skill_api(
 
     if let Some(scope) = scope_filter {
         let want = match scope {
-            crate::skills::mutation::SkillTargetScope::Project => SkillRootKind::CodeWhaleProject,
-            crate::skills::mutation::SkillTargetScope::Global => SkillRootKind::CodeWhaleGlobal,
+            crate::skills::mutation::SkillTargetScope::Project => SkillRootKind::GhostyCodeProject,
+            crate::skills::mutation::SkillTargetScope::Global => SkillRootKind::GhostyCodeGlobal,
         };
         matches.retain(|s| s.root.kind == want);
     }
@@ -2998,16 +2993,16 @@ async fn audit_skill_api(
         .into_iter()
         .map(|skill| {
             let source_kind = match skill.source_kind {
-                SkillSourceKind::CodeWhaleManaged => "codewhale_managed",
-                SkillSourceKind::CodeWhaleManual => "codewhale_manual",
+                SkillSourceKind::GhostyCodeManaged => "ghosty_managed",
+                SkillSourceKind::GhostyCodeManual => "ghosty_manual",
                 SkillSourceKind::CompatibleExternal => "compatible_external",
                 SkillSourceKind::BuiltIn => "built_in",
                 SkillSourceKind::ReviewedPluginSnapshot => "reviewed_plugin_snapshot",
                 SkillSourceKind::RegistryCache => "registry_cache",
             };
             let scope_str = match skill.root.kind {
-                SkillRootKind::CodeWhaleProject => "project",
-                SkillRootKind::CodeWhaleGlobal => "global",
+                SkillRootKind::GhostyCodeProject => "project",
+                SkillRootKind::GhostyCodeGlobal => "global",
                 _ => "other",
             };
             let digest = match &skill.digest {
@@ -3146,7 +3141,7 @@ async fn runtime_info(
     request: Request,
 ) -> Json<RuntimeInfoResponse> {
     let version = env!("CARGO_PKG_VERSION");
-    let commit = option_env!("CODEWHALE_BUILD_COMMIT").unwrap_or("unknown");
+    let commit = option_env!("GHOSTY_BUILD_COMMIT").unwrap_or("unknown");
     let api_base = runtime_account_api_base();
     let account = runtime_account_info_for_request(
         runtime_request_is_authorized(&request, &state),
@@ -3154,10 +3149,10 @@ async fn runtime_info(
         || runtime_account_info(state.config_profile.as_deref(), &api_base),
     );
     Json(RuntimeInfoResponse {
-        service: "codewhale-runtime-api",
+        service: "ghosty-runtime-api",
         runtime_api_version: RUNTIME_API_VERSION,
-        codewhale_version: version,
-        codewhale_commit: commit,
+        ghosty_version: version,
+        ghosty_commit: commit,
         bind_host: state.bind_host.clone(),
         port: state.bind_port,
         auth_required: state.auth_required,
@@ -4282,7 +4277,7 @@ async fn compact_thread(
 async fn get_thread_goal(
     State(state): State<RuntimeApiState>,
     Path(id): Path<String>,
-) -> Result<Json<codewhale_protocol::ThreadGoal>, ApiError> {
+) -> Result<Json<ghosty_protocol::ThreadGoal>, ApiError> {
     // Verify the thread exists so we can return a clean 404 for unknown threads.
     state
         .runtime_threads
@@ -4312,7 +4307,7 @@ async fn upsert_thread_goal(
     State(state): State<RuntimeApiState>,
     Path(id): Path<String>,
     Json(req): Json<UpsertThreadGoalRequest>,
-) -> Result<(StatusCode, Json<codewhale_protocol::ThreadGoal>), ApiError> {
+) -> Result<(StatusCode, Json<ghosty_protocol::ThreadGoal>), ApiError> {
     if req.objective.trim().is_empty() {
         return Err(ApiError::bad_request("objective must not be blank"));
     }
@@ -4329,11 +4324,11 @@ async fn upsert_thread_goal(
         .await
         .map_err(|e| ApiError::internal(e.to_string()))?;
     let is_new = existing.is_none();
-    let goal = codewhale_protocol::ThreadGoal {
+    let goal = ghosty_protocol::ThreadGoal {
         thread_id: id.clone(),
         goal_id: format!("goal-{}", uuid::Uuid::new_v4()),
         objective: req.objective.clone(),
-        status: codewhale_protocol::ThreadGoalStatus::Active,
+        status: ghosty_protocol::ThreadGoalStatus::Active,
         token_budget: req.token_budget,
         tokens_used: 0,
         time_used_seconds: 0,
@@ -4388,7 +4383,7 @@ async fn delete_thread_goal(
 async fn complete_thread_goal(
     State(state): State<RuntimeApiState>,
     Path(id): Path<String>,
-) -> Result<Json<codewhale_protocol::ThreadGoal>, ApiError> {
+) -> Result<Json<ghosty_protocol::ThreadGoal>, ApiError> {
     state
         .runtime_threads
         .get_thread(&id)
@@ -4400,15 +4395,15 @@ async fn complete_thread_goal(
         .await
         .map_err(|e| ApiError::internal(e.to_string()))?
         .ok_or_else(|| ApiError::not_found(format!("thread '{id}' has no goal")))?;
-    if matches!(goal.status, codewhale_protocol::ThreadGoalStatus::Complete) {
+    if matches!(goal.status, ghosty_protocol::ThreadGoalStatus::Complete) {
         return Err(ApiError {
             status: StatusCode::CONFLICT,
             message: format!("goal for thread '{id}' is already complete"),
         });
     }
     let now = chrono::Utc::now().timestamp();
-    let updated = codewhale_protocol::ThreadGoal {
-        status: codewhale_protocol::ThreadGoalStatus::Complete,
+    let updated = ghosty_protocol::ThreadGoal {
+        status: ghosty_protocol::ThreadGoalStatus::Complete,
         updated_at: now,
         ..goal
     };
@@ -4429,7 +4424,7 @@ async fn complete_thread_goal(
 async fn block_thread_goal(
     State(state): State<RuntimeApiState>,
     Path(id): Path<String>,
-) -> Result<Json<codewhale_protocol::ThreadGoal>, ApiError> {
+) -> Result<Json<ghosty_protocol::ThreadGoal>, ApiError> {
     state
         .runtime_threads
         .get_thread(&id)
@@ -4441,7 +4436,7 @@ async fn block_thread_goal(
         .await
         .map_err(|e| ApiError::internal(e.to_string()))?
         .ok_or_else(|| ApiError::not_found(format!("thread '{id}' has no goal")))?;
-    if matches!(goal.status, codewhale_protocol::ThreadGoalStatus::Complete) {
+    if matches!(goal.status, ghosty_protocol::ThreadGoalStatus::Complete) {
         return Err(ApiError {
             status: StatusCode::CONFLICT,
             message: format!(
@@ -4450,8 +4445,8 @@ async fn block_thread_goal(
         });
     }
     let now = chrono::Utc::now().timestamp();
-    let updated = codewhale_protocol::ThreadGoal {
-        status: codewhale_protocol::ThreadGoalStatus::Blocked,
+    let updated = ghosty_protocol::ThreadGoal {
+        status: ghosty_protocol::ThreadGoalStatus::Blocked,
         updated_at: now,
         ..goal
     };
@@ -5164,12 +5159,12 @@ fn truncate_text(text: &str, max_chars: usize) -> String {
 }
 
 fn resolve_skills_dir(config: &Config, workspace: &std::path::Path) -> PathBuf {
-    if config.skills_config().scan_codewhale_only() {
+    if config.skills_config().scan_ghosty_only() {
         if config.skills_dir.is_some() {
             return config.skills_dir();
         }
-        if let Some(codewhale_skills_dir) = crate::skills::codewhale_workspace_skills_dir(workspace)
-            && let Ok(canonical_skills) = fs::canonicalize(&codewhale_skills_dir)
+        if let Some(ghosty_skills_dir) = crate::skills::ghosty_workspace_skills_dir(workspace)
+            && let Ok(canonical_skills) = fs::canonicalize(&ghosty_skills_dir)
         {
             return canonical_skills;
         }
@@ -5456,7 +5451,7 @@ struct ProviderModelEntry {
     /// Image-input support reported by the exact resolved provider/model
     /// offering. Unknown stays unknown: the API never guesses from a model
     /// name or transport protocol.
-    image_input: codewhale_config::route::CapabilityState,
+    image_input: ghosty_config::route::CapabilityState,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -5514,7 +5509,7 @@ fn provider_model_image_input_for_api(
     config: &Config,
     provider: ApiProvider,
     model: &str,
-) -> codewhale_config::route::CapabilityState {
+) -> ghosty_config::route::CapabilityState {
     crate::route_runtime::resolve_runtime_route(config, provider, Some(model))
         .map(|route| route.candidate.capabilities().image_input)
         .unwrap_or_default()
@@ -5596,13 +5591,13 @@ pub(crate) fn runtime_chat_relay_catalog(
 ) -> Result<Value, String> {
     use crate::provider_readiness::CredentialState;
 
-    const PROTOCOL: &str = "codewhale.runtime-chat-relay.v1";
+    const PROTOCOL: &str = "ghosty.runtime-chat-relay.v1";
     if !(32..=128).contains(&challenge.len())
         || !challenge
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
     {
-        return Err("Codewhale returned an invalid Runtime Chat relay challenge.".to_string());
+        return Err("Ghosty returned an invalid Runtime Chat relay challenge.".to_string());
     }
 
     let provider = config.api_provider();
@@ -5649,9 +5644,9 @@ pub(crate) fn runtime_chat_relay_catalog(
         "protocol": PROTOCOL,
         "challenge": challenge,
         "runtime": {
-            "service": "codewhale-runtime-api",
+            "service": "ghosty-runtime-api",
             "apiVersion": RUNTIME_API_VERSION,
-            "codewhaleVersion": env!("CARGO_PKG_VERSION"),
+            "ghostyVersion": env!("CARGO_PKG_VERSION"),
             "authRequired": true,
             "capabilities": {
                 "relay_chat_v1": true,
@@ -6188,7 +6183,7 @@ async fn set_config(
                         "Invalid value '{value}' for subagents_max_depth: expected a non-negative integer"
                     ))
                 })?;
-                let clamped = raw.min(u64::from(codewhale_config::MAX_SPAWN_DEPTH_CEILING));
+                let clamped = raw.min(u64::from(ghosty_config::MAX_SPAWN_DEPTH_CEILING));
                 config_persistence::persist_subagents_integer_key(config_path, "max_depth", clamped)
             }
             "sandbox_mode" => {
@@ -6643,7 +6638,7 @@ fn cors_layer(extra_origins: &[String]) -> CorsLayer {
             header::AUTHORIZATION,
             header::CONTENT_TYPE,
             header::ACCEPT,
-            HeaderName::from_static("x-codewhale-runtime-token"),
+            HeaderName::from_static("x-ghosty-runtime-token"),
             HeaderName::from_static("x-deepseek-runtime-token"),
         ])
 }

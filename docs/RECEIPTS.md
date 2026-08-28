@@ -5,7 +5,7 @@ turns. It is a protocol note, not an implemented endpoint.
 
 The goal is to let a local supervisor audit one completed turn without
 screen-scraping the terminal transcript. A receipt should summarize the durable
-runtime records that Codewhale already owns: thread metadata, turn status, turn
+runtime records that Ghosty already owns: thread metadata, turn status, turn
 items, event sequence lineage, usage when available, approval decisions, and
 side-effect boundaries.
 
@@ -24,7 +24,7 @@ explicit `unavailable` fields rather than raw hidden content.
 Potential local-only surfaces:
 
 ```text
-codewhale receipt export --thread <thread_id> --turn <turn_id> --format json
+ghosty receipt export --thread <thread_id> --turn <turn_id> --format json
 GET /v1/threads/{thread_id}/turns/{turn_id}/receipt
 ```
 
@@ -33,8 +33,8 @@ only read persisted runtime records and append-only events.
 
 ## Review Receipts
 
-`codewhale review --write-receipt` writes a local JSON receipt for the reviewed
-diff under the Codewhale state directory (`review-receipts/`) unless
+`ghosty review --write-receipt` writes a local JSON receipt for the reviewed
+diff under the Ghosty state directory (`review-receipts/`) unless
 `--receipt-path <path>` is provided. This is a pre-push handoff artifact: it
 records what diff was reviewed and what the review reported, without pushing,
 tagging, opening a PR, or claiming to replace maintainer review.
@@ -51,10 +51,10 @@ The current receipt includes:
 - `review_content_sha256`: SHA-256 of the review text.
 
 The receipt deliberately does not include the raw diff body. Re-run
-`codewhale review --write-receipt` after changing the diff; reviewers should
+`ghosty review --write-receipt` after changing the diff; reviewers should
 compare the `diff_fingerprint` before reusing a receipt in a PR handoff.
 
-`codewhale review --check-receipt` is the local pre-push gate. It does not call
+`ghosty review --check-receipt` is the local pre-push gate. It does not call
 a model; it compares the current diff fingerprint with a supplied receipt
 (`--receipt-path <path>`) or the latest matching local receipt. The check exits
 nonzero when the diff no longer matches, the receipt schema is unsupported, the
@@ -82,7 +82,7 @@ store does not persist a value, the receipt should say `available: false` or
 
 ```json
 {
-  "schema_id": "codewhale.conformance-receipt/v0",
+  "schema_id": "ghosty.conformance-receipt/v0",
   "thread": {
     "id": "thr_...",
     "model": "deepseek-v4-pro",

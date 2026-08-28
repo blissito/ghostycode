@@ -15,20 +15,20 @@ use std::process::Command;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
-use codewhale_agent::ModelRegistry;
-use codewhale_app_server::{
+use ghosty_agent::ModelRegistry;
+use ghosty_app_server::{
     AppServerOptions, run as run_app_server, run_stdio as run_app_server_stdio,
 };
-use codewhale_config::{
+use ghosty_config::{
     CliRuntimeOverrides, ConfigApiKeyValueKind, ConfigStore, ConfigToml, ProviderKind,
     ProviderSource, ResolvedRuntimeOptions, RuntimeApiKeySource, SetupState,
     classify_config_api_key_value, provider_base_url_is_official,
 };
-use codewhale_execpolicy::{AskForApproval, ExecPolicyContext, ExecPolicyEngine};
-use codewhale_mcp::{McpServerDefinition, run_stdio_server};
-use codewhale_secrets::Secrets;
-use codewhale_state::{StateStore, ThreadListFilters};
-use codewhale_telemetry::{
+use ghosty_execpolicy::{AskForApproval, ExecPolicyContext, ExecPolicyEngine};
+use ghosty_mcp::{McpServerDefinition, run_stdio_server};
+use ghosty_secrets::Secrets;
+use ghosty_state::{StateStore, ThreadListFilters};
+use ghosty_telemetry::{
     self as telemetry, Counters, DurationBucket, Errors, Event, ExitClass, SessionSource, Surface,
     TelemetryDecision, TurnWall,
 };
@@ -70,6 +70,7 @@ enum ProviderArg {
     #[value(alias = "open-model", alias = "open_model")]
     Openmodel,
     Zai,
+    Easybits,
     Stepfun,
     Minimax,
     #[value(
@@ -148,6 +149,7 @@ impl From<ProviderArg> for ProviderKind {
             ProviderArg::Anthropic => ProviderKind::Anthropic,
             ProviderArg::Openmodel => ProviderKind::Openmodel,
             ProviderArg::Zai => ProviderKind::Zai,
+            ProviderArg::Easybits => ProviderKind::Easybits,
             ProviderArg::Stepfun => ProviderKind::Stepfun,
             ProviderArg::Minimax => ProviderKind::Minimax,
             ProviderArg::MinimaxAnthropic => ProviderKind::MinimaxAnthropic,
@@ -187,10 +189,10 @@ fn parse_provider_identifier(value: &str) -> std::result::Result<String, String>
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "codewhale",
-    version = env!("CODEWHALE_BUILD_VERSION"),
-    bin_name = "codewhale",
-    override_usage = "codewhale [OPTIONS] [PROMPT]\n       codewhale [OPTIONS] <COMMAND> [ARGS]"
+    name = "ghosty",
+    version = env!("GHOSTY_BUILD_VERSION"),
+    bin_name = "ghosty",
+    override_usage = "ghosty [OPTIONS] [PROMPT]\n       ghosty [OPTIONS] <COMMAND> [ARGS]"
 )]
 struct Cli {
     #[arg(long)]
@@ -220,7 +222,7 @@ struct Cli {
         long,
         value_name = "BOOL",
         help = "Control anonymous usage counting for this run (default on; \
-                CODEWHALE_TELEMETRY=0 always wins)"
+                GHOSTY_TELEMETRY=0 always wins)"
     )]
     telemetry: Option<bool>,
     #[arg(long)]
@@ -231,7 +233,7 @@ struct Cli {
     api_key: Option<String>,
     #[arg(long)]
     base_url: Option<String>,
-    /// Workspace directory for Codewhale file tools.
+    /// Workspace directory for Ghosty file tools.
     #[arg(short = 'C', long = "workspace", alias = "cd", value_name = "DIR")]
     workspace: Option<PathBuf>,
     #[arg(long = "mouse-capture", conflicts_with = "no_mouse_capture")]
@@ -267,7 +269,7 @@ struct Cli {
 enum Commands {
     /// Run an interactive or non-interactive task.
     Run(RunArgs),
-    /// Run Codewhale diagnostics.
+    /// Run Ghosty diagnostics.
     Doctor(TuiPassthroughArgs),
     /// List live models from the selected provider.
     Models(TuiPassthroughArgs),
@@ -278,7 +280,7 @@ enum Commands {
     Sessions(TuiPassthroughArgs),
     /// Resume a saved session.
     Resume(TuiPassthroughArgs),
-    /// Launch an interactive session and hand it to the Codewhale web app.
+    /// Launch an interactive session and hand it to the Ghosty web app.
     Rc(TuiPassthroughArgs),
     /// Fork a saved session.
     Fork(TuiPassthroughArgs),
@@ -286,14 +288,14 @@ enum Commands {
     Init(TuiPassthroughArgs),
     /// Bootstrap MCP config and/or skills directories.
     Setup(TuiPassthroughArgs),
-    /// Generate a remote Codewhale agent deploy bundle (cloud + chat bridge).
+    /// Generate a remote Ghosty agent deploy bundle (cloud + chat bridge).
     RemoteSetup(RemoteSetupArgs),
     /// Run a non-interactive prompt.
     #[command(after_help = "\
 Examples:
-  codewhale exec \"explain this function\"
-  codewhale exec --auto \"list crates/ with ls\"
-  codewhale exec --auto --output-format stream-json \"fix the failing test\"
+  ghosty exec \"explain this function\"
+  ghosty exec --auto \"list crates/ with ls\"
+  ghosty exec --auto --output-format stream-json \"fix the failing test\"
 
 Common forwarded flags:
   --auto                           Enable tool-backed agent mode with auto-approvals
@@ -303,7 +305,7 @@ Common forwarded flags:
   --continue                       Continue the most recent session for this workspace
   --output-format <FORMAT>         Output format: text or stream-json
 
-Plain `codewhale exec` is a one-shot model response. Use `--auto` for
+Plain `ghosty exec` is a one-shot model response. Use `--auto` for
 non-interactive filesystem/shell tool use, matching the supported automation
 path used by stream-json wrappers.
 ")]
@@ -319,8 +321,8 @@ path used by stream-json wrappers.
     /// Run checked-in Workflows through a Lane Runtime backend.
     #[command(after_help = "\
 Examples:
-  codewhale workflow run stopship --fleet stopship --runtime tmux --goal verify-release-candidate
-  codewhale workflow run stopship --fleet stopship --runtime inline --verify
+  ghosty workflow run stopship --fleet stopship --runtime tmux --goal verify-release-candidate
+  ghosty workflow run stopship --fleet stopship --runtime inline --verify
 
 `workflow run` validates the checked-in Workflow source and named Fleet roster,
 creates a Lane record, then dispatches the Workflow tool directly through the
@@ -330,15 +332,15 @@ selected Runtime backend without an operator model turn.
     /// Manage running workflow instances (Lanes) and Runtime backends (#4176).
     #[command(after_help = "\
 Examples:
-  codewhale lane list
-  codewhale lane status <lane-id>
-  codewhale lane attach <lane-id>
-  codewhale lane logs <lane-id>
-  codewhale lane interrupt <lane-id>
-  codewhale lane interrupt <lane-id>@<lifecycle-seq>
-  codewhale lane start --workflow stopship --fleet stopship --runtime tmux --goal verify-release-candidate -- echo hello
+  ghosty lane list
+  ghosty lane status <lane-id>
+  ghosty lane attach <lane-id>
+  ghosty lane logs <lane-id>
+  ghosty lane interrupt <lane-id>
+  ghosty lane interrupt <lane-id>@<lifecycle-seq>
+  ghosty lane start --workflow stopship --fleet stopship --runtime tmux --goal verify-release-candidate -- echo hello
 
-Lane records persist under $CODEWHALE_HOME/lanes/. tmux durability belongs to
+Lane records persist under $GHOSTY_HOME/lanes/. tmux durability belongs to
 Runtime, not Fleet.
 
 list/status/interrupt/restart/resume share one control-plane contract with the
@@ -349,7 +351,7 @@ same receipt (`--json`). `lane stop` is a compatibility spelling of
 lifecycle generation you observed.
 ")]
     Lane(LaneArgs),
-    /// Run a Codewhale-powered code review over a git diff.
+    /// Run a Ghosty-powered code review over a git diff.
     Review(TuiPassthroughArgs),
     /// Apply a patch file or stdin to the working tree.
     Apply(TuiPassthroughArgs),
@@ -359,9 +361,9 @@ lifecycle generation you observed.
     Mcp(TuiPassthroughArgs),
     /// Inspect feature flags.
     Features(TuiPassthroughArgs),
-    /// Connect third-party harnesses through Codewhale (e.g. `integrations dsh status`).
+    /// Connect third-party harnesses through Ghosty (e.g. `integrations dsh status`).
     Integrations(TuiPassthroughArgs),
-    /// Run a local Codewhale server.
+    /// Run a local Ghosty server.
     #[command(after_help = "\
 Forwarded serve options:
       --mcp                 Start MCP server over stdio
@@ -377,22 +379,22 @@ Forwarded serve options:
       --auth-token <TOKEN>  Require this bearer token for /v1/* runtime API routes
       --insecure            Disable runtime API auth when no token is configured
 
-`codewhale serve --http` and `codewhale serve --mobile` remain compatibility
-aliases for `codewhale app-server --http` and `codewhale app-server --mobile`.
-New integrations should prefer `codewhale app-server`.")]
+`ghosty serve --http` and `ghosty serve --mobile` remain compatibility
+aliases for `ghosty app-server --http` and `ghosty app-server --mobile`.
+New integrations should prefer `ghosty app-server`.")]
     Serve(TuiPassthroughArgs),
     /// Open the first-class local browser client over the canonical Runtime API.
     #[command(
         after_help = "The browser receives a one-time loopback bootstrap capability, never the Runtime token.\nThe capability is exchanged for a bounded, process-local HttpOnly, SameSite=Strict web session and then invalidated."
     )]
     Web(WebArgs),
-    /// Sign in to your Codewhale account (browser device flow).
+    /// Sign in to your Ghosty account (browser device flow).
     Login(LoginArgs),
     /// Remove saved authentication state.
     Logout,
     /// Manage authentication credentials and provider mode.
     Auth(AuthArgs),
-    /// Sign in to your Codewhale account and manage account-scoped provider keys.
+    /// Sign in to your Ghosty account and manage account-scoped provider keys.
     #[command(visible_alias = "cloud")]
     Account(cloud::CloudArgs),
     /// Run MCP server mode over stdio.
@@ -408,51 +410,51 @@ New integrations should prefer `codewhale app-server`.")]
     /// Run the canonical runtime API / control plane (HTTP/SSE, mobile, stdio).
     #[command(after_help = "\
 Transports:
-  codewhale app-server --http              Full HTTP/SSE runtime API (/v1/*) on 127.0.0.1:7878
-  codewhale app-server --mobile            Runtime API + phone control page (binds 0.0.0.0)
-  codewhale app-server --stdio             JSON-RPC control transport over stdio (no listener)
-  codewhale app-server                     Legacy in-process app-server HTTP on 127.0.0.1:8787
+  ghosty app-server --http              Full HTTP/SSE runtime API (/v1/*) on 127.0.0.1:7878
+  ghosty app-server --mobile            Runtime API + phone control page (binds 0.0.0.0)
+  ghosty app-server --stdio             JSON-RPC control transport over stdio (no listener)
+  ghosty app-server                     Legacy in-process app-server HTTP on 127.0.0.1:8787
 
-`--http` and `--mobile` serve the same mature runtime API as `codewhale serve
+`--http` and `--mobile` serve the same mature runtime API as `ghosty serve
 --http`/`--mobile`, which remain as compatibility aliases. The runtime API token
-is read from --auth-token, CODEWHALE_RUNTIME_TOKEN, or DEEPSEEK_RUNTIME_TOKEN.
+is read from --auth-token, GHOSTY_RUNTIME_TOKEN, or DEEPSEEK_RUNTIME_TOKEN.
 
 See docs/RUNTIME_API.md.")]
     AppServer(AppServerArgs),
     /// Generate shell completions.
     #[command(
         visible_alias = "completions",
-        after_help = r#"Every script completes both `codewhale` and the `codew` shorthand.
+        after_help = r#"Every script completes the `ghosty` command.
 
 Examples:
   Bash (current shell only):
-    source <(codewhale completion bash)
+    source <(ghosty completion bash)
 
   Bash (persistent, Linux/bash-completion):
     mkdir -p ~/.local/share/bash-completion/completions
-    codewhale completion bash > ~/.local/share/bash-completion/completions/codewhale
+    ghosty completion bash > ~/.local/share/bash-completion/completions/ghosty
     # Requires bash-completion to be installed and loaded by your shell.
 
   Zsh:
     mkdir -p ~/.zfunc
-    codewhale completion zsh > ~/.zfunc/_codewhale
+    ghosty completion zsh > ~/.zfunc/_ghosty
     # Add to ~/.zshrc if needed:
     #   fpath=(~/.zfunc $fpath)
     #   autoload -Uz compinit && compinit
 
   Fish:
     mkdir -p ~/.config/fish/completions
-    codewhale completion fish > ~/.config/fish/completions/codewhale.fish
+    ghosty completion fish > ~/.config/fish/completions/ghosty.fish
 
   PowerShell (current shell only):
-    codewhale completion powershell | Out-String | Invoke-Expression
+    ghosty completion powershell | Out-String | Invoke-Expression
 
   PowerShell (persistent):
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PROFILE)
-    codewhale completion powershell >> $PROFILE
+    ghosty completion powershell >> $PROFILE
 
   Elvish:
-    codewhale completion elvish >> ~/.config/elvish/rc.elv
+    ghosty completion elvish >> ~/.config/elvish/rc.elv
 
 The command prints the completion script to stdout; redirect it to a path your shell loads automatically."#
     )]
@@ -462,25 +464,27 @@ The command prints the completion script to stdout; redirect it to a path your s
     },
     /// Print a usage rollup from the audit log and session store.
     Metrics(MetricsArgs),
-    /// Check for and apply updates to the `codewhale` binary.
+    /// Check for and apply updates to the `ghosty` binary.
     Update(UpdateArgs),
 }
 
 /// The name of this crate's `[[bin]]` target, and the command users actually
 /// type. Completion scripts must register *this*, not the in-tree
-/// `codewhale-tui` binary that used to render them (#5526).
+/// `ghosty-tui` binary that used to render them (#5526).
 ///
 /// GitHub releases do not ship a separately compiled TUI: `release-artifacts.yml`
-/// builds `-p codewhale-cli` and publishes `codewhale` plus a byte-identical
-/// `codew` copy. The `codewhale-tui-*` filenames still attached to the release
+/// builds `-p ghosty-cli` and publishes `ghosty` plus a byte-identical
+/// `ghosty-tui` copy. The `ghosty-tui-*` filenames still attached to the release
 /// are that same binary (a v0.9.4 updater bridge), not a third runtime.
-const COMPLETION_BIN_NAME: &str = "codewhale";
+const COMPLETION_BIN_NAME: &str = "ghosty";
 
-/// Releases publish `codew` as a byte-identical copy of `codewhale`
+/// Releases publish `ghosty-tui` as a byte-identical copy of `ghosty`
 /// (`release-artifacts.yml` copies the binary and `cmp`s it), so a completion
-/// script that fires only for `codewhale` is half-installed for anyone who
+/// script that fires only for `ghosty` is half-installed for anyone who
 /// types the short name.
-const COMPLETION_ALIAS_NAME: &str = "codew";
+/// Nombre corto que reciben las completions además de `ghosty`. Upstream usa
+/// `codew`; GhostyCode publica un solo comando, así que no hay alias.
+const COMPLETION_ALIAS_NAME: &str = "";
 
 /// Render the completion script for `shell` from this binary's own clap tree,
 /// registered for both published command names.
@@ -492,7 +496,7 @@ fn render_completion_script(shell: Shell) -> String {
     register_completion_alias(shell, script)
 }
 
-/// Extend a clap_complete script so the `codew` shorthand completes too.
+/// Extend a clap_complete script so the `ghosty-tui` shorthand completes too.
 ///
 /// Each shell gets its own idiomatic hook rather than a second copy of the
 /// script: bash re-binds the generated function, zsh widens the `#compdef`
@@ -502,6 +506,10 @@ fn render_completion_script(shell: Shell) -> String {
 fn register_completion_alias(shell: Shell, script: String) -> String {
     let bin = COMPLETION_BIN_NAME;
     let alias = COMPLETION_ALIAS_NAME;
+    // GhostyCode publica un solo comando: sin alias no hay nada que registrar.
+    if alias.is_empty() {
+        return script;
+    }
     match shell {
         Shell::Bash => format!(
             "{script}\n\
@@ -656,7 +664,7 @@ struct LaneLogProxyArgs {
     command: Vec<String>,
 }
 
-/// `codewhale lane …` — running workflow instances (#4176).
+/// `ghosty lane …` — running workflow instances (#4176).
 #[derive(Debug, Args)]
 struct LaneArgs {
     #[command(subcommand)]
@@ -748,7 +756,7 @@ enum LaneCommand {
         /// Branch name for the worktree (requires `--worktree-repo`).
         #[arg(long)]
         branch: Option<String>,
-        /// Worktree path (defaults to `<repo>/.codewhale/lanes/<lane-id>`).
+        /// Worktree path (defaults to `<repo>/.ghosty/lanes/<lane-id>`).
         #[arg(long, value_name = "DIR")]
         worktree_path: Option<PathBuf>,
         /// Worktree cleanup TTL seconds after stop (0 = immediate on stop).
@@ -760,7 +768,7 @@ enum LaneCommand {
     },
 }
 
-/// `codewhale workflow …` — Workflow entrypoints backed by Lanes (#4177/#4178).
+/// `ghosty workflow …` — Workflow entrypoints backed by Lanes (#4177/#4178).
 #[derive(Debug, Args)]
 struct WorkflowArgs {
     #[command(subcommand)]
@@ -801,7 +809,7 @@ enum WorkflowCommand {
         /// Branch name for the worktree (requires `--worktree-repo`).
         #[arg(long)]
         branch: Option<String>,
-        /// Worktree path (defaults to `<repo>/.codewhale/lanes/<lane-id>`).
+        /// Worktree path (defaults to `<repo>/.ghosty/lanes/<lane-id>`).
         #[arg(long, value_name = "DIR")]
         worktree_path: Option<PathBuf>,
         /// Worktree cleanup TTL seconds after stop (0 = immediate on stop).
@@ -826,7 +834,7 @@ struct LaneStartRequest {
 }
 
 fn start_lane(request: LaneStartRequest) -> Result<()> {
-    use codewhale_lane::{
+    use ghosty_lane::{
         LaneRegistry, LaneStartSpec, RuntimeBackendKind, WorktreeProvision, resolve_backend,
     };
 
@@ -850,7 +858,7 @@ fn start_lane(request: LaneStartRequest) -> Result<()> {
     let worktree = match (worktree_repo, branch) {
         (Some(repo_root), Some(branch_name)) => {
             let path = worktree_path
-                .unwrap_or_else(|| repo_root.join(".codewhale").join("lanes").join(&record.id));
+                .unwrap_or_else(|| repo_root.join(".ghosty").join("lanes").join(&record.id));
             Some(WorktreeProvision {
                 repo_root,
                 branch: branch_name,
@@ -877,7 +885,7 @@ fn start_lane(request: LaneStartRequest) -> Result<()> {
         log_proxy: (kind == RuntimeBackendKind::Tmux)
             .then(std::env::current_exe)
             .transpose()
-            .context("resolve current Codewhale executable for tmux log proxy")?,
+            .context("resolve current Ghosty executable for tmux log proxy")?,
         worktree,
     };
     let backend = resolve_backend(kind);
@@ -895,9 +903,9 @@ fn start_lane(request: LaneStartRequest) -> Result<()> {
 /// Print one shared control receipt on the CLI surface.
 ///
 /// The CLI does not format Lane control results itself: it renders the same
-/// [`codewhale_lane::ControlReceipt`] the slash command and hotbar render, so
+/// [`ghosty_lane::ControlReceipt`] the slash command and hotbar render, so
 /// the three surfaces cannot drift in what they report (#1888).
-fn emit_control_receipt(receipt: &codewhale_lane::ControlReceipt, json: bool) -> Result<()> {
+fn emit_control_receipt(receipt: &ghosty_lane::ControlReceipt, json: bool) -> Result<()> {
     if json {
         // v0.9.2 compatibility: `lane list --json` has always emitted an array
         // of `LaneRecord`, and `lane status --json` a single one. Scripts
@@ -905,10 +913,10 @@ fn emit_control_receipt(receipt: &codewhale_lane::ControlReceipt, json: bool) ->
         // receipt does not replace it. The receipt is what every other verb
         // emits, and what the human renderer shows for these two.
         match receipt.operation {
-            codewhale_lane::ControlOperation::LaneList => {
+            ghosty_lane::ControlOperation::LaneList => {
                 println!("{}", serde_json::to_string_pretty(&receipt.lane_records)?);
             }
-            codewhale_lane::ControlOperation::LaneStatus => match receipt.lane_records.first() {
+            ghosty_lane::ControlOperation::LaneStatus => match receipt.lane_records.first() {
                 Some(record) => println!("{}", serde_json::to_string_pretty(record)?),
                 // Legacy behaviour for an unknown id: `reg.load()` failed, so
                 // the command errored on stderr and printed *nothing* on
@@ -937,12 +945,12 @@ fn emit_control_receipt(receipt: &codewhale_lane::ControlReceipt, json: bool) ->
 }
 
 fn run_lane_control(
-    operation: codewhale_lane::ControlOperation,
+    operation: ghosty_lane::ControlOperation,
     lane_id: Option<&str>,
     json: bool,
 ) -> Result<()> {
-    let receipt = codewhale_lane::control::execute_lane_control(
-        codewhale_lane::ControlSurface::Cli,
+    let receipt = ghosty_lane::control::execute_lane_control(
+        ghosty_lane::ControlSurface::Cli,
         operation,
         lane_id,
     );
@@ -950,7 +958,7 @@ fn run_lane_control(
 }
 
 fn run_lane_command(args: LaneArgs) -> Result<()> {
-    use codewhale_lane::{ControlOperation, LaneRegistry, backend_for};
+    use ghosty_lane::{ControlOperation, LaneRegistry, backend_for};
     use std::io::{BufRead, Seek, Write};
     use std::process::Command;
     use std::thread;
@@ -1095,7 +1103,7 @@ fn run_lane_command(args: LaneArgs) -> Result<()> {
 }
 
 fn run_lane_log_proxy_command(args: LaneLogProxyArgs) -> Result<()> {
-    let exit_code = codewhale_lane::run_lane_log_proxy(codewhale_lane::LaneLogProxySpec {
+    let exit_code = ghosty_lane::run_lane_log_proxy(ghosty_lane::LaneLogProxySpec {
         command: args.command,
         log_path: args.log_path,
         receipt_path: args.receipt_path,
@@ -1146,7 +1154,7 @@ fn run_workflow_command(
             if let Some(name) = fleet.as_deref() {
                 let roots = named_fleet_search_roots(&workspace);
                 let loaded =
-                    codewhale_workflow::load_named_fleet(name, &roots).with_context(|| {
+                    ghosty_workflow::load_named_fleet(name, &roots).with_context(|| {
                         format!("load fleet `{name}` from {}", display_roots(&roots))
                     })?;
                 if workflow == "stopship" || name == "stopship" {
@@ -1280,10 +1288,10 @@ fn validate_workflow_source_file(path: &Path) -> Result<()> {
     {
         let identifier = path.display().to_string();
         if path.extension().and_then(|ext| ext.to_str()) == Some("ts") {
-            codewhale_workflow::compile_typescript_workflow(&identifier, &source)
+            ghosty_workflow::compile_typescript_workflow(&identifier, &source)
                 .with_context(|| format!("parse declarative Workflow {}", path.display()))?;
         } else {
-            codewhale_workflow::compile_javascript_workflow(&identifier, &source)
+            ghosty_workflow::compile_javascript_workflow(&identifier, &source)
                 .with_context(|| format!("parse declarative Workflow {}", path.display()))?;
         }
     }
@@ -1292,7 +1300,7 @@ fn validate_workflow_source_file(path: &Path) -> Result<()> {
 
 fn named_fleet_search_roots(workspace: &Path) -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    if let Ok(home) = codewhale_config::codewhale_home() {
+    if let Ok(home) = ghosty_config::ghosty_home() {
         roots.push(home);
     }
     roots.push(workspace.to_path_buf());
@@ -1378,10 +1386,10 @@ fn workflow_exec_command(spec: WorkflowExecSpec<'_>) -> Result<WorkflowProcessSp
         // Build argv with explicit config path like the previous dispatcher did.
         let mut args = Vec::new();
         let executable = std::env::current_exe()
-            .context("resolve current Codewhale executable for workflow lane")?;
+            .context("resolve current Ghosty executable for workflow lane")?;
         let executable = executable.into_os_string().into_string().map_err(|path| {
             anyhow!(
-                "current Codewhale executable path is not valid UTF-8: {}",
+                "current Ghosty executable path is not valid UTF-8: {}",
                 PathBuf::from(path).display()
             )
         })?;
@@ -1450,7 +1458,7 @@ fn lane_process_spec_from_argv(argv: &[String]) -> Result<WorkflowProcessSpec> {
     })
 }
 
-/// Flags for `codewhale remote-setup`. Forwarded to the TUI binary, which owns
+/// Flags for `ghosty remote-setup`. Forwarded to the TUI binary, which owns
 /// the interactive wizard and bundle generation.
 #[derive(Debug, Args, Clone, Default)]
 struct RemoteSetupArgs {
@@ -1463,7 +1471,7 @@ struct RemoteSetupArgs {
     /// Provider slug; validated against the provider registry. Skips the prompt.
     #[arg(long)]
     provider: Option<String>,
-    /// Bundle output directory (default `./codewhale-deploy/<cloud>-<bridge>`).
+    /// Bundle output directory (default `./ghosty-deploy/<cloud>-<bridge>`).
     #[arg(long, value_name = "DIR")]
     out: Option<PathBuf>,
     /// Emit the bundle, do not provision (default).
@@ -1755,11 +1763,11 @@ impl From<ApprovalModeArg> for AskForApproval {
 struct AppServerArgs {
     /// Serve the full HTTP/SSE runtime API (`/v1/*`: sessions, threads, turns,
     /// approvals, events, usage, fleet, tasks). This is the canonical runtime
-    /// API surface; it delegates to the same server as `codewhale serve --http`.
+    /// API surface; it delegates to the same server as `ghosty serve --http`.
     #[arg(long, conflicts_with_all = ["stdio", "mobile"])]
     http: bool,
     /// Serve the runtime API plus the phone-friendly mobile control page.
-    /// Equivalent to the legacy `codewhale serve --mobile`.
+    /// Equivalent to the legacy `ghosty serve --mobile`.
     #[arg(long, conflicts_with = "stdio")]
     mobile: bool,
     /// Run the app-server JSON-RPC control transport over stdio (no listener).
@@ -1856,11 +1864,11 @@ fn config_store_path_for_dispatch(
         // must be read and updated in place rather than shadowed by a new
         // empty document.
         let current = cwd
-            .join(codewhale_config::CODEWHALE_APP_DIR)
-            .join(codewhale_config::CONFIG_FILE_NAME);
+            .join(ghosty_config::GHOSTY_APP_DIR)
+            .join(ghosty_config::CONFIG_FILE_NAME);
         let legacy = cwd
-            .join(codewhale_config::LEGACY_APP_DIR)
-            .join(codewhale_config::CONFIG_FILE_NAME);
+            .join(ghosty_config::LEGACY_APP_DIR)
+            .join(ghosty_config::CONFIG_FILE_NAME);
         if !current.is_file() && legacy.is_file() {
             return Some(legacy);
         }
@@ -2059,7 +2067,7 @@ fn run() -> Result<()> {
             } => {
                 // Like `doctor`, this is a read-only diagnostic. Starting a
                 // telemetry session here would create
-                // `$CODEWHALE_HOME/telemetry` before the report could truthfully
+                // `$GHOSTY_HOME/telemetry` before the report could truthfully
                 // say the isolated home is missing.
                 run_auth_command_with_runtime(&mut store, command, &runtime_overrides)
             }
@@ -2082,7 +2090,7 @@ fn run() -> Result<()> {
             cloud::run(args, cli.profile.as_deref(), &store)
         }
         Some(Commands::McpServer) => {
-            // `codewhale serve --mcp` delegates to the TUI and arms there, so
+            // `ghosty serve --mcp` delegates to the TUI and arms there, so
             // without this the same user action reported differently depending
             // on which spelling they typed — and `mcp-server`, a surface the
             // schema documents as emitting, could only ever read zero. A
@@ -2195,7 +2203,7 @@ fn root_tui_passthrough(cli: &Cli) -> Result<Vec<String>> {
     if !prompt.is_empty() {
         if cli.continue_session {
             bail!(
-                "`codewhale --continue` resumes the interactive TUI. Use `codewhale exec --continue <PROMPT>` to continue a session non-interactively."
+                "`ghosty --continue` resumes the interactive TUI. Use `ghosty exec --continue <PROMPT>` to continue a session non-interactively."
             );
         }
         forwarded.push("--prompt".to_string());
@@ -2286,7 +2294,7 @@ fn resolve_cli_telemetry_consent(
 /// mislabel every cancel as a signal.
 ///
 /// The flush re-resolves telemetry from disk before it sends anything, which is
-/// what makes `codewhale config set telemetry false` take effect on the very run
+/// what makes `ghosty config set telemetry false` take effect on the very run
 /// that wrote it rather than on the next one.
 fn finish_cli_telemetry(session: Option<CliTelemetrySession>, outcome: &Result<()>) {
     let Some(session) = session else {
@@ -2343,7 +2351,7 @@ fn reject_exec_global_flags(args: &[String]) -> Result<()> {
         let flag = arg.split_once('=').map_or(arg.as_str(), |(flag, _)| flag);
         if GLOBAL_ONLY_FLAGS.contains(&flag) {
             bail!(
-                "{flag} must be placed before `exec`.\n\nUse:\n  codewhale {flag} <value> exec \"<prompt>\""
+                "{flag} must be placed before `exec`.\n\nUse:\n  ghosty {flag} <value> exec \"<prompt>\""
             );
         }
     }
@@ -2351,7 +2359,7 @@ fn reject_exec_global_flags(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// `codewhale login` used to configure provider API keys; that surface moved
+/// `ghosty login` used to configure provider API keys; that surface moved
 /// to `auth set --provider`. The hidden legacy flags stay parseable so the
 /// redirect below can name the replacement instead of an unknown-flag error.
 fn reject_legacy_login_provider_args(args: &LoginArgs) -> Result<()> {
@@ -2359,9 +2367,9 @@ fn reject_legacy_login_provider_args(args: &LoginArgs) -> Result<()> {
         return Ok(());
     }
     bail!(
-        "`codewhale login` now signs in to your Codewhale account via the browser device flow. \
-         To configure a provider key, run `codewhale auth set --provider <provider>` (hidden prompt) \
-         or `codewhale auth set --provider <provider> --api-key-stdin`."
+        "`ghosty login` now signs in to your Ghosty account via the browser device flow. \
+         To configure a provider key, run `ghosty auth set --provider <provider>` (hidden prompt) \
+         or `ghosty auth set --provider <provider> --api-key-stdin`."
     )
 }
 
@@ -2370,7 +2378,7 @@ fn run_logout_command(store: &mut ConfigStore) -> Result<()> {
 }
 
 fn run_logout_command_with_secrets(store: &mut ConfigStore, secrets: &Secrets) -> Result<()> {
-    codewhale_config::with_xai_oauth_revocation_transaction(|| {
+    ghosty_config::with_xai_oauth_revocation_transaction(|| {
         run_logout_command_with_secrets_unlocked(store, secrets)
     })
 }
@@ -2424,7 +2432,7 @@ fn provider_slot(provider: ProviderKind) -> &'static str {
 /// Credentials and their metadata are user-global — a key saved while
 /// working in one repo must be visible from every other repo, and the secret
 /// store already is (#5045). When the ambient config path is a
-/// workspace-scoped document (`<repo>/.codewhale/config.toml`), login and
+/// workspace-scoped document (`<repo>/.ghosty/config.toml`), login and
 /// `auth set` must not bind the provider or write auth markers there: the
 /// binding would be invisible from every other repo and would invite
 /// plaintext keys into a committable repo file (#5198). Returns a store
@@ -2432,14 +2440,14 @@ fn provider_slot(provider: ProviderKind) -> &'static str {
 /// ambient store is already correctly scoped, so key + provider binding +
 /// auth markers share one user-global scope by default.
 fn credential_metadata_store(store: &ConfigStore) -> Result<Option<ConfigStore>> {
-    if !codewhale_config::config_path_is_workspace_scoped(store.path()) {
+    if !ghosty_config::config_path_is_workspace_scoped(store.path()) {
         return Ok(None);
     }
-    let global = codewhale_config::default_config_path()?;
+    let global = ghosty_config::default_config_path()?;
     eprintln!(
         "ambient config {} is workspace-scoped; writing credential metadata to the user-global {} instead",
-        codewhale_config::quote_os_path(store.path()),
-        codewhale_config::quote_os_path(&global),
+        ghosty_config::quote_os_path(store.path()),
+        ghosty_config::quote_os_path(&global),
     );
     ConfigStore::load(Some(global)).map(Some)
 }
@@ -2447,7 +2455,7 @@ fn credential_metadata_store(store: &ConfigStore) -> Result<Option<ConfigStore>>
 #[cfg(test)]
 fn no_keyring_secrets() -> Secrets {
     Secrets::new(std::sync::Arc::new(
-        codewhale_secrets::InMemoryKeyringStore::new(),
+        ghosty_secrets::InMemoryKeyringStore::new(),
     ))
 }
 
@@ -2481,7 +2489,7 @@ fn persist_provider_api_key(
     api_key: &str,
 ) -> Result<bool> {
     if provider == ProviderKind::Xai {
-        return codewhale_config::with_xai_oauth_revocation_transaction(|| {
+        return ghosty_config::with_xai_oauth_revocation_transaction(|| {
             persist_provider_api_key_unlocked(store, secrets, provider, api_key)
         });
     }
@@ -2510,16 +2518,16 @@ fn persist_provider_api_key_unlocked(
             Err(err) => {
                 store.config = original_config;
                 return Err(anyhow::anyhow!(
-                    "Secret storage write failed for {slot}: {err}. Refusing to write the API key in plaintext to {}. Fix the configured secret backend and retry; Codewhale did not change that file.",
-                    codewhale_config::quote_os_path(store.path())
+                    "Secret storage write failed for {slot}: {err}. Refusing to write the API key in plaintext to {}. Fix the configured secret backend and retry; Ghosty did not change that file.",
+                    ghosty_config::quote_os_path(store.path())
                 ));
             }
         },
         Err(error) => {
             store.config = original_config;
             return Err(anyhow::anyhow!(
-                "Secret storage snapshot failed for {slot}: {error}. Refusing to write the API key in plaintext to {}. Fix the configured secret backend and retry; Codewhale did not change that file.",
-                codewhale_config::quote_os_path(store.path())
+                "Secret storage snapshot failed for {slot}: {error}. Refusing to write the API key in plaintext to {}. Fix the configured secret backend and retry; Ghosty did not change that file.",
+                ghosty_config::quote_os_path(store.path())
             ));
         }
     };
@@ -2543,7 +2551,7 @@ fn persist_provider_api_key_unlocked(
         }
         return Err(error);
     }
-    codewhale_config::scrub_plaintext_api_keys_from_config_backup(store.path())?;
+    ghosty_config::scrub_plaintext_api_keys_from_config_backup(store.path())?;
     Ok(secret_store_saved)
 }
 
@@ -2602,7 +2610,7 @@ fn openai_codex_auth_file_path() -> PathBuf {
     if let Ok(path) = std::env::var("OPENAI_CODEX_AUTH_FILE") {
         let path = PathBuf::from(path);
         if !path.as_os_str().is_empty() {
-            return codewhale_config::resolve_external_credential_path(&path).unwrap_or(path);
+            return ghosty_config::resolve_external_credential_path(&path).unwrap_or(path);
         }
     }
 
@@ -2614,7 +2622,7 @@ fn openai_codex_auth_file_path() -> PathBuf {
                 .join(".codex")
         });
     let path = codex_home.join("auth.json");
-    codewhale_config::resolve_external_credential_path(&path).unwrap_or(path)
+    ghosty_config::resolve_external_credential_path(&path).unwrap_or(path)
 }
 
 fn grok_auth_file_path() -> PathBuf {
@@ -2622,7 +2630,7 @@ fn grok_auth_file_path() -> PathBuf {
         if let Ok(path) = std::env::var(key) {
             let path = PathBuf::from(path.trim());
             if !path.as_os_str().is_empty() {
-                return codewhale_config::resolve_external_credential_path(&path).unwrap_or(path);
+                return ghosty_config::resolve_external_credential_path(&path).unwrap_or(path);
             }
         }
     }
@@ -2630,39 +2638,39 @@ fn grok_auth_file_path() -> PathBuf {
         let home = PathBuf::from(home.trim());
         if !home.as_os_str().is_empty() {
             let path = home.join("auth.json");
-            return codewhale_config::resolve_external_credential_path(&path).unwrap_or(path);
+            return ghosty_config::resolve_external_credential_path(&path).unwrap_or(path);
         }
     }
     let path = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".grok")
         .join("auth.json");
-    codewhale_config::resolve_external_credential_path(&path).unwrap_or(path)
+    ghosty_config::resolve_external_credential_path(&path).unwrap_or(path)
 }
 
 fn external_credential_target(
     provider: ProviderKind,
     path_override: Option<PathBuf>,
-) -> Result<(codewhale_config::ExternalCredentialSource, PathBuf)> {
+) -> Result<(ghosty_config::ExternalCredentialSource, PathBuf)> {
     let (source, default_path) = match provider {
         ProviderKind::OpenaiCodex => (
-            codewhale_config::ExternalCredentialSource::CodexCli,
+            ghosty_config::ExternalCredentialSource::CodexCli,
             openai_codex_auth_file_path(),
         ),
         ProviderKind::Xai => (
-            codewhale_config::ExternalCredentialSource::GrokCli,
+            ghosty_config::ExternalCredentialSource::GrokCli,
             grok_auth_file_path(),
         ),
         ProviderKind::Deepseek | ProviderKind::DeepseekAnthropic => (
-            codewhale_config::ExternalCredentialSource::DshCli,
-            codewhale_config::default_dsh_credentials_path(),
+            ghosty_config::ExternalCredentialSource::DshCli,
+            ghosty_config::default_dsh_credentials_path(),
         ),
         ProviderKind::Antigravity => (
-            codewhale_config::ExternalCredentialSource::AgyCli,
-            codewhale_config::default_agy_credentials_path(),
+            ghosty_config::ExternalCredentialSource::AgyCli,
+            ghosty_config::default_agy_credentials_path(),
         ),
         ProviderKind::Moonshot => bail!(
-            "Kimi is API-key-only in Codewhale. Create a key at https://platform.kimi.ai/console/api-keys; Kimi CLI OAuth import is unsupported."
+            "Kimi is API-key-only in Ghosty. Create a key at https://platform.kimi.ai/console/api-keys; Kimi CLI OAuth import is unsupported."
         ),
         _ => bail!(
             "{} has no supported external CLI credential source",
@@ -2670,7 +2678,7 @@ fn external_credential_target(
         ),
     };
     let path =
-        codewhale_config::resolve_external_credential_path(path_override.unwrap_or(default_path))?;
+        ghosty_config::resolve_external_credential_path(path_override.unwrap_or(default_path))?;
     Ok((source, path))
 }
 
@@ -2735,7 +2743,7 @@ fn clear_all_provider_api_keys_from_keyring(secrets: &Secrets) -> Vec<String> {
 fn external_consent(
     store: &ConfigStore,
     provider: ProviderKind,
-) -> Option<&codewhale_config::ExternalCredentialConsentToml> {
+) -> Option<&ghosty_config::ExternalCredentialConsentToml> {
     store
         .config
         .providers
@@ -2747,7 +2755,7 @@ fn external_consent(
 fn external_read_consent(
     store: &ConfigStore,
     provider: ProviderKind,
-) -> Option<&codewhale_config::ExternalCredentialConsentToml> {
+) -> Option<&ghosty_config::ExternalCredentialConsentToml> {
     let (source, expected_path) = external_credential_target(provider, None).ok()?;
     external_consent(store, provider)
         .filter(|consent| consent.read_grant(provider, source, &expected_path).is_ok())
@@ -2776,7 +2784,7 @@ enum XaiAuthDiagnosticRoute {
     /// Normal API-key diagnostics apply. This includes custom endpoints, where
     /// xAI OAuth is intentionally inactive.
     ApiKey,
-    /// A syntactically valid Codewhale-owned generation pointer selects the
+    /// A syntactically valid Ghosty-owned generation pointer selects the
     /// owned OAuth route. Diagnostics deliberately do not inspect the file.
     OwnedOAuth,
     /// A configured but unsafe/malformed generation pointer blocks external
@@ -2884,7 +2892,7 @@ fn xai_oauth_generation_pointer(store: &ConfigStore) -> XaiOAuthGenerationPointe
         .as_deref()
     {
         None => XaiOAuthGenerationPointer::Absent,
-        Some(generation) if codewhale_config::is_valid_xai_oauth_generation(generation) => {
+        Some(generation) if ghosty_config::is_valid_xai_oauth_generation(generation) => {
             XaiOAuthGenerationPointer::Valid
         }
         Some(_) => XaiOAuthGenerationPointer::Invalid,
@@ -2981,7 +2989,7 @@ fn xai_status_summary_source(
 ) -> String {
     match diagnostics.route {
         XaiAuthDiagnosticRoute::OwnedOAuth => {
-            "Codewhale-owned OAuth configured/unprobed (valid generation pointer)".to_string()
+            "Ghosty-owned OAuth configured/unprobed (valid generation pointer)".to_string()
         }
         XaiAuthDiagnosticRoute::NeedsRepair => {
             let api_key = api_key
@@ -3005,7 +3013,7 @@ fn xai_credential_route_label(
 ) -> String {
     match diagnostics.route {
         XaiAuthDiagnosticRoute::OwnedOAuth => {
-            "Codewhale-owned OAuth configured/unprobed (valid generation pointer; storage unprobed)"
+            "Ghosty-owned OAuth configured/unprobed (valid generation pointer; storage unprobed)"
                 .to_string()
         }
         XaiAuthDiagnosticRoute::NeedsRepair => {
@@ -3013,7 +3021,7 @@ fn xai_credential_route_label(
                 .and_then(XaiRuntimeApiKey::source_with_last4)
                 .unwrap_or_else(|| "no runtime-effective API key".to_string());
             format!(
-                "xAI OAuth needs repair (invalid Codewhale-owned generation pointer; Grok CLI consent blocked; API-key fallback: {api_key})"
+                "xAI OAuth needs repair (invalid Ghosty-owned generation pointer; Grok CLI consent blocked; API-key fallback: {api_key})"
             )
         }
         XaiAuthDiagnosticRoute::ExternalConsent => {
@@ -3095,10 +3103,10 @@ fn xai_storage_detail(
 fn xai_lookup_order(diagnostics: &XaiAuthDiagnostics) -> String {
     match diagnostics.route {
         XaiAuthDiagnosticRoute::OwnedOAuth => {
-            "lookup order: configured Codewhale-owned OAuth generation (storage unprobed); Grok CLI consent blocked".to_string()
+            "lookup order: configured Ghosty-owned OAuth generation (storage unprobed); Grok CLI consent blocked".to_string()
         }
         XaiAuthDiagnosticRoute::NeedsRepair => {
-            "lookup order: invalid Codewhale-owned OAuth generation blocks Grok CLI consent; runtime-effective API-key fallback: CLI -> config -> secret store -> env".to_string()
+            "lookup order: invalid Ghosty-owned OAuth generation blocks Grok CLI consent; runtime-effective API-key fallback: CLI -> config -> secret store -> env".to_string()
         }
         XaiAuthDiagnosticRoute::ExternalConsent => {
             "lookup order: configured consent-gated exact Grok CLI file (availability unprobed)".to_string()
@@ -3115,7 +3123,7 @@ fn xai_lookup_order(diagnostics: &XaiAuthDiagnostics) -> String {
 fn xai_get_line(diagnostics: &XaiAuthDiagnostics, api_key: Option<&XaiRuntimeApiKey>) -> String {
     match diagnostics.route {
         XaiAuthDiagnosticRoute::OwnedOAuth => {
-            "xai: configured (source: Codewhale-owned OAuth generation; valid pointer; storage unprobed)".to_string()
+            "xai: configured (source: Ghosty-owned OAuth generation; valid pointer; storage unprobed)".to_string()
         }
         XaiAuthDiagnosticRoute::NeedsRepair => {
             let api_key = match api_key.and_then(XaiRuntimeApiKey::source_name) {
@@ -3127,7 +3135,7 @@ fn xai_get_line(diagnostics: &XaiAuthDiagnostics, api_key: Option<&XaiRuntimeApi
                 None => "no runtime-effective API key".to_string(),
             };
             format!(
-                "xai: needs repair (invalid Codewhale-owned OAuth generation pointer; Grok CLI consent blocked; API-key fallback: {api_key})"
+                "xai: needs repair (invalid Ghosty-owned OAuth generation pointer; Grok CLI consent blocked; API-key fallback: {api_key})"
             )
         }
         XaiAuthDiagnosticRoute::ExternalConsent => {
@@ -3188,7 +3196,7 @@ fn auth_status_all_providers_with_runtime(
     let active_provider = store.config.provider;
     let mut lines = Vec::new();
     lines.push(format!(
-        "active provider: {} (set via config or CODEWHALE_PROVIDER)",
+        "active provider: {} (set via config or GHOSTY_PROVIDER)",
         active_provider.as_str()
     ));
     lines.push(String::new());
@@ -3271,8 +3279,8 @@ fn auth_status_all_providers_with_runtime(
     }
 
     lines.push(String::new());
-    lines.push("* = active provider (from config or CODEWHALE_PROVIDER)".to_string());
-    lines.push("Run `codewhale auth status --provider <id>` for detailed info.".to_string());
+    lines.push("* = active provider (from config or GHOSTY_PROVIDER)".to_string());
+    lines.push("Run `ghosty auth status --provider <id>` for detailed info.".to_string());
     lines
 }
 
@@ -3288,31 +3296,31 @@ fn diagnostic_path_state(path: &Path, directory: bool) -> &'static str {
 }
 
 const fn secret_backend_kind_label(
-    kind: codewhale_secrets::SecretBackendDiagnosticKind,
+    kind: ghosty_secrets::SecretBackendDiagnosticKind,
 ) -> &'static str {
     match kind {
-        codewhale_secrets::SecretBackendDiagnosticKind::File => "file",
-        codewhale_secrets::SecretBackendDiagnosticKind::System => "system",
-        codewhale_secrets::SecretBackendDiagnosticKind::Unknown => "unknown",
+        ghosty_secrets::SecretBackendDiagnosticKind::File => "file",
+        ghosty_secrets::SecretBackendDiagnosticKind::System => "system",
+        ghosty_secrets::SecretBackendDiagnosticKind::Unknown => "unknown",
     }
 }
 
 const fn secret_backend_inspection_label(
-    inspection: codewhale_secrets::SecretBackendInspection,
+    inspection: ghosty_secrets::SecretBackendInspection,
 ) -> &'static str {
     match inspection {
-        codewhale_secrets::SecretBackendInspection::MetadataOnly => "metadata_only",
-        codewhale_secrets::SecretBackendInspection::NotProbed => "not_probed",
+        ghosty_secrets::SecretBackendInspection::MetadataOnly => "metadata_only",
+        ghosty_secrets::SecretBackendInspection::NotProbed => "not_probed",
     }
 }
 
 const fn secret_backend_presence_label(
-    presence: codewhale_secrets::SecretBackendPresence,
+    presence: ghosty_secrets::SecretBackendPresence,
 ) -> &'static str {
     match presence {
-        codewhale_secrets::SecretBackendPresence::Present => "present",
-        codewhale_secrets::SecretBackendPresence::Absent => "missing",
-        codewhale_secrets::SecretBackendPresence::Unknown => "unknown",
+        ghosty_secrets::SecretBackendPresence::Present => "present",
+        ghosty_secrets::SecretBackendPresence::Absent => "missing",
+        ghosty_secrets::SecretBackendPresence::Unknown => "unknown",
     }
 }
 
@@ -3323,8 +3331,8 @@ const fn secret_backend_presence_label(
 /// only; provider environment variables are checked with the runtime's
 /// non-empty-string semantics and their contents are never formatted.
 fn auth_diagnostic_lines(store: &ConfigStore, provider: Option<ProviderKind>) -> Vec<String> {
-    let explicit_home = codewhale_paths::codewhale_home_is_explicit();
-    let resolved_home = codewhale_paths::codewhale_home();
+    let explicit_home = ghosty_paths::ghosty_home_is_explicit();
+    let resolved_home = ghosty_paths::ghosty_home();
     let mut lines = vec![
         "auth diagnostic (structural only; credential values are never printed and provider credential stores were not opened)".to_string(),
         String::new(),
@@ -3333,10 +3341,10 @@ fn auth_diagnostic_lines(store: &ConfigStore, provider: Option<ProviderKind>) ->
     let home = match resolved_home {
         Ok(Some(path)) => {
             lines.push(format!(
-                "codewhale home: {} (source: {}; state: {})",
-                codewhale_config::quote_os_path(&path),
+                "ghosty home: {} (source: {}; state: {})",
+                ghosty_config::quote_os_path(&path),
                 if explicit_home {
-                    "CODEWHALE_HOME (isolated)"
+                    "GHOSTY_HOME (isolated)"
                 } else {
                     "platform home"
                 },
@@ -3345,32 +3353,32 @@ fn auth_diagnostic_lines(store: &ConfigStore, provider: Option<ProviderKind>) ->
             Some(path)
         }
         Ok(None) => {
-            lines.push("codewhale home: unavailable (no user home resolved)".to_string());
+            lines.push("ghosty home: unavailable (no user home resolved)".to_string());
             None
         }
         Err(error) => {
-            lines.push(format!("codewhale home: unavailable ({error})"));
+            lines.push(format!("ghosty home: unavailable ({error})"));
             None
         }
     };
 
     lines.push(format!(
         "config: {} ({})",
-        codewhale_config::quote_os_path(store.path()),
+        ghosty_config::quote_os_path(store.path()),
         diagnostic_path_state(store.path(), false),
     ));
     if let Some(home) = home.as_ref() {
         let settings = home.join("settings.toml");
         lines.push(format!(
             "settings: {} ({})",
-            codewhale_config::quote_os_path(&settings),
+            ghosty_config::quote_os_path(&settings),
             diagnostic_path_state(&settings, false),
         ));
     } else {
-        lines.push("settings: unavailable (Codewhale home unresolved)".to_string());
+        lines.push("settings: unavailable (Ghosty home unresolved)".to_string());
     }
 
-    let backend = codewhale_secrets::diagnose_secret_backend();
+    let backend = ghosty_secrets::diagnose_secret_backend();
     lines.push(format!(
         "secret backend: {} (inspection: {})",
         secret_backend_kind_label(backend.backend),
@@ -3379,7 +3387,7 @@ fn auth_diagnostic_lines(store: &ConfigStore, provider: Option<ProviderKind>) ->
     if let Some(path) = backend.path.as_ref() {
         lines.push(format!(
             "secret store: {} ({})",
-            codewhale_config::quote_os_path(path),
+            ghosty_config::quote_os_path(path),
             secret_backend_presence_label(backend.presence),
         ));
     } else {
@@ -3391,13 +3399,11 @@ fn auth_diagnostic_lines(store: &ConfigStore, provider: Option<ProviderKind>) ->
     if let Some(path) = backend.legacy_path.as_ref() {
         lines.push(format!(
             "legacy secret store: {} ({})",
-            codewhale_config::quote_os_path(path),
+            ghosty_config::quote_os_path(path),
             secret_backend_presence_label(backend.legacy_presence),
         ));
     } else if explicit_home {
-        lines.push(
-            "legacy secret store: suppressed by explicit CODEWHALE_HOME isolation".to_string(),
-        );
+        lines.push("legacy secret store: suppressed by explicit GHOSTY_HOME isolation".to_string());
     } else {
         lines.push("legacy secret store: unavailable (not probed)".to_string());
     }
@@ -3607,7 +3613,7 @@ fn auth_status_lines_for_provider_with_runtime(
         lookup_order,
         format!(
             "config file: {} ({})",
-            codewhale_config::quote_os_path(store.path()),
+            ghosty_config::quote_os_path(store.path()),
             source_status(config_key, "missing")
         ),
         format!(
@@ -3619,7 +3625,7 @@ fn auth_status_lines_for_provider_with_runtime(
     ];
 
     if let Ok((source, expected_path)) = external_credential_target(provider, None) {
-        let status = codewhale_config::external_credential_consent_status(
+        let status = ghosty_config::external_credential_consent_status(
             external,
             provider,
             source,
@@ -3632,7 +3638,7 @@ fn auth_status_lines_for_provider_with_runtime(
             status.provider,
             status.source.as_str(),
             status.owner,
-            codewhale_config::quote_os_path(&status.path),
+            ghosty_config::quote_os_path(&status.path),
             status.consent_version,
             status.route_state,
             status.scope_valid,
@@ -3680,7 +3686,7 @@ fn xai_auth_status_lines_for_provider(
         xai_lookup_order(&diagnostics),
         format!(
             "config file: {} ({})",
-            codewhale_config::quote_os_path(store.path()),
+            ghosty_config::quote_os_path(store.path()),
             xai_storage_detail(
                 &diagnostics,
                 api_key.as_ref(),
@@ -3712,32 +3718,31 @@ fn xai_auth_status_lines_for_provider(
         XaiOAuthGenerationPointer::Valid
             if diagnostics.route == XaiAuthDiagnosticRoute::OwnedOAuth =>
         {
-            "xAI OAuth generation: configured Codewhale-owned pointer (storage unprobed)"
-                .to_string()
+            "xAI OAuth generation: configured Ghosty-owned pointer (storage unprobed)".to_string()
         }
         XaiOAuthGenerationPointer::Valid => {
             "xAI OAuth generation: valid but inactive for this route".to_string()
         }
         XaiOAuthGenerationPointer::Invalid => {
-            "xAI OAuth generation: invalid Codewhale-owned pointer".to_string()
+            "xAI OAuth generation: invalid Ghosty-owned pointer".to_string()
         }
     });
 
     match diagnostics.route {
         XaiAuthDiagnosticRoute::OwnedOAuth => {
             lines.push(
-                "external credentials: blocked by the configured Codewhale-owned xAI OAuth generation (file not probed)"
+                "external credentials: blocked by the configured Ghosty-owned xAI OAuth generation (file not probed)"
                     .to_string(),
             );
             return lines;
         }
         XaiAuthDiagnosticRoute::NeedsRepair => {
             lines.push(
-                "external credentials: blocked by the invalid Codewhale-owned xAI OAuth generation pointer (file not probed)"
+                "external credentials: blocked by the invalid Ghosty-owned xAI OAuth generation pointer (file not probed)"
                     .to_string(),
             );
             lines.push(
-                "repair: run `codewhale auth xai-device` to replace the owned generation, or switch [providers.xai] auth_mode to \"api_key\" and remove oauth_credential_generation. Grok CLI consent remains blocked until the pointer is absent."
+                "repair: run `ghosty auth xai-device` to replace the owned generation, or switch [providers.xai] auth_mode to \"api_key\" and remove oauth_credential_generation. Grok CLI consent remains blocked until the pointer is absent."
                     .to_string(),
             );
             return lines;
@@ -3760,7 +3765,7 @@ fn xai_auth_status_lines_for_provider(
     }
 
     if let Ok((source, expected_path)) = external_credential_target(ProviderKind::Xai, None) {
-        let status = codewhale_config::external_credential_consent_status(
+        let status = ghosty_config::external_credential_consent_status(
             external,
             ProviderKind::Xai,
             source,
@@ -3773,7 +3778,7 @@ fn xai_auth_status_lines_for_provider(
             status.provider,
             status.source.as_str(),
             status.owner,
-            codewhale_config::quote_os_path(&status.path),
+            ghosty_config::quote_os_path(&status.path),
             status.consent_version,
             status.route_state,
             status.scope_valid,
@@ -3855,11 +3860,11 @@ fn run_auth_command_with_secrets_and_runtime(
     match command {
         AuthCommand::XaiDevice => {
             let argv = vec![
-                "codewhale".to_string(),
+                "ghosty".to_string(),
                 "auth".to_string(),
                 "xai-device".to_string(),
             ];
-            let code = codewhale_tui::run(argv);
+            let code = ghosty_tui::run(argv);
             std::process::exit(if code == std::process::ExitCode::SUCCESS {
                 0
             } else {
@@ -3880,7 +3885,7 @@ fn run_auth_command_with_secrets_and_runtime(
             }
             if mode == ExternalCredentialModeArg::Managed {
                 bail!(
-                    "managed external credential access is unsupported in v0.9.1: no provider has a reviewed schema-safe preservation adapter. Use --mode read-only, or use Codewhale-owned login/API-key storage."
+                    "managed external credential access is unsupported in v0.9.1: no provider has a reviewed schema-safe preservation adapter. Use --mode read-only, or use Ghosty-owned login/API-key storage."
                 );
             }
             confirm_external_consent(yes)?;
@@ -3888,39 +3893,39 @@ fn run_auth_command_with_secrets_and_runtime(
                 "external credential path cannot be persisted losslessly because it is not valid UTF-8",
             )?;
             let provider_key = provider.provider().provider_config_key();
-            codewhale_config::mutate_config_document(store.path(), |document| {
+            ghosty_config::mutate_config_document(store.path(), |document| {
                 if matches!(provider, ProviderKind::OpenaiCodex | ProviderKind::Xai) {
-                    codewhale_config::set_config_document_value(
+                    ghosty_config::set_config_document_value(
                         document,
                         &["providers", provider_key, "auth_mode"],
                         "oauth",
                     )?;
                 }
                 let prefix = &["providers", provider_key, "external_credentials"];
-                codewhale_config::set_config_document_value(
+                ghosty_config::set_config_document_value(
                     document,
                     &[prefix[0], prefix[1], prefix[2], "access"],
                     "read_only",
                 )?;
-                codewhale_config::set_config_document_value(
+                ghosty_config::set_config_document_value(
                     document,
                     &[prefix[0], prefix[1], prefix[2], "provider"],
                     provider.as_str(),
                 )?;
-                codewhale_config::set_config_document_value(
+                ghosty_config::set_config_document_value(
                     document,
                     &[prefix[0], prefix[1], prefix[2], "source"],
                     source.as_str(),
                 )?;
-                codewhale_config::set_config_document_value(
+                ghosty_config::set_config_document_value(
                     document,
                     &[prefix[0], prefix[1], prefix[2], "path"],
                     path_value,
                 )?;
-                codewhale_config::set_config_document_value(
+                ghosty_config::set_config_document_value(
                     document,
                     &[prefix[0], prefix[1], prefix[2], "consent_version"],
-                    i64::from(codewhale_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION),
+                    i64::from(ghosty_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION),
                 )
             })?;
             store
@@ -3930,12 +3935,12 @@ fn run_auth_command_with_secrets_and_runtime(
                 "saved read-only external credential consent: provider={}, owner={}, path={}, consent_version={} ({})",
                 provider.as_str(),
                 source.as_str(),
-                codewhale_config::quote_os_path(&path),
-                codewhale_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION,
-                codewhale_config::EXTERNAL_CREDENTIAL_READ_ONLY_SEMANTICS,
+                ghosty_config::quote_os_path(&path),
+                ghosty_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION,
+                ghosty_config::EXTERNAL_CREDENTIAL_READ_ONLY_SEMANTICS,
             );
             println!(
-                "revoke with: codewhale auth external-revoke --provider {}",
+                "revoke with: ghosty auth external-revoke --provider {}",
                 provider.as_str()
             );
             Ok(())
@@ -3943,8 +3948,8 @@ fn run_auth_command_with_secrets_and_runtime(
         AuthCommand::ExternalRevoke { provider } => {
             let provider: ProviderKind = provider.into();
             let provider_key = provider.provider().provider_config_key();
-            codewhale_config::mutate_config_document(store.path(), |document| {
-                codewhale_config::unset_config_document_value(
+            ghosty_config::mutate_config_document(store.path(), |document| {
+                ghosty_config::unset_config_document_value(
                     document,
                     &["providers", provider_key, "external_credentials"],
                 )?;
@@ -4012,8 +4017,16 @@ fn run_auth_command_with_secrets_and_runtime(
                 (None, true) => read_api_key_from_stdin()?,
                 (None, false) => prompt_api_key(slot)?,
             };
+            // Experiencia de cero: el primer `auth set` sobre un config que no
+            // existía también fija ese proveedor como activo. Sin esto el
+            // archivo nacía con el default (`deepseek`) y el usuario acababa
+            // con una key guardada para un proveedor que no estaba en uso.
+            let adopt_as_active = store.is_fresh();
             let mut credential_store = credential_metadata_store(store)?;
             let store = credential_store.as_mut().unwrap_or(store);
+            if adopt_as_active {
+                store.config.set_value("provider", provider.as_str())?;
+            }
             let secret_store_saved = persist_provider_api_key(store, secrets, provider, &api_key)?;
             // Don't print the key. Don't echo length.
             if secret_store_saved {
@@ -4044,7 +4057,7 @@ fn run_auth_command_with_secrets_and_runtime(
         AuthCommand::Clear { provider } => {
             let provider: ProviderKind = provider.into();
             if provider == ProviderKind::Xai {
-                codewhale_config::with_xai_oauth_revocation_transaction(|| {
+                ghosty_config::with_xai_oauth_revocation_transaction(|| {
                     clear_auth_provider(store, secrets, provider)
                 })
             } else {
@@ -4063,7 +4076,7 @@ fn run_auth_command_with_secrets_and_runtime(
 
 fn external_consent_preview_lines(
     provider: ProviderKind,
-    source: codewhale_config::ExternalCredentialSource,
+    source: ghosty_config::ExternalCredentialSource,
     path: &Path,
 ) -> Vec<String> {
     vec![
@@ -4076,15 +4089,15 @@ fn external_consent_preview_lines(
         ),
         format!(
             "  exact resolved path: {}",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         ),
         format!(
             "  access: read_only ({})",
-            codewhale_config::EXTERNAL_CREDENTIAL_READ_ONLY_SEMANTICS
+            ghosty_config::EXTERNAL_CREDENTIAL_READ_ONLY_SEMANTICS
         ),
         "  managed: unavailable (no reviewed schema-safe preservation adapter)".to_string(),
         format!(
-            "  revoke: codewhale auth external-revoke --provider {}",
+            "  revoke: ghosty auth external-revoke --provider {}",
             provider.as_str()
         ),
     ]
@@ -4203,7 +4216,7 @@ fn run_auth_migrate(store: &mut ConfigStore, secrets: &Secrets, dry_run: bool) -
             .context("failed to write updated config.toml")?;
     }
     if !dry_run {
-        codewhale_config::scrub_plaintext_api_keys_from_config_backup(store.path())
+        ghosty_config::scrub_plaintext_api_keys_from_config_backup(store.path())
             .context("failed to remove plaintext API keys from config backup")?;
     }
 
@@ -4237,7 +4250,7 @@ fn run_config_command(
     command: ConfigCommand,
     project_bundle_scope: bool,
 ) -> Result<()> {
-    if project_bundle_scope && !codewhale_config::config_path_is_workspace_scoped(store.path()) {
+    if project_bundle_scope && !ghosty_config::config_path_is_workspace_scoped(store.path()) {
         bail!(
             "--project requires a workspace config ({} is the user-global document)",
             store.path().display()
@@ -4271,7 +4284,7 @@ fn run_config_command(
             // `#` keeps the header safe for `key = value` line parsers.
             println!("# configured values ({})", store.path().display());
             println!(
-                "# a running session keeps the route it resolved at launch; `codewhale model resolve` reports the route a new session would take"
+                "# a running session keeps the route it resolved at launch; `ghosty model resolve` reports the route a new session would take"
             );
             for (key, value) in store.config.list_values() {
                 println!("{key} = {value}");
@@ -4304,7 +4317,7 @@ fn clear_recorded_telemetry_opt_out_if_reenabled(key: &str, value: &str) -> Resu
     if let Some(mut state) = SetupState::load()?
         && state.telemetry_opted_out()
     {
-        state.record_telemetry_notice(codewhale_config::TELEMETRY_NOTICE_VERSION, true);
+        state.record_telemetry_notice(ghosty_config::TELEMETRY_NOTICE_VERSION, true);
         state.save()?;
     }
     Ok(())
@@ -4359,7 +4372,7 @@ fn run_model_command(
             // Only `model resolve --provider X` is a hypothetical. The
             // top-level `--provider` is the route this process is actually on,
             // and it is already folded into `resolved_runtime` — treating it as
-            // a hypothetical made `codewhale --provider moonshot --model
+            // a hypothetical made `ghosty --provider moonshot --model
             // kimi-k3 model resolve` re-derive a registry default and report
             // `kimi-k2.7-code` while the runtime used `kimi-k3` (v0.9.1 kimi-k3 dogfood report). The
             // top-level `--model` was not consulted at all on that path.
@@ -4466,7 +4479,7 @@ fn run_thread_command(
     // through dispatcher, which forwards `--config` and states the
     // resolved telemetry value in the child's environment. They used to take a
     // bare command invocation that forwarded neither, so a session
-    // launched this way re-resolved from `$CODEWHALE_HOME/config.toml` with no
+    // launched this way re-resolved from `$GHOSTY_HOME/config.toml` with no
     // overrides and armed telemetry even when the user had passed
     // `--telemetry false` or pointed `--config` at a file that said
     // `telemetry = false`.
@@ -4625,12 +4638,12 @@ fn run_app_server_command(
 }
 
 /// Build the `serve` argv forwarded to the TUI binary for
-/// `codewhale app-server --http`/`--mobile`. Maps app-server flags onto the
+/// `ghosty app-server --http`/`--mobile`. Maps app-server flags onto the
 /// matching `serve` flags (note `--insecure-no-auth` → `--insecure`). The
 /// subcommand-level `--config` is bridged through the global `--config` in the
 /// dispatcher, so it is intentionally not part of this passthrough. An auth
 /// token from the environment is deliberately *not* forwarded into child argv;
-/// the runtime API reads CODEWHALE_RUNTIME_TOKEN/DEEPSEEK_RUNTIME_TOKEN itself.
+/// the runtime API reads GHOSTY_RUNTIME_TOKEN/DEEPSEEK_RUNTIME_TOKEN itself.
 fn app_server_serve_passthrough(args: &AppServerArgs) -> Vec<String> {
     let mut forwarded = vec!["serve".to_string()];
     forwarded.push(if args.mobile { "--mobile" } else { "--http" }.to_string());
@@ -4673,7 +4686,7 @@ fn web_serve_passthrough(args: &WebArgs) -> Vec<String> {
 }
 
 fn app_server_token_from_env() -> Option<String> {
-    std::env::var("CODEWHALE_APP_SERVER_TOKEN")
+    std::env::var("GHOSTY_APP_SERVER_TOKEN")
         .ok()
         .or_else(|| std::env::var("DEEPSEEK_APP_SERVER_TOKEN").ok())
 }
@@ -4806,7 +4819,7 @@ fn run_dispatcher_resume_picker(
 ) -> Result<()> {
     let argv = tui_argv(cli, vec!["sessions".to_string()]);
     apply_tui_env(cli, resolved_runtime, &argv);
-    let code = codewhale_tui::run(argv);
+    let code = ghosty_tui::run(argv);
     if code != std::process::ExitCode::SUCCESS {
         std::process::exit(if code == std::process::ExitCode::SUCCESS {
             0
@@ -4817,7 +4830,7 @@ fn run_dispatcher_resume_picker(
 
     println!();
     println!("Windows note: enter a session id or prefix from the list above.");
-    println!("You can also run `codewhale resume --last` to skip this prompt.");
+    println!("You can also run `ghosty resume --last` to skip this prompt.");
     print!("Session id/prefix (Enter to cancel): ");
     io::stdout().flush()?;
 
@@ -4848,7 +4861,7 @@ fn run_tui_in_process(
 ) -> Result<()> {
     let argv = tui_argv(cli, passthrough.clone());
     apply_tui_env(cli, resolved_runtime, &passthrough);
-    let code = codewhale_tui::run(argv);
+    let code = ghosty_tui::run(argv);
     std::process::exit(if code == std::process::ExitCode::SUCCESS {
         0
     } else {
@@ -4863,7 +4876,7 @@ fn run_tui_server_in_process(
 ) -> Result<()> {
     let argv = tui_argv(cli, passthrough.clone());
     apply_tui_env(cli, resolved_runtime, &passthrough);
-    let code = codewhale_tui::run(argv);
+    let code = ghosty_tui::run(argv);
     std::process::exit(if code == std::process::ExitCode::SUCCESS {
         0
     } else {
@@ -4873,7 +4886,7 @@ fn run_tui_server_in_process(
 
 fn tui_argv(cli: &Cli, passthrough: Vec<String>) -> Vec<String> {
     let mut args = Vec::new();
-    args.push("codewhale".to_string());
+    args.push("ghosty".to_string());
     if let Some(config) = cli.config.as_deref() {
         args.push("--config".to_string());
         args.push(config.display().to_string());
@@ -4930,7 +4943,7 @@ fn apply_tui_env(cli: &Cli, resolved_runtime: &ResolvedRuntimeOptions, passthrou
                 |provider| provider.as_str().to_string(),
             );
         unsafe {
-            std::env::set_var("CODEWHALE_PROVIDER", &provider);
+            std::env::set_var("GHOSTY_PROVIDER", &provider);
             std::env::set_var("DEEPSEEK_PROVIDER", provider);
         }
     }
@@ -4945,74 +4958,74 @@ fn apply_tui_env(cli: &Cli, resolved_runtime: &ResolvedRuntimeOptions, passthrou
                 std::env::set_var(var, api_key);
             }
             std::env::set_var(
-                codewhale_config::CLI_API_KEY_SOURCE_ENV,
+                ghosty_config::CLI_API_KEY_SOURCE_ENV,
                 RuntimeApiKeySource::Keyring.as_env_value(),
             );
         }
     }
     if let Some(model) = cli.model.as_ref() {
         unsafe {
-            std::env::set_var("CODEWHALE_MODEL", model);
+            std::env::set_var("GHOSTY_MODEL", model);
             std::env::set_var("DEEPSEEK_MODEL", model);
         }
     }
     if let Some(output_mode) = cli.output_mode.as_ref() {
         unsafe {
-            std::env::set_var("CODEWHALE_OUTPUT_MODE", output_mode);
+            std::env::set_var("GHOSTY_OUTPUT_MODE", output_mode);
             std::env::set_var("DEEPSEEK_OUTPUT_MODE", output_mode);
         }
     }
     if let Some(v) = verbosity.as_ref() {
         unsafe {
-            std::env::set_var("CODEWHALE_VERBOSITY", v);
+            std::env::set_var("GHOSTY_VERBOSITY", v);
             std::env::set_var("DEEPSEEK_VERBOSITY", v);
         }
     }
     if let Some(log_level) = cli.log_level.as_ref() {
         unsafe {
-            std::env::set_var("CODEWHALE_LOG_LEVEL", log_level);
+            std::env::set_var("GHOSTY_LOG_LEVEL", log_level);
             std::env::set_var("DEEPSEEK_LOG_LEVEL", log_level);
         }
     }
     let telemetry = resolved_runtime.telemetry.to_string();
     unsafe {
-        std::env::set_var("CODEWHALE_TELEMETRY", &telemetry);
+        std::env::set_var("GHOSTY_TELEMETRY", &telemetry);
         std::env::set_var("DEEPSEEK_TELEMETRY", &telemetry);
     }
-    let floor = cli.telemetry == Some(false) || codewhale_config::telemetry_floor_in_force();
+    let floor = cli.telemetry == Some(false) || ghosty_config::telemetry_floor_in_force();
     unsafe {
         std::env::set_var(
-            codewhale_config::TELEMETRY_FLOOR_ENV,
+            ghosty_config::TELEMETRY_FLOOR_ENV,
             if floor { "1" } else { "0" },
         );
     }
     if let Some(endpoint) = resolved_runtime.telemetry_endpoint.as_ref() {
         unsafe {
-            std::env::set_var("CODEWHALE_TELEMETRY_ENDPOINT", endpoint);
+            std::env::set_var("GHOSTY_TELEMETRY_ENDPOINT", endpoint);
             std::env::set_var("DEEPSEEK_TELEMETRY_ENDPOINT", endpoint);
         }
     }
     if let Some(policy) = cli.approval_policy.as_ref() {
         unsafe {
-            std::env::set_var("CODEWHALE_APPROVAL_POLICY", policy);
+            std::env::set_var("GHOSTY_APPROVAL_POLICY", policy);
             std::env::set_var("DEEPSEEK_APPROVAL_POLICY", policy);
         }
     }
     if let Some(mode) = cli.sandbox_mode.as_ref() {
         unsafe {
-            std::env::set_var("CODEWHALE_SANDBOX_MODE", mode);
+            std::env::set_var("GHOSTY_SANDBOX_MODE", mode);
             std::env::set_var("DEEPSEEK_SANDBOX_MODE", mode);
         }
     }
     if cli.yolo {
         unsafe {
-            std::env::set_var("CODEWHALE_YOLO", "true");
+            std::env::set_var("GHOSTY_YOLO", "true");
             std::env::set_var("DEEPSEEK_YOLO", "true");
         }
     }
     if let Some(api_key) = cli.api_key.as_ref() {
         unsafe {
-            std::env::set_var(codewhale_config::CLI_API_KEY_ENV, api_key);
+            std::env::set_var(ghosty_config::CLI_API_KEY_ENV, api_key);
         }
         if !uses_raw_tui_provider && (cli.profile.is_none() || cli.provider.is_some()) {
             unsafe {
@@ -5022,12 +5035,12 @@ fn apply_tui_env(cli: &Cli, resolved_runtime: &ResolvedRuntimeOptions, passthrou
             }
         }
         unsafe {
-            std::env::set_var(codewhale_config::CLI_API_KEY_SOURCE_ENV, "cli");
+            std::env::set_var(ghosty_config::CLI_API_KEY_SOURCE_ENV, "cli");
         }
     }
     if let Some(base_url) = cli.base_url.as_ref() {
         unsafe {
-            std::env::set_var("CODEWHALE_BASE_URL", base_url);
+            std::env::set_var("GHOSTY_BASE_URL", base_url);
             std::env::set_var("DEEPSEEK_BASE_URL", base_url);
         }
     }
@@ -5069,7 +5082,7 @@ fn read_api_key_from_stdin() -> Result<String> {
 mod tests {
     use super::*;
     use clap::error::ErrorKind;
-    use codewhale_config::{ModelSource, ProviderSource};
+    use ghosty_config::{ModelSource, ProviderSource};
     use std::ffi::OsString;
     use std::sync::{Mutex, OnceLock};
 
@@ -5145,11 +5158,11 @@ mod tests {
         }
     }
 
-    impl codewhale_secrets::KeyringStore for RecordingKeyringStore {
+    impl ghosty_secrets::KeyringStore for RecordingKeyringStore {
         fn get(
             &self,
             key: &str,
-        ) -> std::result::Result<Option<String>, codewhale_secrets::SecretsError> {
+        ) -> std::result::Result<Option<String>, ghosty_secrets::SecretsError> {
             self.gets
                 .lock()
                 .expect("recording gets lock")
@@ -5166,12 +5179,12 @@ mod tests {
             &self,
             key: &str,
             value: &str,
-        ) -> std::result::Result<(), codewhale_secrets::SecretsError> {
+        ) -> std::result::Result<(), ghosty_secrets::SecretsError> {
             self.set_value(key, value);
             Ok(())
         }
 
-        fn delete(&self, key: &str) -> std::result::Result<(), codewhale_secrets::SecretsError> {
+        fn delete(&self, key: &str) -> std::result::Result<(), ghosty_secrets::SecretsError> {
             self.values
                 .lock()
                 .expect("recording values lock")
@@ -5212,7 +5225,7 @@ mod tests {
             output_mode: None,
             log_level: None,
             telemetry: false,
-            telemetry_source: codewhale_config::TelemetrySource::Default,
+            telemetry_source: ghosty_config::TelemetrySource::Default,
             telemetry_explicit_off: false,
             telemetry_endpoint: None,
             approval_policy: None,
@@ -5232,14 +5245,14 @@ mod tests {
             .copied()
             .collect::<Vec<_>>();
         names.extend([
-            codewhale_config::CLI_API_KEY_ENV,
-            codewhale_config::CLI_API_KEY_SOURCE_ENV,
-            codewhale_config::LEGACY_CLI_API_KEY_SOURCE_ENV,
-            "CODEWHALE_PROVIDER",
+            ghosty_config::CLI_API_KEY_ENV,
+            ghosty_config::CLI_API_KEY_SOURCE_ENV,
+            ghosty_config::LEGACY_CLI_API_KEY_SOURCE_ENV,
+            "GHOSTY_PROVIDER",
             "DEEPSEEK_PROVIDER",
-            "CODEWHALE_TELEMETRY",
+            "GHOSTY_TELEMETRY",
             "DEEPSEEK_TELEMETRY",
-            codewhale_config::TELEMETRY_FLOOR_ENV,
+            ghosty_config::TELEMETRY_FLOOR_ENV,
         ]);
         names.sort_unstable();
         names.dedup();
@@ -5260,9 +5273,9 @@ mod tests {
                 {
                     std::env::remove_var(var);
                 }
-                std::env::remove_var(codewhale_config::CLI_API_KEY_ENV);
-                std::env::remove_var(codewhale_config::CLI_API_KEY_SOURCE_ENV);
-                std::env::remove_var(codewhale_config::LEGACY_CLI_API_KEY_SOURCE_ENV);
+                std::env::remove_var(ghosty_config::CLI_API_KEY_ENV);
+                std::env::remove_var(ghosty_config::CLI_API_KEY_SOURCE_ENV);
+                std::env::remove_var(ghosty_config::LEGACY_CLI_API_KEY_SOURCE_ENV);
             }
         };
 
@@ -5276,7 +5289,7 @@ mod tests {
             let mut keyring_runtime = resolved_runtime_for_test(provider, ProviderSource::Cli);
             keyring_runtime.api_key = Some(keyring_key.clone());
             keyring_runtime.api_key_source = Some(RuntimeApiKeySource::Keyring);
-            let keyring_cli = parse_ok(&["codewhale", "--provider", provider_arg]);
+            let keyring_cli = parse_ok(&["ghosty", "--provider", provider_arg]);
 
             apply_tui_env(&keyring_cli, &keyring_runtime, &[]);
 
@@ -5293,19 +5306,19 @@ mod tests {
                 );
             }
             assert_eq!(
-                std::env::var(codewhale_config::CLI_API_KEY_SOURCE_ENV).as_deref(),
+                std::env::var(ghosty_config::CLI_API_KEY_SOURCE_ENV).as_deref(),
                 Ok("keyring")
             );
-            assert!(std::env::var(codewhale_config::CLI_API_KEY_ENV).is_err());
+            assert!(std::env::var(ghosty_config::CLI_API_KEY_ENV).is_err());
             assert!(
-                std::env::var(codewhale_config::LEGACY_CLI_API_KEY_SOURCE_ENV).is_err(),
+                std::env::var(ghosty_config::LEGACY_CLI_API_KEY_SOURCE_ENV).is_err(),
                 "new dispatchers must not write the retired vendor-named marker"
             );
 
             clear_bridge();
             let explicit_key = format!("{provider_arg}-explicit-key");
             let explicit_cli = parse_ok(&[
-                "codewhale",
+                "ghosty",
                 "--provider",
                 provider_arg,
                 "--api-key",
@@ -5328,14 +5341,14 @@ mod tests {
                 );
             }
             assert_eq!(
-                std::env::var(codewhale_config::CLI_API_KEY_ENV).as_deref(),
+                std::env::var(ghosty_config::CLI_API_KEY_ENV).as_deref(),
                 Ok(explicit_key.as_str())
             );
             assert_eq!(
-                std::env::var(codewhale_config::CLI_API_KEY_SOURCE_ENV).as_deref(),
+                std::env::var(ghosty_config::CLI_API_KEY_SOURCE_ENV).as_deref(),
                 Ok("cli")
             );
-            assert!(std::env::var(codewhale_config::LEGACY_CLI_API_KEY_SOURCE_ENV).is_err());
+            assert!(std::env::var(ghosty_config::LEGACY_CLI_API_KEY_SOURCE_ENV).is_err());
         }
     }
 
@@ -5448,7 +5461,7 @@ mod tests {
     fn project_config_dispatch_prefers_current_app_dir_and_falls_back_to_legacy() {
         let temp = tempfile::tempdir().expect("tempdir");
         let workspace = temp.path().join("workspace");
-        let current = workspace.join(".codewhale/config.toml");
+        let current = workspace.join(".ghosty/config.toml");
         let legacy = workspace.join(".deepseek/config.toml");
 
         // Fresh workspace: create under the current app dir.
@@ -5489,7 +5502,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let workspace = temp.path().join("workspace");
         std::fs::create_dir_all(workspace.join(".git")).expect("create checkout marker");
-        let project_path = workspace.join(".codewhale/config.toml");
+        let project_path = workspace.join(".ghosty/config.toml");
         let global_path = temp.path().join("global-config.toml");
         write_config_fixture(&project_path, "verbosity = \"project-before\"\n");
         write_config_fixture(&global_path, "verbosity = \"global-only\"\n");
@@ -5498,7 +5511,7 @@ mod tests {
         std::fs::write(
             &bundle_path,
             r#"schema_version = 1
-kind = "codewhale.portable-config"
+kind = "ghosty.portable-config"
 
 [project]
 verbosity = "project-imported"
@@ -5506,7 +5519,7 @@ verbosity = "project-imported"
         )
         .expect("write project bundle");
         let argv = [
-            OsString::from("codewhale"),
+            OsString::from("ghosty"),
             OsString::from("config"),
             OsString::from("import"),
             bundle_path.as_os_str().to_owned(),
@@ -5529,7 +5542,7 @@ verbosity = "project-imported"
         assert_eq!(global.config.verbosity.as_deref(), Some("global-only"));
 
         let explicit_argv = [
-            OsString::from("codewhale"),
+            OsString::from("ghosty"),
             OsString::from("--config"),
             global_path.as_os_str().to_owned(),
             OsString::from("config"),
@@ -5563,14 +5576,14 @@ verbosity = "project-imported"
         let temp = tempfile::tempdir().expect("tempdir");
         let workspace = temp.path().join("workspace");
         std::fs::create_dir_all(workspace.join(".git")).expect("create checkout marker");
-        let project_path = workspace.join(".codewhale/config.toml");
+        let project_path = workspace.join(".ghosty/config.toml");
         let global_path = temp.path().join("global-config.toml");
         let output_path = temp.path().join("portable.toml");
         write_config_fixture(&project_path, "verbosity = \"project-only\"\n");
         write_config_fixture(&global_path, "verbosity = \"global-only\"\n");
 
         let argv = [
-            OsString::from("codewhale"),
+            OsString::from("ghosty"),
             OsString::from("config"),
             OsString::from("export"),
             OsString::from("--portable"),
@@ -5600,7 +5613,7 @@ verbosity = "project-imported"
 
         let explicit_output_path = temp.path().join("explicit-portable.toml");
         let explicit_argv = [
-            OsString::from("codewhale"),
+            OsString::from("ghosty"),
             OsString::from("--config"),
             global_path.as_os_str().to_owned(),
             OsString::from("config"),
@@ -5633,7 +5646,7 @@ verbosity = "project-imported"
 
     #[test]
     fn parses_update_beta_flag() {
-        let cli = parse_ok(&["codewhale", "update"]);
+        let cli = parse_ok(&["ghosty", "update"]);
         assert!(matches!(
             cli.command,
             Some(Commands::Update(UpdateArgs {
@@ -5643,7 +5656,7 @@ verbosity = "project-imported"
             }))
         ));
 
-        let cli = parse_ok(&["codewhale", "update", "--beta"]);
+        let cli = parse_ok(&["ghosty", "update", "--beta"]);
         assert!(matches!(
             cli.command,
             Some(Commands::Update(UpdateArgs {
@@ -5653,7 +5666,7 @@ verbosity = "project-imported"
             }))
         ));
 
-        let cli = parse_ok(&["codewhale", "update", "--check"]);
+        let cli = parse_ok(&["ghosty", "update", "--check"]);
         assert!(matches!(
             cli.command,
             Some(Commands::Update(UpdateArgs {
@@ -5663,7 +5676,7 @@ verbosity = "project-imported"
             }))
         ));
 
-        let cli = parse_ok(&["codewhale", "update", "--proxy", "socks5://127.0.0.1:1080"]);
+        let cli = parse_ok(&["ghosty", "update", "--proxy", "socks5://127.0.0.1:1080"]);
         let Some(Commands::Update(args)) = cli.command else {
             panic!("expected update command");
         };
@@ -5742,7 +5755,7 @@ verbosity = "project-imported"
         );
         assert_eq!(model_command_provider_hint(None, None), None);
 
-        let cli = parse_ok(&["codewhale", "--provider", "zai", "model", "list"]);
+        let cli = parse_ok(&["ghosty", "--provider", "zai", "model", "list"]);
         assert_eq!(cli.provider.as_deref(), Some("zai"));
         assert!(matches!(
             cli.command,
@@ -5922,16 +5935,42 @@ verbosity = "project-imported"
         );
     }
 
-    /// Issue #5526: `codewhale completions <shell>` used to forward to the
-    /// in-tree `codewhale-tui` binary, so every generated script registered
-    /// `codewhale-tui` — not a GitHub-release command — and exposed the TUI's
+    /// Issue #5526: `ghosty completions <shell>` used to forward to the
+    /// in-tree `ghosty-tui` binary, so every generated script registered
+    /// `ghosty-tui` — not a GitHub-release command — and exposed the TUI's
     /// smaller subcommand tree. Pin the registered names per shell.
     #[test]
     fn generated_completion_scripts_register_the_published_command_names() {
         let bin = declared_bin_name();
         let alias = COMPLETION_ALIAS_NAME;
+        if alias.is_empty() {
+            // Un solo comando publicado: cada script registra `ghosty` y nada más.
+            let has_line =
+                |script: &str, wanted: &str| script.lines().any(|line| line.trim() == wanted);
+            let bash = render_completion_script(Shell::Bash);
+            assert!(has_line(
+                &bash,
+                &format!("complete -F _{bin} -o bashdefault -o default {bin}")
+            ));
+            let zsh = render_completion_script(Shell::Zsh);
+            assert_eq!(zsh.lines().next(), Some(format!("#compdef {bin}").as_str()));
+            for shell in [
+                Shell::Bash,
+                Shell::Zsh,
+                Shell::Fish,
+                Shell::PowerShell,
+                Shell::Elvish,
+            ] {
+                let script = render_completion_script(shell);
+                assert!(
+                    !script.contains("ghosty-tui"),
+                    "{shell:?} leaked ghosty-tui"
+                );
+            }
+            return;
+        }
 
-        // Match whole lines throughout: `codew` is a prefix of `codewhale`,
+        // Match whole lines throughout: `ghosty-tui` is a prefix of `ghosty`,
         // so a substring check for the alias is satisfied by the primary
         // binding and would pass on an unfixed build.
         let has_line =
@@ -6012,8 +6051,8 @@ verbosity = "project-imported"
             ("elvish", &elvish),
         ] {
             assert!(
-                !script.contains("codewhale-tui"),
-                "{shell} completions leaked the in-tree codewhale-tui name (#5526)"
+                !script.contains("ghosty-tui"),
+                "{shell} completions leaked the in-tree ghosty-tui name (#5526)"
             );
         }
     }
@@ -6041,7 +6080,7 @@ verbosity = "project-imported"
     #[test]
     fn completions_is_an_alias_for_completion() {
         assert!(matches!(
-            parse_ok(&["codewhale", "completions", "powershell"]).command,
+            parse_ok(&["ghosty", "completions", "powershell"]).command,
             Some(Commands::Completion {
                 shell: Shell::PowerShell
             })
@@ -6156,7 +6195,7 @@ verbosity = "project-imported"
 
     #[test]
     fn web_command_is_typed_and_delegates_without_auth_material() {
-        let cli = parse_ok(&["codewhale", "web", "--port", "9091"]);
+        let cli = parse_ok(&["ghosty", "web", "--port", "9091"]);
         let args = match cli.command {
             Some(Commands::Web(args)) => args,
             other => panic!("expected web command, got {other:?}"),
@@ -6169,12 +6208,12 @@ verbosity = "project-imported"
 
     #[test]
     fn web_command_defaults_to_runtime_port_and_documents_bootstrap_boundary() {
-        let cli = parse_ok(&["codewhale", "web"]);
+        let cli = parse_ok(&["ghosty", "web"]);
         assert!(matches!(
             cli.command,
             Some(Commands::Web(WebArgs { port: 7878 }))
         ));
-        let help = help_for(&["codewhale", "web", "--help"]);
+        let help = help_for(&["ghosty", "web", "--help"]);
         assert!(help.contains("--port"));
         assert!(help.contains("one-time loopback bootstrap"));
         assert!(!help.contains("--auth-token"));
@@ -6182,7 +6221,7 @@ verbosity = "project-imported"
 
     #[test]
     fn serve_help_documents_forwarded_runtime_modes() {
-        let help = help_for(&["codewhale", "serve", "--help"]);
+        let help = help_for(&["ghosty", "serve", "--help"]);
         for flag in ["--http", "--mobile", "--web", "--mcp", "--acp"] {
             assert!(
                 help.contains(flag),
@@ -6219,21 +6258,14 @@ verbosity = "project-imported"
                 if args == &["--skills", "--local"]
         ));
 
-        let cli = parse_ok(&["codewhale", "fleet", "init"]);
+        let cli = parse_ok(&["ghosty", "fleet", "init"]);
         assert!(cli.prompt.is_empty());
         assert!(matches!(
             cli.command,
             Some(Commands::Fleet(TuiPassthroughArgs { ref args })) if args == &["init"]
         ));
 
-        let cli = parse_ok(&[
-            "codewhale",
-            "fleet",
-            "run",
-            "tasks.json",
-            "--max-workers",
-            "2",
-        ]);
+        let cli = parse_ok(&["ghosty", "fleet", "run", "tasks.json", "--max-workers", "2"]);
         assert!(cli.prompt.is_empty());
         assert!(matches!(
             cli.command,
@@ -6242,7 +6274,7 @@ verbosity = "project-imported"
         ));
 
         let cli = parse_ok(&[
-            "codewhale",
+            "ghosty",
             "workflow",
             "run",
             "stopship",
@@ -6272,7 +6304,7 @@ verbosity = "project-imported"
 
     #[test]
     fn exec_and_fleet_accept_builtin_and_raw_provider_identifiers() {
-        let builtin = parse_ok(&["codewhale", "--provider", "openrouter", "exec", "Reply OK"]);
+        let builtin = parse_ok(&["ghosty", "--provider", "openrouter", "exec", "Reply OK"]);
         assert_eq!(builtin.provider.as_deref(), Some("openrouter"));
         assert_eq!(
             top_level_provider_override(builtin.provider.as_deref(), builtin.command.as_ref())
@@ -6285,7 +6317,7 @@ verbosity = "project-imported"
             ("lm-studio", vec!["exec", "Reply OK"]),
             ("lm-studio", vec!["fleet", "status"]),
         ] {
-            let argv = std::iter::once("codewhale")
+            let argv = std::iter::once("ghosty")
                 .chain(["--provider", provider])
                 .chain(command.iter().copied())
                 .collect::<Vec<_>>();
@@ -6339,7 +6371,7 @@ verbosity = "project-imported"
             );
         }
         let cli = parse_ok(&[
-            "codewhale",
+            "ghosty",
             "--provider",
             "minimax-anthropic",
             "exec",
@@ -6367,7 +6399,7 @@ verbosity = "project-imported"
 
     #[test]
     fn raw_provider_ids_remain_restricted_to_exec_and_fleet() {
-        let cli = parse_ok(&["codewhale", "--provider", "lm-studio", "model", "list"]);
+        let cli = parse_ok(&["ghosty", "--provider", "lm-studio", "model", "list"]);
         let err = top_level_provider_override(cli.provider.as_deref(), cli.command.as_ref())
             .expect_err("model registry commands still require a built-in provider");
         assert!(
@@ -6375,12 +6407,12 @@ verbosity = "project-imported"
                 .contains("configured custom providers are accepted only by exec and fleet")
         );
 
-        let err = Cli::try_parse_from(["codewhale", "auth", "set", "--provider", "lm-studio"])
+        let err = Cli::try_parse_from(["ghosty", "auth", "set", "--provider", "lm-studio"])
             .expect_err("auth keeps enum-only provider validation");
         assert_eq!(err.kind(), ErrorKind::InvalidValue);
 
         let err = Cli::try_parse_from([
-            "codewhale",
+            "ghosty",
             "--provider",
             "../../lm-studio",
             "exec",
@@ -6396,7 +6428,7 @@ verbosity = "project-imported"
     #[test]
     fn hidden_lane_log_proxy_parses_child_argv_and_preserves_other_commands() {
         let cli = parse_ok(&[
-            "codewhale",
+            "ghosty",
             "lane-log-proxy",
             "--log-path",
             "/tmp/lane.ndjson",
@@ -6422,7 +6454,7 @@ verbosity = "project-imported"
             ["/bin/echo", "--child-flag", "hello"].map(str::to_string)
         );
 
-        let cli = parse_ok(&["codewhale", "lane", "list", "--json"]);
+        let cli = parse_ok(&["ghosty", "lane", "list", "--json"]);
         let (proxy, command) = split_lane_log_proxy_command(cli.command);
         assert!(proxy.is_none());
         assert!(matches!(
@@ -6437,11 +6469,11 @@ verbosity = "project-imported"
     /// declares, under the same ids — no CLI-only verb, no missing verb.
     #[test]
     fn cli_lane_subcommands_cover_the_shared_control_contract() {
-        use codewhale_lane::{ControlDomain, ControlOperation, ControlSurface};
+        use ghosty_lane::{ControlDomain, ControlOperation, ControlSurface};
 
-        for descriptor in codewhale_lane::control::operations_for_domain(ControlDomain::Lane) {
+        for descriptor in ghosty_lane::control::operations_for_domain(ControlDomain::Lane) {
             let argv = [
-                "codewhale".to_string(),
+                "ghosty".to_string(),
                 "lane".to_string(),
                 descriptor.verb.to_string(),
             ];
@@ -6468,7 +6500,7 @@ verbosity = "project-imported"
             };
             assert_eq!(
                 parsed, descriptor.operation,
-                "`codewhale lane {}` must map to {}",
+                "`ghosty lane {}` must map to {}",
                 descriptor.verb, descriptor.id
             );
             assert!(
@@ -6482,7 +6514,7 @@ verbosity = "project-imported"
     /// `lane stop` is a compatibility spelling, not a second verb.
     #[test]
     fn lane_stop_and_interrupt_resolve_to_one_verb() {
-        use codewhale_lane::{ControlDomain, ControlOperation};
+        use ghosty_lane::{ControlDomain, ControlOperation};
 
         for spelling in ["stop", "interrupt", "cancel", "kill"] {
             assert_eq!(
@@ -6491,7 +6523,7 @@ verbosity = "project-imported"
                 "{spelling}"
             );
         }
-        let stop = parse_ok(&["codewhale", "lane", "stop", "lane-a1b2c3d4"]);
+        let stop = parse_ok(&["ghosty", "lane", "stop", "lane-a1b2c3d4"]);
         assert!(matches!(
             stop.command,
             Some(Commands::Lane(LaneArgs {
@@ -6532,12 +6564,12 @@ verbosity = "project-imported"
         let _model = ScopedEnvVar::remove("DEEPSEEK_MODEL");
         let _base_url = ScopedEnvVar::remove("DEEPSEEK_BASE_URL");
         let _api_key = ScopedEnvVar::remove("DEEPSEEK_API_KEY");
-        let _cli_api_key = ScopedEnvVar::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_api_key = ScopedEnvVar::remove("GHOSTY_CLI_API_KEY");
         let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..");
         let cli = parse_ok(&[
-            "codewhale",
+            "ghosty",
             "--profile",
             "workflow-profile",
             "--model",
@@ -6584,7 +6616,7 @@ verbosity = "project-imported"
                 .windows(2)
                 .any(|pair| pair == ["--profile", "workflow-profile"])
         );
-        assert!(!joined.contains("Run the CodeWhale"));
+        assert!(!joined.contains("Run the GhostyCode"));
         assert!(joined.contains("\"source_path\":\"workflows/stopship.workflow.js\""));
         assert!(joined.contains("\"fleet\":\"stopship\""));
         assert!(joined.contains("\"issue\":\"4375\""));
@@ -6614,7 +6646,7 @@ verbosity = "project-imported"
                 .any(|(key, _)| key == "DEEPSEEK_API_KEY")
         );
         assert!(process.environment.iter().any(|(key, value)| {
-            key == "CODEWHALE_CLI_API_KEY" && value == "explicit-profile-key"
+            key == "GHOSTY_CLI_API_KEY" && value == "explicit-profile-key"
         }));
         assert!(
             !process
@@ -6633,7 +6665,7 @@ verbosity = "project-imported"
     #[test]
     fn exec_keeps_global_looking_flags_as_passthrough_args() {
         let cli = parse_ok(&[
-            "codewhale",
+            "ghosty",
             "exec",
             "--provider",
             "definitely-not-a-provider",
@@ -6729,11 +6761,11 @@ verbosity = "project-imported"
     fn auth_set_uses_isolated_file_store_and_preserves_tui_defaults() {
         let _lock = env_lock();
         let dir = tempfile::TempDir::new().expect("tempdir");
-        let codewhale_home = dir.path().join("codewhale-home");
-        let codewhale_home_value = codewhale_home.to_string_lossy().into_owned();
-        let _home = ScopedEnvVar::set("CODEWHALE_HOME", &codewhale_home_value);
-        let _backend = ScopedEnvVar::set("CODEWHALE_SECRET_BACKEND", "file");
-        let path = codewhale_home.join("config.toml");
+        let ghosty_home = dir.path().join("ghosty-home");
+        let ghosty_home_value = ghosty_home.to_string_lossy().into_owned();
+        let _home = ScopedEnvVar::set("GHOSTY_HOME", &ghosty_home_value);
+        let _backend = ScopedEnvVar::set("GHOSTY_SECRET_BACKEND", "file");
+        let path = ghosty_home.join("config.toml");
         let mut store = ConfigStore::load(Some(path.clone())).expect("store should load");
         let secrets = Secrets::auto_detect();
 
@@ -6768,11 +6800,11 @@ verbosity = "project-imported"
         );
     }
 
-    /// `codewhale login` now means the Codewhale account device flow: the
+    /// `ghosty login` now means the Ghosty account device flow: the
     /// account-login flags parse through and reach the cloud path.
     #[test]
     fn login_parses_account_device_flow_flags() {
-        let cli = parse_ok(&["codewhale", "login", "--no-open", "--timeout-seconds", "5"]);
+        let cli = parse_ok(&["ghosty", "login", "--no-open", "--timeout-seconds", "5"]);
         let Some(Commands::Login(args)) = cli.command else {
             panic!("expected Login");
         };
@@ -6781,7 +6813,7 @@ verbosity = "project-imported"
         assert!(args.api_key.is_none());
         assert!(args.provider.is_none());
 
-        let cli = parse_ok(&["codewhale", "login"]);
+        let cli = parse_ok(&["ghosty", "login"]);
         let Some(Commands::Login(args)) = cli.command else {
             panic!("expected Login");
         };
@@ -6831,9 +6863,9 @@ verbosity = "project-imported"
     /// sign-in; the subcommand help must say so.
     #[test]
     fn login_help_describes_account_signin() {
-        let help = help_for(&["codewhale", "login", "--help"]);
+        let help = help_for(&["ghosty", "login", "--help"]);
         assert!(
-            help.contains("Codewhale account"),
+            help.contains("Ghosty account"),
             "login help must describe account sign-in: {help}"
         );
         assert!(
@@ -6850,16 +6882,16 @@ verbosity = "project-imported"
         let dir = tempfile::TempDir::new().expect("tempdir");
         let repo = dir.path().join("repo");
         std::fs::create_dir_all(repo.join(".git")).expect("git marker");
-        let repo_config_dir = repo.join(".codewhale");
+        let repo_config_dir = repo.join(".ghosty");
         std::fs::create_dir_all(&repo_config_dir).expect("repo config dir");
         let repo_config = repo_config_dir.join("config.toml");
         std::fs::write(&repo_config, "approval_policy = \"never\"\n").expect("repo config");
 
-        let codewhale_home = dir.path().join("codewhale-home");
-        let _home = ScopedEnvVar::set("CODEWHALE_HOME", &codewhale_home.to_string_lossy());
-        let _config = ScopedEnvVar::set("CODEWHALE_CONFIG_PATH", &repo_config.to_string_lossy());
+        let ghosty_home = dir.path().join("ghosty-home");
+        let _home = ScopedEnvVar::set("GHOSTY_HOME", &ghosty_home.to_string_lossy());
+        let _config = ScopedEnvVar::set("GHOSTY_CONFIG_PATH", &repo_config.to_string_lossy());
         let _legacy_config = ScopedEnvVar::remove("DEEPSEEK_CONFIG_PATH");
-        let _backend = ScopedEnvVar::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _backend = ScopedEnvVar::set("GHOSTY_SECRET_BACKEND", "file");
         let mut store = ConfigStore::load(None).expect("ambient store should load");
         let secrets = Secrets::auto_detect();
 
@@ -6878,8 +6910,8 @@ verbosity = "project-imported"
             secrets.get("openrouter").expect("read secret").as_deref(),
             Some("sk-or-repo-scoped")
         );
-        let global = std::fs::read_to_string(codewhale_home.join("config.toml"))
-            .expect("user-global config");
+        let global =
+            std::fs::read_to_string(ghosty_home.join("config.toml")).expect("user-global config");
         assert!(
             global.contains("auth_mode = \"api_key\""),
             "user-global config must carry the auth markers: {global}"
@@ -7174,23 +7206,23 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_help_describes_runtime_effective_diagnostics() {
-        let get = help_for(&["codewhale", "auth", "get", "--help"]);
+        let get = help_for(&["ghosty", "auth", "get", "--help"]);
         assert!(get.contains("effective credential route"), "{get}");
         assert!(get.contains("structural OAuth/repair state"), "{get}");
 
-        let status = help_for(&["codewhale", "auth", "status", "--help"]);
+        let status = help_for(&["ghosty", "auth", "status", "--help"]);
         assert!(
             status.contains("runtime-effective credential route state"),
             "{status}"
         );
 
-        let list = help_for(&["codewhale", "auth", "list", "--help"]);
+        let list = help_for(&["ghosty", "auth", "list", "--help"]);
         assert!(list.contains("runtime-effective auth state"), "{list}");
     }
 
     #[test]
     fn auth_set_writes_secret_store_and_keeps_config_credential_free() {
-        use codewhale_secrets::{InMemoryKeyringStore, KeyringStore};
+        use ghosty_secrets::{InMemoryKeyringStore, KeyringStore};
         use std::sync::Arc;
 
         let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default();
@@ -7232,7 +7264,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_set_refuses_plaintext_config_when_secret_store_write_fails() {
-        use codewhale_secrets::{KeyringStore, SecretsError};
+        use ghosty_secrets::{KeyringStore, SecretsError};
         use std::sync::Arc;
 
         struct FailingStore;
@@ -7275,11 +7307,40 @@ verbosity = "project-imported"
         assert!(message.contains("Secret storage write failed"), "{message}");
         assert!(message.contains("Refusing"), "{message}");
         assert!(
-            message.contains(&codewhale_config::quote_os_path(store.path())),
+            message.contains(&ghosty_config::quote_os_path(store.path())),
             "{message}"
         );
         assert!(store.config.providers.openrouter.api_key.is_none());
         assert!(!path.exists(), "plaintext config must stay untouched");
+    }
+
+    #[test]
+    fn auth_set_on_existing_config_keeps_active_provider() {
+        let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default();
+        let path = std::env::temp_dir().join(format!(
+            "ghosty-cli-auth-set-existing-config-test-{}-{nanos}.toml",
+            std::process::id()
+        ));
+        // Config que YA existe en disco con un proveedor elegido.
+        std::fs::write(&path, "provider = \"deepseek\"\n").unwrap();
+        let mut store = ConfigStore::load(Some(path.clone())).expect("store should load");
+        assert!(!store.is_fresh());
+        let secrets = no_keyring_secrets();
+
+        run_auth_command_with_secrets(
+            &mut store,
+            AuthCommand::Set {
+                provider: ProviderArg::Arcee,
+                api_key: Some("arcee-key".to_string()),
+                api_key_stdin: false,
+            },
+            &secrets,
+        )
+        .expect("set should succeed");
+
+        // Guardar una key para otro proveedor no cambia el activo.
+        assert_eq!(store.config.provider, ProviderKind::Deepseek);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
@@ -7304,7 +7365,9 @@ verbosity = "project-imported"
         )
         .expect("set should succeed");
 
-        assert_eq!(store.config.provider, ProviderKind::Deepseek);
+        // Config NUEVO (el archivo no existía): el primer `auth set` deja ese
+        // proveedor activo, así el usuario de cero arranca con lo que configuró.
+        assert_eq!(store.config.provider, ProviderKind::Arcee);
         assert!(store.config.providers.arcee.api_key.is_none());
         assert_eq!(
             store.config.providers.arcee.auth_mode.as_deref(),
@@ -7312,7 +7375,8 @@ verbosity = "project-imported"
         );
 
         let reloaded = ConfigStore::load(Some(path.clone())).expect("store should reload");
-        assert_eq!(reloaded.config.provider, ProviderKind::Deepseek);
+        // ...y esa adopción sobrevive al recargar desde disco.
+        assert_eq!(reloaded.config.provider, ProviderKind::Arcee);
         assert!(reloaded.config.providers.arcee.api_key.is_none());
         assert_eq!(
             reloaded.config.providers.arcee.auth_mode.as_deref(),
@@ -7356,7 +7420,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_clear_removes_from_config() {
-        use codewhale_secrets::{InMemoryKeyringStore, KeyringStore};
+        use ghosty_secrets::{InMemoryKeyringStore, KeyringStore};
         use std::sync::Arc;
 
         let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default();
@@ -7391,7 +7455,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_status_scoped_probe_and_list_all_provider_keyrings() {
-        use codewhale_secrets::{KeyringStore, SecretsError};
+        use ghosty_secrets::{KeyringStore, SecretsError};
         use std::sync::{Arc, Mutex};
 
         #[derive(Default)]
@@ -7469,7 +7533,7 @@ verbosity = "project-imported"
             .path()
             .canonicalize()
             .expect("canonical fixture root")
-            .join("isolated-codewhale-home");
+            .join("isolated-ghosty-home");
         let config_path = home.join("config.toml");
         let settings_path = home.join("settings.toml");
         let secret_path = home.join("secrets").join("secrets.json");
@@ -7488,30 +7552,30 @@ verbosity = "project-imported"
         )
         .expect("write secret fixture");
 
-        let _home = ScopedEnvVar::set("CODEWHALE_HOME", &home.to_string_lossy());
-        let _backend = ScopedEnvVar::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _home = ScopedEnvVar::set("GHOSTY_HOME", &home.to_string_lossy());
+        let _backend = ScopedEnvVar::set("GHOSTY_SECRET_BACKEND", "file");
         let _env = ScopedEnvVar::set("DEEPSEEK_API_KEY", "diagnostic-env-secret-9012");
         let store = ConfigStore::load(Some(config_path.clone())).expect("load config fixture");
 
         let output = auth_diagnostic_lines(&store, Some(ProviderKind::Deepseek)).join("\n");
         assert!(
             output.contains(&format!(
-                "codewhale home: {} (source: CODEWHALE_HOME (isolated); state: present)",
-                codewhale_config::quote_os_path(&home)
+                "ghosty home: {} (source: GHOSTY_HOME (isolated); state: present)",
+                ghosty_config::quote_os_path(&home)
             )),
             "{output}"
         );
         assert!(
             output.contains(&format!(
                 "config: {} (present)",
-                codewhale_config::quote_os_path(&config_path)
+                ghosty_config::quote_os_path(&config_path)
             )),
             "{output}"
         );
         assert!(
             output.contains(&format!(
                 "settings: {} (present)",
-                codewhale_config::quote_os_path(&settings_path)
+                ghosty_config::quote_os_path(&settings_path)
             )),
             "{output}"
         );
@@ -7522,7 +7586,7 @@ verbosity = "project-imported"
         assert!(
             output.contains(&format!(
                 "secret store: {} (present)",
-                codewhale_config::quote_os_path(&secret_path)
+                ghosty_config::quote_os_path(&secret_path)
             )),
             "{output}"
         );
@@ -7531,7 +7595,7 @@ verbosity = "project-imported"
             "{output}"
         );
         assert!(
-            output.contains("legacy secret store: suppressed by explicit CODEWHALE_HOME isolation"),
+            output.contains("legacy secret store: suppressed by explicit GHOSTY_HOME isolation"),
             "{output}"
         );
         for secret_fragment in [
@@ -7552,7 +7616,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_status_reports_all_active_provider_sources_with_last4() {
-        use codewhale_secrets::{InMemoryKeyringStore, KeyringStore};
+        use ghosty_secrets::{InMemoryKeyringStore, KeyringStore};
         use std::sync::Arc;
 
         let _lock = env_lock();
@@ -7591,7 +7655,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_status_all_providers_lists_every_known_provider() {
-        use codewhale_secrets::{InMemoryKeyringStore, KeyringStore};
+        use ghosty_secrets::{InMemoryKeyringStore, KeyringStore};
         use std::sync::Arc;
 
         let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default();
@@ -7631,7 +7695,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_status_never_probes_codex_file_and_reports_exact_consent() {
-        use codewhale_secrets::InMemoryKeyringStore;
+        use ghosty_secrets::InMemoryKeyringStore;
         use std::sync::Arc;
 
         let _lock = env_lock();
@@ -7664,9 +7728,9 @@ verbosity = "project-imported"
         assert!(!output.contains("secret-token"));
 
         store.config.providers.openai_codex.external_credentials =
-            Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+            Some(ghosty_config::ExternalCredentialConsentToml::read_only(
                 ProviderKind::OpenaiCodex,
-                codewhale_config::ExternalCredentialSource::CodexCli,
+                ghosty_config::ExternalCredentialSource::CodexCli,
                 auth_path.clone(),
             ));
         let output =
@@ -7679,11 +7743,11 @@ verbosity = "project-imported"
         assert!(output.contains("source=codex_cli"));
         assert!(output.contains(&format!(
             "path={}",
-            codewhale_config::quote_os_path(&auth_path)
+            ghosty_config::quote_os_path(&auth_path)
         )));
         assert!(output.contains(&format!(
             "consent_version={}",
-            codewhale_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION
+            ghosty_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION
         )));
         assert!(output.contains("file not probed"));
         assert!(!output.contains("secret-token"));
@@ -7697,7 +7761,7 @@ verbosity = "project-imported"
         assert!(changed.contains("ambient_path_changed=true"), "{changed}");
         assert!(changed.contains("consent remains pinned"), "{changed}");
         assert!(
-            changed.contains(&codewhale_config::quote_os_path(&auth_path)),
+            changed.contains(&ghosty_config::quote_os_path(&auth_path)),
             "{changed}"
         );
         assert!(!changed.contains(&ambient_path_str), "{changed}");
@@ -7724,9 +7788,9 @@ verbosity = "project-imported"
         store.config.providers.xai.oauth_credential_generation =
             Some("xai-auth-0123456789abcdef0123456789abcdef.json".to_string());
         store.config.providers.xai.external_credentials =
-            Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+            Some(ghosty_config::ExternalCredentialConsentToml::read_only(
                 ProviderKind::Xai,
-                codewhale_config::ExternalCredentialSource::GrokCli,
+                ghosty_config::ExternalCredentialSource::GrokCli,
                 external_path.clone(),
             ));
         let keyring = Arc::new(RecordingKeyringStore::default());
@@ -7735,19 +7799,24 @@ verbosity = "project-imported"
         let scoped = auth_status_lines_for_provider(&store, &secrets, ProviderKind::Xai).join("\n");
         assert!(
             scoped.contains(
-                "credential route: Codewhale-owned OAuth configured/unprobed (valid generation pointer; storage unprobed)"
+                "credential route: Ghosty-owned OAuth configured/unprobed (valid generation pointer; storage unprobed)"
             ),
             "{scoped}"
         );
-        assert!(scoped.contains("external credentials: blocked by the configured Codewhale-owned xAI OAuth generation"), "{scoped}");
         assert!(
             scoped.contains(
-                "xAI OAuth generation: configured Codewhale-owned pointer (storage unprobed)"
+                "external credentials: blocked by the configured Ghosty-owned xAI OAuth generation"
             ),
             "{scoped}"
         );
         assert!(
-            !scoped.contains("active source: Codewhale-owned OAuth"),
+            scoped.contains(
+                "xAI OAuth generation: configured Ghosty-owned pointer (storage unprobed)"
+            ),
+            "{scoped}"
+        );
+        assert!(
+            !scoped.contains("active source: Ghosty-owned OAuth"),
             "a valid pointer is configured/unprobed, not an active credential: {scoped}"
         );
         assert!(
@@ -7761,7 +7830,7 @@ verbosity = "project-imported"
             .find(|line| line.starts_with("xai"))
             .expect("xAI status row");
         assert!(
-            xai_row.contains("Codewhale-owned OAuth configured/unprobed"),
+            xai_row.contains("Ghosty-owned OAuth configured/unprobed"),
             "{xai_row}"
         );
 
@@ -7782,7 +7851,7 @@ verbosity = "project-imported"
             &CliRuntimeOverrides::default(),
         );
         assert!(
-            get.starts_with("xai: configured (source: Codewhale-owned OAuth generation"),
+            get.starts_with("xai: configured (source: Ghosty-owned OAuth generation"),
             "{get}"
         );
         assert!(!get.starts_with("xai: set"), "{get}");
@@ -7827,9 +7896,9 @@ verbosity = "project-imported"
         store.config.providers.xai.api_key = Some("fake-cfg-key-1234".to_string());
         store.config.providers.xai.oauth_credential_generation = Some("../unsafe.json".to_string());
         store.config.providers.xai.external_credentials =
-            Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+            Some(ghosty_config::ExternalCredentialConsentToml::read_only(
                 ProviderKind::Xai,
-                codewhale_config::ExternalCredentialSource::GrokCli,
+                ghosty_config::ExternalCredentialSource::GrokCli,
                 external_path.clone(),
             ));
         let keyring = Arc::new(RecordingKeyringStore::default());
@@ -7844,9 +7913,9 @@ verbosity = "project-imported"
             scoped.contains("API-key fallback: config (last4: ...1234)"),
             "{scoped}"
         );
-        assert!(scoped.contains("external credentials: blocked by the invalid Codewhale-owned xAI OAuth generation pointer"), "{scoped}");
+        assert!(scoped.contains("external credentials: blocked by the invalid Ghosty-owned xAI OAuth generation pointer"), "{scoped}");
         assert!(
-            scoped.contains("repair: run `codewhale auth xai-device`"),
+            scoped.contains("repair: run `ghosty auth xai-device`"),
             "{scoped}"
         );
         assert!(
@@ -7910,9 +7979,9 @@ verbosity = "project-imported"
         store.config.providers.xai.oauth_credential_generation =
             Some("xai-auth-0123456789abcdef0123456789abcdef.json".to_string());
         store.config.providers.xai.external_credentials =
-            Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+            Some(ghosty_config::ExternalCredentialConsentToml::read_only(
                 ProviderKind::Xai,
-                codewhale_config::ExternalCredentialSource::GrokCli,
+                ghosty_config::ExternalCredentialSource::GrokCli,
                 external_path.clone(),
             ));
         let keyring = Arc::new(RecordingKeyringStore::default());
@@ -8009,9 +8078,9 @@ verbosity = "project-imported"
         store.config.providers.xai.oauth_credential_generation =
             Some("xai-auth-0123456789abcdef0123456789abcdef.json".to_string());
         store.config.providers.xai.external_credentials =
-            Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+            Some(ghosty_config::ExternalCredentialConsentToml::read_only(
                 ProviderKind::Xai,
-                codewhale_config::ExternalCredentialSource::GrokCli,
+                ghosty_config::ExternalCredentialSource::GrokCli,
                 external_path.clone(),
             ));
         let keyring = Arc::new(RecordingKeyringStore::default());
@@ -8131,9 +8200,9 @@ verbosity = "project-imported"
         store.config.provider = ProviderKind::Xai;
         store.config.providers.xai.auth_mode = Some("oauth".to_string());
         store.config.providers.xai.external_credentials =
-            Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+            Some(ghosty_config::ExternalCredentialConsentToml::read_only(
                 ProviderKind::Xai,
-                codewhale_config::ExternalCredentialSource::GrokCli,
+                ghosty_config::ExternalCredentialSource::GrokCli,
                 external_path.clone(),
             ));
         let keyring = Arc::new(RecordingKeyringStore::default());
@@ -8198,7 +8267,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_list_uses_persisted_consent_without_probing_codex_file() {
-        use codewhale_secrets::InMemoryKeyringStore;
+        use ghosty_secrets::InMemoryKeyringStore;
         use std::sync::Arc;
 
         let _lock = env_lock();
@@ -8216,9 +8285,9 @@ verbosity = "project-imported"
         let mut store = ConfigStore::load(Some(config_path)).expect("store should load");
         store.config.provider = ProviderKind::OpenaiCodex;
         store.config.providers.openai_codex.external_credentials =
-            Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+            Some(ghosty_config::ExternalCredentialConsentToml::read_only(
                 ProviderKind::OpenaiCodex,
-                codewhale_config::ExternalCredentialSource::CodexCli,
+                ghosty_config::ExternalCredentialSource::CodexCli,
                 auth_path,
             ));
         let secrets = Secrets::new(Arc::new(InMemoryKeyringStore::new()));
@@ -8240,8 +8309,8 @@ verbosity = "project-imported"
             .path()
             .canonicalize()
             .expect("canonical temp root")
-            .join("codewhale-home");
-        let _home = ScopedEnvVar::set("CODEWHALE_HOME", &home.to_string_lossy());
+            .join("ghosty-home");
+        let _home = ScopedEnvVar::set("GHOSTY_HOME", &home.to_string_lossy());
         let config_path = dir.path().join("config.toml");
         let external_path = dir.path().join("grok-auth.json");
         let external_raw = r#"{"secret":"must-never-be-read-or-written"}"#;
@@ -8251,7 +8320,7 @@ verbosity = "project-imported"
 
         let preview = external_consent_preview_lines(
             ProviderKind::Xai,
-            codewhale_config::ExternalCredentialSource::GrokCli,
+            ghosty_config::ExternalCredentialSource::GrokCli,
             &external_path,
         )
         .join("\n");
@@ -8259,7 +8328,7 @@ verbosity = "project-imported"
         assert!(
             preview.contains(&format!(
                 "exact resolved path: {}",
-                codewhale_config::quote_os_path(&external_path)
+                ghosty_config::quote_os_path(&external_path)
             )),
             "{preview}"
         );
@@ -8318,17 +8387,17 @@ verbosity = "project-imported"
             .expect("persisted consent");
         assert_eq!(
             consent.access,
-            codewhale_config::ExternalCredentialAccess::ReadOnly
+            ghosty_config::ExternalCredentialAccess::ReadOnly
         );
         assert_eq!(consent.provider, ProviderKind::Xai.as_str());
         assert_eq!(
             consent.source,
-            codewhale_config::ExternalCredentialSource::GrokCli
+            ghosty_config::ExternalCredentialSource::GrokCli
         );
         assert_eq!(consent.path, external_path);
         assert_eq!(
             consent.consent_version,
-            codewhale_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION
+            ghosty_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION
         );
         assert_eq!(
             store.config.providers.xai.auth_mode.as_deref(),
@@ -8350,24 +8419,24 @@ verbosity = "project-imported"
         assert_eq!(reloaded_consent.provider, ProviderKind::Xai.as_str());
         assert_eq!(
             reloaded_consent.source,
-            codewhale_config::ExternalCredentialSource::GrokCli
+            ghosty_config::ExternalCredentialSource::GrokCli
         );
         assert_eq!(reloaded_consent.path, external_path);
         assert_eq!(
             reloaded_consent.consent_version,
-            codewhale_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION
+            ghosty_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION
         );
 
         run_auth_command_with_secrets(
             &mut store,
             AuthCommand::Set {
                 provider: ProviderArg::Xai,
-                api_key: Some("xai-codewhale-owned-key".to_string()),
+                api_key: Some("xai-ghosty-owned-key".to_string()),
                 api_key_stdin: false,
             },
             &secrets,
         )
-        .expect("Codewhale-owned API key should supersede external consent");
+        .expect("Ghosty-owned API key should supersede external consent");
         assert!(store.config.providers.xai.external_credentials.is_none());
         assert_eq!(
             std::fs::read_to_string(&external_path).expect("external file still unchanged"),
@@ -8477,15 +8546,15 @@ verbosity = "project-imported"
                 .path()
                 .canonicalize()
                 .expect("canonical temp root")
-                .join("codewhale-home");
-            let _home = ScopedEnvVar::set("CODEWHALE_HOME", &home.to_string_lossy());
+                .join("ghosty-home");
+            let _home = ScopedEnvVar::set("GHOSTY_HOME", &home.to_string_lossy());
             let config_path = dir.path().join("config.toml");
             let mut store = ConfigStore::load(Some(config_path.clone())).expect("load store");
             store.config.providers.xai.auth_mode = Some("oauth".to_string());
             store.config.providers.xai.external_credentials =
-                Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+                Some(ghosty_config::ExternalCredentialConsentToml::read_only(
                     ProviderKind::Xai,
-                    codewhale_config::ExternalCredentialSource::GrokCli,
+                    ghosty_config::ExternalCredentialSource::GrokCli,
                     dir.path().join("external.json"),
                 ));
             std::fs::create_dir(&config_path).expect("turn config target into a directory");
@@ -8521,7 +8590,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_status_scoped_provider_shows_detailed_info() {
-        use codewhale_secrets::InMemoryKeyringStore;
+        use ghosty_secrets::InMemoryKeyringStore;
         use std::sync::Arc;
 
         let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default();
@@ -8544,7 +8613,7 @@ verbosity = "project-imported"
         assert!(output.contains("model:"));
         assert!(!output.contains("sk-arcee-9999"));
 
-        for sentinel in [codewhale_config::API_KEYRING_SENTINEL, "  __KEYRING__  "] {
+        for sentinel in [ghosty_config::API_KEYRING_SENTINEL, "  __KEYRING__  "] {
             store.config.providers.arcee.api_key = Some(sentinel.to_string());
             assert_eq!(provider_config_api_key(&store, ProviderKind::Arcee), None);
         }
@@ -8554,7 +8623,7 @@ verbosity = "project-imported"
 
     #[test]
     fn dispatch_uses_secret_store_without_rehydrating_plaintext_config() {
-        use codewhale_secrets::{InMemoryKeyringStore, KeyringStore};
+        use ghosty_secrets::{InMemoryKeyringStore, KeyringStore};
         use std::sync::Arc;
 
         // Runtime resolution reads process-global provider environment overrides.
@@ -8612,8 +8681,8 @@ verbosity = "project-imported"
             .path()
             .canonicalize()
             .expect("canonical temp root")
-            .join("codewhale-home");
-        let _home = ScopedEnvVar::set("CODEWHALE_HOME", &home.to_string_lossy());
+            .join("ghosty-home");
+        let _home = ScopedEnvVar::set("GHOSTY_HOME", &home.to_string_lossy());
         let path = home.join("config.toml");
         let mut store = ConfigStore::load(Some(path.clone())).expect("store should load");
         store.config.api_key = Some("sk-stale".to_string());
@@ -8624,16 +8693,16 @@ verbosity = "project-imported"
         store.config.providers.xai.oauth_credential_generation = Some(generation.to_string());
         store.save().unwrap();
         let credentials = home.join("credentials");
-        codewhale_config::with_xai_oauth_lifecycle_lock(|owned| {
+        ghosty_config::with_xai_oauth_lifecycle_lock(|owned| {
             owned.write(generation, b"xai-generation", false)?;
             owned.write(
-                codewhale_config::LEGACY_XAI_OAUTH_FILE_NAME,
+                ghosty_config::LEGACY_XAI_OAUTH_FILE_NAME,
                 b"legacy-xai",
                 false,
             )?;
             Ok(())
         })
-        .expect("seed Codewhale-owned xAI credentials");
+        .expect("seed Ghosty-owned xAI credentials");
         std::fs::write(credentials.join("other-provider.json"), "preserve").unwrap();
 
         let secrets = no_keyring_secrets();
@@ -8670,8 +8739,8 @@ verbosity = "project-imported"
             .path()
             .canonicalize()
             .expect("canonical temp root")
-            .join("codewhale-home");
-        let _home = ScopedEnvVar::set("CODEWHALE_HOME", &home.to_string_lossy());
+            .join("ghosty-home");
+        let _home = ScopedEnvVar::set("GHOSTY_HOME", &home.to_string_lossy());
         let path = home.join("config.toml");
         let mut store = ConfigStore::load(Some(path.clone())).expect("store should load");
         store.config.provider = ProviderKind::Deepseek;
@@ -8698,7 +8767,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_migrate_moves_plaintext_keys_into_keyring_and_strips_file() {
-        use codewhale_secrets::{InMemoryKeyringStore, KeyringStore};
+        use ghosty_secrets::{InMemoryKeyringStore, KeyringStore};
         use std::sync::Arc;
 
         let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default();
@@ -8775,7 +8844,7 @@ verbosity = "project-imported"
 
     #[test]
     fn auth_migrate_dry_run_does_not_modify_anything() {
-        use codewhale_secrets::{InMemoryKeyringStore, KeyringStore};
+        use ghosty_secrets::{InMemoryKeyringStore, KeyringStore};
         use std::sync::Arc;
 
         let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default();
@@ -8862,13 +8931,13 @@ verbosity = "project-imported"
 
     #[test]
     fn cli_provider_helpers_follow_config_metadata() {
-        let registry_kinds: Vec<ProviderKind> = codewhale_config::provider::all_providers()
+        let registry_kinds: Vec<ProviderKind> = ghosty_config::provider::all_providers()
             .iter()
             .map(|provider| provider.kind())
             .collect();
         // Full registry keeps legacy dialect/plan kinds; ALL is the catalog surface.
-        assert_eq!(registry_kinds.len(), 47);
-        assert_eq!(ProviderKind::ALL.len(), 42);
+        assert_eq!(registry_kinds.len(), 48);
+        assert_eq!(ProviderKind::ALL.len(), 43);
         for kind in ProviderKind::ALL {
             assert!(
                 registry_kinds.contains(&kind),
@@ -8926,8 +8995,7 @@ verbosity = "project-imported"
             "the help string must disclose the default: {telemetry_line}"
         );
         assert!(
-            telemetry_line.contains("CODEWHALE_TELEMETRY=0 always")
-                && telemetry_line.contains("wins"),
+            telemetry_line.contains("GHOSTY_TELEMETRY=0 always") && telemetry_line.contains("wins"),
             "the help string must document the always-winning opt-out: {telemetry_line}"
         );
     }
@@ -8937,14 +9005,14 @@ verbosity = "project-imported"
         let help = Cli::command().render_long_help().to_string();
         assert!(
             !help.contains("TUI"),
-            "root help must describe what Codewhale does, not its internal UI/runtime layers:\n{help}"
+            "root help must describe what Ghosty does, not its internal UI/runtime layers:\n{help}"
         );
     }
 
     #[test]
     fn only_one_function_may_locate_and_spawn_the_tui() {
         // Single-binary invariant: no sibling TUI discovery exists. The
-        // two-process glue has been deleted; the only TUI entry is codewhale_tui::run.
+        // two-process glue has been deleted; the only TUI entry is ghosty_tui::run.
         let source = include_str!("lib.rs");
         let a = format!("{}{}", "locate_sibling", "_tui_binary");
         let b = format!("{}{}", "tui_spawn", "_error");
@@ -8970,7 +9038,7 @@ verbosity = "project-imported"
 
     #[test]
     fn parses_no_project_config_before_subcommand() {
-        let cli = parse_ok(&["codewhale", "--no-project-config", "exec", "list the files"]);
+        let cli = parse_ok(&["ghosty", "--no-project-config", "exec", "list the files"]);
         assert!(cli.no_project_config);
         match cli.command {
             Some(Commands::Exec(args)) => {
@@ -8985,7 +9053,7 @@ verbosity = "project-imported"
         // `exec` captures trailing args (`trailing_var_arg`), so a misplaced
         // `--no-project-config` is NOT honored as the dispatcher flag — it must
         // appear before the subcommand, exactly like `--skip-onboarding`.
-        let cli = parse_ok(&["codewhale", "exec", "--no-project-config", "hi"]);
+        let cli = parse_ok(&["ghosty", "exec", "--no-project-config", "hi"]);
         assert!(!cli.no_project_config);
         match cli.command {
             Some(Commands::Exec(args)) => {
@@ -9009,7 +9077,7 @@ verbosity = "project-imported"
 
     #[test]
     fn parses_top_level_continue_for_interactive_resume() {
-        let cli = parse_ok(&["codewhale", "--continue"]);
+        let cli = parse_ok(&["ghosty", "--continue"]);
 
         assert!(cli.continue_session);
         assert!(cli.prompt_flag.is_none());
@@ -9019,7 +9087,7 @@ verbosity = "project-imported"
 
     #[test]
     fn parses_rc_as_the_account_owned_interactive_handoff() {
-        let cli = parse_ok(&["codewhale", "rc"]);
+        let cli = parse_ok(&["ghosty", "rc"]);
 
         let Some(Commands::Rc(args)) = cli.command else {
             panic!("rc should parse as the remote-control TUI handoff");
@@ -9029,13 +9097,10 @@ verbosity = "project-imported"
 
     #[test]
     fn top_level_continue_rejects_startup_prompt() {
-        let cli = parse_ok(&["codewhale", "--continue", "-p", "follow up"]);
+        let cli = parse_ok(&["ghosty", "--continue", "-p", "follow up"]);
 
         let err = root_tui_passthrough(&cli).expect_err("prompted continue should be rejected");
-        assert!(
-            err.to_string()
-                .contains("codewhale exec --continue <PROMPT>")
-        );
+        assert!(err.to_string().contains("ghosty exec --continue <PROMPT>"));
     }
 
     #[test]
@@ -9156,13 +9221,13 @@ verbosity = "project-imported"
                 vec![
                     "<SHELL>",
                     "bash",
-                    "Every script completes both `codewhale` and the `codew` shorthand.",
-                    "source <(codewhale completion bash)",
-                    "~/.local/share/bash-completion/completions/codewhale",
+                    "Every script completes the `ghosty` command.",
+                    "source <(ghosty completion bash)",
+                    "~/.local/share/bash-completion/completions/ghosty",
                     "fpath=(~/.zfunc $fpath)",
-                    "codewhale completion fish > ~/.config/fish/completions/codewhale.fish",
-                    "codewhale completion powershell | Out-String | Invoke-Expression",
-                    "codewhale completion elvish >> ~/.config/elvish/rc.elv",
+                    "ghosty completion fish > ~/.config/fish/completions/ghosty.fish",
+                    "ghosty completion powershell | Out-String | Invoke-Expression",
+                    "ghosty completion elvish >> ~/.config/elvish/rc.elv",
                 ],
             ),
             ("metrics", vec!["--json", "--since"]),

@@ -1,9 +1,9 @@
 {
-  "name": "@codewhale/telegram-bridge",
+  "name": "@ghosty/telegram-bridge",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Telegram mobile bridge for a local codewhale serve --http runtime.",
+  "description": "Telegram mobile bridge for a local ghosty serve --http runtime.",
   "main": "src/index.mjs",
   "scripts": {
     "start": "node src/index.mjs",

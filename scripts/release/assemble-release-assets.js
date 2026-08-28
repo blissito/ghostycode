@@ -10,9 +10,9 @@ const {
   BUNDLE_CHECKSUM_MANIFEST,
   CHECKSUM_MANIFEST,
   checksummedReleaseAssetNames,
-} = require("../../npm/codewhale/scripts/artifacts");
+} = require("../../npm/ghosty/scripts/artifacts");
 
-const WINDOWS_LAUNCHER = "codewhale.bat";
+const WINDOWS_LAUNCHER = "ghosty.bat";
 
 function usage() {
   return [
@@ -100,9 +100,9 @@ function windowsLauncherContents() {
     "where wt >nul 2>nul",
     "set NO_ANIMATIONS=1",
     'if "%ERRORLEVEL%"=="0" (',
-    '    wt --title Codewhale cmd /k "%~dp0codewhale-windows-x64.exe"',
+    '    wt --title Ghosty cmd /k "%~dp0ghosty-windows-x64.exe"',
     ") else (",
-    '    "%~dp0codewhale-windows-x64.exe"',
+    '    "%~dp0ghosty-windows-x64.exe"',
     ")",
     "",
   ].join("\r\n");
@@ -110,7 +110,7 @@ function windowsLauncherContents() {
 
 function intermediateArtifactPath(inputDirectory, name) {
   if (name === BUNDLE_CHECKSUM_MANIFEST || BUNDLE_ASSET_NAMES.includes(name)) {
-    return path.join(inputDirectory, "codewhale-bundles", name);
+    return path.join(inputDirectory, "ghosty-bundles", name);
   }
   return path.join(inputDirectory, name, name);
 }

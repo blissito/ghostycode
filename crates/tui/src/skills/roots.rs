@@ -3,7 +3,7 @@
 //!
 //! Runtime discovery and (later) audit/mutation share this catalog so
 //! precedence cannot drift between modules. Discovery directories are not
-//! write targets: only explicitly owned CodeWhale roots are writable.
+//! write targets: only explicitly owned GhostyCode roots are writable.
 
 use std::collections::HashSet;
 use std::fs;
@@ -27,7 +27,7 @@ impl std::fmt::Display for SkillRootId {
     }
 }
 
-/// External harness layouts that CodeWhale can discover/audit but never owns.
+/// External harness layouts that GhostyCode can discover/audit but never owns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompatibleHarness {
     Agents,
@@ -60,8 +60,8 @@ impl CompatibleHarness {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(dead_code)] // BuiltIn / ReviewedPluginSnapshot used by later #4651 stages
 pub enum SkillRootKind {
-    CodeWhaleProject,
-    CodeWhaleGlobal,
+    GhostyCodeProject,
+    GhostyCodeGlobal,
     CompatibleProject(CompatibleHarness),
     CompatibleGlobal(CompatibleHarness),
     /// Explicitly configured `skills_dir` that is not one of the owned roots.
@@ -71,11 +71,11 @@ pub enum SkillRootKind {
     RegistryCache,
 }
 
-/// Whether CodeWhale may mutate files under this root.
+/// Whether GhostyCode may mutate files under this root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(dead_code)] // Immutable used by later #4651 stages
 pub enum SkillRootAccess {
-    /// CodeWhale-owned project/global install targets.
+    /// GhostyCode-owned project/global install targets.
     WritableOwned,
     /// Compatible harness roots and unclassified configured dirs — read only.
     ReadOnlyExternal,
@@ -200,20 +200,20 @@ impl SkillRootCatalog {
             "project-cursor",
         );
 
-        // CodeWhale project root — always listed for ownership; runtime
-        // CodeWhale-only mode additionally requires the path stay inside the
+        // GhostyCode project root — always listed for ownership; runtime
+        // GhostyCode-only mode additionally requires the path stay inside the
         // workspace (symlink escape check happens in path selection helpers).
-        let project_owned = workspace.join(".codewhale").join("skills");
+        let project_owned = workspace.join(".ghosty").join("skills");
         push_descriptor(
             &mut roots,
             &mut precedence,
-            SkillRootKind::CodeWhaleProject,
+            SkillRootKind::GhostyCodeProject,
             SkillRootAccess::WritableOwned,
             SkillScope::Project,
             project_owned,
             true,
             true,
-            "project-codewhale",
+            "project-ghosty",
             true, // include even if missing — owned target may be created later
         );
 
@@ -254,17 +254,17 @@ impl SkillRootCatalog {
                 "global-claude",
             );
 
-            let global_owned = home.join(".codewhale").join("skills");
+            let global_owned = home.join(".ghosty").join("skills");
             push_descriptor(
                 &mut roots,
                 &mut precedence,
-                SkillRootKind::CodeWhaleGlobal,
+                SkillRootKind::GhostyCodeGlobal,
                 SkillRootAccess::WritableOwned,
                 SkillScope::Global,
                 global_owned,
                 true,
                 true,
-                "global-codewhale",
+                "global-ghosty",
                 true,
             );
 
@@ -294,7 +294,7 @@ impl SkillRootCatalog {
             );
 
             // Registry cache is never an active skill root.
-            let cache = home.join(".codewhale").join("cache").join("skills");
+            let cache = home.join(".ghosty").join("cache").join("skills");
             push_descriptor(
                 &mut roots,
                 &mut precedence,
@@ -312,13 +312,13 @@ impl SkillRootCatalog {
             push_descriptor(
                 &mut roots,
                 &mut precedence,
-                SkillRootKind::CodeWhaleGlobal,
+                SkillRootKind::GhostyCodeGlobal,
                 SkillRootAccess::WritableOwned,
                 SkillScope::Global,
-                PathBuf::from("/tmp/codewhale/skills"),
+                PathBuf::from("/tmp/ghosty/skills"),
                 true,
                 true,
-                "global-codewhale-fallback",
+                "global-ghosty-fallback",
                 true,
             );
         }
@@ -337,7 +337,7 @@ impl SkillRootCatalog {
     }
 
     /// Paths used by runtime discovery for the given mode (existing dirs only,
-    /// first-wins order preserved). CodeWhale-only applies the workspace
+    /// first-wins order preserved). GhostyCode-only applies the workspace
     /// containment check for the project owned root.
     #[must_use]
     pub fn runtime_directories(
@@ -354,17 +354,17 @@ impl SkillRootCatalog {
             }
             match mode {
                 super::SkillDiscoveryMode::Compatible => {}
-                super::SkillDiscoveryMode::CodeWhaleOnly => {
+                super::SkillDiscoveryMode::GhostyCodeOnly => {
                     if !matches!(
                         root.kind,
-                        SkillRootKind::CodeWhaleProject
-                            | SkillRootKind::CodeWhaleGlobal
+                        SkillRootKind::GhostyCodeProject
+                            | SkillRootKind::GhostyCodeGlobal
                             | SkillRootKind::Configured
                     ) {
                         continue;
                     }
-                    if root.kind == SkillRootKind::CodeWhaleProject
-                        && !codewhale_project_root_is_inside_workspace(workspace, &root.path)
+                    if root.kind == SkillRootKind::GhostyCodeProject
+                        && !ghosty_project_root_is_inside_workspace(workspace, &root.path)
                     {
                         continue;
                     }
@@ -385,7 +385,7 @@ impl SkillRootCatalog {
         out
     }
 
-    /// Owned CodeWhale project + global roots (may not exist yet).
+    /// Owned GhostyCode project + global roots (may not exist yet).
     #[must_use]
     pub fn owned_writable_roots(&self) -> Vec<&SkillRootDescriptor> {
         self.roots
@@ -437,11 +437,11 @@ pub fn skills_directories_with_home_and_mode(
     SkillRootCatalog::build(workspace, home_dir, None).runtime_directories(workspace, mode)
 }
 
-/// CodeWhale project skills dir when it exists and stays inside the workspace.
+/// GhostyCode project skills dir when it exists and stays inside the workspace.
 #[must_use]
-pub fn codewhale_workspace_skills_dir(workspace: &Path) -> Option<PathBuf> {
-    let skills_dir = workspace.join(".codewhale").join("skills");
-    codewhale_project_root_is_inside_workspace(workspace, &skills_dir).then_some(skills_dir)
+pub fn ghosty_workspace_skills_dir(workspace: &Path) -> Option<PathBuf> {
+    let skills_dir = workspace.join(".ghosty").join("skills");
+    ghosty_project_root_is_inside_workspace(workspace, &skills_dir).then_some(skills_dir)
 }
 
 /// Filter candidate paths to existing directories, preserving order and
@@ -463,26 +463,26 @@ pub fn existing_skill_dirs(candidates: impl IntoIterator<Item = PathBuf>) -> Vec
 }
 
 /// Classify a configured `skills_dir`: owned only when it is exactly a
-/// CodeWhale project/global root; compatible harness paths stay read-only.
+/// GhostyCode project/global root; compatible harness paths stay read-only.
 #[must_use]
 pub fn classify_configured_skills_dir(
     workspace: &Path,
     home_dir: Option<&Path>,
     skills_dir: &Path,
 ) -> (SkillRootKind, SkillRootAccess, SkillScope) {
-    let project_owned = workspace.join(".codewhale").join("skills");
+    let project_owned = workspace.join(".ghosty").join("skills");
     if paths_refer_to_same_dir(&project_owned, skills_dir) {
         return (
-            SkillRootKind::CodeWhaleProject,
+            SkillRootKind::GhostyCodeProject,
             SkillRootAccess::WritableOwned,
             SkillScope::Project,
         );
     }
     if let Some(home) = home_dir {
-        let global_owned = home.join(".codewhale").join("skills");
+        let global_owned = home.join(".ghosty").join("skills");
         if paths_refer_to_same_dir(&global_owned, skills_dir) {
             return (
-                SkillRootKind::CodeWhaleGlobal,
+                SkillRootKind::GhostyCodeGlobal,
                 SkillRootAccess::WritableOwned,
                 SkillScope::Global,
             );
@@ -554,7 +554,7 @@ pub fn paths_refer_to_same_dir(left: &Path, right: &Path) -> bool {
     }
 }
 
-fn codewhale_project_root_is_inside_workspace(workspace: &Path, skills_dir: &Path) -> bool {
+fn ghosty_project_root_is_inside_workspace(workspace: &Path, skills_dir: &Path) -> bool {
     let Ok(canonical_workspace) = fs::canonicalize(workspace) else {
         return false;
     };
@@ -761,9 +761,9 @@ mod tests {
         write_dir(&workspace.join("skills"));
         write_dir(&workspace.join(".claude").join("skills"));
         write_dir(&workspace.join(".cursor").join("skills"));
-        write_dir(&workspace.join(".codewhale").join("skills"));
+        write_dir(&workspace.join(".ghosty").join("skills"));
         write_dir(&workspace.join(".codex").join("skills"));
-        write_dir(&home.join(".codewhale").join("skills"));
+        write_dir(&home.join(".ghosty").join("skills"));
 
         let catalog = SkillRootCatalog::build(&workspace, Some(&home), None);
         let dirs = catalog.runtime_directories(&workspace, SkillDiscoveryMode::Compatible);
@@ -775,8 +775,8 @@ mod tests {
                 workspace.join("skills"),
                 workspace.join(".claude").join("skills"),
                 workspace.join(".cursor").join("skills"),
-                workspace.join(".codewhale").join("skills"),
-                home.join(".codewhale").join("skills"),
+                workspace.join(".ghosty").join("skills"),
+                home.join(".ghosty").join("skills"),
             ]
         );
         assert!(
@@ -792,9 +792,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        write_dir(&workspace.join(".codewhale").join("skills"));
+        write_dir(&workspace.join(".ghosty").join("skills"));
         write_dir(&workspace.join(".codex").join("skills"));
-        write_dir(&home.join(".codewhale").join("skills"));
+        write_dir(&home.join(".ghosty").join("skills"));
         write_dir(&home.join(".codex").join("skills"));
 
         let catalog = SkillRootCatalog::build(&workspace, Some(&home), None);
@@ -812,13 +812,13 @@ mod tests {
     }
 
     #[test]
-    fn owned_roots_are_writable_and_codewhale_only() {
+    fn owned_roots_are_writable_and_ghosty_only() {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
         write_dir(&workspace.join(".agents").join("skills"));
-        write_dir(&workspace.join(".codewhale").join("skills"));
-        write_dir(&home.join(".codewhale").join("skills"));
+        write_dir(&workspace.join(".ghosty").join("skills"));
+        write_dir(&home.join(".ghosty").join("skills"));
         write_dir(&home.join(".agents").join("skills"));
 
         let catalog = SkillRootCatalog::build(&workspace, Some(&home), None);
@@ -826,12 +826,12 @@ mod tests {
         assert_eq!(owned.len(), 2);
         assert!(owned.iter().all(|r| r.is_writable_owned()));
 
-        let runtime = catalog.runtime_directories(&workspace, SkillDiscoveryMode::CodeWhaleOnly);
+        let runtime = catalog.runtime_directories(&workspace, SkillDiscoveryMode::GhostyCodeOnly);
         assert_eq!(
             runtime,
             vec![
-                workspace.join(".codewhale").join("skills"),
-                home.join(".codewhale").join("skills"),
+                workspace.join(".ghosty").join("skills"),
+                home.join(".ghosty").join("skills"),
             ]
         );
     }
@@ -859,15 +859,15 @@ mod tests {
     fn safe_display_path_prefers_home_then_workspace() {
         let home = PathBuf::from("/home/user");
         let workspace = home.join("proj");
-        let path = home.join(".codewhale").join("skills");
+        let path = home.join(".ghosty").join("skills");
         assert_eq!(
             safe_display_path(&path, Some(&workspace), Some(&home)),
-            "~/.codewhale/skills"
+            "~/.ghosty/skills"
         );
-        let project = workspace.join(".codewhale").join("skills");
+        let project = workspace.join(".ghosty").join("skills");
         assert_eq!(
             safe_display_path(&project, Some(&workspace), Some(&home)),
-            "<workspace>/.codewhale/skills"
+            "<workspace>/.ghosty/skills"
         );
     }
 }

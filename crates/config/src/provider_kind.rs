@@ -2,7 +2,7 @@
 //! kinds, their serde aliases, and identity helpers (`all`, `as_str`, `parse`,
 //! `provider`). Extracted verbatim from `lib.rs` to separate provider identity
 //! from config schema/loading; re-exported at the crate root so
-//! `codewhale_config::ProviderKind` is unchanged. Behavior is identical.
+//! `ghosty_config::ProviderKind` is unchanged. Behavior is identical.
 
 use serde::{Deserialize, Serialize};
 
@@ -92,6 +92,11 @@ pub enum ProviderKind {
         alias = "big-model"
     )]
     Zai,
+    /// EasyBits.cloud — revendedor de DeepSeek. Proveedor propio (no alias de
+    /// `Deepseek`) para que el modo sobreviva a persistirse en disco: escribir
+    /// `as_str()` de un alias devolvía `"deepseek"` y perdía el modo al arrancar.
+    #[serde(alias = "easy-bits", alias = "easy_bits", alias = "eb")]
+    Easybits,
     #[serde(
         alias = "step-fun",
         alias = "step_fun",
@@ -232,7 +237,7 @@ impl ProviderKind {
     /// stay on the enum for serde and `provider_for_kind`, but they are not
     /// first-class catalog rows. Plan is `mode` / base_url; dialect is
     /// `wire = openai|anthropic` on the primary provider config.
-    pub const ALL: [Self; 42] = [
+    pub const ALL: [Self; 43] = [
         Self::Deepseek,
         Self::NvidiaNim,
         Self::Openai,
@@ -259,6 +264,7 @@ impl ProviderKind {
         Self::Anthropic,
         Self::Openmodel,
         Self::Zai,
+        Self::Easybits,
         Self::Stepfun,
         Self::Minimax,
         Self::Deepinfra,
@@ -318,7 +324,7 @@ impl ProviderKind {
     /// onto it so pickers show one row per vendor. That collapse must not
     /// decide which config table holds the user's credentials: TOML serde
     /// keeps the legacy kind for `provider = "deepseek-anthropic"`, so env
-    /// (`CODEWHALE_PROVIDER`) and `config set provider` must resolve the same
+    /// (`GHOSTY_PROVIDER`) and `config set provider` must resolve the same
     /// way or the user's own named table is orphaned with the key present.
     ///
     /// An exact canonical-id or `provider_config_key` match across the full

@@ -107,10 +107,10 @@ edit_file / write_file / apply_patch success
 ## Verification
 
 ```
-cargo test -p codewhale-tui --bin codewhale-tui lsp::
+cargo test -p ghosty-tui --bin ghosty-tui lsp::
 # 32 tests passed (3 new: detects_php_extension, language_ids_for_php,
 # server_for_php_is_intelephense)
-cargo clippy -p codewhale-tui --bin codewhale-tui
+cargo clippy -p ghosty-tui --bin ghosty-tui
 # lsp module: zero new warnings
 ```
 

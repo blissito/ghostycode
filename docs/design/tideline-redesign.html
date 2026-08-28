@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <title>Codewhale — terminal workbench & Ratatui wiring</title>
+  <title>Ghosty — terminal workbench & Ratatui wiring</title>
   <style>
     /*
-      CODEWHALE TIDELINE / WORKBENCH
+      GHOSTY TIDELINE / WORKBENCH
       This is a self-contained visual + interaction contract, not a marketing
       page. The terminal frame simulates a host terminal; production Ratatui
       renders Color::Reset for Match Terminal, Dark, and Light backgrounds.
@@ -291,7 +291,7 @@
   <main class="page" id="top">
     <header class="hero">
       <div>
-        <div class="eyebrow">Codewhale visual + interaction contract</div>
+        <div class="eyebrow">Ghosty visual + interaction contract</div>
         <h1>A normal coding workbench.<br>One unmistakable whale.</h1>
         <p class="intro">Conversation stays primary. A pod, receipts, context, and settings are there when the work needs them. The surface inherits the terminal that brought it; Deepsea is an explicit atmosphere, not a default wallpaper.</p>
       </div>
@@ -332,9 +332,9 @@
 
         <div class="terminal" id="terminal" data-background="Color::Reset">
           <div class="topbar">
-            <button class="brand-lockup" type="button" data-target="brand.primary" title="Codewhale identity"><span class="brand-cell" aria-hidden="true">▚△▞</span>CODEWHALE</button>
+            <button class="brand-lockup" type="button" data-target="brand.primary" title="Ghosty identity"><span class="brand-cell" aria-hidden="true">▚△▞</span>GHOSTY</button>
             <span class="divider"></span>
-            <button type="button" data-target="header.workspace"><span class="label">folder</span> <span class="path">~/codewhale</span></button>
+            <button type="button" data-target="header.workspace"><span class="label">folder</span> <span class="path">~/ghosty</span></button>
             <span class="divider collapse-on-small"></span>
             <button type="button" data-target="header.route"><span class="label">route</span> <span class="value">main</span></button>
             <span class="divider collapse-on-narrow"></span>
@@ -376,7 +376,7 @@
                   </article>
                   <article class="turn assistant">
                     <span class="turn-marker" aria-hidden="true">▚△▞</span>
-                    <div class="turn-head"><strong>CODEWHALE</strong><time>14:41:02</time></div>
+                    <div class="turn-head"><strong>GHOSTY</strong><time>14:41:02</time></div>
                     <div class="turn-copy">I’ll prepare release 0.9.12. Spawning a pod to run checks in parallel.<br><span class="dim">Plan: fix CI, audit contributor ancestry, draft release notes.</span></div>
 
                     <button type="button" class="pod-block" data-target="pod.formation">
@@ -408,7 +408,7 @@
                 </section>
                 <form class="composer" data-target="composer.input" onsubmit="return false">
                   <span class="prompt">›</span>
-                  <button type="button" data-target="composer.input"><span class="placeholder">Ask Codewhale to build, fix, verify…</span></button>
+                  <button type="button" data-target="composer.input"><span class="placeholder">Ask Ghosty to build, fix, verify…</span></button>
                   <button type="button" class="send" data-target="composer.send" title="Send">↑</button>
                   <div class="composer-hints"><b>↵</b> send &nbsp; <b>⇧↵</b> new line &nbsp; <b>esc</b> interrupt</div>
                 </form>
@@ -420,7 +420,7 @@
           <div class="screen" id="screen-startup">
             <div class="startup">
               <div class="startup-center">
-                <button type="button" class="startup-mark" data-target="brand.startup" aria-label="Codewhale fluke asset slot">▚△▞</button>
+                <button type="button" class="startup-mark" data-target="brand.startup" aria-label="Ghosty fluke asset slot">▚△▞</button>
                 <h2>What are we working on?</h2>
                 <p>Folder and tool access are asked when needed.</p>
               </div>
@@ -437,7 +437,7 @@
                   <button type="button" data-target="settings.theme"><span class="tone-color" style="color:var(--gold)">◒</span> Theme<span>Match terminal.</span></button>
                   <button type="button" data-target="startup.help"><span class="tone-color" style="color:var(--gold)">?</span> Help<span>Shortcuts & docs.</span></button>
                 </div>
-                <form class="composer" data-target="composer.input" onsubmit="return false" style="margin-top:14px"><span class="prompt">›</span><button type="button" data-target="composer.input"><span class="placeholder">Ask Codewhale anything…</span></button><button type="button" class="send" data-target="composer.send">↑</button><div class="composer-hints"><b>↵</b> send &nbsp; <b>⇧↵</b> new line</div></form>
+                <form class="composer" data-target="composer.input" onsubmit="return false" style="margin-top:14px"><span class="prompt">›</span><button type="button" data-target="composer.input"><span class="placeholder">Ask Ghosty anything…</span></button><button type="button" class="send" data-target="composer.send">↑</button><div class="composer-hints"><b>↵</b> send &nbsp; <b>⇧↵</b> new line</div></form>
               </section>
             </div>
             <div class="footer"><span><span class="label">route</span> <span class="route">main</span></span><span class="sep">•</span><span><span class="label">model</span> <span style="color:var(--gold)">not connected</span></span><span class="keys"><span class="label">tab</span> next &nbsp; <span class="label">enter</span> choose &nbsp; <span class="label">esc</span> back</span></div>
@@ -477,7 +477,7 @@
                 <div class="preview-label">Live preview — match terminal</div>
                 <div class="preview-terminal" id="settings-preview-terminal">
                   <div class="preview-message"><strong>USER</strong> <span class="label">14:41:02</span><br>Make release 0.9.12 ready.</div>
-                  <div class="preview-message"><span class="name">CODEWHALE</span> <span class="label">14:41:02</span><br>I’ll prepare release 0.9.12. Spawning a pod to run checks in parallel.</div>
+                  <div class="preview-message"><span class="name">GHOSTY</span> <span class="label">14:41:02</span><br>I’ll prepare release 0.9.12. Spawning a pod to run checks in parallel.</div>
                   <div class="preview-mini-pod"><span class="name">⌁ pod formation</span> launched launch pod with 3 whales<br>◌ Scout &nbsp; audit contributor PRs &nbsp; <span class="pass">(2 receipts)</span><br>◌ Builder &nbsp; ci-repair in progress<br><span class="pass">✓ Verifier</span> &nbsp; exact-head checks passed<br><span class="fail">! Builder</span> &nbsp; tests failed in ci-repair job<br><span class="think">Reasoning:</span> root cause appears to be flaky network mock.</div>
                   <div class="preview-context">context <span class="value">61%</span> ▰▰▰▱▱</div>
                 </div>
@@ -536,7 +536,7 @@
     </nav>
 
     <section class="doc-section" id="principles">
-      <h2>What makes it Codewhale</h2>
+      <h2>What makes it Ghosty</h2>
       <p>It should feel as legible as Codex, Claude Code, or a sober native workbench before it feels branded. The brand arrives through timing, language, a small current of cyan, and the fluke at moments of authorship or return.</p>
       <div class="rule-grid">
         <article class="rule"><b>Host first</b><p>Match Terminal, Dark, and Light use <code>Color::Reset</code> for the background. Their foreground palette adapts; the user’s terminal remains the surface.</p></article>
@@ -550,7 +550,7 @@
 
     <section class="doc-section" id="glyphs">
       <h2>Small whale grammar</h2>
-      <p>The fluke is the new mark. It appears at the wordmark, startup, a Codewhale turn, and a settled resurface—not in every button or table row. The rest of the glyphs are working notation. All retain an ASCII fallback in the terminal projection.</p>
+      <p>The fluke is the new mark. It appears at the wordmark, startup, a Ghosty turn, and a settled resurface—not in every button or table row. The rest of the glyphs are working notation. All retain an ASCII fallback in the terminal projection.</p>
       <div class="glyph-grid">
         <article class="glyph-card"><div class="glyph-sample">▚△▞</div><b>Fluke</b><p>Identity and a successful resurface. Source is an approved asset; the terminal gets a cell projection.</p></article>
         <article class="glyph-card"><div class="glyph-sample">⌁</div><b>Pod formation</b><p>Parallel work beginning. Never a generic button icon.</p></article>
@@ -603,7 +603,7 @@
 
   <script id="ratatui-wiring-manifest" type="application/json">
   {
-    "schema": "codewhale.tideline.wiring.v1",
+    "schema": "ghosty.tideline.wiring.v1",
     "backgroundPolicy": {
       "match-terminal": "Color::Reset",
       "dark": "Color::Reset",

@@ -438,7 +438,7 @@ mod tests {
         let _env = crate::test_support::lock_test_env();
         // SAFETY: serialized behind the process-wide test env lock.
         unsafe {
-            std::env::set_var("CODEWHALE_GH_BIN", &bin);
+            std::env::set_var("GHOSTY_GH_BIN", &bin);
         }
         let result = close_github_thread(
             close_input_with_dry_run(json!("true")),
@@ -447,7 +447,7 @@ mod tests {
         );
         // SAFETY: same lock; restores the process environment.
         unsafe {
-            std::env::remove_var("CODEWHALE_GH_BIN");
+            std::env::remove_var("GHOSTY_GH_BIN");
         }
 
         let invocations = std::fs::read_to_string(&log).unwrap_or_default();
@@ -475,7 +475,7 @@ mod tests {
         let _env = crate::test_support::lock_test_env();
         // SAFETY: serialized behind the process-wide test env lock.
         unsafe {
-            std::env::set_var("CODEWHALE_GH_BIN", &bin);
+            std::env::set_var("GHOSTY_GH_BIN", &bin);
         }
         let result = close_github_thread(
             close_input_with_dry_run(json!(true)),
@@ -484,7 +484,7 @@ mod tests {
         );
         // SAFETY: same lock; restores the process environment.
         unsafe {
-            std::env::remove_var("CODEWHALE_GH_BIN");
+            std::env::remove_var("GHOSTY_GH_BIN");
         }
 
         let result = result.expect("a real bool dry_run stays a dry run");

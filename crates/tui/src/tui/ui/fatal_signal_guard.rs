@@ -22,7 +22,7 @@
 //! - Installed only when stdout is a TTY, so piped/embedded surfaces never
 //!   get escape bytes injected into their output.
 //!
-//! The marker file (`.codewhale/crashes/last-fatal-signal.log`, appended,
+//! The marker file (`.ghosty/crashes/last-fatal-signal.log`, appended,
 //! never truncated) records which signal fired. The kernel's mtime on the
 //! file timestamps the crash without any time formatting in the handler. On
 //! the next real-world #5424-class report, that one line distinguishes an
@@ -73,7 +73,7 @@ pub(crate) fn install_fatal_signal_guard() {
             return;
         }
         if let Some(home) = crate::config::effective_home_dir() {
-            let dir = home.join(".codewhale").join("crashes");
+            let dir = home.join(".ghosty").join("crashes");
             // Pre-create so the handler's open(2) cannot fail on ENOENT and
             // so a first crash needs no directory creation mid-signal.
             if std::fs::create_dir_all(&dir).is_ok() {

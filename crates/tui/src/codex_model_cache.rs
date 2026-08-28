@@ -1,7 +1,7 @@
 //! Secret-free OpenAI Codex / ChatGPT OAuth model roster discovery.
 //!
 //! The Codex CLI keeps its account-scoped roster in `models_cache.json`.
-//! CodeWhale reads only the cache timestamp and model identifiers; it never
+//! GhostyCode reads only the cache timestamp and model identifiers; it never
 //! opens the adjacent OAuth credential file and never logs cache contents.
 
 use std::collections::HashSet;
@@ -18,7 +18,7 @@ use crate::config::DEFAULT_OPENAI_CODEX_MODEL;
 
 const MODEL_CACHE_FILE: &str = "models_cache.json";
 const MAX_MODEL_CACHE_BYTES: u64 = 4 * 1024 * 1024;
-/// Codex refreshes its own cache much more frequently. CodeWhale is an offline
+/// Codex refreshes its own cache much more frequently. GhostyCode is an offline
 /// consumer, so it accepts a last-known account roster for one day before
 /// falling back to the single conservative compatibility model.
 const MODEL_CACHE_MAX_AGE: Duration = Duration::hours(24);

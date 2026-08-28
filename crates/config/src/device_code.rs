@@ -1,5 +1,5 @@
-//! One RFC 8628 device-authorization polling loop, shared by every Codewhale
-//! device-code flow (xAI/Grok device login, Codewhale account login).
+//! One RFC 8628 device-authorization polling loop, shared by every Ghosty
+//! device-code flow (xAI/Grok device login, Ghosty account login).
 //!
 //! Ported from pi (<https://github.com/badlogic/pi-mono>), MIT licensed,
 //! Copyright (c) 2025 Mario Zechner — see
@@ -94,7 +94,7 @@ impl DeviceCodePoll {
     ///
     /// Device-code endpoints that answer `authorization_pending` (xAI) want
     /// this; endpoints whose first response is already meaningful (the
-    /// Codewhale account service, which returns HTTP 202 while pending) poll
+    /// Ghosty account service, which returns HTTP 202 while pending) poll
     /// immediately and sleep afterwards.
     #[must_use]
     pub fn wait_before_first_poll(mut self, wait: bool) -> Self {
@@ -184,7 +184,7 @@ impl DeviceCodePoll {
 /// Zechner): the URI comes straight off the wire and is passed to the platform
 /// "open this" call, so a malicious or compromised response could otherwise
 /// launch `file:`, a custom app scheme, or a helper with attacker-chosen
-/// arguments. pi requires `https:`; Codewhale additionally allows `http:` on a
+/// arguments. pi requires `https:`; Ghosty additionally allows `http:` on a
 /// loopback host, which is what self-hosted issuers and the device-code tests
 /// use — matching the loopback allowance the account login already makes.
 ///
@@ -206,7 +206,7 @@ pub fn validate_browser_verification_uri(raw: &str, context: &str) -> Result<Str
 }
 
 /// Minimal scheme/host/credential split, so this module stays free of a URL
-/// dependency (`codewhale-config` deliberately has no `reqwest`/`url`).
+/// dependency (`ghosty-config` deliberately has no `reqwest`/`url`).
 fn url_scheme_and_host(raw: &str) -> Result<(String, String, bool), ()> {
     let (scheme, rest) = raw.split_once("://").ok_or(())?;
     if scheme.is_empty()

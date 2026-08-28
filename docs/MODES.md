@@ -2,7 +2,7 @@
 
 > 阅读简体中文版：[zh_hans/MODES.md](zh_hans/MODES.md)
 
-Codewhale has three related concepts:
+Ghosty has three related concepts:
 
 - **TUI mode**: what kind of visible interaction you're in (Plan/Work/Operate).
 - **Permission posture**: how aggressively the UI asks before executing tools.
@@ -124,7 +124,7 @@ thread resume semantics.
 Choosing a mode interactively also sets the mode a fresh session starts in.
 Tab/Shift+Tab cycling, the `Alt+A` / `Alt+P` / `Alt+Y` shortcuts, the hotbar's
 Plan/Work/Operate actions, and `/mode` all write `default_mode` to
-`~/.codewhale/settings.toml`, so switching to Operate survives a restart. The
+`~/.ghosty/settings.toml`, so switching to Operate survives a restart. The
 write happens off the event loop; if it fails, the TUI says so in a warning
 toast rather than reverting silently on the next launch.
 
@@ -141,7 +141,7 @@ alias, never a startup mode.
 
 Re-selecting the mode you are already in is not a no-op. After a restored
 session the live mode and `default_mode` routinely disagree, so choosing the
-live mode again is how you make it durable; Codewhale confirms with a
+live mode again is how you make it durable; Ghosty confirms with a
 "saved as startup default" receipt rather than reporting "already in that mode".
 
 While a turn is running, every change to the live route is refused — mode,
@@ -151,8 +151,8 @@ now includes the slash surfaces (`/mode`, `/model`, `/config <key> <value>`,
 Esc to interrupt first. The restart-only `default_mode` key is exempt, because
 it does not touch the running turn.
 
-Codewhale writes `settings.toml` under a lock that spans processes, and replaces
-the file atomically, so a second Codewhale instance on the same home directory
+Ghosty writes `settings.toml` under a lock that spans processes, and replaces
+the file atomically, so a second Ghosty instance on the same home directory
 cannot lose your selection or read a half-written file. At exit, queued writes
 are flushed before the terminal is restored; anything that failed is printed on
 the way out instead of disappearing with the alternate screen.
@@ -186,7 +186,7 @@ at runtime:
 
 Legacy note: `/set approval_mode ...` was retired in favor of `/config`.
 
-- `suggest` (**Ask**, default): tool approvals may interrupt, and Codewhale asks
+- `suggest` (**Ask**, default): tool approvals may interrupt, and Ghosty asks
   when an unresolved user choice materially changes authority, cost, scope, or
   outcome.
 - `auto` (**Auto-Review**): the fully autonomous posture. It never opens a user
@@ -214,7 +214,7 @@ The LLM reviewer is closest to OpenAI Codex's experimental Auto-Review at
 commit [`6fc6b9d6d2580d62622fc9884b5f5707f6505a5e`](https://github.com/openai/codex/tree/6fc6b9d6d2580d62622fc9884b5f5707f6505a5e).
 Codex's [guardian entry point](https://github.com/openai/codex/blob/6fc6b9d6d2580d62622fc9884b5f5707f6505a5e/codex-rs/core/src/guardian/mod.rs)
 reconstructs conversation context and runs a dedicated review session.
-Codewhale deliberately adopts only the exact-action structured decision,
+Ghosty deliberately adopts only the exact-action structured decision,
 90-second deadline, and fail-closed result. It does not copy Codex's transcript
 reconstruction, user-authorization score, reviewer tools, retries, persistent
 review session, or denial ledger.
@@ -225,7 +225,7 @@ also has no LLM reviewer. Its ordered
 [permission policy](https://github.com/MoonshotAI/kimi-code/blob/1414d4602898f406e540b23342cb18db23ff9efc/packages/agent-core-v2/src/agent/permissionPolicy/permissionPolicyService.ts)
 applies explicit deny rules and then its
 [Auto policy](https://github.com/MoonshotAI/kimi-code/blob/1414d4602898f406e540b23342cb18db23ff9efc/packages/agent-core-v2/src/agent/permissionPolicy/policies/auto-mode-approve.ts)
-returns `approve` directly. Codewhale borrows Kimi's no-question autonomous UX,
+returns `approve` directly. Ghosty borrows Kimi's no-question autonomous UX,
 not that blanket approval rule.
 
 The sandbox and escalation baseline is grounded in DeepSeek Harness
@@ -240,7 +240,7 @@ unavailable answerer; and its
 [sandbox result contract](https://github.com/deepseek-ai/deepseek-harness/blob/47f943859bef60e4160492346772ded9b24f765a/packages/shell/bash-sandbox/README.md)
 tells the model to retry a denied command exactly once with the narrowest wider
 mode plus a justification. DeepSeek Harness does not add an LLM reviewer to
-that path. Codewhale's autonomous posture adds only the single stateless
+that path. Ghosty's autonomous posture adds only the single stateless
 guardian request described above; deterministic hard blocks remain
 non-bypassable.
 - `bypass` (**Full Access**): ordinary tool calls do not show approval prompts,
@@ -315,14 +315,14 @@ See `MCP.md`.
 
 ## Related CLI Flags
 
-Run `codewhale --help` for the canonical list. Common flags:
+Run `ghosty --help` for the canonical list. Common flags:
 
 - `-p, --prompt <TEXT>`: one-shot prompt mode (prints and exits)
-- `codewhale exec --auto --output-format stream-json <PROMPT>`: run the tool-backed non-interactive agent and emit one JSON object per line for harnesses and backend wrappers. Exit codes: `0` on success, `1` for genuine task/agent failures, `75` (`EX_TEMPFAIL`) when the turn ended on a retryable infrastructure failure (provider/transport `network`/`timeout` after all in-session retries) so harnesses can tell a retryable infra exit apart from a task failure; the terminal stream `metadata` event's `error_category` carries the same classification
-- `codewhale exec --resume <ID|PREFIX> <PROMPT>` / `--session-id <ID|PREFIX>`: continue a saved session non-interactively
-- `codewhale exec --continue <PROMPT>`: continue the most recent saved session for this workspace non-interactively
-- `codewhale fork <ID|PREFIX>` / `codewhale fork --last`: copy a saved session into a new sibling session; forked sessions retain additive parent-session metadata and show that lineage in session listings
-- `--model <MODEL>`: when using the `codewhale` facade, forward a DeepSeek model override to the TUI
+- `ghosty exec --auto --output-format stream-json <PROMPT>`: run the tool-backed non-interactive agent and emit one JSON object per line for harnesses and backend wrappers. Exit codes: `0` on success, `1` for genuine task/agent failures, `75` (`EX_TEMPFAIL`) when the turn ended on a retryable infrastructure failure (provider/transport `network`/`timeout` after all in-session retries) so harnesses can tell a retryable infra exit apart from a task failure; the terminal stream `metadata` event's `error_category` carries the same classification
+- `ghosty exec --resume <ID|PREFIX> <PROMPT>` / `--session-id <ID|PREFIX>`: continue a saved session non-interactively
+- `ghosty exec --continue <PROMPT>`: continue the most recent saved session for this workspace non-interactively
+- `ghosty fork <ID|PREFIX>` / `ghosty fork --last`: copy a saved session into a new sibling session; forked sessions retain additive parent-session metadata and show that lineage in session listings
+- `--model <MODEL>`: when using the `ghosty` facade, forward a DeepSeek model override to the TUI
 - `--workspace <DIR>`: workspace root for file tools
 - `-r, --resume <ID|PREFIX|latest>`: resume a saved session
 - `-c, --continue`: resume the most recent session in this workspace
@@ -334,9 +334,9 @@ Run `codewhale --help` for the canonical list. Common flags:
 
 ## Branching and Rollback
 
-Codewhale has three related but intentionally separate recovery paths:
+Ghosty has three related but intentionally separate recovery paths:
 
-- `codewhale fork <ID>` creates a new saved session from an existing saved
+- `ghosty fork <ID>` creates a new saved session from an existing saved
   conversation and records the source session id. This is the safe way to
   explore a different answer path without overwriting the original session.
 - Esc-Esc backtrack rewinds the live transcript to a previous user prompt and

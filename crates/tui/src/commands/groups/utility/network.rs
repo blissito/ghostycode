@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use toml::Value;
 
-use codewhale_command_contract::handler::CommandHandler;
-use codewhale_command_contract::metadata::{CommandInfo, RegisterCommand};
+use ghosty_command_contract::handler::CommandHandler;
+use ghosty_command_contract::metadata::{CommandInfo, RegisterCommand};
 
 use crate::commands::CommandResult;
 
@@ -92,7 +92,7 @@ enum NetworkEdit {
 /// Resolve the active config document path through the leaf configuration
 /// crate (acyclic; no TUI persistence helper).
 fn config_toml_path() -> anyhow::Result<PathBuf> {
-    codewhale_config::resolve_config_path(None)
+    ghosty_config::resolve_config_path(None)
 }
 
 fn list_policy() -> anyhow::Result<String> {
@@ -124,7 +124,7 @@ fn list_policy() -> anyhow::Result<String> {
 
 fn update_host(edit: NetworkEdit, host: &str) -> anyhow::Result<String> {
     let path = config_toml_path()?;
-    codewhale_config::mutate_config_document(&path, |doc| {
+    ghosty_config::mutate_config_document(&path, |doc| {
         ensure_network_defaults(doc)?;
         let mut allow = document_string_array(doc, "allow")?;
         let mut deny = document_string_array(doc, "deny")?;
@@ -142,12 +142,12 @@ fn update_host(edit: NetworkEdit, host: &str) -> anyhow::Result<String> {
                 remove_host(&mut deny, host);
             }
         }
-        codewhale_config::set_config_document_value(
+        ghosty_config::set_config_document_value(
             doc,
             &["network", "allow"],
             string_array_value(&allow),
         )?;
-        codewhale_config::set_config_document_value(
+        ghosty_config::set_config_document_value(
             doc,
             &["network", "deny"],
             string_array_value(&deny),
@@ -173,9 +173,9 @@ fn update_default(value: &str) -> anyhow::Result<String> {
     };
 
     let path = config_toml_path()?;
-    codewhale_config::mutate_config_document(&path, |doc| {
+    ghosty_config::mutate_config_document(&path, |doc| {
         ensure_network_defaults(doc)?;
-        codewhale_config::set_config_document_value(doc, &["network", "default"], normalized)
+        ghosty_config::set_config_document_value(doc, &["network", "default"], normalized)
     })?;
 
     Ok(format!(
@@ -193,7 +193,7 @@ fn load_config_doc(path: &Path) -> anyhow::Result<Value> {
     toml::from_str(&raw).map_err(|_| {
         anyhow::anyhow!(
             "failed to parse config at {}; file contents were omitted",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         )
     })
 }
@@ -205,7 +205,7 @@ fn ensure_network_defaults(doc: &mut toml_edit::DocumentMut) -> anyhow::Result<(
         .and_then(|table| table.get("default"))
         .is_none()
     {
-        codewhale_config::set_config_document_value(doc, &["network", "default"], "prompt")?;
+        ghosty_config::set_config_document_value(doc, &["network", "default"], "prompt")?;
     }
     if doc
         .get("network")
@@ -213,7 +213,7 @@ fn ensure_network_defaults(doc: &mut toml_edit::DocumentMut) -> anyhow::Result<(
         .and_then(|table| table.get("audit"))
         .is_none()
     {
-        codewhale_config::set_config_document_value(doc, &["network", "audit"], true)?;
+        ghosty_config::set_config_document_value(doc, &["network", "audit"], true)?;
     }
     Ok(())
 }
@@ -319,7 +319,7 @@ mod tests {
     struct EnvGuard {
         _home: crate::test_support::EnvVarGuard,
         _userprofile: crate::test_support::EnvVarGuard,
-        _codewhale_config_path: crate::test_support::EnvVarGuard,
+        _ghosty_config_path: crate::test_support::EnvVarGuard,
         _deepseek_config_path: crate::test_support::EnvVarGuard,
         _lock: crate::test_support::TestEnvLock,
     }
@@ -331,8 +331,8 @@ mod tests {
             Self {
                 _home: crate::test_support::EnvVarGuard::set("HOME", home),
                 _userprofile: crate::test_support::EnvVarGuard::set("USERPROFILE", home),
-                _codewhale_config_path: crate::test_support::EnvVarGuard::set(
-                    "CODEWHALE_CONFIG_PATH",
+                _ghosty_config_path: crate::test_support::EnvVarGuard::set(
+                    "GHOSTY_CONFIG_PATH",
                     &config_path,
                 ),
                 _deepseek_config_path: crate::test_support::EnvVarGuard::set(

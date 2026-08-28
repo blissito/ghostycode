@@ -193,11 +193,11 @@ describe("navigation parity and accessibility", () => {
       ).toEqual(reference);
       const project = footerProjectLinks(locale, getChrome(locale));
       expect(project.map((l) => l.href), `${locale} footer project routes`).toEqual([
-        "https://github.com/Hmbown/CodeWhale",
-        "https://github.com/Hmbown/CodeWhale/issues",
+        "https://github.com/blissito/ghostycode",
+        "https://github.com/blissito/ghostycode/issues",
         "https://discord.gg/37gfS3ksug",
         `/${locale}/contribute`,
-        "https://github.com/Hmbown/CodeWhale/blob/main/LICENSE",
+        "https://github.com/blissito/ghostycode/blob/main/LICENSE",
       ]);
     }
   });
@@ -279,7 +279,7 @@ describe("navigation parity and accessibility", () => {
     const license = footerProjectLinks("en", getChrome("en")).at(-1);
     expect(license).toEqual({
       label: "MIT license",
-      href: "https://github.com/Hmbown/CodeWhale/blob/main/LICENSE",
+      href: "https://github.com/blissito/ghostycode/blob/main/LICENSE",
     });
     expect(footer).toContain("footerProductLinks(locale, chrome)");
     expect(footer).toContain("footerProjectLinks(locale, chrome)");
@@ -305,7 +305,7 @@ describe("homepage integration", () => {
     // (plain "Unreleased", per docs/design/WEB_VOICE.md).
     expect(homepage).toContain("d.sourceCandidate");
     expect(getHome("en").sourceCandidate).toBe("Unreleased");
-    expect(homepage).toContain('src="/codewhale-tui.webp"');
+    expect(homepage).toContain('src="/ghosty-tui.webp"');
     for (const label of ["Plan", "Act", "Operate", "Ask", "Auto-Review", "Full Access"]) {
       expect(homepage).toContain(label);
     }

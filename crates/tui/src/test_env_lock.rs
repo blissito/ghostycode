@@ -234,7 +234,7 @@ mod tests {
     /// for the env barrier: the thread holding the barrier may itself be waiting
     /// on that initializer. Both threads then wedge, and libtest has no per-test
     /// timeout, so the entire test binary hangs — reproduced locally as
-    /// `cargo test -p codewhale-tui --lib -- shell` never returning.
+    /// `cargo test -p ghosty-tui --lib -- shell` never returning.
     #[test]
     fn uncontended_read_returns_while_another_thread_holds_the_barrier() {
         let (held_tx, held_rx) = mpsc::channel();

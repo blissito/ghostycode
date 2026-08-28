@@ -44,7 +44,7 @@ fn create_test_app(root: &Path) -> (App, TempDir) {
 }
 
 fn write_bundle(root: &Path) {
-    let bundle = root.join(".codewhale/plugins/demo");
+    let bundle = root.join(".ghosty/plugins/demo");
     fs::create_dir_all(bundle.join("skills/hello")).unwrap();
     fs::write(
         bundle.join("plugin.toml"),
@@ -59,7 +59,7 @@ fn write_bundle(root: &Path) {
 }
 
 fn write_mcp_review_bundle(root: &Path) {
-    let bundle = root.join(".codewhale/plugins/review-mcp");
+    let bundle = root.join(".ghosty/plugins/review-mcp");
     fs::create_dir_all(&bundle).unwrap();
     fs::write(bundle.join("server.js"), "// reviewed entrypoint\n").unwrap();
     fs::write(
@@ -94,7 +94,7 @@ network_hosts = ["example.invalid"]
 fn bare_plugin_command_opens_unified_extensions_modal() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", root.path().join("home"));
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", root.path().join("home"));
     let (mut app, _temp) = create_test_app(root.path());
 
     let result = plugins(&mut app, None);
@@ -112,8 +112,8 @@ fn bare_plugin_command_opens_unified_extensions_modal() {
 fn list_show_validate_are_read_only_and_label_legacy_tools() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let codewhale_home = root.path().join("home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = root.path().join("home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     write_bundle(root.path());
     let (mut app, _temp) = create_test_app(root.path());
     fs::write(
@@ -129,7 +129,7 @@ fn list_show_validate_are_read_only_and_label_legacy_tools() {
         "api_key = [\"must-not-be-re-read\"\n",
     )
     .unwrap();
-    let state_path = codewhale_home.join("plugins/state.json");
+    let state_path = ghosty_home.join("plugins/state.json");
 
     for arg in [Some("list"), Some("show demo"), Some("validate")] {
         let result = plugins(&mut app, arg);
@@ -146,8 +146,8 @@ fn list_show_validate_are_read_only_and_label_legacy_tools() {
 fn suggest_ranks_installed_plugins_without_trusting_or_enabling_them() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let codewhale_home = root.path().join("home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = root.path().join("home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     write_bundle(root.path());
     let (mut app, _temp) = create_test_app(root.path());
 
@@ -167,7 +167,7 @@ fn suggest_ranks_installed_plugins_without_trusting_or_enabling_them() {
     assert!(message.contains("Why:"), "{message}");
     assert!(message.contains("/plugin trust demo"), "{message}");
     assert!(message.contains("Nothing was installed, trusted, or enabled."));
-    assert!(!codewhale_home.join("plugins/state.json").exists());
+    assert!(!ghosty_home.join("plugins/state.json").exists());
     let plugin = app.plugin_registry.get("demo").expect("demo plugin");
     assert!(!plugin.enabled && !plugin.trusted());
 }
@@ -176,7 +176,7 @@ fn suggest_ranks_installed_plugins_without_trusting_or_enabling_them() {
 fn trust_requires_content_and_capability_bound_review_token() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", root.path().join("home"));
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", root.path().join("home"));
     write_bundle(root.path());
     let (mut app, _temp) = create_test_app(root.path());
     let enable_review = plugins(&mut app, Some("enable demo"));
@@ -230,7 +230,7 @@ fn trust_requires_content_and_capability_bound_review_token() {
 }
 
 fn write_mixed_bundle(root: &Path) {
-    let bundle = root.join(".codewhale/plugins/mixed");
+    let bundle = root.join(".ghosty/plugins/mixed");
     fs::create_dir_all(bundle.join("skills/hello")).unwrap();
     fs::create_dir_all(bundle.join("commands")).unwrap();
     fs::create_dir_all(bundle.join("hooks")).unwrap();
@@ -251,7 +251,7 @@ fn write_mixed_bundle(root: &Path) {
 fn mixed_bundle_review_and_enable_keep_supported_components_active() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", root.path().join("home"));
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", root.path().join("home"));
     write_mixed_bundle(root.path());
     let (mut app, _temp) = create_test_app(root.path());
 
@@ -301,7 +301,7 @@ fn mixed_bundle_review_and_enable_keep_supported_components_active() {
 fn mcp_review_discloses_host_authority_and_names_without_secret_values() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", root.path().join("home"));
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", root.path().join("home"));
     write_mcp_review_bundle(root.path());
     let (mut app, _temp) = create_test_app(root.path());
     let review = plugins(&mut app, Some("trust review-mcp"))
@@ -324,7 +324,7 @@ fn mcp_review_discloses_host_authority_and_names_without_secret_values() {
 fn legacy_tool_detail_remains_available_under_tools_namespace() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", root.path().join("home"));
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", root.path().join("home"));
     let (mut app, _temp) = create_test_app(root.path());
     fs::write(
         root.path().join("tools/greet.sh"),
@@ -342,7 +342,7 @@ fn legacy_tool_detail_remains_available_under_tools_namespace() {
 fn install_update_uninstall_verbs_validate_arguments() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", root.path().join("home"));
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", root.path().join("home"));
     let (mut app, _temp) = create_test_app(root.path());
     for arg in ["install", "update", "uninstall"] {
         let result = plugins(&mut app, Some(arg));
@@ -363,8 +363,8 @@ fn install_update_uninstall_verbs_validate_arguments() {
 fn install_update_uninstall_verbs_drive_the_guided_trust_flow() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let codewhale_home = root.path().join("home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = root.path().join("home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
 
     let source = root.path().join("source/installed-demo");
     fs::create_dir_all(&source).unwrap();
@@ -393,7 +393,7 @@ fn install_update_uninstall_verbs_drive_the_guided_trust_flow() {
         let plugin = app.plugin_registry.get("installed-demo").unwrap();
         assert!(!plugin.enabled && !plugin.trusted());
         assert!(
-            codewhale_home
+            ghosty_home
                 .join("plugins/installed-demo/.installed-from")
                 .exists()
         );
@@ -411,13 +411,13 @@ fn install_update_uninstall_verbs_drive_the_guided_trust_flow() {
         // Uninstall requires disabled, then removes bits and prunes state.
         let refused = plugins(&mut app, Some("uninstall installed-demo"));
         assert!(refused.is_error);
-        assert!(codewhale_home.join("plugins/installed-demo").exists());
+        assert!(ghosty_home.join("plugins/installed-demo").exists());
         assert!(!plugins(&mut app, Some("disable installed-demo")).is_error);
         let removed = plugins(&mut app, Some("uninstall installed-demo"));
         assert!(!removed.is_error, "{:?}", removed.message);
-        assert!(!codewhale_home.join("plugins/installed-demo").exists());
+        assert!(!ghosty_home.join("plugins/installed-demo").exists());
         assert!(app.plugin_registry.get("installed-demo").is_none());
-        let raw = fs::read_to_string(codewhale_home.join("plugins/state.json")).unwrap();
+        let raw = fs::read_to_string(ghosty_home.join("plugins/state.json")).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert!(
             parsed["plugins"].as_object().unwrap().is_empty(),
@@ -430,8 +430,8 @@ fn install_update_uninstall_verbs_drive_the_guided_trust_flow() {
 fn kimi_managed_import_is_read_only_until_hash_bound_approval() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let codewhale_home = root.path().join("codewhale-home");
-    let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = root.path().join("ghosty-home");
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let managed = root.path().join(".kimi-code/plugins/managed/kimi-demo");
     fs::create_dir_all(managed.join("skills/kimi-demo")).unwrap();
     fs::write(
@@ -474,8 +474,8 @@ fn kimi_managed_import_is_read_only_until_hash_bound_approval() {
         .expect("listing must render an exact approval command")
         .to_string();
     assert!(app.plugin_registry.get("kimi-demo").is_none());
-    assert!(!codewhale_home.join("plugins/kimi-demo").exists());
-    assert!(!codewhale_home.join("plugins/state.json").exists());
+    assert!(!ghosty_home.join("plugins/kimi-demo").exists());
+    assert!(!ghosty_home.join("plugins/state.json").exists());
 
     // The approval token is tied to the bytes that were inspected.
     fs::write(
@@ -486,7 +486,7 @@ fn kimi_managed_import_is_read_only_until_hash_bound_approval() {
     let changed = plugins_with_kimi_home(&mut app, Some(&approval), root.path());
     assert!(changed.is_error);
     assert!(changed.message.unwrap().contains("changed since review"));
-    assert!(!codewhale_home.join("plugins/kimi-demo").exists());
+    assert!(!ghosty_home.join("plugins/kimi-demo").exists());
 
     let refreshed = plugins_with_kimi_home(&mut app, Some("import kimi"), root.path())
         .message
@@ -514,7 +514,7 @@ fn kimi_managed_import_is_read_only_until_hash_bound_approval() {
     let plugin = app.plugin_registry.get("kimi-demo").unwrap();
     assert!(!plugin.enabled && !plugin.trusted());
     assert!(
-        codewhale_home
+        ghosty_home
             .join("plugins/kimi-demo/kimi.plugin.json")
             .is_file()
     );
@@ -568,8 +568,8 @@ fn kimi_managed_import_refuses_linked_children() {
 fn export_verb_writes_agent_plugins_bundle() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let codewhale_home = root.path().join("home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = root.path().join("home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     write_bundle(root.path());
     let (mut app, _temp) = create_test_app(root.path());
 
@@ -597,7 +597,7 @@ fn export_verb_writes_agent_plugins_bundle() {
     // The installed bundle keeps its legacy manifest and stays untouched.
     assert!(
         root.path()
-            .join(".codewhale/plugins/demo/plugin.toml")
+            .join(".ghosty/plugins/demo/plugin.toml")
             .exists()
     );
 }

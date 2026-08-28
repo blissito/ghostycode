@@ -2,12 +2,12 @@
 //!
 //! FEAT-014 publishes these interfaces without implementing them for the TUI
 //! or changing an existing command. Later work adopts them inside
-//! `codewhale-tui` one command group at a time. Only after every group uses
+//! `ghosty-tui` one command group at a time. Only after every group uses
 //! these shapes will groups move physically into a commands crate.
 
 use std::path::{Path, PathBuf};
 
-use codewhale_core::request::{Message, SystemPrompt};
+use ghosty_core::request::{Message, SystemPrompt};
 
 use crate::types::{
     CommandApprovalMode, CommandCurrency, CommandMode, CommandProviderId, CommandReasoningEffort,

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Mobile runtime surface smoke tests.
-# Launches the compiled codewhale-tui binary on loopback ports and verifies
+# Launches the compiled ghosty-tui binary on loopback ports and verifies
 # the mobile control page, auth, API routes, and binding behaviour through
 # real HTTP requests.
 #
 # Usage:  ./scripts/mobile-smoke.sh
-# Requires: curl, a built binary at target/release/codewhale-tui
+# Requires: curl, a built binary at target/release/ghosty-tui
 #           (the script will build it if cargo is available).
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-BINARY="${BINARY:-${REPO_ROOT}/target/release/codewhale-tui}"
+BINARY="${BINARY:-${REPO_ROOT}/target/release/ghosty-tui}"
 PASS=0
 FAIL=0
 SERVER_PID=""
@@ -131,8 +131,8 @@ assert_body_not_contains() {
 # ── build ────────────────────────────────────────────────────────────────────
 
 if [[ ! -x "$BINARY" ]]; then
-    log "Binary not found; building codewhale-tui in release mode..."
-    cargo build -p codewhale-tui --release --locked
+    log "Binary not found; building ghosty-tui in release mode..."
+    cargo build -p ghosty-tui --release --locked
 fi
 
 log "Using binary: $BINARY"
@@ -145,7 +145,7 @@ PORT=$(pick_port)
 log "=== Test Group 1: Token auth ==="
 start_server "$PORT" --mobile --auth-token "$TOKEN"
 
-assert_body_contains GET "/mobile" "" "Codewhale Mobile"
+assert_body_contains GET "/mobile" "" "Ghosty Mobile"
 assert_body_not_contains GET "/mobile" "" "$TOKEN"
 assert_status GET "/v1/threads/summary" 401
 assert_status GET "/v1/threads/summary" "Authorization: Bearer ${TOKEN}" 200
@@ -160,7 +160,7 @@ PORT=$(pick_port)
 log "=== Test Group 2: Insecure mode (no token) ==="
 start_server "$PORT" --mobile --insecure
 
-assert_body_contains GET "/mobile" "" "Codewhale Mobile"
+assert_body_contains GET "/mobile" "" "Ghosty Mobile"
 assert_status GET "/v1/threads/summary" 200
 
 stop_server

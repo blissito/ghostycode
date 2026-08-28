@@ -7,7 +7,7 @@
  * Run: /workflow run docs/examples/dogfood-automatic/wf_a3_partial_failure_synthesis.workflow.js
  *
  * For pure VM proof without model spend, use workflow-js unit tests:
- *   cargo test -p codewhale-workflow-js --locked parallel_fan_out_maps_one_failure_to_null_slot
+ *   cargo test -p ghosty-workflow-js --locked parallel_fan_out_maps_one_failure_to_null_slot
  */
 export default async function () {
   phase("Parallel scouts");

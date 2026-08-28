@@ -6,19 +6,19 @@ import type { HomeDict } from "../types";
  * Riscrittura nativa nella direzione inglese attuale: porta il tuo modello,
  * tutto avviene sulla tua macchina. Il vocabolario di prodotto resta
  * letterale come nel pack TUI: Plan / Work / Operate, Ask / Auto-Review /
- * Full Access, Codewhale, TUI, `codewhale exec`, Runtime API + MCP, Fleet,
+ * Full Access, Ghosty, TUI, `ghosty exec`, Runtime API + MCP, Fleet,
  * Node 18+, Rust, MIT.
  *
  * I sigilli di sezione (法, 行, …) sono glifi condivisi con l'edizione
  * inglese — marchi, non prosa.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — si tuffa negli abissi al posto tuo.",
+  metaTitle: "Ghosty — si tuffa negli abissi al posto tuo.",
   metaDescription:
-    "Codewhale si tuffa negli abissi al posto tuo — un agente di coding open source per il terminale. Porta il tuo modello. Gira sulla tua macchina. Rust, MIT.",
+    "Ghosty si tuffa negli abissi al posto tuo — un agente di coding open source per il terminale. Porta il tuo modello. Gira sulla tua macchina. Rust, MIT.",
 
   kicker: "Open source · Porta il tuo modello · Nel tuo terminale",
-  heroTitleA: "Codewhale si tuffa negli abissi",
+  heroTitleA: "Ghosty si tuffa negli abissi",
   heroTitleB: "così non devi farlo tu.",
   heroIntro:
     "{brand} è un agente di coding open source per il tuo terminale. Dagli un modello e un compito: legge il tuo codice, modifica i file, esegue i suoi controlli e si ferma quando il lavoro è finito o quando serve te. Porta qualsiasi modello, o mescolali: fissa un modello diverso per ciascun ruolo.",
@@ -41,8 +41,8 @@ export const home: HomeDict = {
 
   shotSession: "Sessione corrente",
   screenshotAlt:
-    "Sessione corrente di Codewhale nel terminale: modalità Operate, la balena, il compositore e il piè di pagina",
-  figcaption: "Sessione corrente di Codewhale · modalità Operate · postura di permessi Ask",
+    "Sessione corrente di Ghosty nel terminale: modalità Operate, la balena, il compositore e il piè di pagina",
+  figcaption: "Sessione corrente di Ghosty · modalità Operate · postura di permessi Ask",
 
   proofHeading: "Una shell sottomarina. Qualsiasi modello. Sulla tua macchina.",
   proofBody:
@@ -68,7 +68,7 @@ export const home: HomeDict = {
   receiptReport: "controlli superati · ricevuta salvata",
 
   sealStart: "起",
-  startHeading: "Nuovo su Codewhale? Quattro passi dall'inizio alla fine.",
+  startHeading: "Nuovo su Ghosty? Quattro passi dall'inizio alla fine.",
   startLede:
     "Installare → prima sessione senza chiavi → collegare un provider → configurare la tua Fleet. I termini sono definiti nella pagina del vocabolario.",
   startGuideLink: "Leggi la guida introduttiva →",
@@ -88,7 +88,7 @@ export const home: HomeDict = {
   surfacesHeading: "Usa il runtime dove avviene il lavoro.",
   surfaces: [
     ["TUI", "Lavoro interattivo nel terminale"],
-    ["codewhale exec", "Script e CI"],
+    ["ghosty exec", "Script e CI"],
     ["Client web", "Client browser, solo in loopback"],
     ["Runtime API + MCP", "Integrazioni locali"],
     ["Fleet", "Lavoro multi-agente durevole"],

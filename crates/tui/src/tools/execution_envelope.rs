@@ -648,7 +648,7 @@ mod tests {
     fn a_read_only_shell_capable_role_keeps_test_selection_arguments() {
         let tests = executes("run_tests", None);
         for args in [
-            "-p codewhale-tui",
+            "-p ghosty-tui",
             "--lib fleet::exact",
             "exact_fleet_workflow --exact",
             "--package tui --test-threads=1 --nocapture",

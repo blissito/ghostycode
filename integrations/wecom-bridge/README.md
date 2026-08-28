@@ -1,6 +1,6 @@
 # WeCom (企业微信) Bridge
 
-此 bridge 让**企业微信**用户通过智能机器人长连接控制本地 `codewhale serve --http` runtime。
+此 bridge 让**企业微信**用户通过智能机器人长连接控制本地 `ghosty serve --http` runtime。
 使用企业微信智能机器人 API（长连接/WebSocket 模式），无需公网 IP。
 
 与 `integrations/weixin-bridge`（个人微信 iLink Bot 协议）不同，此 bridge 面向企业微信组织内部使用，
@@ -8,14 +8,14 @@
 
 ## 安全模型
 
-- `codewhale serve --http` 绑定于 `127.0.0.1`。
-- `/v1/*` runtime 调用使用 `CODEWHALE_RUNTIME_TOKEN`。
+- `ghosty serve --http` 绑定于 `127.0.0.1`。
+- `/v1/*` runtime 调用使用 `GHOSTY_RUNTIME_TOKEN`。
 - 企业微信用户必须加入白名单（`WECOM_CHAT_ALLOWLIST`），除非首次配对时设置 `WECOM_ALLOW_UNLISTED=true`。
 - 支持私聊和群聊（群聊需要前缀 `/cw`）。
 - 工具审批通过文本命令：`/allow <approval_id>` 或 `/deny <approval_id>`。
 - 长连接模式无需公网端口。
 - 企业微信只会看到 bridge 发送的提示、状态、线程摘要和审批消息；工作区、shell 和 runtime HTTP
-  监听仍留在本机，并由 `CODEWHALE_RUNTIME_TOKEN` 保护。
+  监听仍留在本机，并由 `GHOSTY_RUNTIME_TOKEN` 保护。
 
 ## 前提
 
@@ -27,10 +27,10 @@
 ## 设置
 
 ```bash
-cd /opt/codewhale/wecom-bridge
+cd /opt/ghosty/wecom-bridge
 npm install --omit=dev
-cp .env.example /etc/codewhale/wecom-bridge.env
-sudoedit /etc/codewhale/wecom-bridge.env
+cp .env.example /etc/ghosty/wecom-bridge.env
+sudoedit /etc/ghosty/wecom-bridge.env
 node src/index.mjs
 ```
 
@@ -51,7 +51,7 @@ node src/index.mjs
 | `/allow <approval_id> [remember]` | 批准待处理的工具调用 |
 | `/deny <approval_id>` | 拒绝待处理的工具调用 |
 
-其他所有内容均作为 Codewhale 提示发送。群聊中需要在消息前加 `/cw` 前缀。
+其他所有内容均作为 Ghosty 提示发送。群聊中需要在消息前加 `/cw` 前缀。
 
 ## 首次配对
 
@@ -65,11 +65,11 @@ node src/index.mjs
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `CODEWHALE_RUNTIME_URL` | 否 | Runtime HTTP 地址（默认 `http://127.0.0.1:7878`） |
-| `CODEWHALE_RUNTIME_TOKEN` | **是** | Runtime Bearer 令牌 |
-| `CODEWHALE_WORKSPACE` | 否 | 工作区路径（默认 cwd） |
-| `CODEWHALE_MODEL` | 否 | 模型名称（默认 `auto`） |
-| `CODEWHALE_MODE` | 否 | 运行模式（默认 `agent`） |
+| `GHOSTY_RUNTIME_URL` | 否 | Runtime HTTP 地址（默认 `http://127.0.0.1:7878`） |
+| `GHOSTY_RUNTIME_TOKEN` | **是** | Runtime Bearer 令牌 |
+| `GHOSTY_WORKSPACE` | 否 | 工作区路径（默认 cwd） |
+| `GHOSTY_MODEL` | 否 | 模型名称（默认 `auto`） |
+| `GHOSTY_MODE` | 否 | 运行模式（默认 `agent`） |
 | `WECOM_BOT_ID` | **是** | 企业微信智能机器人 BotID |
 | `WECOM_BOT_SECRET` | **是** | 企业微信智能机器人 Secret |
 | `WECOM_CHAT_ALLOWLIST` | 否 | 逗号分隔的允许用户 UserID |
@@ -77,18 +77,18 @@ node src/index.mjs
 | `WECOM_STATE_DIR` | 否 | 状态持久化目录 |
 | `WECOM_THREAD_MAP_PATH` | 否 | 线程映射文件路径 |
 | `WECOM_MAX_REPLY_CHARS` | 否 | 单条回复最大字符数（默认 `3500`） |
-| `CODEWHALE_TURN_TIMEOUT_MS` | 否 | Turn 超时（默认 `900000`） |
+| `GHOSTY_TURN_TIMEOUT_MS` | 否 | Turn 超时（默认 `900000`） |
 
 ## 架构
 
 ```
-企业微信客户端 → 智能机器人长连接(WebSocket) → WeCom Bridge ──HTTP──→ codewhale serve --http
+企业微信客户端 → 智能机器人长连接(WebSocket) → WeCom Bridge ──HTTP──→ ghosty serve --http
                     ◀── aibot_respond_msg ◀──                          (127.0.0.1:7878)
 ```
 
 Bridge 使用 BotID + Secret 获取 access_token，建立 WebSocket 长连接。
 接收 `aibot_msg_callback` 事件，通过 `aibot_respond_msg` 命令回复消息。
-所有消息处理与 Codewhale Runtime API 交互，与 Feishu/Telegram bridge 共享相同逻辑。
+所有消息处理与 Ghosty Runtime API 交互，与 Feishu/Telegram bridge 共享相同逻辑。
 
 ## 与 weixin-bridge 的区别
 

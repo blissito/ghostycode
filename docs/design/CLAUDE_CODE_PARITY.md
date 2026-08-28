@@ -7,7 +7,7 @@ milestone, writing from direct operating knowledge of the Claude Code harness
 [`AUTO_MODE_PARITY.md`](AUTO_MODE_PARITY.md). This is a *mechanics* reference
 for builders on #5439 (orchestration trio visibility), #5311 (plugin system /
 federated marketplaces), #5324/#5123 (agent tool surface), and the one-bash
-consolidation. Where Codewhale already does the same thing, it says so; where
+consolidation. Where Ghosty already does the same thing, it says so; where
 Claude Code is simply different (not better), it says that too.
 
 ## 1. Sub-agents: the `Agent` tool
@@ -39,11 +39,11 @@ parent needs after spawn is a lifecycle, not a knob:
 - Fork semantics: `subagent_type: "fork"` = same model, same context,
   tool output kept out of the parent context.
 
-**Codewhale mapping.** The `agent` tool already has `action` (spawn/wait/
+**Ghosty mapping.** The `agent` tool already has `action` (spawn/wait/
 message/interrupt/…), `type` (8 roles), `profile`, `name`/`agent_id`/`message`,
 `detached`, `worktree`, `resume_from`. That is the same shape as Claude Code's
 Agent + SendMessage + ListAgents folded into one tool — fine. The delta is
-that Codewhale *also* advertises ~20 budget/authority/model knobs per call.
+that Ghosty *also* advertises ~20 budget/authority/model knobs per call.
 Claude Code's answer, and the direction chosen for #5324/#5123: budgets and
 authority belong to the role/profile definition, model to the operator's
 session, and the per-call surface stays at ~12 fields (`action, prompt,
@@ -82,7 +82,7 @@ completion notification. The API surface the script sees:
   verify (N refuters per finding), perspective-diverse verify, judge panel,
   loop-until-dry, multi-modal sweep, completeness critic, no silent caps.
 
-**Codewhale mapping.** Codewhale's `workflows/*.workflow.js` + Lane Runtime
+**Ghosty mapping.** Ghosty's `workflows/*.workflow.js` + Lane Runtime
 is the same idea (Grok uses Rhai; Claude Code uses JS with the API above; dsh
 uses YAML presets). What Claude Code does that #5439 asks for: the *user*
 sees workflows as first-class objects — `/workflows` lists live runs with
@@ -91,7 +91,7 @@ model must announce/relay. The `journal.jsonl` replay-on-resume and the
 `schema`-forced structured return are the two engine features worth
 copying if they are missing (check `crates/tui/src/workflow*` before
 building; do not assume). The "user opts in explicitly" rule is a product
-decision Codewhale should keep too: goal/workflow/auto are chosen by the
+decision Ghosty should keep too: goal/workflow/auto are chosen by the
 user, visibly (#5439 acceptance list), never silently.
 
 ## 3. Loops and schedules
@@ -102,7 +102,7 @@ user, visibly (#5439 acceptance list), never silently.
   exists for autonomous loops.
 - `/schedule` — cloud "routines" on a cron.
 
-**Codewhale mapping.** Goal mode + dsh-style ralph loops cover the
+**Ghosty mapping.** Goal mode + dsh-style ralph loops cover the
 "keep going until done" case; the interval loop with a *visible reason
 string per wake* is the piece worth adopting for goal status
 (`/goal status` should show *why* it is waiting and when it wakes).
@@ -128,7 +128,7 @@ string per wake* is the piece worth adopting for goal status
 - **CLAUDE.md / AGENTS.md** = per-repo contract, loaded verbatim; user-level
   `~/.claude/CLAUDE.md` layers under it.
 
-**Codewhale mapping.** Codewhale has all four primitives (docs/SKILLS.md,
+**Ghosty mapping.** Ghosty has all four primitives (docs/SKILLS.md,
 docs/PLUGINS.md, docs/PLUGIN_BUNDLES.md, docs/HOOKS.md, `plugin.toml`,
 `/plugin marketplace …`, `.claude/skills` compat per
 docs/CLAUDE_PLUGIN_COMPAT.md). #5311's real gap versus Claude Code /
@@ -137,7 +137,7 @@ at session start (skills + agents + plugin-provided ones), (b) parsing
 Claude/Kimi marketplace manifests so a plugin can bring agents + hooks +
 MCP servers, not only a skill folder, and (c) deferred tool schemas so a
 large plugin surface does not bloat the pinned prefix (docs/CACHE.md
-constraint). The `.claude-plugin/plugin.json` runtime semantics Codewhale
+constraint). The `.claude-plugin/plugin.json` runtime semantics Ghosty
 declines to emulate (docs/CLAUDE_PLUGIN_COMPAT.md) can stay declined; the
 manifest *parse* and the namespaced listing are the parity items.
 
@@ -151,13 +151,13 @@ wait/interact/cancel tool family — a `Monitor` tool watches a condition,
 front. Permission is a classifier + allow-rules over the *command string*,
 not per-tool-name families.
 
-**Codewhale mapping.** The one-bash consolidation planner already reached
+**Ghosty mapping.** The one-bash consolidation planner already reached
 the same conclusion (7 exec name families → `bash` + a small session
 surface). Claude Code adds one detail worth copying: `run_in_background`
 on the same tool with completion notifications, rather than a second tool
 family for jobs.
 
-## 6. What Claude Code does *not* have (Codewhale is ahead)
+## 6. What Claude Code does *not* have (Ghosty is ahead)
 
 - No fleet ledger, no role-based authority clamps (delegation-never-widens
   is enforced by prompt + permission classifier, not by a typed envelope).

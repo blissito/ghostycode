@@ -33,7 +33,7 @@ export default function OpengraphImage() {
           }}
         >
           <div style={{ width: 28, height: 14, borderRadius: "50% 45% 45% 50%", backgroundColor: "#F6C453" }} />
-          codewhale.net
+          ghosty.net
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div

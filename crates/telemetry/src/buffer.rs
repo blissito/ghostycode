@@ -1,6 +1,6 @@
 //! The on-disk ring buffer, the tombstone, and the wipe.
 //!
-//! Everything lives under `$CODEWHALE_HOME/telemetry/`, created `0700`, with
+//! Everything lives under `$GHOSTY_HOME/telemetry/`, created `0700`, with
 //! every file `0600`:
 //!
 //! | file | role |
@@ -60,7 +60,7 @@ pub fn buffer_path(root: &Path) -> PathBuf {
 /// `dryrun.jsonl` — where batches go when the endpoint resolves to `None`.
 ///
 /// Reached by configuring `telemetry_endpoint` empty; an unconfigured endpoint
-/// resolves to `codewhale_config::DEFAULT_TELEMETRY_ENDPOINT` instead.
+/// resolves to `ghosty_config::DEFAULT_TELEMETRY_ENDPOINT` instead.
 #[must_use]
 pub fn dryrun_path(root: &Path) -> PathBuf {
     root.join("dryrun.jsonl")
@@ -95,7 +95,7 @@ pub fn state_path(root: &Path) -> PathBuf {
 /// Whether the tombstone is present.
 ///
 /// Re-checked on **every** append and immediately before **every** send. This is
-/// what makes `codewhale config set telemetry false` — an external write by
+/// what makes `ghosty config set telemetry false` — an external write by
 /// another process — observable to a session that is already running.
 #[must_use]
 pub fn tombstone_present(root: &Path) -> bool {

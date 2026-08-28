@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-use codewhale_lane::control::{
+use ghosty_lane::control::{
     ControlContext, ControlFailure, ControlFailureKind, ControlOperation, ControlReceipt,
     ControlSurface, execute_lane_control_in, parse_target,
 };
@@ -291,7 +291,7 @@ impl LaneControlQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codewhale_lane::{LaneRegistry, LaneStatus, LifecycleOutcome, RuntimeBackendKind};
+    use ghosty_lane::{LaneRegistry, LaneStatus, LifecycleOutcome, RuntimeBackendKind};
 
     fn seeded() -> (tempfile::TempDir, String) {
         let dir = tempfile::tempdir().unwrap();
@@ -386,7 +386,7 @@ mod tests {
             assert_eq!(receipt.outcome, LifecycleOutcome::Rejected);
             assert_eq!(
                 receipt.availability.reason(),
-                Some(codewhale_lane::UnavailableReason::BackendNotImplemented),
+                Some(ghosty_lane::UnavailableReason::BackendNotImplemented),
                 "{operation:?}"
             );
             assert!(receipt.ticket.is_none());

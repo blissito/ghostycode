@@ -13,15 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libdbus-1-3 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd --gid 1000 codewhale \
-    && useradd --create-home --shell /bin/bash --uid 1000 --gid 1000 codewhale \
-    && install -d -m 0700 -o codewhale -g codewhale /home/codewhale/.codewhale \
-    && install -d -m 0700 -o codewhale -g codewhale /home/codewhale/.deepseek
+RUN groupadd --gid 1000 ghosty \
+    && useradd --create-home --shell /bin/bash --uid 1000 --gid 1000 ghosty \
+    && install -d -m 0700 -o ghosty -g ghosty /home/ghosty/.ghosty \
+    && install -d -m 0700 -o ghosty -g ghosty /home/ghosty/.deepseek
 
-COPY --chmod=0755 --chown=codewhale:codewhale bin/codewhale /usr/local/bin/codewhale
-COPY --chmod=0755 --chown=codewhale:codewhale bin/codew /usr/local/bin/codew
+COPY --chmod=0755 --chown=ghosty:ghosty bin/ghosty /usr/local/bin/ghosty
+COPY --chmod=0755 --chown=ghosty:ghosty bin/ghosty-tui /usr/local/bin/ghosty-tui
 
-USER codewhale
-WORKDIR /home/codewhale
-ENTRYPOINT ["codewhale"]
+USER ghosty
+WORKDIR /home/ghosty
+ENTRYPOINT ["ghosty"]
 CMD []

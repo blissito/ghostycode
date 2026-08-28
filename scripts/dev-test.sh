@@ -16,7 +16,7 @@
 #   scripts/dev-test.sh crates/tui/src/elapsed.rs
 #
 # Environment:
-#   CODEWHALE_DEV_NEXTEST  auto|1|0  (default auto: use cargo-nextest when
+#   GHOSTY_DEV_NEXTEST  auto|1|0  (default auto: use cargo-nextest when
 #                          it is on PATH; 0 forces cargo test)
 #   Cache knobs are documented in scripts/dev-cache.sh.
 set -eu
@@ -37,29 +37,29 @@ list_areas() {
   cat <<'EOF'
 area              command
 ----              -------
-agent             cargo test -p codewhale-agent --lib --locked
-app-server        cargo test -p codewhale-app-server --lib --locked
-build-support     cargo test -p codewhale-build-support --lib --locked
-cli               cargo test -p codewhale-cli --lib --locked
-command-contract  cargo test -p codewhale-command-contract --lib --locked
-config            cargo test -p codewhale-config --lib --locked
-core              cargo test -p codewhale-core --lib --locked
-execpolicy        cargo test -p codewhale-execpolicy --lib --locked
-hooks             cargo test -p codewhale-hooks --lib --locked
-lane              cargo test -p codewhale-lane --lib --locked
-mcp               cargo test -p codewhale-mcp --lib --locked
-paths             cargo test -p codewhale-paths --lib --locked
-protocol          cargo test -p codewhale-protocol --lib --locked
-release           cargo test -p codewhale-release --lib --locked
-secrets           cargo test -p codewhale-secrets --lib --locked
-state             cargo test -p codewhale-state --lib --locked
-telemetry         cargo test -p codewhale-telemetry --lib --locked
-tools             cargo test -p codewhale-tools --lib --locked
-tui               cargo test -p codewhale-tui --lib --locked
-tui-integration   cargo test -p codewhale-tui --test integration --locked
-tui-cucumber      cargo test -p codewhale-tui --test cucumber --locked
-workflow          cargo test -p codewhale-workflow --lib --locked
-workflow-js       cargo test -p codewhale-workflow-js --lib --locked
+agent             cargo test -p ghosty-agent --lib --locked
+app-server        cargo test -p ghosty-app-server --lib --locked
+build-support     cargo test -p ghosty-build-support --lib --locked
+cli               cargo test -p ghosty-cli --lib --locked
+command-contract  cargo test -p ghosty-command-contract --lib --locked
+config            cargo test -p ghosty-config --lib --locked
+core              cargo test -p ghosty-core --lib --locked
+execpolicy        cargo test -p ghosty-execpolicy --lib --locked
+hooks             cargo test -p ghosty-hooks --lib --locked
+lane              cargo test -p ghosty-lane --lib --locked
+mcp               cargo test -p ghosty-mcp --lib --locked
+paths             cargo test -p ghosty-paths --lib --locked
+protocol          cargo test -p ghosty-protocol --lib --locked
+release           cargo test -p ghosty-release --lib --locked
+secrets           cargo test -p ghosty-secrets --lib --locked
+state             cargo test -p ghosty-state --lib --locked
+telemetry         cargo test -p ghosty-telemetry --lib --locked
+tools             cargo test -p ghosty-tools --lib --locked
+tui               cargo test -p ghosty-tui --lib --locked
+tui-integration   cargo test -p ghosty-tui --test integration --locked
+tui-cucumber      cargo test -p ghosty-tui --test cucumber --locked
+workflow          cargo test -p ghosty-workflow --lib --locked
+workflow-js       cargo test -p ghosty-workflow-js --lib --locked
 
 path prefix                         area / extra filter
 -----------                         -------------------
@@ -75,7 +75,7 @@ crates/tui/tests/                  tui-integration
 
 When cargo-nextest is on PATH, the run stage is `cargo nextest run`
 instead of `cargo test` (same binaries; process per test). Set
-CODEWHALE_DEV_NEXTEST=0 to force libtest. New worktrees get an isolated
+GHOSTY_DEV_NEXTEST=0 to force libtest. New worktrees get an isolated
 Cargo build-dir via scripts/dev-cache.sh; sccache wraps rustc only when
 incremental is already off. Do not use cargo test --workspace for a
 single-area edit. --lib and --tests are disjoint; a green --lib run does
@@ -158,34 +158,34 @@ fi
 pkg=
 target=--lib
 case $area in
-  agent) pkg=codewhale-agent ;;
-  app-server) pkg=codewhale-app-server ;;
-  build-support) pkg=codewhale-build-support ;;
-  cli) pkg=codewhale-cli ;;
-  command-contract) pkg=codewhale-command-contract ;;
-  config) pkg=codewhale-config ;;
-  core) pkg=codewhale-core ;;
-  execpolicy) pkg=codewhale-execpolicy ;;
-  hooks) pkg=codewhale-hooks ;;
-  lane) pkg=codewhale-lane ;;
-  mcp) pkg=codewhale-mcp ;;
-  paths) pkg=codewhale-paths ;;
-  protocol) pkg=codewhale-protocol ;;
-  release) pkg=codewhale-release ;;
-  secrets) pkg=codewhale-secrets ;;
-  state) pkg=codewhale-state ;;
-  telemetry) pkg=codewhale-telemetry ;;
-  tools) pkg=codewhale-tools ;;
-  tui) pkg=codewhale-tui ;;
-  workflow) pkg=codewhale-workflow ;;
-  workflow-js) pkg=codewhale-workflow-js ;;
+  agent) pkg=ghosty-agent ;;
+  app-server) pkg=ghosty-app-server ;;
+  build-support) pkg=ghosty-build-support ;;
+  cli) pkg=ghosty-cli ;;
+  command-contract) pkg=ghosty-command-contract ;;
+  config) pkg=ghosty-config ;;
+  core) pkg=ghosty-core ;;
+  execpolicy) pkg=ghosty-execpolicy ;;
+  hooks) pkg=ghosty-hooks ;;
+  lane) pkg=ghosty-lane ;;
+  mcp) pkg=ghosty-mcp ;;
+  paths) pkg=ghosty-paths ;;
+  protocol) pkg=ghosty-protocol ;;
+  release) pkg=ghosty-release ;;
+  secrets) pkg=ghosty-secrets ;;
+  state) pkg=ghosty-state ;;
+  telemetry) pkg=ghosty-telemetry ;;
+  tools) pkg=ghosty-tools ;;
+  tui) pkg=ghosty-tui ;;
+  workflow) pkg=ghosty-workflow ;;
+  workflow-js) pkg=ghosty-workflow-js ;;
   tui-integration)
-    pkg=codewhale-tui
+    pkg=ghosty-tui
     target=--test
     harness=integration
     ;;
   tui-cucumber)
-    pkg=codewhale-tui
+    pkg=ghosty-tui
     target=--test
     harness=cucumber
     ;;
@@ -195,20 +195,20 @@ case $area in
     ;;
 esac
 
-codewhale_dev_cache_apply
+ghosty_dev_cache_apply
 if [ -z "${RUST_MIN_STACK:-}" ]; then
   RUST_MIN_STACK=16777216
   export RUST_MIN_STACK
 fi
 
 use_nextest=0
-_cw_nextest=${CODEWHALE_DEV_NEXTEST:-auto}
-if codewhale_dev_cache_falsey "$_cw_nextest"; then
+_cw_nextest=${GHOSTY_DEV_NEXTEST:-auto}
+if ghosty_dev_cache_falsey "$_cw_nextest"; then
   use_nextest=0
 elif command -v cargo-nextest >/dev/null 2>&1; then
   use_nextest=1
-elif codewhale_dev_cache_truthy "$_cw_nextest"; then
-  printf '%s\n' "dev-test: CODEWHALE_DEV_NEXTEST=${_cw_nextest} but cargo-nextest is not on PATH" >&2
+elif ghosty_dev_cache_truthy "$_cw_nextest"; then
+  printf '%s\n' "dev-test: GHOSTY_DEV_NEXTEST=${_cw_nextest} but cargo-nextest is not on PATH" >&2
   exit 2
 fi
 
@@ -216,17 +216,17 @@ if [ "$target" = "--test" ]; then
   if [ "$use_nextest" -eq 1 ]; then
     set -- nextest run -p "$pkg" --test "$harness" --locked "$@"
     printf '+ cargo %s\n' "$*"
-    codewhale_dev_cache_exec_cargo "$@"
+    ghosty_dev_cache_exec_cargo "$@"
   fi
   set -- test -p "$pkg" --test "$harness" --locked "$@"
 else
   if [ "$use_nextest" -eq 1 ]; then
     set -- nextest run -p "$pkg" --lib --locked "$@"
     printf '+ cargo %s\n' "$*"
-    codewhale_dev_cache_exec_cargo "$@"
+    ghosty_dev_cache_exec_cargo "$@"
   fi
   set -- test -p "$pkg" --lib --locked "$@"
 fi
 
 printf '+ cargo %s\n' "$*"
-codewhale_dev_cache_exec_cargo "$@"
+ghosty_dev_cache_exec_cargo "$@"

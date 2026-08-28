@@ -1,4 +1,4 @@
-//! User-authored theme overlays loaded from the Codewhale-owned themes directory.
+//! User-authored theme overlays loaded from the Ghosty-owned themes directory.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
@@ -168,9 +168,9 @@ pub fn resolve_user_theme(value: &str) -> Result<Option<(ThemeId, UiTheme)>, Str
 }
 
 pub fn user_themes_dir() -> Result<PathBuf, String> {
-    codewhale_config::codewhale_home()
+    ghosty_config::ghosty_home()
         .map(|home| home.join("themes"))
-        .map_err(|error| format!("failed to resolve Codewhale themes directory: {error}"))
+        .map_err(|error| format!("failed to resolve Ghosty themes directory: {error}"))
 }
 
 fn reject_symlink_directory(path: &Path) -> Result<(), String> {
@@ -290,7 +290,7 @@ mod tests {
     fn user_theme_loads_fixed_file_and_rejects_unknown_fields() {
         let _lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().unwrap();
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", temp.path());
+        let _home = EnvVarGuard::set("GHOSTY_HOME", temp.path());
         let themes = temp.path().join("themes");
         fs::create_dir(&themes).unwrap();
         fs::write(
@@ -316,7 +316,7 @@ mod tests {
         use std::os::unix::fs::symlink;
         let _lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().unwrap();
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", temp.path());
+        let _home = EnvVarGuard::set("GHOSTY_HOME", temp.path());
         let themes = temp.path().join("themes");
         fs::create_dir(&themes).unwrap();
         let outside = temp.path().join("outside.json");

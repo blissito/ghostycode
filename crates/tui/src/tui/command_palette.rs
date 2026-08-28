@@ -70,7 +70,7 @@ pub struct CommandPaletteView {
 pub fn build_entries(
     locale: Locale,
     skills_dir: &Path,
-    skills_scan_codewhale_only: bool,
+    skills_scan_ghosty_only: bool,
     workspace: &Path,
     mcp_config_path: &Path,
     mcp_snapshot: Option<&crate::mcp::McpManagerSnapshot>,
@@ -78,7 +78,7 @@ pub fn build_entries(
     build_entries_with_plugins(
         locale,
         skills_dir,
-        skills_scan_codewhale_only,
+        skills_scan_ghosty_only,
         workspace,
         mcp_config_path,
         mcp_snapshot,
@@ -89,7 +89,7 @@ pub fn build_entries(
 pub fn build_entries_with_plugins(
     locale: Locale,
     skills_dir: &Path,
-    skills_scan_codewhale_only: bool,
+    skills_scan_ghosty_only: bool,
     workspace: &Path,
     mcp_config_path: &Path,
     mcp_snapshot: Option<&crate::mcp::McpManagerSnapshot>,
@@ -163,7 +163,7 @@ pub fn build_entries_with_plugins(
     let skills = skills::discover_for_workspace_and_dir_with_mode_and_plugins(
         workspace,
         skills_dir,
-        skills::SkillDiscoveryMode::from_codewhale_only(skills_scan_codewhale_only),
+        skills::SkillDiscoveryMode::from_ghosty_only(skills_scan_ghosty_only),
         Some(plugins),
     )
     .into_enabled();
@@ -1239,7 +1239,7 @@ mod tests {
     }
 
     #[test]
-    fn command_palette_skills_respect_codewhale_only_scan() {
+    fn command_palette_skills_respect_ghosty_only_scan() {
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
         let claude_skill_dir = workspace
@@ -1252,20 +1252,20 @@ mod tests {
             "---\nname: claude-skill\ndescription: Claude skill\n---\nbody",
         )
         .expect("write claude skill");
-        let codewhale_skill_dir = workspace
-            .join(".codewhale")
+        let ghosty_skill_dir = workspace
+            .join(".ghosty")
             .join("skills")
-            .join("codewhale-skill");
-        std::fs::create_dir_all(&codewhale_skill_dir).expect("create codewhale skill dir");
+            .join("ghosty-skill");
+        std::fs::create_dir_all(&ghosty_skill_dir).expect("create ghosty skill dir");
         std::fs::write(
-            codewhale_skill_dir.join("SKILL.md"),
-            "---\nname: codewhale-skill\ndescription: CodeWhale skill\n---\nbody",
+            ghosty_skill_dir.join("SKILL.md"),
+            "---\nname: ghosty-skill\ndescription: GhostyCode skill\n---\nbody",
         )
-        .expect("write codewhale skill");
+        .expect("write ghosty skill");
 
         let entries = build_entries(
             Locale::En,
-            workspace.join(".codewhale").join("skills").as_path(),
+            workspace.join(".ghosty").join("skills").as_path(),
             true,
             workspace.as_path(),
             Path::new("mcp.json"),
@@ -1277,7 +1277,7 @@ mod tests {
             .map(|entry| entry.label.as_str())
             .collect();
 
-        assert!(skill_labels.contains(&"$codewhale-skill"));
+        assert!(skill_labels.contains(&"$ghosty-skill"));
         assert!(!skill_labels.contains(&"$claude-skill"));
     }
 
@@ -1285,8 +1285,7 @@ mod tests {
     fn command_palette_includes_only_active_reviewed_plugin_skills() {
         let _env = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let _home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path().join("home"));
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path().join("home"));
         let workspace = tmp.path().join("workspace");
         let plugin_root = tmp.path().join("plugins/demo");
         std::fs::create_dir_all(plugin_root.join("skills/review")).expect("plugin Skill dir");
@@ -1303,7 +1302,7 @@ mod tests {
         let config = crate::plugins::discovery::DiscoveryConfig {
             workspace: workspace.clone(),
             user_plugins_dir: tmp.path().join("plugins"),
-            workspace_plugins_dir: workspace.join(".codewhale/plugins"),
+            workspace_plugins_dir: workspace.join(".ghosty/plugins"),
             builtin_plugin_dirs: Vec::new(),
             state_path: tmp.path().join("plugin-state/state.json"),
         };
@@ -1371,7 +1370,7 @@ mod tests {
     fn command_palette_includes_workspace_user_commands() {
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
-        let commands_dir = workspace.join(".codewhale").join("commands");
+        let commands_dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).expect("create commands dir");
         std::fs::write(
             commands_dir.join("review.md"),
@@ -1404,7 +1403,7 @@ mod tests {
     fn command_palette_uses_frontmatter_name_usage_and_arguments() {
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
-        let commands_dir = workspace.join(".codewhale").join("commands");
+        let commands_dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).expect("create commands dir");
         std::fs::write(
             commands_dir.join("workflow-file.md"),
@@ -1439,7 +1438,7 @@ mod tests {
     fn command_palette_excludes_hidden_user_commands() {
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
-        let commands_dir = workspace.join(".codewhale").join("commands");
+        let commands_dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).expect("create commands dir");
         std::fs::write(
             commands_dir.join("secret.md"),
@@ -1467,7 +1466,7 @@ mod tests {
     fn hidden_frontmatter_name_override_suppresses_shadowed_builtin() {
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
-        let commands_dir = workspace.join(".codewhale").join("commands");
+        let commands_dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).expect("create commands dir");
         std::fs::write(
             commands_dir.join("private-help.md"),
@@ -1494,7 +1493,7 @@ mod tests {
     fn command_palette_filters_shadowed_builtin_aliases_from_description() {
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
-        let commands_dir = workspace.join(".codewhale").join("commands");
+        let commands_dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).expect("create commands dir");
         std::fs::write(
             commands_dir.join("image-review.md"),
@@ -1538,7 +1537,7 @@ mod tests {
         // command (its metadata and action), never the built-in row.
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
-        let commands_dir = workspace.join(".codewhale").join("commands");
+        let commands_dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).expect("create commands dir");
         std::fs::write(
             commands_dir.join("my-help.md"),
@@ -1583,7 +1582,7 @@ mod tests {
         // matching the shared alias-aware contract.
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
-        let commands_dir = workspace.join(".codewhale").join("commands");
+        let commands_dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).expect("create commands dir");
         std::fs::write(
             commands_dir.join("assistant.md"),
@@ -1621,7 +1620,7 @@ mod tests {
         // still owning the token (AT-008 boundary in the palette).
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
-        let commands_dir = workspace.join(".codewhale").join("commands");
+        let commands_dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).expect("create commands dir");
         std::fs::write(
             commands_dir.join("private-help.md"),
@@ -1653,7 +1652,7 @@ mod tests {
         // from its description.
         let tmp = TempDir::new().expect("tempdir");
         let workspace = tmp.path().join("workspace");
-        let commands_dir = workspace.join(".codewhale").join("commands");
+        let commands_dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).expect("create commands dir");
         std::fs::write(
             commands_dir.join("image-review.md"),

@@ -1,8 +1,8 @@
 //! OpenAI Responses API bridge for the OpenAI Codex / ChatGPT provider.
 //!
-//! Implements a dedicated Responses API client that maps CodeWhale's internal
+//! Implements a dedicated Responses API client that maps GhostyCode's internal
 //! message/tool types to the Responses wire format and parses streaming SSE
-//! events back into CodeWhale's `StreamEvent` / `MessageResponse` types.
+//! events back into GhostyCode's `StreamEvent` / `MessageResponse` types.
 //!
 //! This is intentionally separate from the Chat Completions path
 //! (`client/chat.rs`) to avoid protocol hacks.
@@ -99,7 +99,7 @@ pub(super) fn build_responses_body_for_provider(
     // Reasoning configuration. The Codex Responses backend accepts
     // low/medium/high/xhigh, so provider-aware callers normalize inherited
     // DeepSeek-only values before request construction: "off" becomes
-    // "low", and CodeWhale's "auto" falls back to "medium". DeepSeek's
+    // "low", and GhostyCode's "auto" falls back to "medium". DeepSeek's
     // Responses API documents `reasoning.effort: "none"` to disable
     // thinking, so its branch sends "none" for the off tier instead of
     // collapsing it into low (see `responses_reasoning_effort`).
@@ -375,7 +375,7 @@ impl DeepSeekClient {
                                                 Some(content_block_counter - 1);
                                         }
                                         // DeepSeek can run server-side web
-                                        // search on this route, but Codewhale
+                                        // search on this route, but Ghosty
                                         // does not yet replay `web_search_call`
                                         // items or their citations (the
                                         // offering keeps
@@ -687,7 +687,7 @@ pub(super) fn responses_tool_output(content: &str, content_blocks: Option<&[Valu
     json!(output)
 }
 
-/// Convert Codewhale messages to Responses API input items.
+/// Convert Ghosty messages to Responses API input items.
 pub(super) fn convert_messages_to_responses_input(
     request: &MessageRequest,
     provider: ApiProvider,
@@ -877,7 +877,7 @@ pub(super) fn convert_messages_to_responses_input(
     items
 }
 
-/// Convert a CodeWhale tool definition to a Responses API function tool.
+/// Convert a GhostyCode tool definition to a Responses API function tool.
 fn tool_to_responses_function(tool: &Tool) -> Value {
     let mut parameters = tool.input_schema.clone();
     let constraint_note = schema_sanitize::sanitize_for_responses(&mut parameters);

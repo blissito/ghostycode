@@ -91,7 +91,7 @@ fn update_renderer_canonicalizes_safe_release_tags() {
         doctor_update_report_lines(&report),
         vec![
             "latest: v0.9.4".to_string(),
-            "Update available. Run `codewhale update` to install.".to_string(),
+            "Update available. Run `ghosty update` to install.".to_string(),
         ]
     );
 }
@@ -132,8 +132,7 @@ fn live_probe_flags_open_only_their_owned_boundary() {
 
 #[test]
 fn cli_defaults_doctor_offline_and_keeps_json_incompatible_with_live_flags() {
-    let cli =
-        crate::Cli::try_parse_from(["codewhale-tui", "doctor"]).expect("parse default doctor");
+    let cli = crate::Cli::try_parse_from(["ghosty-tui", "doctor"]).expect("parse default doctor");
     let Some(crate::Commands::Doctor(args)) = cli.command else {
         panic!("expected doctor command");
     };
@@ -143,7 +142,7 @@ fn cli_defaults_doctor_offline_and_keeps_json_incompatible_with_live_flags() {
     assert!(!args.probe_mcp);
     assert!(!args.probe_search);
 
-    let cli = crate::Cli::try_parse_from(["codewhale-tui", "doctor", "--probe-search"])
+    let cli = crate::Cli::try_parse_from(["ghosty-tui", "doctor", "--probe-search"])
         .expect("parse search probe");
     let Some(crate::Commands::Doctor(args)) = cli.command else {
         panic!("expected doctor command");
@@ -162,7 +161,7 @@ fn cli_defaults_doctor_offline_and_keeps_json_incompatible_with_live_flags() {
             "--probe-search",
         ] {
             assert!(
-                crate::Cli::try_parse_from(["codewhale-tui", "doctor", output_flag, live_flag,])
+                crate::Cli::try_parse_from(["ghosty-tui", "doctor", output_flag, live_flag,])
                     .is_err(),
                 "{output_flag} unexpectedly accepted live flag {live_flag}"
             );
@@ -322,18 +321,18 @@ async fn search_probe_skips_the_default_provider_when_web_search_is_disabled() {
 }
 
 #[test]
-fn explicit_codewhale_home_owns_every_default_user_path() {
+fn explicit_ghosty_home_owns_every_default_user_path() {
     let _lock = crate::test_support::lock_test_env();
     let temp = tempfile::tempdir().expect("temp home");
-    let home = temp.path().join("isolated-codewhale-home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
-    let _config = crate::test_support::EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+    let home = temp.path().join("isolated-ghosty-home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
+    let _config = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
     let _legacy_config = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-    let _automations = crate::test_support::EnvVarGuard::remove("CODEWHALE_AUTOMATIONS_DIR");
+    let _automations = crate::test_support::EnvVarGuard::remove("GHOSTY_AUTOMATIONS_DIR");
     let _legacy_automations = crate::test_support::EnvVarGuard::remove("DEEPSEEK_AUTOMATIONS_DIR");
-    let _tasks = crate::test_support::EnvVarGuard::remove("CODEWHALE_TASKS_DIR");
+    let _tasks = crate::test_support::EnvVarGuard::remove("GHOSTY_TASKS_DIR");
     let _legacy_tasks = crate::test_support::EnvVarGuard::remove("DEEPSEEK_TASKS_DIR");
-    let _runtime = crate::test_support::EnvVarGuard::remove("CODEWHALE_RUNTIME_DIR");
+    let _runtime = crate::test_support::EnvVarGuard::remove("GHOSTY_RUNTIME_DIR");
     let _legacy_runtime = crate::test_support::EnvVarGuard::remove("DEEPSEEK_RUNTIME_DIR");
 
     let report = DoctorPathReport::resolve(None).expect("resolve doctor paths");
@@ -342,7 +341,7 @@ fn explicit_codewhale_home_owns_every_default_user_path() {
         task_manager_root.clone(),
     );
     let (secrets, legacy_secrets) =
-        codewhale_secrets::FileKeyringStore::default_paths_read_only().expect("secret paths");
+        ghosty_secrets::FileKeyringStore::default_paths_read_only().expect("secret paths");
 
     assert_eq!(report.home, home);
     assert_eq!(report.config, home.join("config.toml"));
@@ -389,7 +388,7 @@ fn explicit_codewhale_home_owns_every_default_user_path() {
 #[test]
 fn explicit_relative_config_matches_the_canonical_loader_path() {
     let relative = Path::new("fixtures/relative-doctor-config.toml");
-    let expected = codewhale_config::resolve_config_path(Some(relative.to_path_buf()))
+    let expected = ghosty_config::resolve_config_path(Some(relative.to_path_buf()))
         .expect("canonical config path");
 
     let report = DoctorPathReport::resolve(Some(relative)).expect("resolve doctor paths");
@@ -402,12 +401,12 @@ fn explicit_relative_config_matches_the_canonical_loader_path() {
 fn path_report_json_contains_no_secret_file_contents() {
     let _lock = crate::test_support::lock_test_env();
     let temp = tempfile::tempdir().expect("temp home");
-    let home = temp.path().join("isolated-codewhale-home");
+    let home = temp.path().join("isolated-ghosty-home");
     let secret_path = home.join("secrets").join("secrets.json");
     std::fs::create_dir_all(secret_path.parent().unwrap()).expect("secret dir fixture");
     let sentinel = "doctor-path-report-secret-sentinel";
     std::fs::write(&secret_path, sentinel).expect("secret fixture");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
 
     let report = DoctorPathReport::resolve(None).expect("resolve doctor paths");
     let json = serde_json::to_string(&report).expect("serialize path report");
@@ -420,15 +419,15 @@ fn path_report_json_contains_no_secret_file_contents() {
 fn human_and_json_backend_reports_never_include_secret_file_contents() {
     let _lock = crate::test_support::lock_test_env();
     let temp = tempfile::tempdir().expect("temp home");
-    let home = temp.path().join("isolated-codewhale-home");
+    let home = temp.path().join("isolated-ghosty-home");
     let secret_path = home.join("secrets").join("secrets.json");
     std::fs::create_dir_all(secret_path.parent().unwrap()).expect("secret dir fixture");
     let sentinel = "doctor-render-secret-sentinel";
     std::fs::write(&secret_path, format!("not-json:{sentinel}")).expect("secret fixture");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
-    let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
+    let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
 
-    let diagnostic = codewhale_secrets::diagnose_secret_backend();
+    let diagnostic = ghosty_secrets::diagnose_secret_backend();
     let human = secret_backend_human_lines(&diagnostic).join("\n");
     let json = serde_json::to_string(&diagnostic).expect("serialize backend diagnostic");
 

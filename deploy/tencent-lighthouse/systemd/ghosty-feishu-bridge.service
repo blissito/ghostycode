@@ -1,0 +1,23 @@
+[Unit]
+Description=GhostyCode Feishu/Lark Phone Bridge
+Wants=network-online.target ghosty-runtime.service
+After=network-online.target ghosty-runtime.service
+
+[Service]
+Type=simple
+User=ghosty
+Group=ghosty
+WorkingDirectory=/opt/ghosty/bridge
+# Legacy /etc/deepseek is loaded first for old installs; /etc/ghosty wins.
+EnvironmentFile=-/etc/deepseek/feishu-bridge.env
+EnvironmentFile=-/etc/ghosty/feishu-bridge.env
+ExecStart=/usr/bin/node /opt/ghosty/bridge/src/index.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/ghosty-feishu-bridge
+
+[Install]
+WantedBy=multi-user.target

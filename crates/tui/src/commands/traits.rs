@@ -180,7 +180,7 @@ pub trait Command: Send + Sync {
     /// default keeps every existing entry legacy (D2).
     fn contextual_handler(
         &self,
-    ) -> Option<codewhale_command_contract::handler::CommandHandler<CommandResult>> {
+    ) -> Option<ghosty_command_contract::handler::CommandHandler<CommandResult>> {
         None
     }
 }
@@ -235,14 +235,14 @@ impl Command for FunctionCommand {
 /// production group migrates (FEAT-018+).
 pub(crate) struct ContextualCommand {
     info: &'static CommandInfo,
-    handler: Option<codewhale_command_contract::handler::CommandHandler<CommandResult>>,
+    handler: Option<ghosty_command_contract::handler::CommandHandler<CommandResult>>,
     legacy: Option<CommandHandler>,
 }
 
 impl ContextualCommand {
     pub(crate) const fn contextual(
         info: &'static CommandInfo,
-        handler: codewhale_command_contract::handler::CommandHandler<CommandResult>,
+        handler: ghosty_command_contract::handler::CommandHandler<CommandResult>,
     ) -> Self {
         Self {
             info,
@@ -258,7 +258,7 @@ impl ContextualCommand {
     /// entry. This is the dependency inversion later command crates reuse.
     pub(crate) fn from_contract<C>() -> Result<Self, String>
     where
-        C: codewhale_command_contract::metadata::RegisterCommand<CommandResult>,
+        C: ghosty_command_contract::metadata::RegisterCommand<CommandResult>,
     {
         let portable = C::info();
         let description_id = super::contract::key_to_message_id(portable.description_key)
@@ -291,7 +291,7 @@ impl Command for ContextualCommand {
 
     fn contextual_handler(
         &self,
-    ) -> Option<codewhale_command_contract::handler::CommandHandler<CommandResult>> {
+    ) -> Option<ghosty_command_contract::handler::CommandHandler<CommandResult>> {
         self.handler.clone()
     }
 }

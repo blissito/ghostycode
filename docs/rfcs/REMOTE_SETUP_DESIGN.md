@@ -1,13 +1,13 @@
-# `codewhale remote-setup` - Tailscale-first design
+# `ghosty remote-setup` - Tailscale-first design
 
 Status: **design / revision**. This RFC revises the earlier cloud-first
 `remote-setup` plan. Keep the accurate implementation work already present:
-`codewhale remote-setup` exists today as a generate-only bundle wizard for
+`ghosty remote-setup` exists today as a generate-only bundle wizard for
 cloud plus chat bridge deployments, and `--apply` is still not implemented.
 
 ## Goal
 
-Give users a guided, education-forward way to reach a local-first CodeWhale
+Give users a guided, education-forward way to reach a local-first GhostyCode
 runtime from another surface without accidentally publishing their agent.
 
 Default posture:
@@ -18,7 +18,7 @@ Default posture:
 
 The wizard should ask:
 
-> How do you want to reach CodeWhale?
+> How do you want to reach GhostyCode?
 
 and offer these paths, in this order:
 
@@ -43,8 +43,8 @@ status derived from observable state — never from intent:
 | mode | status source |
 |------|---------------|
 | this machine only | always `ready`; nothing is exposed and nothing to configure |
-| runtime API | presence (never value) of `CODEWHALE_RUNTIME_TOKEN` / `DEEPSEEK_RUNTIME_TOKEN` |
-| phone on your network | `disabled` unless `CODEWHALE_RUNTIME_HOST` is set, because the shipped unit binds loopback |
+| runtime API | presence (never value) of `GHOSTY_RUNTIME_TOKEN` / `DEEPSEEK_RUNTIME_TOKEN` |
+| phone on your network | `disabled` unless `GHOSTY_RUNTIME_HOST` is set, because the shipped unit binds loopback |
 | chat app | per-bridge `secret_keys` presence from `remote_setup::registry` |
 
 Contract for that step:
@@ -62,9 +62,9 @@ Contract for that step:
 
 Verified against the codebase:
 
-- `codewhale app-server --http` is the canonical HTTP/SSE runtime API entrypoint.
+- `ghosty app-server --http` is the canonical HTTP/SSE runtime API entrypoint.
   It delegates to the mature `serve --http` implementation.
-- `codewhale app-server --mobile` is real and serves the phone control page at
+- `ghosty app-server --mobile` is real and serves the phone control page at
   `/mobile`.
 - `--host`, `--port`, `--workers`, `--auth-token`, `--insecure-no-auth`, and
   repeatable `--cors-origin` exist on `app-server --http` / `--mobile`.
@@ -73,8 +73,8 @@ Verified against the codebase:
 - `/health` and `/v1/runtime/info` are public bootstrap/supervision endpoints.
   `/v1/*` control routes require the runtime bearer token unless auth is
   explicitly disabled on a trusted loopback bind.
-- `codewhale doctor --json` exists as the machine-readable local diagnostic.
-- `codewhale remote-setup` exists, but today it is generate-only. Its current
+- `ghosty doctor --json` exists as the machine-readable local diagnostic.
+- `ghosty remote-setup` exists, but today it is generate-only. Its current
   matrix is cloud target (`lighthouse`, `azure`, `digitalocean`) x bridge
   (`feishu`, `telegram`) x provider registry. It does **not** yet model
   localhost, Tailscale, Weixin, or Funnel as first-class choices.
@@ -89,10 +89,10 @@ is required:
 
 ```bash
 # Runtime API only, verified:
-codewhale app-server --http --host 127.0.0.1 --port 7878 --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+ghosty app-server --http --host 127.0.0.1 --port 7878 --auth-token "$GHOSTY_RUNTIME_TOKEN"
 
 # Runtime API plus /mobile, verified:
-codewhale app-server --mobile --host 127.0.0.1 --port 7878 --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+ghosty app-server --mobile --host 127.0.0.1 --port 7878 --auth-token "$GHOSTY_RUNTIME_TOKEN"
 ```
 
 ## Common runtime base
@@ -100,13 +100,13 @@ codewhale app-server --mobile --host 127.0.0.1 --port 7878 --auth-token "$CODEWH
 Every path starts from the same local runtime trust boundary.
 
 ```bash
-CODEWHALE_RUNTIME_TOKEN="$(openssl rand -hex 32)"
-export CODEWHALE_RUNTIME_TOKEN
+GHOSTY_RUNTIME_TOKEN="$(openssl rand -hex 32)"
+export GHOSTY_RUNTIME_TOKEN
 
-codewhale app-server --http \
+ghosty app-server --http \
   --host 127.0.0.1 \
   --port 7878 \
-  --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+  --auth-token "$GHOSTY_RUNTIME_TOKEN"
 ```
 
 For the current binary, use `--mobile --host 127.0.0.1` instead of `--http` if
@@ -115,18 +115,18 @@ the path needs the built-in `/mobile` page.
 Doctor-style local validation:
 
 ```bash
-codewhale doctor --json
+ghosty doctor --json
 curl -fsS http://127.0.0.1:7878/health
 curl -fsS \
-  -H "Authorization: Bearer $CODEWHALE_RUNTIME_TOKEN" \
+  -H "Authorization: Bearer $GHOSTY_RUNTIME_TOKEN" \
   http://127.0.0.1:7878/v1/runtime/info
 ```
 
 Runtime mental model:
 
-- Exposed by CodeWhale: only the address it binds. The recommended bind is
+- Exposed by GhostyCode: only the address it binds. The recommended bind is
   `127.0.0.1:7878`.
-- Auth token: `CODEWHALE_RUNTIME_TOKEN`, passed as `Authorization: Bearer ...`
+- Auth token: `GHOSTY_RUNTIME_TOKEN`, passed as `Authorization: Bearer ...`
   by clients and bridges. Legacy `DEEPSEEK_RUNTIME_TOKEN` remains a fallback.
 - Provider secrets: stay in runtime configuration, not in bridge env files.
 - Bridge secrets: stay in transport-specific env files.
@@ -136,34 +136,34 @@ Runtime mental model:
 ### 1. This machine only (localhost)
 
 Use this when the TUI, SDK, browser, or local script runs on the same machine as
-CodeWhale.
+GhostyCode.
 
 Setup:
 
 ```bash
-CODEWHALE_RUNTIME_TOKEN="$(openssl rand -hex 32)"
-export CODEWHALE_RUNTIME_TOKEN
+GHOSTY_RUNTIME_TOKEN="$(openssl rand -hex 32)"
+export GHOSTY_RUNTIME_TOKEN
 
-codewhale app-server --http \
+ghosty app-server --http \
   --host 127.0.0.1 \
   --port 7878 \
-  --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+  --auth-token "$GHOSTY_RUNTIME_TOKEN"
 ```
 
 Env template:
 
 ```env
-CODEWHALE_RUNTIME_URL=http://127.0.0.1:7878
-CODEWHALE_RUNTIME_TOKEN=<same value used to start app-server>
+GHOSTY_RUNTIME_URL=http://127.0.0.1:7878
+GHOSTY_RUNTIME_TOKEN=<same value used to start app-server>
 ```
 
 Validation:
 
 ```bash
-codewhale doctor --json
+ghosty doctor --json
 curl -fsS http://127.0.0.1:7878/health
 curl -fsS \
-  -H "Authorization: Bearer $CODEWHALE_RUNTIME_TOKEN" \
+  -H "Authorization: Bearer $GHOSTY_RUNTIME_TOKEN" \
   http://127.0.0.1:7878/v1/runtime/info
 ```
 
@@ -171,38 +171,38 @@ Trust boundary:
 
 - Exposed: loopback only.
 - Not exposed: LAN, tailnet, or public internet.
-- Token used: `CODEWHALE_RUNTIME_TOKEN` for control routes; local `/health` and
+- Token used: `GHOSTY_RUNTIME_TOKEN` for control routes; local `/health` and
   `/v1/runtime/info` are public bootstrap endpoints.
 
 ### 2. Private devices with Tailscale (Recommended)
 
-Use this to reach CodeWhale from your phone or laptop without opening a LAN or
-public port. Tailscale authenticates devices in your tailnet; CodeWhale still
+Use this to reach GhostyCode from your phone or laptop without opening a LAN or
+public port. Tailscale authenticates devices in your tailnet; GhostyCode still
 binds to localhost.
 
 Target setup to feature in the wizard:
 
 ```bash
-CODEWHALE_RUNTIME_TOKEN="$(openssl rand -hex 32)"
-export CODEWHALE_RUNTIME_TOKEN
+GHOSTY_RUNTIME_TOKEN="$(openssl rand -hex 32)"
+export GHOSTY_RUNTIME_TOKEN
 
-codewhale app-server --http \
+ghosty app-server --http \
   --host 127.0.0.1 \
   --port 7878 \
-  --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+  --auth-token "$GHOSTY_RUNTIME_TOKEN"
 
 tailscale serve --bg --https=443 localhost:7878
 ```
 
 Then open the Tailscale Serve URL from a phone or laptop in the same tailnet.
-For the current binary's mobile page, start CodeWhale with the verified mobile
+For the current binary's mobile page, start GhostyCode with the verified mobile
 variant:
 
 ```bash
-codewhale app-server --mobile \
+ghosty app-server --mobile \
   --host 127.0.0.1 \
   --port 7878 \
-  --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+  --auth-token "$GHOSTY_RUNTIME_TOKEN"
 ```
 
 Then open (put the token in the URL **fragment**, not a query param — the
@@ -210,14 +210,14 @@ Then open (put the token in the URL **fragment**, not a query param — the
 the Tailscale serving layer or to any proxy log):
 
 ```text
-https://<machine>.<tailnet>.ts.net/mobile#token=<CODEWHALE_RUNTIME_TOKEN>
+https://<machine>.<tailnet>.ts.net/mobile#token=<GHOSTY_RUNTIME_TOKEN>
 ```
 
 Env template:
 
 ```env
-CODEWHALE_RUNTIME_URL=http://127.0.0.1:7878
-CODEWHALE_RUNTIME_TOKEN=<openssl-rand-hex-32>
+GHOSTY_RUNTIME_URL=http://127.0.0.1:7878
+GHOSTY_RUNTIME_TOKEN=<openssl-rand-hex-32>
 TAILSCALE_SERVE_TARGET=localhost:7878
 TAILSCALE_SERVE_URL=https://<machine>.<tailnet>.ts.net
 ```
@@ -225,11 +225,11 @@ TAILSCALE_SERVE_URL=https://<machine>.<tailnet>.ts.net
 Validation:
 
 ```bash
-codewhale doctor --json
+ghosty doctor --json
 curl -fsS http://127.0.0.1:7878/health
 curl -fsS https://<machine>.<tailnet>.ts.net/health
 curl -fsS \
-  -H "Authorization: Bearer $CODEWHALE_RUNTIME_TOKEN" \
+  -H "Authorization: Bearer $GHOSTY_RUNTIME_TOKEN" \
   https://<machine>.<tailnet>.ts.net/v1/runtime/info
 tailscale serve status
 ```
@@ -237,28 +237,28 @@ tailscale serve status
 Trust boundary:
 
 - Exposed: an HTTPS endpoint reachable by devices authorized in your tailnet.
-- Not exposed: the raw CodeWhale listener; it stays on `127.0.0.1`.
-- Token used: Tailscale identity gates network reachability; CodeWhale still
-  uses `CODEWHALE_RUNTIME_TOKEN` for runtime control.
+- Not exposed: the raw GhostyCode listener; it stays on `127.0.0.1`.
+- Token used: Tailscale identity gates network reachability; GhostyCode still
+  uses `GHOSTY_RUNTIME_TOKEN` for runtime control.
 - Caveat: Tailscale Serve is private to the tailnet. Tailscale Funnel is public
   internet exposure and belongs only in the advanced path below.
 
 ### 3. Telegram bot
 
-Use this when a Telegram DM should control a local CodeWhale runtime. The bridge
+Use this when a Telegram DM should control a local GhostyCode runtime. The bridge
 uses Telegram Bot API long polling, so it does not require a public webhook URL
 or inbound port.
 
 Setup:
 
 ```bash
-CODEWHALE_RUNTIME_TOKEN="$(openssl rand -hex 32)"
-export CODEWHALE_RUNTIME_TOKEN
+GHOSTY_RUNTIME_TOKEN="$(openssl rand -hex 32)"
+export GHOSTY_RUNTIME_TOKEN
 
-codewhale app-server --http \
+ghosty app-server --http \
   --host 127.0.0.1 \
   --port 7878 \
-  --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+  --auth-token "$GHOSTY_RUNTIME_TOKEN"
 
 cd integrations/telegram-bridge
 npm install --omit=dev
@@ -276,15 +276,15 @@ Env template:
 ```env
 TELEGRAM_BOT_TOKEN=replace-with-botfather-token
 
-CODEWHALE_RUNTIME_URL=http://127.0.0.1:7878
-CODEWHALE_RUNTIME_TOKEN=<same value used to start app-server>
-CODEWHALE_WORKSPACE=/path/to/workspace
+GHOSTY_RUNTIME_URL=http://127.0.0.1:7878
+GHOSTY_RUNTIME_TOKEN=<same value used to start app-server>
+GHOSTY_WORKSPACE=/path/to/workspace
 # Optional override; leave blank to inherit the runtime's configured provider/model.
-CODEWHALE_MODEL=
-CODEWHALE_MODE=agent
-CODEWHALE_ALLOW_SHELL=true     # grants shell execution from the bridge; set false for text-only chat
-CODEWHALE_TRUST_MODE=false
-CODEWHALE_AUTO_APPROVE=false
+GHOSTY_MODEL=
+GHOSTY_MODE=agent
+GHOSTY_ALLOW_SHELL=true     # grants shell execution from the bridge; set false for text-only chat
+GHOSTY_TRUST_MODE=false
+GHOSTY_AUTO_APPROVE=false
 
 TELEGRAM_CHAT_ALLOWLIST=
 TELEGRAM_ALLOW_UNLISTED=false
@@ -305,7 +305,7 @@ the bridge.
 Validation:
 
 ```bash
-codewhale doctor --json
+ghosty doctor --json
 curl -fsS http://127.0.0.1:7878/health
 npm run validate:config -- \
   --env .env \
@@ -315,10 +315,10 @@ npm run validate:config -- \
 
 Trust boundary:
 
-- Exposed: no inbound CodeWhale port. Telegram sees messages sent to the bot.
-- Not exposed: CodeWhale remains on `127.0.0.1`; provider keys stay in the
+- Exposed: no inbound GhostyCode port. Telegram sees messages sent to the bot.
+- Not exposed: GhostyCode remains on `127.0.0.1`; provider keys stay in the
   runtime env, not the Telegram env.
-- Tokens used: `TELEGRAM_BOT_TOKEN` for Telegram, `CODEWHALE_RUNTIME_TOKEN` for
+- Tokens used: `TELEGRAM_BOT_TOKEN` for Telegram, `GHOSTY_RUNTIME_TOKEN` for
   bridge-to-runtime calls, and `TELEGRAM_CHAT_ALLOWLIST` for user/chat gating.
 - Caveat: direct messages are the intended MVP control surface. Group control is
   off unless `TELEGRAM_ALLOW_GROUPS=true`.
@@ -332,13 +332,13 @@ public webhook URL.
 Setup:
 
 ```bash
-CODEWHALE_RUNTIME_TOKEN="$(openssl rand -hex 32)"
-export CODEWHALE_RUNTIME_TOKEN
+GHOSTY_RUNTIME_TOKEN="$(openssl rand -hex 32)"
+export GHOSTY_RUNTIME_TOKEN
 
-codewhale app-server --http \
+ghosty app-server --http \
   --host 127.0.0.1 \
   --port 7878 \
-  --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+  --auth-token "$GHOSTY_RUNTIME_TOKEN"
 
 cd integrations/feishu-bridge
 npm install --omit=dev
@@ -358,31 +358,31 @@ FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
 FEISHU_APP_SECRET=replace-with-app-secret
 FEISHU_DOMAIN=feishu               # international Lark users: set to "lark"
 
-CODEWHALE_RUNTIME_URL=http://127.0.0.1:7878
-CODEWHALE_RUNTIME_TOKEN=<same value used to start app-server>
-CODEWHALE_WORKSPACE=/path/to/workspace
+GHOSTY_RUNTIME_URL=http://127.0.0.1:7878
+GHOSTY_RUNTIME_TOKEN=<same value used to start app-server>
+GHOSTY_WORKSPACE=/path/to/workspace
 # Optional override; leave blank to inherit the runtime's configured provider/model.
-CODEWHALE_MODEL=
-CODEWHALE_MODE=agent
-CODEWHALE_ALLOW_SHELL=true     # grants shell execution from the bridge; set false for text-only chat
-CODEWHALE_TRUST_MODE=false
-CODEWHALE_AUTO_APPROVE=false
+GHOSTY_MODEL=
+GHOSTY_MODE=agent
+GHOSTY_ALLOW_SHELL=true     # grants shell execution from the bridge; set false for text-only chat
+GHOSTY_TRUST_MODE=false
+GHOSTY_AUTO_APPROVE=false
 
-CODEWHALE_CHAT_ALLOWLIST=
-CODEWHALE_ALLOW_UNLISTED=false
+GHOSTY_CHAT_ALLOWLIST=
+GHOSTY_ALLOW_UNLISTED=false
 FEISHU_ALLOW_GROUPS=false
 ```
 
 First pairing:
 
-Temporarily set `CODEWHALE_ALLOW_UNLISTED=true`, message the app once, copy the
-logged open id into `CODEWHALE_CHAT_ALLOWLIST`, then set
-`CODEWHALE_ALLOW_UNLISTED=false` and restart the bridge.
+Temporarily set `GHOSTY_ALLOW_UNLISTED=true`, message the app once, copy the
+logged open id into `GHOSTY_CHAT_ALLOWLIST`, then set
+`GHOSTY_ALLOW_UNLISTED=false` and restart the bridge.
 
 Validation:
 
 ```bash
-codewhale doctor --json
+ghosty doctor --json
 curl -fsS http://127.0.0.1:7878/health
 npm run validate:config -- \
   --env .env \
@@ -392,12 +392,12 @@ npm run validate:config -- \
 
 Trust boundary:
 
-- Exposed: no inbound CodeWhale port. Feishu/Lark sees messages sent to the app.
-- Not exposed: CodeWhale remains on `127.0.0.1`; provider keys stay in runtime
+- Exposed: no inbound GhostyCode port. Feishu/Lark sees messages sent to the app.
+- Not exposed: GhostyCode remains on `127.0.0.1`; provider keys stay in runtime
   config.
 - Tokens used: `FEISHU_APP_ID` / `FEISHU_APP_SECRET` for the platform,
-  `CODEWHALE_RUNTIME_TOKEN` for bridge-to-runtime calls, and
-  `CODEWHALE_CHAT_ALLOWLIST` for chat gating.
+  `GHOSTY_RUNTIME_TOKEN` for bridge-to-runtime calls, and
+  `GHOSTY_CHAT_ALLOWLIST` for chat gating.
 - Caveat: group control is off unless explicitly enabled.
 
 ### 5. Weixin personal bridge
@@ -409,13 +409,13 @@ and does not need a public port.
 Setup:
 
 ```bash
-CODEWHALE_RUNTIME_TOKEN="$(openssl rand -hex 32)"
-export CODEWHALE_RUNTIME_TOKEN
+GHOSTY_RUNTIME_TOKEN="$(openssl rand -hex 32)"
+export GHOSTY_RUNTIME_TOKEN
 
-codewhale app-server --http \
+ghosty app-server --http \
   --host 127.0.0.1 \
   --port 7878 \
-  --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+  --auth-token "$GHOSTY_RUNTIME_TOKEN"
 
 cd integrations/weixin-bridge
 npm install --omit=dev
@@ -428,19 +428,19 @@ npm start
 Env template:
 
 ```env
-CODEWHALE_RUNTIME_URL=http://127.0.0.1:7878
-CODEWHALE_RUNTIME_TOKEN=<same value used to start app-server>
-CODEWHALE_WORKSPACE=/path/to/workspace
+GHOSTY_RUNTIME_URL=http://127.0.0.1:7878
+GHOSTY_RUNTIME_TOKEN=<same value used to start app-server>
+GHOSTY_WORKSPACE=/path/to/workspace
 # Optional override; leave blank to inherit the runtime's configured provider/model.
-CODEWHALE_MODEL=
-CODEWHALE_MODE=agent
-CODEWHALE_ALLOW_SHELL=true     # grants shell execution from the bridge; set false for text-only chat
-CODEWHALE_TRUST_MODE=false
-CODEWHALE_AUTO_APPROVE=false
+GHOSTY_MODEL=
+GHOSTY_MODE=agent
+GHOSTY_ALLOW_SHELL=true     # grants shell execution from the bridge; set false for text-only chat
+GHOSTY_TRUST_MODE=false
+GHOSTY_AUTO_APPROVE=false
 
 WEXIN_CHAT_ALLOWLIST=
 WEXIN_ALLOW_UNLISTED=false
-WEXIN_STATE_DIR=/var/lib/codewhale-weixin-bot-bridge
+WEXIN_STATE_DIR=/var/lib/ghosty-weixin-bot-bridge
 ```
 
 First pairing:
@@ -452,19 +452,19 @@ Set `WEXIN_ALLOW_UNLISTED=true`, start the bridge, scan the QR code, send
 Validation:
 
 ```bash
-codewhale doctor --json
+ghosty doctor --json
 curl -fsS http://127.0.0.1:7878/health
 npm run check
 ```
 
 Trust boundary:
 
-- Exposed: no inbound CodeWhale port. The personal Weixin session and the
+- Exposed: no inbound GhostyCode port. The personal Weixin session and the
   bridge state directory become sensitive local state.
-- Not exposed: CodeWhale remains on `127.0.0.1`; provider keys stay in runtime
+- Not exposed: GhostyCode remains on `127.0.0.1`; provider keys stay in runtime
   config.
 - Tokens used: the scanned Weixin login/session state for platform access,
-  `CODEWHALE_RUNTIME_TOKEN` for bridge-to-runtime calls, and
+  `GHOSTY_RUNTIME_TOKEN` for bridge-to-runtime calls, and
   `WEXIN_CHAT_ALLOWLIST` for user gating.
 - Caveat: this is a personal-account bridge. Treat the host and state directory
   like a logged-in phone session.
@@ -478,13 +478,13 @@ that Tailscale Serve or long polling cannot satisfy.
 Preferred advanced pattern:
 
 ```bash
-CODEWHALE_RUNTIME_TOKEN="$(openssl rand -hex 32)"
-export CODEWHALE_RUNTIME_TOKEN
+GHOSTY_RUNTIME_TOKEN="$(openssl rand -hex 32)"
+export GHOSTY_RUNTIME_TOKEN
 
-codewhale app-server --mobile \
+ghosty app-server --mobile \
   --host 127.0.0.1 \
   --port 7878 \
-  --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+  --auth-token "$GHOSTY_RUNTIME_TOKEN"
 
 tailscale funnel --bg --https=443 localhost:7878
 ```
@@ -492,19 +492,19 @@ tailscale funnel --bg --https=443 localhost:7878
 Env template:
 
 ```env
-CODEWHALE_RUNTIME_URL=https://<public-name>
-CODEWHALE_RUNTIME_TOKEN=<openssl-rand-hex-32>
+GHOSTY_RUNTIME_URL=https://<public-name>
+GHOSTY_RUNTIME_TOKEN=<openssl-rand-hex-32>
 PUBLIC_EXPOSURE_ACK=true
 ```
 
 Validation:
 
 ```bash
-codewhale doctor --json
+ghosty doctor --json
 curl -fsS http://127.0.0.1:7878/health
 curl -fsS https://<public-name>/health
 curl -fsS \
-  -H "Authorization: Bearer $CODEWHALE_RUNTIME_TOKEN" \
+  -H "Authorization: Bearer $GHOSTY_RUNTIME_TOKEN" \
   https://<public-name>/v1/runtime/info
 tailscale funnel status
 ```
@@ -512,11 +512,11 @@ tailscale funnel status
 Trust boundary:
 
 - Exposed: a public HTTPS endpoint, not just your tailnet.
-- Not exposed by CodeWhale directly: the backend still binds to `127.0.0.1`,
+- Not exposed by GhostyCode directly: the backend still binds to `127.0.0.1`,
   but the fronting layer makes selected routes reachable from the internet.
-- Token used: `CODEWHALE_RUNTIME_TOKEN` remains mandatory for control routes.
+- Token used: `GHOSTY_RUNTIME_TOKEN` remains mandatory for control routes.
 - Caveat: public does not mean safe. Do not use `--insecure-no-auth`, do not bind
-  CodeWhale to `0.0.0.0`, and do not call this the default.
+  GhostyCode to `0.0.0.0`, and do not call this the default.
 
 ## Cloud/VPS posture
 
@@ -539,7 +539,7 @@ choices, not the default cloud path.
 ## Prior art: Hermes Agent (reference only - do not copy)
 
 Nous Research's Hermes Agent validates the table-driven part of this design.
-Use it for ideas; keep CodeWhale's style: Rust core, local runtime, zero-dep
+Use it for ideas; keep GhostyCode's style: Rust core, local runtime, zero-dep
 Node bridges where possible, and plain-text replies.
 
 - `gateway/platform_registry.py` maps to our `BridgeSpec` / access-path
@@ -580,12 +580,12 @@ funnel       local/vps   optional     explicit public exposure
 Clean separation:
 
 - **Provider = runtime env.** The runtime resolves provider/model/API key from
-  `CODEWHALE_PROVIDER`, provider key vars, and the provider registry. Bridges do
+  `GHOSTY_PROVIDER`, provider key vars, and the provider registry. Bridges do
   not need provider keys.
 - **Access path = reachability.** Localhost, Tailscale Serve, chat long polling,
   and Funnel are separate choices with different trust boundaries.
 - **Bridge = transport.** A chat bridge forwards allowed chat messages to
-  `http://127.0.0.1:7878` with `CODEWHALE_RUNTIME_TOKEN`.
+  `http://127.0.0.1:7878` with `GHOSTY_RUNTIME_TOKEN`.
 - **Cloud = where it runs and where secrets live.** It is not permission to
   open port 7878.
 
@@ -631,32 +631,32 @@ Files:
 - `runtime.env` - provider and runtime config:
 
   ```env
-  CODEWHALE_PROVIDER=openai
+  GHOSTY_PROVIDER=openai
   OPENAI_API_KEY=replace-with-provider-key
   # Optional override; leave blank to inherit the runtime's configured provider/model.
-CODEWHALE_MODEL=
-  CODEWHALE_RUNTIME_TOKEN=<random>
-  CODEWHALE_RUNTIME_PORT=7878
-  CODEWHALE_RUNTIME_WORKERS=2
+GHOSTY_MODEL=
+  GHOSTY_RUNTIME_TOKEN=<random>
+  GHOSTY_RUNTIME_PORT=7878
+  GHOSTY_RUNTIME_WORKERS=2
   RUST_LOG=info
   ```
 
 - `<bridge>.env` - transport only when a bridge is selected:
 
   ```env
-  CODEWHALE_RUNTIME_URL=http://127.0.0.1:7878
-  CODEWHALE_RUNTIME_TOKEN=<same random token>
-  CODEWHALE_WORKSPACE=/opt/whalebro
+  GHOSTY_RUNTIME_URL=http://127.0.0.1:7878
+  GHOSTY_RUNTIME_TOKEN=<same random token>
+  GHOSTY_WORKSPACE=/opt/whalebro
   # Optional override; leave blank to inherit the runtime's configured provider/model.
-CODEWHALE_MODEL=
-  CODEWHALE_MODE=agent
-  CODEWHALE_ALLOW_SHELL=true     # grants shell execution from the bridge; set false for text-only chat
-  CODEWHALE_TRUST_MODE=false
-  CODEWHALE_AUTO_APPROVE=false
+GHOSTY_MODEL=
+  GHOSTY_MODE=agent
+  GHOSTY_ALLOW_SHELL=true     # grants shell execution from the bridge; set false for text-only chat
+  GHOSTY_TRUST_MODE=false
+  GHOSTY_AUTO_APPROVE=false
   ```
 
-- `codewhale-runtime.service`
-- optional `codewhale-<bridge>.service`
+- `ghosty-runtime.service`
+- optional `ghosty-<bridge>.service`
 - optional cloud artifacts: `cloud-init.yaml`, `provision.sh`, `cnb.yml`, or
   cloud-specific runbook steps
 - `RUNBOOK.md` with:
@@ -683,22 +683,22 @@ Existing cloud target design remains accurate:
 - Azure VM: Docker image plus Key Vault, managed identity at boot.
 - DigitalOcean Droplet: native plus systemd, env-file secrets, `doctl` plan.
 
-All cloud plans should bind CodeWhale to `127.0.0.1` and then layer one of the
+All cloud plans should bind GhostyCode to `127.0.0.1` and then layer one of the
 reachability paths above.
 
-## Namespace migration: `DEEPSEEK_*` to `CODEWHALE_*`
+## Namespace migration: `DEEPSEEK_*` to `GHOSTY_*`
 
-Carry forward the convention already used in code: read `CODEWHALE_X` first,
+Carry forward the convention already used in code: read `GHOSTY_X` first,
 fall back to `DEEPSEEK_X` where compatibility is needed.
 
 Touch list from the original RFC remains valid:
 
-1. Bridges: read `CODEWHALE_X ?? DEEPSEEK_X` for runtime URL/token, workspace,
+1. Bridges: read `GHOSTY_X ?? DEEPSEEK_X` for runtime URL/token, workspace,
    model, mode, shell/trust/approval flags, allowlists, and timeouts. Templates
-   should emit `CODEWHALE_*`.
-2. Deploy units: prefer `/etc/codewhale/*.env`; keep legacy path reads only for
+   should emit `GHOSTY_*`.
+2. Deploy units: prefer `/etc/ghosty/*.env`; keep legacy path reads only for
    compatibility where needed.
-3. `.env.example` files and `config.example.toml`: lead with `CODEWHALE_*`,
+3. `.env.example` files and `config.example.toml`: lead with `GHOSTY_*`,
    document legacy aliases.
 4. Drop DeepSeek-shaped defaults in bridge templates except where DeepSeek is
    explicitly the chosen provider. Provider choice belongs in `runtime.env`.
@@ -708,8 +708,8 @@ Touch list from the original RFC remains valid:
 Existing bundle tests should stay:
 
 - Every cloud / bridge / provider triple renders.
-- Runtime and bridge env files share the same `CODEWHALE_RUNTIME_TOKEN`.
-- Env files lead with `CODEWHALE_*`.
+- Runtime and bridge env files share the same `GHOSTY_RUNTIME_TOKEN`.
+- Env files lead with `GHOSTY_*`.
 - Generated runbooks are non-empty and list the provision plan.
 - Provision plans are command data and are not executed in tests.
 
@@ -739,11 +739,11 @@ New tests for this revision:
 
 ## Command verification ledger
 
-Verified against CodeWhale code/docs in this worktree:
+Verified against GhostyCode code/docs in this worktree:
 
-- `codewhale app-server --http --host 127.0.0.1 --port 7878 --auth-token TOKEN`
-- `codewhale app-server --mobile --host 127.0.0.1 --port 7878 --auth-token TOKEN`
-- `codewhale doctor --json`
+- `ghosty app-server --http --host 127.0.0.1 --port 7878 --auth-token TOKEN`
+- `ghosty app-server --mobile --host 127.0.0.1 --port 7878 --auth-token TOKEN`
+- `ghosty doctor --json`
 - `curl /health` and authenticated `curl /v1/runtime/info`
 - `npm run validate:config` for Telegram and Feishu bridges
 - `npm run check` for the Weixin bridge
@@ -751,9 +751,9 @@ Verified against CodeWhale code/docs in this worktree:
 
 Marked proposed or external:
 
-- `codewhale remote-setup --access ...` and access-path registry
+- `ghosty remote-setup --access ...` and access-path registry
 - first-class Tailscale, localhost, Weixin, and Funnel choices in the wizard
 - `--apply` execution
 - Tailscale CLI commands (`tailscale serve ...`, `tailscale funnel ...`) are
   external Tailscale commands. They are the intended RFC examples, but they are
-  not CodeWhale CLI flags.
+  not GhostyCode CLI flags.

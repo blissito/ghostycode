@@ -58,7 +58,7 @@ impl BehavioralTip {
             Self::PlanningMode => template.replace("{key}", "Tab"),
             Self::BackgroundJobReceipt => template.replace("{key}", "Enter"),
             Self::ClearedInputRestore => template.replace("{chord}", "Ctrl+Z"),
-            Self::McpValidation => template.replace("{command}", "codewhale mcp validate"),
+            Self::McpValidation => template.replace("{command}", "ghosty mcp validate"),
             Self::RepeatedCommandHotbar => template.replace("{command}", "/hotbar"),
             Self::DurableStateWritten => template.replace("{command}", "/memory"),
             Self::TodoWriteHint => template.replace("{command}", "todo_write"),
@@ -269,7 +269,7 @@ mod tests {
         );
         assert_eq!(
             BehavioralTip::McpValidation.message(Locale::En),
-            "codewhale mcp validate starts servers and shows why"
+            "ghosty mcp validate starts servers and shows why"
         );
         assert_eq!(
             BehavioralTip::RepeatedCommandHotbar.message(Locale::En),

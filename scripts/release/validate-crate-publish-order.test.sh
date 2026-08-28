@@ -12,42 +12,42 @@ cat >"${metadata_file}" <<'JSON'
   "packages": [
     {
       "id": "build",
-      "name": "codewhale-build-support",
+      "name": "ghosty-build-support",
       "version": "0.9.5",
       "dependencies": []
     },
     {
       "id": "core",
-      "name": "codewhale-core",
+      "name": "ghosty-core",
       "version": "0.9.5",
       "dependencies": [
-        {"name": "codewhale-cli", "path": "/workspace/cli", "kind": "dev"}
+        {"name": "ghosty-cli", "path": "/workspace/cli", "kind": "dev"}
       ]
     },
     {
       "id": "tui",
-      "name": "codewhale-tui",
+      "name": "ghosty-tui",
       "version": "0.9.5",
       "dependencies": [
-        {"name": "codewhale-build-support", "path": "/workspace/build", "kind": "build"},
-        {"name": "codewhale-core", "path": "/workspace/core", "kind": null}
+        {"name": "ghosty-build-support", "path": "/workspace/build", "kind": "build"},
+        {"name": "ghosty-core", "path": "/workspace/core", "kind": null}
       ]
     },
     {
       "id": "app",
-      "name": "codewhale-app-server",
+      "name": "ghosty-app-server",
       "version": "0.9.5",
       "dependencies": [
-        {"name": "codewhale-core", "path": "/workspace/core", "kind": null}
+        {"name": "ghosty-core", "path": "/workspace/core", "kind": null}
       ]
     },
     {
       "id": "cli",
-      "name": "codewhale-cli",
+      "name": "ghosty-cli",
       "version": "0.9.5",
       "dependencies": [
-        {"name": "codewhale-tui", "path": "/workspace/tui", "kind": null},
-        {"name": "codewhale-app-server", "path": "/workspace/app", "kind": null}
+        {"name": "ghosty-tui", "path": "/workspace/tui", "kind": null},
+        {"name": "ghosty-app-server", "path": "/workspace/app", "kind": null}
       ]
     }
   ]
@@ -75,34 +75,34 @@ expect_validation_failure() {
 
 expect_validation_failure \
   duplicate-crate \
-  "publish package list contains duplicates: codewhale-core" \
+  "publish package list contains duplicates: ghosty-core" \
   "${metadata_file}" \
-  codewhale-build-support \
-  codewhale-core \
-  codewhale-core \
-  codewhale-tui \
-  codewhale-app-server \
-  codewhale-cli
+  ghosty-build-support \
+  ghosty-core \
+  ghosty-core \
+  ghosty-tui \
+  ghosty-app-server \
+  ghosty-cli
 
 expect_validation_failure \
   missing-crate \
-  "publish package list is missing workspace crates: codewhale-app-server" \
+  "publish package list is missing workspace crates: ghosty-app-server" \
   "${metadata_file}" \
-  codewhale-build-support \
-  codewhale-core \
-  codewhale-tui \
-  codewhale-cli
+  ghosty-build-support \
+  ghosty-core \
+  ghosty-tui \
+  ghosty-cli
 
 expect_validation_failure \
   extra-crate \
-  "publish package list contains non-workspace crates: codewhale-extra" \
+  "publish package list contains non-workspace crates: ghosty-extra" \
   "${metadata_file}" \
-  codewhale-build-support \
-  codewhale-core \
-  codewhale-tui \
-  codewhale-app-server \
-  codewhale-cli \
-  codewhale-extra
+  ghosty-build-support \
+  ghosty-core \
+  ghosty-tui \
+  ghosty-app-server \
+  ghosty-cli \
+  ghosty-extra
 
 mixed_metadata_file="${tmp_dir}/mixed-metadata.json"
 python3 - "${metadata_file}" "${mixed_metadata_file}" <<'PY'
@@ -119,11 +119,11 @@ expect_validation_failure \
   mixed-versions \
   "workspace packages have mixed versions: 0.9.4, 0.9.5" \
   "${mixed_metadata_file}" \
-  codewhale-build-support \
-  codewhale-core \
-  codewhale-tui \
-  codewhale-app-server \
-  codewhale-cli
+  ghosty-build-support \
+  ghosty-core \
+  ghosty-tui \
+  ghosty-app-server \
+  ghosty-cli
 
 nonrelease_metadata_file="${tmp_dir}/nonrelease-metadata.json"
 cat >"${nonrelease_metadata_file}" <<'JSON'
@@ -138,7 +138,7 @@ cat >"${nonrelease_metadata_file}" <<'JSON'
     },
     {
       "id": "core",
-      "name": "codewhale-core",
+      "name": "ghosty-core",
       "version": "0.9.5",
       "dependencies": [
         {"name": "internal-helper", "path": "/workspace/helper", "kind": null}
@@ -149,35 +149,35 @@ cat >"${nonrelease_metadata_file}" <<'JSON'
 JSON
 expect_validation_failure \
   nonrelease-workspace-dependency \
-  "codewhale-core depends on workspace crate internal-helper [normal], which is not in the codewhale-* release inventory" \
+  "ghosty-core depends on workspace crate internal-helper [normal], which is not in the ghosty-* release inventory" \
   "${nonrelease_metadata_file}" \
-  codewhale-core
+  ghosty-core
 
 bad_output="${tmp_dir}/bad-order.txt"
 if python3 "${script_dir}/validate-crate-publish-order.py" \
   --metadata-file "${metadata_file}" \
-  codewhale-build-support \
-  codewhale-tui \
-  codewhale-core \
-  codewhale-app-server \
-  codewhale-cli >"${bad_output}" 2>&1; then
+  ghosty-build-support \
+  ghosty-tui \
+  ghosty-core \
+  ghosty-app-server \
+  ghosty-cli >"${bad_output}" 2>&1; then
   echo "v0.9.5 publication order unexpectedly passed" >&2
   exit 1
 fi
 grep -F \
-  "codewhale-tui (position 2) depends on codewhale-core (position 3) [normal]" \
+  "ghosty-tui (position 2) depends on ghosty-core (position 3) [normal]" \
   "${bad_output}" >/dev/null
 
 good_output="${tmp_dir}/good-order.txt"
 python3 "${script_dir}/validate-crate-publish-order.py" \
   --metadata-file "${metadata_file}" \
-  codewhale-build-support \
-  codewhale-core \
-  codewhale-tui \
-  codewhale-app-server \
-  codewhale-cli >"${good_output}"
+  ghosty-build-support \
+  ghosty-core \
+  ghosty-tui \
+  ghosty-app-server \
+  ghosty-cli >"${good_output}"
 grep -F $'version\t0.9.5\t' "${good_output}" >/dev/null
-grep -F $'crate\tcodewhale-core\t1' "${good_output}" >/dev/null
+grep -F $'crate\tghosty-core\t1' "${good_output}" >/dev/null
 
 # Keep the checked-in order synchronized with the live locked workspace graph.
 # shellcheck source=scripts/release/crates.sh

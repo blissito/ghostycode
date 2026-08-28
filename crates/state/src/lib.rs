@@ -22,14 +22,14 @@ static SESSION_INDEX_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(())
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use codewhale_paths::{CODEWHALE_APP_DIR, LEGACY_APP_DIR, codewhale_home_override};
+use ghosty_paths::{GHOSTY_APP_DIR, LEGACY_APP_DIR, ghosty_home_override};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 // Re-export protocol's ThreadStatus so callers in the state crate and
 // external consumers (e.g. core) can reference a single canonical definition.
-pub use codewhale_protocol::ThreadStatus;
+pub use ghosty_protocol::ThreadStatus;
 
 /// Indicates how a session was initiated.
 ///
@@ -281,7 +281,7 @@ pub struct StateStore {
 impl StateStore {
     /// Open (or create) a state store at the given database path.
     ///
-    /// If `path` is `None`, the default location (`~/.codewhale/state.db`, with
+    /// If `path` is `None`, the default location (`~/.ghosty/state.db`, with
     /// `~/.deepseek/state.db` as a legacy fallback) is used.
     /// The database schema is created automatically if it does not exist.
     pub fn open(path: Option<PathBuf>) -> Result<Self> {
@@ -308,7 +308,7 @@ impl StateStore {
 
     /// Apply connection-level SQLite settings that must hold for every open.
     ///
-    /// Enables WAL so readers and writers from concurrent CodeWhale processes
+    /// Enables WAL so readers and writers from concurrent GhostyCode processes
     /// do not block each other as aggressively as the default rollback journal,
     /// and sets a multi-second busy timeout so a second process retries on
     /// `SQLITE_BUSY` instead of failing immediately (issue #4734).
@@ -1622,7 +1622,7 @@ impl StateStore {
     ///
     /// The lock is an adjacent `.lock` file rather than the index itself, so
     /// compaction's rename cannot pull the lock out from under a waiter. This
-    /// mirrors the discipline `codewhale-config` uses for `config.toml`.
+    /// mirrors the discipline `ghosty-config` uses for `config.toml`.
     fn with_session_index_lock<T>(&self, operation: impl FnOnce() -> Result<T>) -> Result<T> {
         if let Some(parent) = self.session_index_path.parent() {
             fs::create_dir_all(parent).with_context(|| {
@@ -1841,24 +1841,24 @@ impl StateStore {
 
 /// Resolve the default SQLite state path without opening or creating it.
 ///
-/// An explicit `CODEWHALE_HOME` always yields `<override>/state.db` and blocks
+/// An explicit `GHOSTY_HOME` always yields `<override>/state.db` and blocks
 /// ambient legacy fallback. Without an override, an existing legacy database
 /// remains readable until it is migrated.
 #[must_use]
 pub fn default_state_db_path() -> PathBuf {
-    // $CODEWHALE_HOME is a hard override of the base data directory
+    // $GHOSTY_HOME is a hard override of the base data directory
     // (docs/CONFIGURATION.md): when set, the state DB lives under it and we do
     // NOT fall back to the legacy ~/.deepseek path — silent fallback would
     // defeat the isolation the override promises (CI, containers, multi-project,
     // test harnesses). Legacy ~/.deepseek migration only applies to the default
     // home location.
-    if let Some(overridden) = codewhale_home_override().ok().flatten() {
+    if let Some(overridden) = ghosty_home_override().ok().flatten() {
         return overridden.join("state.db");
     }
-    let home = codewhale_paths::user_home().unwrap_or_else(|| PathBuf::from("."));
-    // Prefer the CodeWhale directory, falling back to legacy DeepSeek path
+    let home = ghosty_paths::user_home().unwrap_or_else(|| PathBuf::from("."));
+    // Prefer the GhostyCode directory, falling back to legacy DeepSeek path
     // so existing installs don't lose their session history.
-    let primary = home.join(CODEWHALE_APP_DIR).join("state.db");
+    let primary = home.join(GHOSTY_APP_DIR).join("state.db");
     if primary.exists() || !home.join(LEGACY_APP_DIR).join("state.db").exists() {
         primary
     } else {
@@ -2052,7 +2052,7 @@ mod tests {
             .expect("system time")
             .as_nanos();
         let dir = std::env::temp_dir().join(format!(
-            "codewhale-state-{name}-{}-{suffix}",
+            "ghosty-state-{name}-{}-{suffix}",
             std::process::id()
         ));
         fs::create_dir_all(&dir).expect("create temp state dir");
@@ -2075,7 +2075,7 @@ mod tests {
             updated_at: 10,
             status: ThreadStatus::Running,
             path: None,
-            cwd: PathBuf::from("/tmp/codewhale"),
+            cwd: PathBuf::from("/tmp/ghosty"),
             cli_version: "0.0.0-test".to_string(),
             source: SessionSource::Interactive,
             name: None,
@@ -2499,76 +2499,76 @@ mod tests {
         assert_eq!(persisted.continuation_count, 2);
     }
 
-    // ── $CODEWHALE_HOME override tests ──────────────────────────────
+    // ── $GHOSTY_HOME override tests ──────────────────────────────
     //
     // These touch a process-global env var, so they serialize against each
     // other (and restore the prior value) to stay hermetic under parallel test
     // runs — the same concern AGENTS.md flags for config_command_allow_shell_*.
 
-    static CODEWHALE_HOME_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static GHOSTY_HOME_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    struct CodeWhaleHomeGuard {
+    struct GhostyCodeHomeGuard {
         prior: Option<std::ffi::OsString>,
     }
-    impl CodeWhaleHomeGuard {
+    impl GhostyCodeHomeGuard {
         fn set(value: &str) -> Self {
-            let prior = std::env::var_os("CODEWHALE_HOME");
-            // SAFETY: serialised by CODEWHALE_HOME_TEST_LOCK.
-            unsafe { std::env::set_var("CODEWHALE_HOME", value) };
+            let prior = std::env::var_os("GHOSTY_HOME");
+            // SAFETY: serialised by GHOSTY_HOME_TEST_LOCK.
+            unsafe { std::env::set_var("GHOSTY_HOME", value) };
             Self { prior }
         }
         fn remove() -> Self {
-            let prior = std::env::var_os("CODEWHALE_HOME");
-            // SAFETY: serialised by CODEWHALE_HOME_TEST_LOCK.
-            unsafe { std::env::remove_var("CODEWHALE_HOME") };
+            let prior = std::env::var_os("GHOSTY_HOME");
+            // SAFETY: serialised by GHOSTY_HOME_TEST_LOCK.
+            unsafe { std::env::remove_var("GHOSTY_HOME") };
             Self { prior }
         }
     }
-    impl Drop for CodeWhaleHomeGuard {
+    impl Drop for GhostyCodeHomeGuard {
         fn drop(&mut self) {
-            // SAFETY: serialised by CODEWHALE_HOME_TEST_LOCK.
+            // SAFETY: serialised by GHOSTY_HOME_TEST_LOCK.
             unsafe {
                 match &self.prior {
-                    Some(value) => std::env::set_var("CODEWHALE_HOME", value),
-                    None => std::env::remove_var("CODEWHALE_HOME"),
+                    Some(value) => std::env::set_var("GHOSTY_HOME", value),
+                    None => std::env::remove_var("GHOSTY_HOME"),
                 }
             }
         }
     }
 
     #[test]
-    fn codewhale_home_override_returns_the_env_value_verbatim() {
-        let _lock = CODEWHALE_HOME_TEST_LOCK.lock().unwrap();
+    fn ghosty_home_override_returns_the_env_value_verbatim() {
+        let _lock = GHOSTY_HOME_TEST_LOCK.lock().unwrap();
         let override_path = std::env::temp_dir().join("cw-isolated-state");
-        let _g = CodeWhaleHomeGuard::set(override_path.to_str().unwrap());
-        // The env var IS the home dir — no ".codewhale" appended. This matches
-        // codewhale_home() in config ($CODEWHALE_HOME=/x means home is /x).
+        let _g = GhostyCodeHomeGuard::set(override_path.to_str().unwrap());
+        // The env var IS the home dir — no ".ghosty" appended. This matches
+        // ghosty_home() in config ($GHOSTY_HOME=/x means home is /x).
         assert_eq!(
-            codewhale_home_override().unwrap().as_deref(),
+            ghosty_home_override().unwrap().as_deref(),
             Some(override_path.as_path())
         );
     }
 
     #[test]
-    fn codewhale_home_override_none_when_unset() {
-        let _lock = CODEWHALE_HOME_TEST_LOCK.lock().unwrap();
-        let _g = CodeWhaleHomeGuard::remove();
-        assert!(codewhale_home_override().unwrap().is_none());
+    fn ghosty_home_override_none_when_unset() {
+        let _lock = GHOSTY_HOME_TEST_LOCK.lock().unwrap();
+        let _g = GhostyCodeHomeGuard::remove();
+        assert!(ghosty_home_override().unwrap().is_none());
     }
 
     #[test]
-    fn codewhale_home_override_none_when_whitespace_only() {
-        let _lock = CODEWHALE_HOME_TEST_LOCK.lock().unwrap();
-        let _g = CodeWhaleHomeGuard::set("   ");
+    fn ghosty_home_override_none_when_whitespace_only() {
+        let _lock = GHOSTY_HOME_TEST_LOCK.lock().unwrap();
+        let _g = GhostyCodeHomeGuard::set("   ");
         assert!(
-            codewhale_home_override().unwrap().is_none(),
-            "whitespace-only CODEWHALE_HOME must not establish isolation"
+            ghosty_home_override().unwrap().is_none(),
+            "whitespace-only GHOSTY_HOME must not establish isolation"
         );
     }
 
     #[test]
-    fn default_state_db_path_uses_codewhale_home_when_set() {
-        let _lock = CODEWHALE_HOME_TEST_LOCK.lock().unwrap();
+    fn default_state_db_path_uses_ghosty_home_when_set() {
+        let _lock = GHOSTY_HOME_TEST_LOCK.lock().unwrap();
         let dir = std::env::temp_dir().join(format!(
             "cw-home-state-{}-{}",
             std::process::id(),
@@ -2577,9 +2577,9 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let _g = CodeWhaleHomeGuard::set(dir.to_str().unwrap());
-        // Hard override: the DB is <CODEWHALE_HOME>/state.db, NOT
-        // <CODEWHALE_HOME>/.codewhale/state.db, and the legacy ~/.deepseek
+        let _g = GhostyCodeHomeGuard::set(dir.to_str().unwrap());
+        // Hard override: the DB is <GHOSTY_HOME>/state.db, NOT
+        // <GHOSTY_HOME>/.ghosty/state.db, and the legacy ~/.deepseek
         // fallback is bypassed entirely.
         assert_eq!(default_state_db_path(), dir.join("state.db"));
     }

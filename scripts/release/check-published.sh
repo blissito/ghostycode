@@ -57,21 +57,21 @@ fail=0
 echo "Checking published release ${version}..."
 
 # Canonical post-rebrand npm package.
-if npm_version="$(npm view "codewhale@${version}" version 2>/dev/null)"; then
-  echo "npm codewhale@${npm_version} is published."
+if npm_version="$(npm view "ghosty@${version}" version 2>/dev/null)"; then
+  echo "npm ghosty@${npm_version} is published."
 else
-  echo "npm codewhale@${version} is not published." >&2
+  echo "npm ghosty@${version} is not published." >&2
   fail=1
 fi
 
-# `codewhaleBinaryVersion` is the new internal version-pin field. Fall back
+# `ghostyBinaryVersion` is the new internal version-pin field. Fall back
 # to the legacy `deepseekBinaryVersion` field for old/transition packages.
 binary_field=""
 npm_binary_version=""
-if value="$(npm view "codewhale@${version}" codewhaleBinaryVersion 2>/dev/null)" && [[ -n "${value}" ]]; then
-  binary_field="codewhaleBinaryVersion"
+if value="$(npm view "ghosty@${version}" ghostyBinaryVersion 2>/dev/null)" && [[ -n "${value}" ]]; then
+  binary_field="ghostyBinaryVersion"
   npm_binary_version="${value}"
-elif value="$(npm view "codewhale@${version}" deepseekBinaryVersion 2>/dev/null)" && [[ -n "${value}" ]]; then
+elif value="$(npm view "ghosty@${version}" deepseekBinaryVersion 2>/dev/null)" && [[ -n "${value}" ]]; then
   binary_field="deepseekBinaryVersion"
   npm_binary_version="${value}"
 fi
@@ -86,9 +86,9 @@ if [[ -n "${binary_field}" ]]; then
     fail=1
   fi
 elif [[ "${allow_npm_binary_mismatch}" == "1" ]]; then
-  echo "npm codewhaleBinaryVersion is absent (allowed packaging-only mismatch)."
+  echo "npm ghostyBinaryVersion is absent (allowed packaging-only mismatch)."
 else
-  echo "npm codewhaleBinaryVersion is absent for codewhale@${version}." >&2
+  echo "npm ghostyBinaryVersion is absent for ghosty@${version}." >&2
   fail=1
 fi
 
@@ -105,7 +105,7 @@ else
   fail=1
 fi
 
-crates_user_agent="CodeWhale release check (https://github.com/Hmbown/CodeWhale)"
+crates_user_agent="GhostyCode release check (https://github.com/blissito/ghostycode)"
 for crate in "${release_crates[@]}"; do
   if curl -fsSL -A "${crates_user_agent}" "https://crates.io/api/v1/crates/${crate}/${version}" >/dev/null 2>&1; then
     echo "crates.io ${crate}@${version} is published."
@@ -116,7 +116,7 @@ for crate in "${release_crates[@]}"; do
 done
 
 if [[ "${fail}" == "0" ]]; then
-  echo "Published release OK: npm codewhale@${version} and ${#release_crates[@]} crates are visible."
+  echo "Published release OK: npm ghosty@${version} and ${#release_crates[@]} crates are visible."
 fi
 
 exit "${fail}"

@@ -95,7 +95,7 @@ pub(super) fn reasoning_detail_text(app: &App) -> Option<String> {
 }
 
 /// Build the full recorded-reasoning text for a turn-scoped set of thinking
-/// cells. Only provider-supplied reasoning Codewhale actually recorded is
+/// cells. Only provider-supplied reasoning Ghosty actually recorded is
 /// shown; nothing is fabricated when a chunk is empty.
 pub(super) fn reasoning_timeline_text(
     app: &App,

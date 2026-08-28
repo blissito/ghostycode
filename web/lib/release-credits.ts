@@ -15,7 +15,7 @@
  * See also:
  *   - .github/AUTHOR_MAP for identity mapping
  *   - CHANGELOG.md for the full release narrative
- *   - https://github.com/Hmbown/CodeWhale/graphs/contributors for the live list
+ *   - https://github.com/blissito/ghostycode/graphs/contributors for the live list
  */
 
 /** Contributors whose PRs were merged or harvested into this release. */

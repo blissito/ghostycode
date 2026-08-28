@@ -6,7 +6,7 @@ describe("SoftwareApplication structured data", () => {
   it("uses the published version advertised by the release-backed install URL", () => {
     const schema = buildSoftwareApplicationJsonLd({ version: "0.9.3" });
 
-    expect(schema.downloadUrl).toBe("https://codewhale.net/en/install");
+    expect(schema.downloadUrl).toBe("https://ghosty.net/en/install");
     expect(schema.softwareVersion).toBe("0.9.3");
     expect(schema.author).toEqual({ "@id": ORGANIZATION_ID });
   });

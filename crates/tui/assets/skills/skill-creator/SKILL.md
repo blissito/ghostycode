@@ -1,6 +1,6 @@
 ---
 name: skill-creator
-description: Create or improve codewhale skills. Use when the user wants a new skill, wants to update an existing skill, or needs guidance on when a skill should be a skill versus MCP, hooks, tools, or a plugin scaffold.
+description: Create or improve ghosty skills. Use when the user wants a new skill, wants to update an existing skill, or needs guidance on when a skill should be a skill versus MCP, hooks, tools, or a plugin scaffold.
 metadata:
   short-description: Create DeepSeek skills
 aliases-for: create-skill
@@ -8,7 +8,7 @@ aliases-for: create-skill
 
 # Skill Creator
 
-Use this skill to create small, useful codewhale skills that match the
+Use this skill to create small, useful ghosty skills that match the
 runtime this repository actually ships.
 
 ## What A Skill Is
@@ -24,10 +24,10 @@ Discovery paths, in precedence order:
 - `<workspace>/.opencode/skills`
 - `<workspace>/.claude/skills`
 - `<workspace>/.cursor/skills`
-- `<workspace>/.codewhale/skills`
+- `<workspace>/.ghosty/skills`
 - `~/.agents/skills`
 - `~/.claude/skills`
-- `~/.codewhale/skills`
+- `~/.ghosty/skills`
 - `~/.deepseek/skills` (legacy fallback)
 
 Use skills for model instructions, workflows, and lightweight conventions. Use
@@ -45,7 +45,7 @@ my-skill/
 ```markdown
 ---
 name: my-skill
-description: Use when Codewhale should follow this specific workflow.
+description: Use when Ghosty should follow this specific workflow.
 ---
 
 # My Skill
@@ -97,7 +97,7 @@ plain single-line values. Use lower-case hyphen-case names.
   unless the user asked for a rewrite.
 - Tighten descriptions when the skill is under-triggering or over-triggering.
 - Remove stale tool names, unavailable dependencies, and copied instructions
-  from other agents that do not apply to codewhale.
+  from other agents that do not apply to ghosty.
 - Keep examples short and directly tied to this runtime's commands and tools.
 
 ## Validation Checklist

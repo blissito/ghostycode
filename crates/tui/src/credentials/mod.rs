@@ -15,7 +15,7 @@
 //!
 //! This is a **design port into idiomatic Rust, not a line-for-line copy**.
 //! pi's module is async TypeScript over a `Provider` record with a single
-//! `auth.json`; CodeWhale's is synchronous Rust over `ApiProvider` and the
+//! `auth.json`; GhostyCode's is synchronous Rust over `ApiProvider` and the
 //! several pre-existing on-disk stores (secret store, config file, ambient
 //! environment, externally consented CLI credential files). The four ideas
 //! taken verbatim in spirit are: one type-tagged credential per provider,
@@ -68,17 +68,17 @@ pub(crate) use store::{CredentialInfo, CredentialStore};
 
 /// One type-tagged credential per provider — pi's `Credential` union.
 ///
-/// CodeWhale stores API keys in the secret store and OAuth material in
+/// GhostyCode stores API keys in the secret store and OAuth material in
 /// provider-specific files that this type deliberately does **not** try to
 /// unify; the OAuth variant carries only what a status surface needs, so
 /// adopting this type never moves a token between stores.
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum Credential {
-    /// A bearer API key held in CodeWhale's own durable store.
+    /// A bearer API key held in GhostyCode's own durable store.
     ApiKey { key: String },
     /// An OAuth access token plus its expiry, if the flow reported one.
     ///
-    /// Constructed today only by this module's own tests: CodeWhale's OAuth
+    /// Constructed today only by this module's own tests: GhostyCode's OAuth
     /// stores (xAI's generation files, the read-only external grants) have not
     /// been moved behind [`CredentialStore`] in this change, so nothing in the
     /// production path mints one yet. The variant is kept because it is half

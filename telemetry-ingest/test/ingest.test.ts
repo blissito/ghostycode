@@ -225,7 +225,7 @@ describe("value rules from the published schema", () => {
 
   it("rejects an app_version that is not a release version", () =>
     reject((batch) => {
-      batch.app_version = "0.9.4 (/Users/someone/src/codewhale)";
+      batch.app_version = "0.9.4 (/Users/someone/src/ghosty)";
     }));
 
   it("rejects a git_sha that is not 12 hex chars", () =>

@@ -1,6 +1,6 @@
 //! How *this* binary was installed, and therefore which command updates it.
 //!
-//! `codewhale update` replaces the running executable in place. That is the
+//! `ghosty update` replaces the running executable in place. That is the
 //! right thing for a binary the user downloaded from GitHub Releases, and the
 //! wrong thing for one a package manager owns: overwriting Homebrew's Cellar
 //! binary or npm's `node_modules` payload leaves the manager's metadata
@@ -22,12 +22,12 @@ use std::process::{Command, Stdio};
 /// Anything else is ignored and detection falls back to automatic detection.
 /// Packagers who relocate the binary somewhere the heuristics cannot read —
 /// and users debugging a wrong guess — set this.
-pub const INSTALL_METHOD_ENV: &str = "CODEWHALE_INSTALL_METHOD";
+pub const INSTALL_METHOD_ENV: &str = "GHOSTY_INSTALL_METHOD";
 
 /// The package manager (if any) that owns the running executable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InstallMethod {
-    /// Global npm install — the `codewhale` package under `node_modules`.
+    /// Global npm install — the `ghosty` package under `node_modules`.
     Npm,
     /// Homebrew — a binary under a `Cellar` or `linuxbrew` prefix.
     Homebrew,
@@ -91,7 +91,7 @@ impl InstallMethod {
         if has("cellar") || has(".linuxbrew") || has("linuxbrew") {
             return Self::Homebrew;
         }
-        // `.cargo/bin/codewhale` — require the pair so an unrelated `bin`
+        // `.cargo/bin/ghosty` — require the pair so an unrelated `bin`
         // directory does not read as a Cargo install.
         if components
             .windows(2)
@@ -115,22 +115,22 @@ impl InstallMethod {
 
     /// The exact shell command that updates this install.
     ///
-    /// Homebrew's primary formula is `codewhale`. Existing Cellar paths
+    /// Homebrew's primary formula is `ghosty`. Existing Cellar paths
     /// under the legacy `deepseek-tui` name still detect as Homebrew; those
     /// installs can keep using `brew upgrade deepseek-tui` during the
-    /// overlap window, but new notices name the Codewhale formula.
+    /// overlap window, but new notices name the Ghosty formula.
     #[must_use]
     pub fn update_command(self) -> &'static str {
         match self {
-            Self::Npm => "npm install -g codewhale@latest",
-            Self::Homebrew => "brew upgrade codewhale",
-            Self::Cargo => "cargo install codewhale-cli --locked --force",
+            Self::Npm => "npm install -g ghosty@latest",
+            Self::Homebrew => "brew upgrade ghosty",
+            Self::Cargo => "cargo install ghosty-cli --locked --force",
             Self::Omarchy => "omarchy update",
-            Self::Binary => "codewhale update",
+            Self::Binary => "ghosty update",
         }
     }
 
-    /// Whether `codewhale update` may replace this binary in place.
+    /// Whether `ghosty update` may replace this binary in place.
     ///
     /// False for every package-managed install: see the module docs for why
     /// overwriting a managed binary is worse than doing nothing.
@@ -195,11 +195,11 @@ mod tests {
 
     #[test]
     fn npm_global_install_is_detected_from_node_modules() {
-        let exe = PathBuf::from("/usr/local/lib/node_modules/codewhale/bin/codewhale");
+        let exe = PathBuf::from("/usr/local/lib/node_modules/ghosty/bin/ghosty");
         assert_eq!(InstallMethod::from_path(&exe), InstallMethod::Npm);
         assert_eq!(
             InstallMethod::Npm.update_command(),
-            "npm install -g codewhale@latest"
+            "npm install -g ghosty@latest"
         );
         assert!(!InstallMethod::Npm.supports_self_update());
     }
@@ -207,12 +207,12 @@ mod tests {
     #[test]
     fn homebrew_install_is_detected_from_cellar_on_both_prefixes() {
         for exe in [
-            "/opt/homebrew/Cellar/codewhale/0.9.8/bin/codewhale",
-            "/usr/local/Cellar/codewhale/0.9.8/bin/codewhale",
-            "/home/linuxbrew/.linuxbrew/Cellar/codewhale/0.9.8/bin/codewhale",
-            "/opt/homebrew/Cellar/deepseek-tui/0.9.4/bin/codewhale",
-            "/usr/local/Cellar/deepseek-tui/0.9.4/bin/codewhale",
-            "/home/linuxbrew/.linuxbrew/Cellar/deepseek-tui/0.9.4/bin/codewhale",
+            "/opt/homebrew/Cellar/ghosty/0.9.8/bin/ghosty",
+            "/usr/local/Cellar/ghosty/0.9.8/bin/ghosty",
+            "/home/linuxbrew/.linuxbrew/Cellar/ghosty/0.9.8/bin/ghosty",
+            "/opt/homebrew/Cellar/deepseek-tui/0.9.4/bin/ghosty",
+            "/usr/local/Cellar/deepseek-tui/0.9.4/bin/ghosty",
+            "/home/linuxbrew/.linuxbrew/Cellar/deepseek-tui/0.9.4/bin/ghosty",
         ] {
             assert_eq!(
                 InstallMethod::from_path(&PathBuf::from(exe)),
@@ -222,7 +222,7 @@ mod tests {
         }
         assert_eq!(
             InstallMethod::Homebrew.update_command(),
-            "brew upgrade codewhale"
+            "brew upgrade ghosty"
         );
         assert!(!InstallMethod::Homebrew.supports_self_update());
     }
@@ -230,12 +230,12 @@ mod tests {
     #[test]
     fn cargo_install_requires_the_cargo_bin_pair() {
         assert_eq!(
-            InstallMethod::from_path(&PathBuf::from("/home/u/.cargo/bin/codewhale")),
+            InstallMethod::from_path(&PathBuf::from("/home/u/.cargo/bin/ghosty")),
             InstallMethod::Cargo
         );
         // A bare `bin` directory is not a Cargo install.
         assert_eq!(
-            InstallMethod::from_path(&PathBuf::from("/home/u/bin/codewhale")),
+            InstallMethod::from_path(&PathBuf::from("/home/u/bin/ghosty")),
             InstallMethod::Binary
         );
         assert!(!InstallMethod::Cargo.supports_self_update());
@@ -244,13 +244,13 @@ mod tests {
     #[test]
     fn npm_wins_over_an_enclosing_manager_prefix() {
         // npm installed under a Homebrew-managed node prefix is still npm's.
-        let exe = PathBuf::from("/opt/homebrew/lib/node_modules/codewhale/bin/codewhale");
+        let exe = PathBuf::from("/opt/homebrew/lib/node_modules/ghosty/bin/ghosty");
         assert_eq!(InstallMethod::from_path(&exe), InstallMethod::Npm);
     }
 
     #[test]
     fn omarchy_probe_only_claims_package_owned_plain_paths() {
-        let managed = PathBuf::from("/usr/bin/codewhale");
+        let managed = PathBuf::from("/usr/bin/ghosty");
         assert_eq!(
             InstallMethod::detect_with_omarchy_probe(&managed, |_| true),
             InstallMethod::Omarchy
@@ -260,7 +260,7 @@ mod tests {
             InstallMethod::Binary
         );
 
-        let npm = PathBuf::from("/usr/lib/node_modules/codewhale/bin/codewhale");
+        let npm = PathBuf::from("/usr/lib/node_modules/ghosty/bin/ghosty");
         assert_eq!(
             InstallMethod::detect_with_omarchy_probe(&npm, |_| {
                 panic!("a path-owned install must not query pacman")
@@ -272,14 +272,14 @@ mod tests {
     #[test]
     fn termux_and_plain_release_binaries_self_update() {
         for exe in [
-            "/data/data/com.termux/files/usr/bin/codewhale",
-            "/usr/local/bin/codewhale",
-            "/home/u/Downloads/codewhale",
+            "/data/data/com.termux/files/usr/bin/ghosty",
+            "/usr/local/bin/ghosty",
+            "/home/u/Downloads/ghosty",
         ] {
             let method = InstallMethod::from_path(&PathBuf::from(exe));
             assert_eq!(method, InstallMethod::Binary, "{exe} should self-update");
             assert!(method.supports_self_update());
-            assert_eq!(method.update_command(), "codewhale update");
+            assert_eq!(method.update_command(), "ghosty update");
         }
     }
 

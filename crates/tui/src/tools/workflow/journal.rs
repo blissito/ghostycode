@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use tracing::warn;
 
-pub(super) const CODEWHALE_DIR: &str = ".codewhale";
+pub(super) const GHOSTY_DIR: &str = ".ghosty";
 pub(super) const WORKFLOW_RUNS_FILE: &str = "workflow-runs.jsonl";
 
 /// Per-workspace workflow state shared across tool-registry rebuilds.
@@ -183,7 +183,7 @@ struct WorkflowRunJournal {
 
 impl WorkflowRunJournal {
     fn open(workspace: &Path) -> Self {
-        let dir = workspace.join(CODEWHALE_DIR);
+        let dir = workspace.join(GHOSTY_DIR);
         if let Err(err) = std::fs::create_dir_all(&dir) {
             warn!(
                 "workflow journal dir create failed ({}): {err}",

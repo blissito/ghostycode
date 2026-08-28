@@ -1,4 +1,4 @@
-//! Codewhale color palette and semantic roles.
+//! Ghosty color palette and semantic roles.
 //!
 //! This module defines the color system for the TUI in three layers:
 //!

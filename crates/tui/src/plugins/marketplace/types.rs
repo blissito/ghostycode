@@ -1,6 +1,6 @@
 //! Normalized marketplace catalog model.
 //!
-//! Every parser (`kimi`, `claude`, `codex`, `codewhale`) funnels foreign
+//! Every parser (`kimi`, `claude`, `codex`, `ghosty`) funnels foreign
 //! catalog entries into [`MarketplaceCandidate`]. Parsers are pure: no
 //! network, no filesystem, no process execution. Sources are normalized
 //! and mapped onto an install plan, but nothing is fetched here.
@@ -10,10 +10,10 @@
 //! - Catalog labels (`official`, `curated`, `verified`, `partner`) are
 //!   display provenance only. They never grant trust, enablement,
 //!   installation, or any runtime permission. Every installed plugin still
-//!   enters Codewhale disabled and untrusted and goes through the existing
+//!   enters Ghosty disabled and untrusted and goes through the existing
 //!   content/capability hash review.
 //! - Foreign `policy` blocks (Codex `INSTALLED_BY_DEFAULT`) never trigger
-//!   auto-install; Codewhale only installs on an explicit operator action.
+//!   auto-install; Ghosty only installs on an explicit operator action.
 //! - A malformed entry degrades that entry alone; it never hides the rest
 //!   of the catalog.
 
@@ -37,9 +37,9 @@ pub enum MarketplaceFormat {
     /// Detect from documented structural markers; ambiguous documents fail.
     #[default]
     Auto,
-    /// Codewhale native catalog: `plugins[]` with `name` + install-spec
+    /// Ghosty native catalog: `plugins[]` with `name` + install-spec
     /// `source` strings.
-    Codewhale,
+    Ghosty,
     /// Kimi / Moonshot `marketplace.json`: `version` + `plugins[]` with
     /// `id`, `displayName`, `tier`, `source` (path / GitHub URL / zip URL).
     Kimi,
@@ -57,7 +57,7 @@ impl MarketplaceFormat {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Auto => "auto",
-            Self::Codewhale => "codewhale",
+            Self::Ghosty => "ghosty",
             Self::Kimi => "kimi",
             Self::Claude => "claude",
             Self::Codex => "codex",
@@ -214,10 +214,10 @@ pub enum MarketplaceSourceSpec {
     /// Non-GitHub git URL. The installer cannot fetch these yet; the plan
     /// stays [`MarketplaceInstallPlan::Unsupported`].
     GitUrl { url: String },
-    /// npm package declaration. Codewhale does not execute npm; the plan
+    /// npm package declaration. Ghosty does not execute npm; the plan
     /// stays unsupported.
     Npm { package: String },
-    /// A source form the catalog format defines but Codewhale refuses to
+    /// A source form the catalog format defines but Ghosty refuses to
     /// execute (e.g. Claude `command` sources), with the reason.
     Refused { reason: String },
     /// Required source field present but not a documented shape for the
@@ -225,7 +225,7 @@ pub enum MarketplaceSourceSpec {
     Invalid { reason: String },
 }
 
-/// Whether and how Codewhale's existing installer could fetch a source.
+/// Whether and how Ghosty's existing installer could fetch a source.
 /// Unsupported plans are visible, with an honest reason — a listed plugin
 /// is never implied to be installable.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -233,7 +233,7 @@ pub enum MarketplaceSourceSpec {
 pub enum MarketplaceInstallPlan {
     /// Maps onto a real [`PluginInstallSource`] spec.
     Supported { spec: String, source_kind: String },
-    /// Cannot be installed by Codewhale today, and why.
+    /// Cannot be installed by Ghosty today, and why.
     Unsupported { reason: String, raw: String },
 }
 

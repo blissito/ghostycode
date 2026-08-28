@@ -72,10 +72,10 @@ pub const ALL_HOOK_EVENTS: [HookEvent; 11] = [
     HookEvent::ShellEnv,
 ];
 
-/// How much a hook's result can change what Codewhale does next.
+/// How much a hook's result can change what Ghosty does next.
 ///
 /// This is the steering allowlist. "Observer" is a statement about
-/// Codewhale's control flow only — an observer hook is still an arbitrary
+/// Ghosty's control flow only — an observer hook is still an arbitrary
 /// shell command and can have any external side effect it likes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HookSteering {
@@ -85,7 +85,7 @@ pub enum HookSteering {
     DecidesToolCall,
     /// stdout contributes `KEY=VALUE` pairs to one `exec_shell` invocation.
     ContributesShellEnv,
-    /// stdout is ignored and the result cannot change Codewhale's behavior.
+    /// stdout is ignored and the result cannot change Ghosty's behavior.
     Observer,
 }
 
@@ -126,7 +126,7 @@ impl HookEvent {
         }
     }
 
-    /// Whether a hook result for this event can change Codewhale's own
+    /// Whether a hook result for this event can change Ghosty's own
     /// behavior. Never read this as "side-effect free" — see [`HookSteering`].
     #[must_use]
     pub fn can_steer(self) -> bool {
@@ -382,7 +382,7 @@ fn default_enabled() -> bool {
 }
 
 impl HooksConfig {
-    /// Load global hooks merged with project-local `.codewhale/hooks.toml` (#3026).
+    /// Load global hooks merged with project-local `.ghosty/hooks.toml` (#3026).
     ///
     /// Project hooks are executable repository configuration, so they are only
     /// honored after the workspace has been trusted in user-owned config.
@@ -396,7 +396,7 @@ impl HooksConfig {
     ///
     /// Project hooks intentionally remain last because that is the existing
     /// tie-breaking contract for mutable `message_submit` transformations.
-    /// Plugin files are read only from Codewhale's immutable staged snapshot;
+    /// Plugin files are read only from Ghosty's immutable staged snapshot;
     /// their attached authority is rechecked at every process-spawn boundary.
     pub fn load_with_project_and_plugins(
         global: HooksConfig,
@@ -432,7 +432,7 @@ impl HooksConfig {
                 }
             }
         }
-        let project_path = workspace.join(".codewhale").join("hooks.toml");
+        let project_path = workspace.join(".ghosty").join("hooks.toml");
         if project_path.exists() && workspace_allows_project_hooks(workspace) {
             match read_project_hooks_file(&project_path) {
                 Ok(contents) => match toml::from_str::<HooksConfig>(&contents) {
@@ -866,7 +866,7 @@ command = "echo hi"
         assert_eq!(legacy.hooks.len(), 1);
     }
 
-    /// The steering allowlist. Exactly three events can change what Codewhale
+    /// The steering allowlist. Exactly three events can change what Ghosty
     /// does; every other event defaults to observer.
     #[test]
     fn steering_allowlist_is_exactly_three_events() {
@@ -905,7 +905,7 @@ command = "echo hi"
         }
     }
 
-    /// Observer-only is a claim about Codewhale's control flow, not about the
+    /// Observer-only is a claim about Ghosty's control flow, not about the
     /// command. This test exists so the distinction is written down somewhere
     /// executable: an observer hook is still an arbitrary shell command and
     /// its external side effects are entirely real.
@@ -934,7 +934,7 @@ command = "echo hi"
             &crate::hooks::HookContext::new().with_session_id("sess_test"),
         );
 
-        // Codewhale ignored the result...
+        // Ghosty ignored the result...
         assert_eq!(results.len(), 1);
         assert_eq!(HookEvent::SessionEnd.steering(), HookSteering::Observer);
         // ...and the command still changed the filesystem.

@@ -10,8 +10,8 @@ import { buildPageMetadata } from "@/lib/page-meta";
  */
 const CODE_SPANS: Record<string, string> = {
   constitutionCommand: "/constitution",
-  homeConfig: "$CODEWHALE_HOME/constitution.json",
-  repoConfig: ".codewhale/constitution.json",
+  homeConfig: "$GHOSTY_HOME/constitution.json",
+  repoConfig: ".ghosty/constitution.json",
 };
 
 /**
@@ -26,7 +26,7 @@ const PRINCIPLE_BADGES: Record<string, [string, string]> = {
 };
 
 const CONFIG_DOCS_HREF =
-  "https://github.com/Hmbown/CodeWhale/blob/main/docs/CONFIGURATION.md#constitution-project-instructions-and-repo-authority";
+  "https://github.com/blissito/ghostycode/blob/main/docs/CONFIGURATION.md#constitution-project-instructions-and-repo-authority";
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

@@ -5,7 +5,7 @@
 Agent Fleet is the local-first roster and member-selection layer for durable
 multi-worker runs. It does not execute or authorize work. After Fleet resolves
 who should participate, the delegated coordinator launches a headless
-`codewhale exec` run and the Runtime tracks it durably. See
+`ghosty exec` run and the Runtime tracks it durably. See
 [AGENT_RUNTIME.md](AGENT_RUNTIME.md) for how sub-agents, `exec`, and
 Fleet-backed workers converge on one runtime. In product language, a user may
 still "open a sub-agent"; in architecture language, durable nested work uses a
@@ -20,19 +20,19 @@ For a guided start-to-monitor walkthrough that combines Fleet task specs with
 Workflow authoring, see [Fleet + Workflow Tutorial](FLEET_WORKFLOW_TUTORIAL.md).
 
 ```sh
-codewhale fleet init
-codewhale fleet run tasks.json --max-workers 4
-codewhale fleet status
-codewhale fleet inspect <worker-id>
-codewhale fleet logs <worker-id>
-codewhale fleet artifacts <worker-id>
-codewhale fleet interrupt <worker-id>
-codewhale fleet restart <worker-id>
-codewhale fleet resume <run-id>
-codewhale fleet stop --all
+ghosty fleet init
+ghosty fleet run tasks.json --max-workers 4
+ghosty fleet status
+ghosty fleet inspect <worker-id>
+ghosty fleet logs <worker-id>
+ghosty fleet artifacts <worker-id>
+ghosty fleet interrupt <worker-id>
+ghosty fleet restart <worker-id>
+ghosty fleet resume <run-id>
+ghosty fleet stop --all
 ```
 
-`codewhale fleet resume <run-id>` is the restart-recovery verb: it replays the
+`ghosty fleet resume <run-id>` is the restart-recovery verb: it replays the
 ledger, reconciles any in-flight lease whose worker stopped heartbeating
 (retrying within the task's budget, else failing and escalating per the alert
 policy), and prints the post-resume status. It launches no new work and is
@@ -40,8 +40,8 @@ idempotent, so it is safe to run after a manager exit, laptop sleep, or runtime
 restart.
 
 Coordinator state for Fleet-backed runs is stored under the workspace in
-`.codewhale/fleet.jsonl`. Worker logs and adapter logs are stored under
-`.codewhale/fleet/` and `.codewhale/fleet-host/`.
+`.ghosty/fleet.jsonl`. Worker logs and adapter logs are stored under
+`.ghosty/fleet/` and `.ghosty/fleet-host/`.
 
 ## Public contract: identity, membership, and selection
 
@@ -72,7 +72,7 @@ Natural-language member selection is deterministic. A caller may name:
 
 An unqualified exact member id wins. Every other match succeeds only when it
 identifies one distinct roster member. Multiple matches produce an ambiguity
-error that names the candidates and asks for `member:<id>`; Codewhale never
+error that names the candidates and asks for `member:<id>`; Ghosty never
 picks whichever match happened to be listed first. Users do not need to know
 an internal role label such as `scout`: a unique member name, display model, or
 exact model id is equally valid. Saved v2 Fleets store that optional human name
@@ -81,8 +81,8 @@ trimmed printable line of at most 80 characters.
 
 ### Interactive and persistent status
 
-`/fleet status` and `codewhale fleet status` are the **same** command on two
-surfaces. Both read the durable `.codewhale/fleet.jsonl` ledger for the
+`/fleet status` and `ghosty fleet status` are the **same** command on two
+surfaces. Both read the durable `.ghosty/fleet.jsonl` ledger for the
 workspace, through one shared control-plane contract, and both report the same
 verb id (`fleet.status`), read-vs-write authority, persistence scope, and
 receipt. When the workspace has no ledger they say so with a typed reason
@@ -94,9 +94,9 @@ have their own name:
 
 - `/fleet workers` (or `/subagents`, or `n`) shows sub-agents attached to the
   current TUI session. It does not read the persistent ledger.
-- `/fleet list|status|interrupt|resume` and `codewhale fleet
+- `/fleet list|status|interrupt|resume` and `ghosty fleet
   list|status|interrupt|resume` act on the durable ledger.
-- `codewhale fleet restart <worker-id>` is CLI-only: it re-leases the task and
+- `ghosty fleet restart <worker-id>` is CLI-only: it re-leases the task and
   then drives the manager loop to completion. `/fleet restart` does not
   silently do a smaller thing — it reports `surface_not_supported` and names
   the CLI command.
@@ -115,7 +115,7 @@ authoring a reusable agent-team profile. Bare `/fleet` and the
 `roster`/`roles`/`profiles`/`party` aliases open the roster (the saved profiles).
 `/fleet workers` opens the current-session worker view; `/subagents` is a
 compatibility shortcut for that view. For durable run history, use
-`/fleet status` or the shell command `codewhale fleet status` described above —
+`/fleet status` or the shell command `ghosty fleet status` described above —
 they are the same command.
 
 The wizard is progressive: you make one focused choice at a time — a **role**,
@@ -132,13 +132,13 @@ on the review step.
 The **Destination** step is a focused two-option list (arrows move, Enter or
 Space chooses; Tab never changes the destination):
 
-- **This project** writes `<workspace>/.codewhale/agents/<role>.toml`. It
+- **This project** writes `<workspace>/.ghosty/agents/<role>.toml`. It
   applies to this project only and takes precedence over a Personal profile
   with the same id. When project profiles are disabled for the session
   (`--no-project-config`) or the workspace folder is unavailable, the option is
   shown disabled with that reason; the wizard never falls back to Personal on
   its own.
-- **Personal** writes `$CODEWHALE_HOME/agents/<role>.toml` and is available in
+- **Personal** writes `$GHOSTY_HOME/agents/<role>.toml` and is available in
   every project on this machine, except where a project has its own profile
   with the same id.
 
@@ -157,12 +157,12 @@ execution setting rather than part of the member's Fleet identity.
 
 Profile scope controls where a role definition is reusable; it does not widen
 the authority of a running operation and is not a project-trust setting. To
-coordinate several nearby repositories, start Codewhale from their shared
+coordinate several nearby repositories, start Ghosty from their shared
 parent directory so that parent is the workspace. Project/workspace trust,
 external paths, filesystem and network reach, secrets, approvals, sandboxing,
 and tool authorization come from delegated-coordination and Runtime policy.
 For nested delegation, Runtime intersects the requested child posture with the
-live parent. For standalone `codewhale fleet` execution, Runtime instead uses
+live parent. For standalone `ghosty fleet` execution, Runtime instead uses
 the bounded tool-authority envelope minted from the task's explicit write
 scope together with live config, sandbox, and platform enforcement. Neither
 path reads authority from the profile's storage scope or identity selector.
@@ -250,7 +250,7 @@ header/status signal; avoid repeating emoji-heavy rows for every worker.
 
 A selected v2 Fleet freezes each selected member's id, semantic role, provider,
 and model identity into the durable run before a Workflow starts. Save the
-Fleet as `fleets/<name>.toml` in the workspace or under `$CODEWHALE_HOME`.
+Fleet as `fleets/<name>.toml` in the workspace or under `$GHOSTY_HOME`.
 Models cannot replace those identity or route assignments at runtime:
 
 ```toml
@@ -301,7 +301,7 @@ rejected. A manually selected worker reasoning tier makes no Router call. Route
 and reasoning receipts name the worker model and, when used, the Router's exact
 provider/model so the operator can see which model did which job. If the same
 bare Router or Fleet name exists in both roots, qualify it as
-`workspace/<name>` or `codewhale_home/<name>` instead of relying on shadowing.
+`workspace/<name>` or `ghosty_home/<name>` instead of relying on shadowing.
 
 Compatibility schemas may serialize `reasoning`, `permissions`, tool hints, or
 other execution settings beside a member. Those values are not Fleet identity,
@@ -321,7 +321,7 @@ choose a different member or route. See
 
 Reasoning receipts record the requested tier *and* the tier the provider was
 actually asked for. Those differ whenever a route cannot express the requested
-one — CodeWhale's route normalizer sends `high` for a requested `low` on most
+one — GhostyCode's route normalizer sends `high` for a requested `low` on most
 routes, and Z.AI's GLM routes express only thinking on/off — so the receipt
 reports the real request rather than the label that was selected. The value a
 call actually carries is spelled by that route's own normalizer, not by the tier
@@ -378,7 +378,7 @@ branch, sequence, loop, expand, review, and reduce decisions. The delegated
 coordinator and Runtime own slot admission, launch concurrency, the execution
 ledger, and every authority decision. A workflow script receives no direct
 shell, filesystem, network, provider-secret, cancellation, or TUI authority;
-workers perform real work as `codewhale exec` processes under the effective
+workers perform real work as `ghosty exec` processes under the effective
 Runtime policy.
 
 Default Workflow-to-Fleet validation is intentionally bounded:
@@ -416,7 +416,7 @@ next recursive ring rather than trying to show the whole tree at once.
 
 ## Task Spec
 
-`codewhale fleet run` accepts JSON or TOML. A minimal JSON spec:
+`ghosty fleet run` accepts JSON or TOML. A minimal JSON spec:
 
 ```json
 {
@@ -432,7 +432,7 @@ next recursive ring rather than trying to show the whole tree at once.
 }
 ```
 
-Workers are optional. If omitted, Codewhale creates local worker slots up to
+Workers are optional. If omitted, Ghosty creates local worker slots up to
 `--max-workers`.
 
 Task specs are typed in Rust and keep verification data separate from worker
@@ -448,15 +448,15 @@ or Runtime inputs applied after the member is resolved. A task can declare:
 
 None of those execution-policy fields becomes part of a Fleet identity or an
 alternate member selector. Omitted or zero `max_steps` means no model-step
-ceiling; Codewhale must not synthesize a default step budget. Explicit positive
+ceiling; Ghosty must not synthesize a default step budget. Explicit positive
 step limits, timeouts, cancellation, provider safeguards, heartbeats, and
 admission control are enforced independently by the delegated coordinator and
 Runtime.
 
-Workers write bounded artifact files under `.codewhale/fleet/` and ledger only
+Workers write bounded artifact files under `.ghosty/fleet/` and ledger only
 the artifact refs: kind, path, checksum, MIME type, and size. Receipts record
 `pass`, `fail`, `partial`, `skip`, or `timeout`; failed receipts may also mark
-the source as `transport`, `task`, or `verifier`. `codewhale fleet status`
+the source as `transport`, `task`, or `verifier`. `ghosty fleet status`
 surfaces those failure-source counts separately.
 
 Deterministic built-in scorers are `exit_code`, `file_exists`, `regex_match`,
@@ -504,7 +504,7 @@ Runtime clamping. A task spec may request its execution settings explicitly:
   "input_files": ["crates/**/*.rs"],
   "budget": { "max_tokens": 32000 },
   "expected_artifacts": ["log", "report"],
-  "scorer": { "kind": "regex_match", "path": ".codewhale/fleet/report.md", "pattern": "finding|all clear" }
+  "scorer": { "kind": "regex_match", "path": ".ghosty/fleet/report.md", "pattern": "finding|all clear" }
 }
 ```
 
@@ -583,12 +583,12 @@ Example alert config shape:
   "adapters": {
     "ops-slack": {
       "kind": "slack",
-      "webhook_env": "CODEWHALE_FLEET_SLACK_WEBHOOK",
-      "channel": "#codewhale-fleet"
+      "webhook_env": "GHOSTY_FLEET_SLACK_WEBHOOK",
+      "channel": "#ghosty-fleet"
     },
     "pager": {
       "kind": "pager_duty",
-      "routing_key_env": "CODEWHALE_FLEET_PAGERDUTY_ROUTING_KEY",
+      "routing_key_env": "GHOSTY_FLEET_PAGERDUTY_ROUTING_KEY",
       "severity": "critical"
     }
   }
@@ -598,7 +598,7 @@ Example alert config shape:
 Use dry-run to inspect a redacted adapter payload without sending:
 
 ```sh
-codewhale fleet alert-dry-run \
+ghosty fleet alert-dry-run \
   --event stale \
   --run-id fleet-demo \
   --worker-id fleet-demo-local-1 \
@@ -608,13 +608,13 @@ codewhale fleet alert-dry-run \
 ```
 
 The payload includes the run id, worker id, task id, status, short reason, and
-safe inspection commands such as `codewhale fleet status` and
-`codewhale fleet inspect <worker-id>`. Endpoints, webhook secrets, and
+safe inspection commands such as `ghosty fleet status` and
+`ghosty fleet inspect <worker-id>`. Endpoints, webhook secrets, and
 PagerDuty routing keys are shown as `<redacted:env:...>`.
 
 ## Status Surfaces
 
-`codewhale fleet status` shows compact counts for queued, running, completed,
+`ghosty fleet status` shows compact counts for queued, running, completed,
 partial, failed, restarted, escalated, cancelled, stale, and verifier/transport
 failure sources. `inspect` shows the worker state plus the current task
 objective, role, host, heartbeat, latest event, artifact refs, latest error, and
@@ -640,9 +640,9 @@ decisions in the fleet ledger.
 ## Manager-Agent Runbook
 
 Manager agents should treat Fleet operations as typed, ledgered control-plane
-work. Start with `codewhale fleet status`, then inspect one run or worker with
-`codewhale fleet inspect <worker-id>`, `logs`, and `artifacts`. Use direct
-reads of `.codewhale/fleet.jsonl`, host logs, or remote files only when the
+work. Start with `ghosty fleet status`, then inspect one run or worker with
+`ghosty fleet inspect <worker-id>`, `logs`, and `artifacts`. Use direct
+reads of `.ghosty/fleet.jsonl`, host logs, or remote files only when the
 typed CLI/API surface cannot provide the required evidence.
 
 Classify the worker before taking action:
@@ -662,10 +662,10 @@ Choose one typed action:
 
 - Restart a worker only when the failure is transient, retry budget remains,
   the task is idempotent or retry-safe, and no permission or secret boundary is
-  involved: `codewhale fleet restart <worker-id>`.
+  involved: `ghosty fleet restart <worker-id>`.
 - Interrupt or stop only when the current task is unsafe to continue or the
-  operator explicitly asks for cancellation: `codewhale fleet interrupt
-  <worker-id>` or `codewhale fleet stop --all`.
+  operator explicitly asks for cancellation: `ghosty fleet interrupt
+  <worker-id>` or `ghosty fleet stop --all`.
 - Do not restart pure task failures by default; preserve artifacts and hand the
   receipt to the task owner unless the task spec says retrying can produce new
   evidence.
@@ -678,13 +678,13 @@ Choose one typed action:
 Safe Slack or PagerDuty draft:
 
 ```text
-Codewhale fleet needs attention
+Ghosty fleet needs attention
 Run: <run-id>
 Worker: <worker-id>
 Task: <task-id or unknown>
 Classification: <transient failure | task failure | verifier failure | needs-human>
 Reason: <one sentence, no secrets>
-Latest typed evidence: codewhale fleet inspect <worker-id>; codewhale fleet artifacts <worker-id>
+Latest typed evidence: ghosty fleet inspect <worker-id>; ghosty fleet artifacts <worker-id>
 Safe log excerpt: <3 lines max or "see artifact <ref>">
 Requested decision: <restart approval | verifier review | task owner review | permission decision>
 ```
@@ -723,12 +723,12 @@ Example SSH worker spec:
   "host": {
     "kind": "ssh",
     "host": "builder.example.com",
-    "user": "codewhale",
+    "user": "ghosty",
     "port": 22,
-    "identity": "~/.ssh/codewhale_fleet",
-    "working_directory": "/srv/codewhale/work",
-    "env_allowlist": ["CODEWHALE_PROFILE"],
-    "codewhale_binary": "/usr/local/bin/codewhale"
+    "identity": "~/.ssh/ghosty_fleet",
+    "working_directory": "/srv/ghosty/work",
+    "env_allowlist": ["GHOSTY_PROFILE"],
+    "ghosty_binary": "/usr/local/bin/ghosty"
   },
   "capabilities": ["local", "linux", "tests"],
   "max_concurrent_tasks": 1
@@ -738,10 +738,10 @@ Example SSH worker spec:
 Defaults are intentionally conservative:
 
 - no hosted control plane or cloud provisioning is enabled;
-- SSH requires an explicit host, working directory, and Codewhale binary path;
+- SSH requires an explicit host, working directory, and Ghosty binary path;
 - secret-like environment names such as `TOKEN`, `SECRET`, `PASSWORD`,
   `API_KEY`, and `PRIVATE_KEY` are rejected from adapter allowlists;
-- secrets should remain in Codewhale config providers or remote host config,
+- secrets should remain in Ghosty config providers or remote host config,
   not in task instructions, argv, or fleet logs.
 
 ## Runtime policy and authority are not Fleet identity

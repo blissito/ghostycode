@@ -40,9 +40,9 @@ jobs:
             //
             // Anchor on signals that survive the single-binary refactor (#4747):
             // the crate path and the rendering framework stay put when
-            // codewhale-tui is lib-ized, whereas the `codewhale-tui` *binary*
+            // ghosty-tui is lib-ized, whereas the `ghosty-tui` *binary*
             // name goes away. Do not reintroduce a bare word match here.
-            if (/crates\/tui\b|ratatui|\bcodewhale-tui\b/.test(text)) labels.add('tui');
+            if (/crates\/tui\b|ratatui|\bghosty-tui\b/.test(text)) labels.add('tui');
             if (/fleet|subagent|sub-agent/.test(text)) labels.add('subagents');
             if (/catalog|openrouter|model.?picker|provider.?lake/.test(text)) labels.add('reliability');
 

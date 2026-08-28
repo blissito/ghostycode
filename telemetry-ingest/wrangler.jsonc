@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "codewhale-telemetry-ingest",
+  "name": "ghosty-telemetry-ingest",
   "main": "src/index.ts",
   "compatibility_date": "2025-04-01",
 
@@ -14,7 +14,7 @@
   "analytics_engine_datasets": [
     {
       "binding": "TELEMETRY",
-      "dataset": "codewhale_telemetry"
+      "dataset": "ghosty_telemetry"
     }
   ],
 
@@ -50,10 +50,10 @@
   // network traffic should be able to tell what this is from the name alone.
   // An opaque `t.` would have been shorter and would have looked evasive.
   "routes": [
-    { "pattern": "telemetry.codewhale.net", "custom_domain": true }
+    { "pattern": "telemetry.ghosty.net", "custom_domain": true }
   ]
   //
-  // `https://telemetry.codewhale.net/v1/telemetry` is the shipped default for
+  // `https://telemetry.ghosty.net/v1/telemetry` is the shipped default for
   // `telemetry_endpoint` (`DEFAULT_TELEMETRY_ENDPOINT` in
   // `crates/config/src/lib.rs`), so real batches arrive here. Only from
   // sessions that have not opted out. v0.9.6 discloses anonymous usage

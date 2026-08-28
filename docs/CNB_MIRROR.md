@@ -1,6 +1,6 @@
 # CNB Cool mirror
 
-`cnb.cool/codewhale.net/codewhale` is a one-way mirror of this
+`cnb.cool/ghosty.net/ghosty` is a one-way mirror of this
 GitHub repository for users on networks where GitHub is slow or blocked
 (primarily mainland China). The mirror receives every push to `main`, every
 `fix/*`, `rebrand/*`, and `work/v*` branch used for first-party release work,
@@ -9,11 +9,11 @@ and every `v*` release tag.
 ## Provenance
 
 **GitHub is the sole canonical source.** All releases, tags, and source code
-originate at `github.com/Hmbown/CodeWhale`. The CNB mirror is a read-only
+originate at `github.com/blissito/ghostycode`. The CNB mirror is a read-only
 replica maintained by the `Sync to CNB` workflow — it exists solely to serve
 users behind GFW-blocked or slow GitHub connections.
 
-Every CNB release includes `codewhale-artifacts-sha256.txt` — a SHA256 manifest
+Every CNB release includes `ghosty-artifacts-sha256.txt` — a SHA256 manifest
 of the CNB-built Linux x64 binaries, generated from the same source commit that
 is tagged on GitHub. (CNB builds from source, so these checksums cover the
 CNB-built artifacts, not GitHub's release assets.) Verify a downloaded binary
@@ -21,7 +21,7 @@ against it:
 
 ```bash
 # Verify a downloaded CNB binary against the CNB manifest
-sha256sum -c codewhale-artifacts-sha256.txt --ignore-missing
+sha256sum -c ghosty-artifacts-sha256.txt --ignore-missing
 ```
 
 ## How it works
@@ -56,11 +56,11 @@ mirror carry them to CNB.
 When CNB receives a `v*` tag, the root `.cnb.yml` tag pipeline builds Linux x64
 release assets from source and publishes a CNB release with:
 
-- `codewhale-linux-x64`
-- `codew-linux-x64`
-- `codewhale-tui-linux-x64` (compatibility-only release filename; not a third
+- `ghosty-linux-x64`
+- `ghosty-tui-linux-x64`
+- `ghosty-tui-linux-x64` (compatibility-only release filename; not a third
   installed command)
-- `codewhale-artifacts-sha256.txt`
+- `ghosty-artifacts-sha256.txt`
 
 This gives users who can reach CNB but not GitHub a CNB-native release path.
 GitHub remains the canonical macOS/Windows release matrix; the CNB tag pipeline
@@ -76,7 +76,7 @@ Linux Rust gates run on Tencent-hosted runners instead of GitHub Actions:
 - `cargo check --workspace --all-targets --locked`
 - `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
 - `cargo test --workspace --all-features --locked`
-- `cargo build --release --locked -p codewhale-cli -p codewhale-tui`
+- `cargo build --release --locked -p ghosty-cli -p ghosty-tui`
 - `node scripts/release/npm-wrapper-smoke.js`
 
 Release branches matching `work/v*` also run
@@ -90,19 +90,19 @@ should have both the new commit on `main` and the new tag:
 
 ```bash
 # Quick check: does the new tag exist on CNB?
-git ls-remote https://cnb.cool/codewhale.net/codewhale.git \
+git ls-remote https://cnb.cool/ghosty.net/ghosty.git \
     refs/tags/vX.Y.Z
 
 # Quick check: is CNB's main at the same commit as origin/main?
-gh_main=$(git ls-remote https://github.com/Hmbown/CodeWhale.git refs/heads/main | awk '{print $1}')
-cnb_main=$(git ls-remote https://cnb.cool/codewhale.net/codewhale.git refs/heads/main | awk '{print $1}')
+gh_main=$(git ls-remote https://github.com/blissito/ghostycode.git refs/heads/main | awk '{print $1}')
+cnb_main=$(git ls-remote https://cnb.cool/ghosty.net/ghosty.git refs/heads/main | awk '{print $1}')
 test "$gh_main" = "$cnb_main" && echo "in sync" || echo "DIVERGED: gh=$gh_main cnb=$cnb_main"
 ```
 
 Or check the workflow run directly:
 
 ```bash
-gh run list --workflow=sync-cnb.yml --repo Hmbown/CodeWhale --limit 5
+gh run list --workflow=sync-cnb.yml --repo blissito/ghostycode --limit 5
 ```
 
 If the most recent run for the release tag is `success`, the mirror
@@ -123,10 +123,10 @@ without pushing anything:
 
 ```bash
 # Prefer rerunning the existing failed tag run when one exists.
-gh run rerun <failed-tag-run-id> --repo Hmbown/CodeWhale
+gh run rerun <failed-tag-run-id> --repo blissito/ghostycode
 
 # If no tag run exists, dispatch from the exact existing release tag.
-gh workflow run sync-cnb.yml --repo Hmbown/CodeWhale --ref vX.Y.Z
+gh workflow run sync-cnb.yml --repo blissito/ghostycode --ref vX.Y.Z
 ```
 
 Do not omit `--ref` when repairing a tag: a default-branch dispatch syncs
@@ -142,26 +142,26 @@ expired:
    with `repo` (push) scope.
 2. Update the `CNB_GIT_TOKEN` repository secret:
    ```bash
-   gh secret set CNB_GIT_TOKEN --repo Hmbown/CodeWhale
+   gh secret set CNB_GIT_TOKEN --repo blissito/ghostycode
    ```
 3. Re-trigger the workflow on a recent commit:
    ```bash
-   gh workflow run sync-cnb.yml --repo Hmbown/CodeWhale
+   gh workflow run sync-cnb.yml --repo blissito/ghostycode
    ```
 4. Confirm the run succeeds via `gh run list --workflow=sync-cnb.yml`.
 
-## Binary release assets and `codewhale update`
+## Binary release assets and `ghosty update`
 
 CNB now builds Linux x64 assets for `v*` tags from the source-controlled
 `.cnb.yml` pipeline. GitHub remains the canonical macOS/Windows release matrix.
 
 ### Automatic source selection (Linux x64)
 
-On Linux x64, `codewhale update` picks its asset source before it downloads
+On Linux x64, `ghosty update` picks its asset source before it downloads
 anything large. Once the target tag is known, it requests
-`codewhale-artifacts-sha256.txt` for that exact tag from GitHub Releases and
+`ghosty-artifacts-sha256.txt` for that exact tag from GitHub Releases and
 from the CNB release **at the same time**, and takes the first source that
-answers with a manifest listing `codewhale-linux-x64`. The straggler's answer is
+answers with a manifest listing `ghosty-linux-x64`. The straggler's answer is
 discarded.
 
 Three properties this relies on:
@@ -180,7 +180,7 @@ Three properties this relies on:
   meaning; only where the bytes for that tag are fetched from is decided by the
   probe.
 
-`codewhale update` and `codewhale update --check` both print the result as a
+`ghosty update` and `ghosty update --check` both print the result as a
 `Release source:` line, and the post-install summary repeats it, so the source a
 given binary came from is recoverable after the fact.
 
@@ -188,14 +188,14 @@ Every other target keeps a single canonical source: CNB publishes Linux x64 and
 nothing else, so macOS, Windows, Android, and Linux arm64 do not race CNB;
 Linux riscv64 remains explicitly unsupported. All supported self-update paths
 are nevertheless checksum-required: the chosen source must publish a valid
-`codewhale-artifacts-sha256.txt` entry for the exact platform binary, or
-`codewhale update` stops before downloading that binary. There is no
+`ghosty-artifacts-sha256.txt` entry for the exact platform binary, or
+`ghosty update` stops before downloading that binary. There is no
 unverified-install fallback.
 
-Setting `CODEWHALE_RELEASE_BASE_URL` (or a legacy alias) or
-`CODEWHALE_USE_CNB_MIRROR` turns selection off entirely — an explicitly named
+Setting `GHOSTY_RELEASE_BASE_URL` (or a legacy alias) or
+`GHOSTY_USE_CNB_MIRROR` turns selection off entirely — an explicitly named
 source is used as named, including its own checksum manifest, with
-`CODEWHALE_RELEASE_BASE_URL` outranking `CODEWHALE_USE_CNB_MIRROR`.
+`GHOSTY_RELEASE_BASE_URL` outranking `GHOSTY_USE_CNB_MIRROR`.
 
 ### Manual paths
 
@@ -203,34 +203,34 @@ Users behind GitHub-blocking networks can also select a source explicitly:
 
 - **`cargo install`** from the CNB mirror:
   ```bash
-  cargo install --git https://cnb.cool/codewhale.net/codewhale --tag vX.Y.Z codewhale-cli --locked
+  cargo install --git https://cnb.cool/ghosty.net/ghosty --tag vX.Y.Z ghosty-cli --locked
   ```
-  The current `codewhale` binary runs the TUI in-process. Cargo users who want
-  the optional short command can add a `codew` symlink beside it; a separate
-  `codewhale-tui` install is not required.
+  The current `ghosty` binary runs the TUI in-process. Cargo users who want
+  the optional short command can add a `ghosty-tui` symlink beside it; a separate
+  `ghosty-tui` install is not required.
   Linux build-time dependencies (`build-essential`, `pkg-config`,
   `libdbus-1-dev` on Debian/Ubuntu) are required — see
   [INSTALL.md](INSTALL.md#4-install-via-cargo-any-tier-1-rust-target).
 
 - **CNB release assets** for Linux x64, when the matching CNB tag pipeline has
-  completed successfully. Download `codewhale-linux-x64`, `codew-linux-x64`,
-  and `codewhale-artifacts-sha256.txt` from the CNB release for `vX.Y.Z`, then
+  completed successfully. Download `ghosty-linux-x64`, `ghosty-tui-linux-x64`,
+  and `ghosty-artifacts-sha256.txt` from the CNB release for `vX.Y.Z`, then
   verify the binaries against the manifest. The published
-  `codewhale-tui-linux-x64` file is a legacy-client bridge and is not required
+  `ghosty-tui-linux-x64` file is a legacy-client bridge and is not required
   by current installs. On Linux x64 and OpenHarmony x64 the npm wrapper probes
   that CNB checksum manifest concurrently with GitHub Releases for the exact
   package version and locks onto the first source whose HTTP response and
   manifest validate — it does not wait for a slow GitHub binary download. Set
-  `CODEWHALE_USE_CNB_MIRROR=1` to force CNB only, or
-  `CODEWHALE_RELEASE_BASE_URL` to skip the race. Other platforms must use
-  GitHub or a complete `CODEWHALE_RELEASE_BASE_URL` mirror.
+  `GHOSTY_USE_CNB_MIRROR=1` to force CNB only, or
+  `GHOSTY_RELEASE_BASE_URL` to skip the race. Other platforms must use
+  GitHub or a complete `GHOSTY_RELEASE_BASE_URL` mirror.
 
-- **`CODEWHALE_RELEASE_BASE_URL`** environment variable, if a CDN mirror of
-  release assets exists. The npm wrapper installer and `codewhale update` read
-  this variable to redirect binary downloads. For `codewhale update`, also set
-  `CODEWHALE_VERSION=X.Y.Z` so the updater can label the mirrored
+- **`GHOSTY_RELEASE_BASE_URL`** environment variable, if a CDN mirror of
+  release assets exists. The npm wrapper installer and `ghosty update` read
+  this variable to redirect binary downloads. For `ghosty update`, also set
+  `GHOSTY_VERSION=X.Y.Z` so the updater can label the mirrored
   release without contacting GitHub. The directory pointed to must contain
-  `codewhale-artifacts-sha256.txt` and the platform binaries; format matches
+  `ghosty-artifacts-sha256.txt` and the platform binaries; format matches
   a GitHub Release asset directory. The earlier `DEEPSEEK_TUI_*` names remain
   accepted as compatibility aliases.
 
@@ -239,7 +239,7 @@ Users behind GitHub-blocking networks can also select a source explicitly:
 For a stable install, clone `main` or a release tag from:
 
 ```bash
-https://cnb.cool/codewhale.net/codewhale.git
+https://cnb.cool/ghosty.net/ghosty.git
 ```
 
 The mirror receives `main`, release tags, and matched release branches. GitHub

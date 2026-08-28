@@ -1,8 +1,8 @@
 {
-  "name": "codewhale-web",
+  "name": "ghosty-web",
   "version": "0.1.0",
   "private": true,
-  "description": "Community site for Codewhale \u2014 codewhale.net",
+  "description": "Community site for Ghosty \u2014 ghosty.net",
   "scripts": {
     "dev": "node scripts/derive-facts.mjs && next dev",
     "prebuild": "node scripts/derive-facts.mjs",

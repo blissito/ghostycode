@@ -1,6 +1,6 @@
 //! Lossless, serialized `config.toml` mutation.
 //!
-//! Every Codewhale config writer coordinates through the adjacent lock owned
+//! Every Ghosty config writer coordinates through the adjacent lock owned
 //! here. Mutations re-read only after acquiring the lock, so a stale process
 //! cannot resurrect revoked credential authority. Callers that still serialize
 //! a full typed snapshot must supply the exact bytes they originally loaded and
@@ -460,7 +460,7 @@ mod tests {
         // scalar or array under that exact name round-trips through the typed
         // path as ordinary user data. Healing used to `remove()` it before
         // discovering it was not a table, dropping it on the very next
-        // `codewhale config set` — and reporting `healed == false` while doing
+        // `ghosty config set` — and reporting `healed == false` while doing
         // so.
         for body in [
             "extras = \"opaque\"\nmodel = \"m\"\n",

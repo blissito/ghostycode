@@ -40,7 +40,7 @@ acting on it.
 
 ## 1. Purpose and the weaker-model problem
 
-Codewhale ships a large native tool surface. The first-turn *active* partition
+Ghosty ships a large native tool surface. The first-turn *active* partition
 of that surface is what every model sees before it has run a single
 `tool_search_*` call. Today that active set contains several **near-duplicate
 tools** that map to the *same* implementation under different names:
@@ -96,7 +96,7 @@ different surface from the request.
 `crates/tui/src/todo_snapshot.rs` renders the one bounded body — hard-bounded in
 both item count and characters, in-progress item preserved preferentially, any
 elision marked — for the three seams that show a snapshot *once*, because a
-person asked: the `<codewhale:fork_state>` block a newly forked agent is handed,
+person asked: the `<ghosty:fork_state>` block a newly forked agent is handed,
 `/relay`, and the in-transcript agent card.
 
 Two properties of that renderer are load-bearing:
@@ -107,7 +107,7 @@ Two properties of that renderer are load-bearing:
   attached runtime read the list directly.
 - **Per-agent isolation.** Every agent reads *its own* list (`#4810`), so a
   worker sees its own progress and never a parent's or sibling's. The parent's
-  list reaches a forked child only as the immutable `<codewhale:fork_state>`
+  list reaches a forked child only as the immutable `<ghosty:fork_state>`
   To-do section, resolved at the spawn seam so a same-turn `todo_write` is
   included.
 

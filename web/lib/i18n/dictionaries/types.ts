@@ -16,9 +16,9 @@
  *
  * Code-owned strings stay out of these dictionaries per docs/VOICE.md:
  * "Plan · Work · Operate", "Ask · Auto-Review · Full Access",
- * "TUI · exec · web · API", "Codewhale", "GitHub", "Issues",
- * `npm install -g codewhale`, `cargo test --locked`, `codewhale exec`,
- * package-manager proper nouns, mirror names, and `/codewhale-tui.webp`.
+ * "TUI · exec · web · API", "Ghosty", "GitHub", "Issues",
+ * `npm install -g ghosty`, `cargo test --locked`, `ghosty exec`,
+ * package-manager proper nouns, mirror names, and `/ghosty-tui.webp`.
  */
 
 export interface ChromeDict {
@@ -62,7 +62,7 @@ export interface ChromeDict {
   /** Mobile-menu and masthead call to action, e.g. "Install →". */
   installCta: string;
 
-  /** Header account links to the Codewhale app (app.codewhale.net). */
+  /** Header account links to the Ghosty app (app.ghosty.net). */
   authSignIn: string;
   authRegister: string;
   /** aria-label for the header account link group. */
@@ -220,7 +220,7 @@ export interface HomeDict {
 
   /** Screenshot toolbar label, e.g. "Current session". */
   shotSession: string;
-  /** Screenshot alt text for /codewhale-tui.webp. */
+  /** Screenshot alt text for /ghosty-tui.webp. */
   screenshotAlt: string;
   /** Screenshot figcaption. */
   figcaption: string;
@@ -242,7 +242,7 @@ export interface HomeDict {
   receiptAria: string;
   /**
    * Right-hand column of the example receipt. The verbs (inspect / act /
-   * verify / report), `$ codewhale exec …`, and `cargo test --locked` stay
+   * verify / report), `$ ghosty exec …`, and `cargo test --locked` stay
    * code-owned literals in the JSX per docs/VOICE.md.
    */
   receiptInspect: string;

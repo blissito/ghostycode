@@ -6,7 +6,7 @@
 use super::*;
 
 pub(crate) fn startup_version_check_source(config: &UpdateConfig) -> StartupVersionCheckSource {
-    resolve_version_check_source(config, codewhale_release::suppression_reason())
+    resolve_version_check_source(config, ghosty_release::suppression_reason())
 }
 
 /// Pure form of [`startup_version_check_source`]: the environment is read once
@@ -15,7 +15,7 @@ pub(crate) fn startup_version_check_source(config: &UpdateConfig) -> StartupVers
 /// change the answer).
 pub(crate) fn resolve_version_check_source(
     config: &UpdateConfig,
-    suppression: Option<codewhale_release::SuppressionReason>,
+    suppression: Option<ghosty_release::SuppressionReason>,
 ) -> StartupVersionCheckSource {
     if !config.check_for_updates {
         return StartupVersionCheckSource::Disabled;
@@ -38,13 +38,13 @@ pub(crate) fn resolve_version_check_source(
 
 /// Where the throttling cache for the startup check lives.
 ///
-/// `None` when the CodeWhale home cannot be resolved — the check still runs,
+/// `None` when the GhostyCode home cannot be resolved — the check still runs,
 /// it just cannot be throttled, which is the right tradeoff for a homeless
 /// install (rare, and better than never checking).
 pub(crate) fn update_check_cache_path() -> Option<PathBuf> {
-    codewhale_config::codewhale_home()
+    ghosty_config::ghosty_home()
         .ok()
-        .map(|home| codewhale_release::check::cache_path_in(&home))
+        .map(|home| ghosty_release::check::cache_path_in(&home))
 }
 
 pub(crate) fn spawn_startup_version_check(
@@ -76,9 +76,9 @@ pub(crate) async fn cached_version_hint(
     cache_path: Option<&Path>,
     interval_hours: u64,
 ) -> Option<UpdateNotice> {
-    let now = codewhale_release::check::now_unix();
+    let now = ghosty_release::check::now_unix();
     if let Some(path) = cache_path
-        && let Some(entry) = codewhale_release::UpdateCheckCache::load(path)
+        && let Some(entry) = ghosty_release::UpdateCheckCache::load(path)
         && entry.is_fresh(now, interval_hours)
     {
         return entry
@@ -94,7 +94,7 @@ pub(crate) async fn cached_version_hint(
     // whole day.
     if let Some(path) = cache_path
         && latest_tag.is_some()
-        && let Err(err) = codewhale_release::UpdateCheckCache::now(latest_tag.clone()).store(path)
+        && let Err(err) = ghosty_release::UpdateCheckCache::now(latest_tag.clone()).store(path)
     {
         tracing::debug!(error = %err, "failed to persist update-check cache");
     }
@@ -122,8 +122,8 @@ pub(crate) async fn latest_tag_from_startup_source(
                 return latest_tag_from_release_mirror_env().await;
             }
 
-            let body = codewhale_release::fetch_release_json_async(
-                codewhale_release::LATEST_RELEASE_URL,
+            let body = ghosty_release::fetch_release_json_async(
+                ghosty_release::LATEST_RELEASE_URL,
                 "latest release",
             )
             .await
@@ -138,22 +138,22 @@ pub(crate) async fn latest_tag_from_release_mirror_env() -> Option<String> {
     if !release_mirror_env_configured() {
         return None;
     }
-    codewhale_release::latest_release_tag_async(codewhale_release::ReleaseChannel::Stable)
+    ghosty_release::latest_release_tag_async(ghosty_release::ReleaseChannel::Stable)
         .await
         .ok()
 }
 
 pub(crate) fn release_mirror_env_configured() -> bool {
-    let version = codewhale_release::update_version_from_env()
+    let version = ghosty_release::update_version_from_env()
         .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());
-    codewhale_release::release_base_url_from_env(&version).is_some()
+    ghosty_release::release_base_url_from_env(&version).is_some()
 }
 
 pub(crate) async fn latest_tag_from_configured_update_uri(
     update_uri: &str,
 ) -> Result<Option<String>> {
-    let body = codewhale_release::fetch_release_json_async(update_uri, "configured latest release")
-        .await?;
+    let body =
+        ghosty_release::fetch_release_json_async(update_uri, "configured latest release").await?;
     let json: serde_json::Value = serde_json::from_str(&body).with_context(|| {
         format!("failed to parse release JSON from configured URI {update_uri}")
     })?;

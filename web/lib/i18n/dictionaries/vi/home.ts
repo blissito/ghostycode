@@ -7,19 +7,19 @@ import type { HomeDict } from "../types";
  * locale pack: nhà cung cấp (provider), phiên (session), kho mã
  * (repository), mức quyền (permission posture), biên nhận (receipt), nhiệm
  * vụ (task). Modes (Plan / Work / Operate), permission postures (Ask /
- * Auto-Review / Full Access), commands (`codewhale exec`), Fleet, Workflow,
+ * Auto-Review / Full Access), commands (`ghosty exec`), Fleet, Workflow,
  * Runtime and the product name stay literal, exactly as the TUI renders
  * them.
  *
  * The `seal*` glyphs are marks, not prose, and are shared with English.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — lặn xuống biển sâu để bạn khỏi phải lặn.",
+  metaTitle: "Ghosty — lặn xuống biển sâu để bạn khỏi phải lặn.",
   metaDescription:
-    "Codewhale lặn xuống biển sâu để bạn khỏi phải lặn — tác nhân lập trình mã nguồn mở trong terminal. Mang theo mô hình của bạn. Chạy trên máy của bạn. Rust, MIT.",
+    "Ghosty lặn xuống biển sâu để bạn khỏi phải lặn — tác nhân lập trình mã nguồn mở trong terminal. Mang theo mô hình của bạn. Chạy trên máy của bạn. Rust, MIT.",
 
   kicker: "Nguồn mở · Mang theo mô hình của bạn · Chạy trong terminal của bạn",
-  heroTitleA: "Codewhale lặn xuống biển sâu",
+  heroTitleA: "Ghosty lặn xuống biển sâu",
   heroTitleB: "để bạn khỏi phải lặn.",
   heroIntro:
     "{brand} là tác nhân lập trình mã nguồn mở trong terminal của bạn. Giao cho nó một mô hình và một nhiệm vụ — nó đọc mã của bạn, sửa tệp, tự chạy kiểm tra, và dừng lại khi việc đã xong hoặc khi nó cần bạn. Mang bất kỳ mô hình nào, hoặc trộn nhiều mô hình: ghim một mô hình riêng cho từng vai trò.",
@@ -42,8 +42,8 @@ export const home: HomeDict = {
 
   shotSession: "Phiên hiện tại",
   screenshotAlt:
-    "Phiên terminal Codewhale hiện tại hiển thị chế độ Operate, hình cá voi, khung soạn thảo và thanh chân màn hình",
-  figcaption: "Phiên Codewhale hiện tại · chế độ Operate · mức quyền Ask",
+    "Phiên terminal Ghosty hiện tại hiển thị chế độ Operate, hình cá voi, khung soạn thảo và thanh chân màn hình",
+  figcaption: "Phiên Ghosty hiện tại · chế độ Operate · mức quyền Ask",
 
   proofHeading: "Một lớp vỏ terminal dưới lòng biển. Mọi mô hình. Trên máy của bạn.",
   proofBody:
@@ -69,7 +69,7 @@ export const home: HomeDict = {
   receiptReport: "kiểm tra đạt · đã lưu biên nhận",
 
   sealStart: "起",
-  startHeading: "Mới dùng Codewhale? Bốn bước từ đầu đến cuối.",
+  startHeading: "Mới dùng Ghosty? Bốn bước từ đầu đến cuối.",
   startLede:
     "Cài đặt → phiên đầu không cần khóa → kết nối nhà cung cấp → Workflow Fleet đầu tiên. Thuật ngữ được định nghĩa ở trang thuật ngữ.",
   startGuideLink: "Đọc hướng dẫn bắt đầu →",
@@ -89,7 +89,7 @@ export const home: HomeDict = {
   surfacesHeading: "Dùng runtime ngay nơi công việc diễn ra.",
   surfaces: [
     ["TUI", "Làm việc tương tác trong terminal"],
-    ["codewhale exec", "Script và CI"],
+    ["ghosty exec", "Script và CI"],
     ["Ứng dụng web", "Chạy trong trình duyệt, chỉ qua loopback"],
     ["Runtime API + MCP", "Tích hợp cục bộ"],
     ["Fleet", "Công việc nhiều tác tử, bền vững"],

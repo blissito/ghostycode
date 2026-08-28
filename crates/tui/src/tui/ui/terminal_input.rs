@@ -67,7 +67,7 @@ impl TerminalInputPump {
         let thread_paused = Arc::clone(&paused);
         let thread_paused_ack = Arc::clone(&paused_ack);
         let handle = thread::Builder::new()
-            .name("codewhale-terminal-input".to_string())
+            .name("ghosty-terminal-input".to_string())
             .spawn(move || {
                 let mut last_heartbeat = Instant::now();
                 while !thread_stop.load(Ordering::Acquire) {

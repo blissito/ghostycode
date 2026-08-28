@@ -964,7 +964,7 @@ mod tests {
     }
 
     fn write_workspace_command(workspace: &Path, name: &str, content: &str) {
-        let dir = workspace.join(".codewhale").join("commands");
+        let dir = workspace.join(".ghosty").join("commands");
         std::fs::create_dir_all(&dir).expect("create commands dir");
         std::fs::write(dir.join(format!("{name}.md")), content).expect("write command");
     }

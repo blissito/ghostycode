@@ -407,7 +407,7 @@ impl ExternalTool for Git {
     /// opportunistically refresh the index, and that refresh takes
     /// `.git/index.lock` — which is why a user's own `git commit` could fail
     /// with "Unable to create '.../.git/index.lock': File exists" while
-    /// codewhale was merely idling in the same repo (#5617, reported by
+    /// ghosty was merely idling in the same repo (#5617, reported by
     /// @LmeSzinc).
     ///
     /// `GIT_OPTIONAL_LOCKS=0` suppresses only *optional* lock-taking, so
@@ -603,7 +603,7 @@ mod tests {
     fn probe_executable_returns_false_for_unknown_binary() {
         // Pick a name we're confident isn't on any developer's PATH.
         // If this ever starts failing locally, rename it.
-        assert!(!probe_executable("codewhale-tui-imaginary-binary-xyz123"));
+        assert!(!probe_executable("ghosty-tui-imaginary-binary-xyz123"));
     }
 
     #[test]
@@ -617,7 +617,7 @@ mod tests {
     #[test]
     fn probe_executable_with_flag_returns_false_for_unknown_binary() {
         assert!(!probe_executable_with_flag(
-            "codewhale-tui-imaginary-binary-xyz123",
+            "ghosty-tui-imaginary-binary-xyz123",
             "-v"
         ));
     }
@@ -626,7 +626,7 @@ mod tests {
     fn probe_executable_delegates_to_double_dash_version() {
         // `probe_executable` must remain exactly
         // `probe_executable_with_flag(.., "--version")`.
-        let spec = "codewhale-tui-imaginary-binary-xyz123";
+        let spec = "ghosty-tui-imaginary-binary-xyz123";
         assert_eq!(
             probe_executable(spec),
             probe_executable_with_flag(spec, "--version")

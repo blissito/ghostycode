@@ -7,7 +7,7 @@ use crate::localization::MessageId;
 use crate::tui::app::{App, AppAction};
 
 use super::CommandResult;
-use codewhale_config::SetupStep;
+use ghosty_config::SetupStep;
 
 pub(in crate::commands) const COMMAND_INFO: CommandInfo = CommandInfo {
     name: "setup",

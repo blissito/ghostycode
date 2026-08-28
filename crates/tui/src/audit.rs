@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 
 use crate::utils::{flush_and_sync, open_append};
 
-/// Append an audit event to `$CODEWHALE_HOME/audit.log` (or the default
-/// `~/.codewhale/audit.log` when no explicit CodeWhale home is configured).
+/// Append an audit event to `$GHOSTY_HOME/audit.log` (or the default
+/// `~/.ghosty/audit.log` when no explicit GhostyCode home is configured).
 ///
 /// This helper is best-effort by design: callers should not fail critical flows
 /// if audit persistence fails.
@@ -21,7 +21,7 @@ pub fn log_sensitive_event(event: &str, details: Value) {
 
 /// Size at which `audit.log` is rolled to `audit.log.1`.
 ///
-/// The log was append-only with no bound at all: a real `~/.codewhale/audit.log`
+/// The log was append-only with no bound at all: a real `~/.ghosty/audit.log`
 /// had reached 2.6 MB and was still growing, with nothing in the product that
 /// would ever shrink it. Unbounded growth in the user's config directory is not
 /// a viable end state, and neither is silently discarding the record — so one
@@ -71,11 +71,11 @@ fn append_event(event: &str, details: Value) -> anyhow::Result<()> {
 }
 
 fn default_audit_path() -> anyhow::Result<PathBuf> {
-    Ok(codewhale_config::codewhale_home()?.join("audit.log"))
+    Ok(ghosty_config::ghosty_home()?.join("audit.log"))
 }
 
 /// Where audit events are written, for surfaces that point a person at the
-/// full record (for example `/permissions`). `None` when no Codewhale home
+/// full record (for example `/permissions`). `None` when no Ghosty home
 /// resolves; callers show a placeholder rather than guessing a path.
 #[must_use]
 pub fn audit_log_path() -> Option<PathBuf> {

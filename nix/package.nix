@@ -27,7 +27,7 @@ let
   );
 in
 rustPlatform.buildRustPackage (finalAttrs: {
-  pname = "codewhale";
+  pname = "ghosty";
   version = "git-${rev}";
 
   src = ../.;
@@ -63,7 +63,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   cargoBuildFlags = [
     "--package"
-    "codewhale-cli"
+    "ghosty-cli"
   ];  # single binary — tui crate is a library, not a shipped binary (v0.9.5+)
   cargoTestFlags = finalAttrs.cargoBuildFlags ++ [
     "--lib"
@@ -126,8 +126,8 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   meta = {
     description = "Terminal coding agent for DeepSeek";
-    homepage = "https://github.com/Hmbown/CodeWhale";
+    homepage = "https://github.com/blissito/ghostycode";
     license = lib.licenses.mit;
-    mainProgram = "codewhale";
+    mainProgram = "ghosty";
   };
 })

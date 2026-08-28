@@ -1,4 +1,4 @@
-//! Persistent background task manager for Codewhale agent work.
+//! Persistent background task manager for Ghosty agent work.
 //!
 //! Tasks are durable across restarts and execute with a bounded worker pool.
 //! Execution stays DeepSeek-only and now links every task to runtime
@@ -2576,27 +2576,27 @@ fn default_auto_approve() -> bool {
     true
 }
 
-/// Default task manager data location (`~/.codewhale/tasks`, or legacy
+/// Default task manager data location (`~/.ghosty/tasks`, or legacy
 /// `~/.deepseek/tasks` when only the legacy directory exists).
 #[must_use]
 pub fn default_tasks_dir() -> PathBuf {
-    for var in ["CODEWHALE_TASKS_DIR", "DEEPSEEK_TASKS_DIR"] {
+    for var in ["GHOSTY_TASKS_DIR", "DEEPSEEK_TASKS_DIR"] {
         if let Ok(path) = std::env::var(var)
             && !path.trim().is_empty()
         {
             return PathBuf::from(path);
         }
     }
-    if let Some(home) = codewhale_paths::codewhale_home_override().ok().flatten() {
+    if let Some(home) = ghosty_paths::ghosty_home_override().ok().flatten() {
         return home.join("tasks");
     }
-    codewhale_paths::user_home()
+    ghosty_paths::user_home()
         .map(|home| default_tasks_dir_for_home(&home))
-        .unwrap_or_else(|| PathBuf::from(".codewhale").join("tasks"))
+        .unwrap_or_else(|| PathBuf::from(".ghosty").join("tasks"))
 }
 
 fn default_tasks_dir_for_home(home: &Path) -> PathBuf {
-    let primary = home.join(".codewhale").join("tasks");
+    let primary = home.join(".ghosty").join("tasks");
     if primary.is_dir() {
         return primary;
     }
@@ -3206,7 +3206,7 @@ mod tests {
                         "gate": {
                             "id": "gate_test",
                             "gate": "test",
-                            "command": "cargo test -p codewhale-tui --lib",
+                            "command": "cargo test -p ghosty-tui --lib",
                             "cwd": ".",
                             "exit_code": 0,
                             "status": "passed",
@@ -3386,10 +3386,10 @@ mod tests {
     }
 
     #[test]
-    fn default_tasks_dir_prefers_existing_codewhale_tasks() {
+    fn default_tasks_dir_prefers_existing_ghosty_tasks() {
         let temp_home = tempfile::tempdir().unwrap();
         let home = temp_home.path();
-        let primary_tasks = home.join(".codewhale").join("tasks");
+        let primary_tasks = home.join(".ghosty").join("tasks");
         let legacy_tasks = home.join(".deepseek").join("tasks");
         std::fs::create_dir_all(&primary_tasks).unwrap();
         std::fs::create_dir_all(&legacy_tasks).unwrap();
@@ -3401,7 +3401,7 @@ mod tests {
     fn default_tasks_dir_falls_back_to_legacy_when_primary_is_file() {
         let temp_home = tempfile::tempdir().unwrap();
         let home = temp_home.path();
-        let primary_tasks = home.join(".codewhale").join("tasks");
+        let primary_tasks = home.join(".ghosty").join("tasks");
         let legacy_tasks = home.join(".deepseek").join("tasks");
         std::fs::create_dir_all(primary_tasks.parent().unwrap()).unwrap();
         std::fs::write(&primary_tasks, "not a directory").unwrap();
@@ -3414,7 +3414,7 @@ mod tests {
     fn default_tasks_dir_ignores_legacy_file_for_new_installs() {
         let temp_home = tempfile::tempdir().unwrap();
         let home = temp_home.path();
-        let primary_tasks = home.join(".codewhale").join("tasks");
+        let primary_tasks = home.join(".ghosty").join("tasks");
         let legacy_tasks = home.join(".deepseek").join("tasks");
         std::fs::create_dir_all(legacy_tasks.parent().unwrap()).unwrap();
         std::fs::write(&legacy_tasks, "not a directory").unwrap();
@@ -3423,18 +3423,18 @@ mod tests {
     }
 
     #[test]
-    fn default_tasks_dir_uses_codewhale_tasks_for_new_installs() {
+    fn default_tasks_dir_uses_ghosty_tasks_for_new_installs() {
         let temp_home = tempfile::tempdir().unwrap();
         let home = temp_home.path();
 
         assert_eq!(
             default_tasks_dir_for_home(home),
-            home.join(".codewhale").join("tasks")
+            home.join(".ghosty").join("tasks")
         );
     }
 
     #[test]
-    fn task_and_runtime_roots_honor_explicit_codewhale_home() {
+    fn task_and_runtime_roots_honor_explicit_ghosty_home() {
         let _lock = lock_test_env();
         let temp_root = tempfile::tempdir().unwrap();
         let ambient_home = temp_root.path().join("ambient-home");
@@ -3442,10 +3442,10 @@ mod tests {
         std::fs::create_dir_all(ambient_home.join(".deepseek").join("tasks")).unwrap();
         let _home = EnvVarGuard::set("HOME", &ambient_home);
         let _userprofile = EnvVarGuard::set("USERPROFILE", &ambient_home);
-        let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &explicit_home);
-        let _tasks_override = EnvVarGuard::remove("CODEWHALE_TASKS_DIR");
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &explicit_home);
+        let _tasks_override = EnvVarGuard::remove("GHOSTY_TASKS_DIR");
         let _legacy_tasks_override = EnvVarGuard::remove("DEEPSEEK_TASKS_DIR");
-        let _runtime_override = EnvVarGuard::remove("CODEWHALE_RUNTIME_DIR");
+        let _runtime_override = EnvVarGuard::remove("GHOSTY_RUNTIME_DIR");
         let _legacy_runtime_override = EnvVarGuard::remove("DEEPSEEK_RUNTIME_DIR");
 
         let task_root = default_tasks_dir();
@@ -3463,7 +3463,7 @@ mod tests {
     }
 
     #[test]
-    fn whitespace_codewhale_home_keeps_ambient_legacy_task_and_runtime_fallbacks() {
+    fn whitespace_ghosty_home_keeps_ambient_legacy_task_and_runtime_fallbacks() {
         let _lock = lock_test_env();
         let temp_root = tempfile::tempdir().unwrap();
         let ambient_home = temp_root.path().join("ambient-home");
@@ -3471,10 +3471,10 @@ mod tests {
         std::fs::create_dir_all(&legacy_tasks).unwrap();
         let _home = EnvVarGuard::set("HOME", &ambient_home);
         let _userprofile = EnvVarGuard::set("USERPROFILE", &ambient_home);
-        let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", " \t ");
-        let _tasks_override = EnvVarGuard::remove("CODEWHALE_TASKS_DIR");
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", " \t ");
+        let _tasks_override = EnvVarGuard::remove("GHOSTY_TASKS_DIR");
         let _legacy_tasks_override = EnvVarGuard::remove("DEEPSEEK_TASKS_DIR");
-        let _runtime_override = EnvVarGuard::remove("CODEWHALE_RUNTIME_DIR");
+        let _runtime_override = EnvVarGuard::remove("GHOSTY_RUNTIME_DIR");
         let _legacy_runtime_override = EnvVarGuard::remove("DEEPSEEK_RUNTIME_DIR");
 
         let task_root = default_tasks_dir();
@@ -3490,18 +3490,18 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn non_unicode_codewhale_home_is_preserved_by_task_and_runtime_roots() {
+    fn non_unicode_ghosty_home_is_preserved_by_task_and_runtime_roots() {
         use std::os::unix::ffi::OsStringExt;
 
         let _lock = lock_test_env();
         let temp_root = tempfile::tempdir().unwrap();
-        let explicit_home = temp_root.path().join(std::ffi::OsString::from_vec(
-            b"codewhale-\xff-home".to_vec(),
-        ));
-        let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &explicit_home);
-        let _tasks_override = EnvVarGuard::remove("CODEWHALE_TASKS_DIR");
+        let explicit_home = temp_root
+            .path()
+            .join(std::ffi::OsString::from_vec(b"ghosty-\xff-home".to_vec()));
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &explicit_home);
+        let _tasks_override = EnvVarGuard::remove("GHOSTY_TASKS_DIR");
         let _legacy_tasks_override = EnvVarGuard::remove("DEEPSEEK_TASKS_DIR");
-        let _runtime_override = EnvVarGuard::remove("CODEWHALE_RUNTIME_DIR");
+        let _runtime_override = EnvVarGuard::remove("GHOSTY_RUNTIME_DIR");
         let _legacy_runtime_override = EnvVarGuard::remove("DEEPSEEK_RUNTIME_DIR");
 
         let task_root = default_tasks_dir();

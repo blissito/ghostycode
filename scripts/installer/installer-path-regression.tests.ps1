@@ -33,13 +33,13 @@ function Get-RawUserPath {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $testRoot = Join-Path `
     ([System.IO.Path]::GetTempPath()) `
-    "codewhale-installer-path-$PID-$([guid]::NewGuid().ToString('N'))"
+    "ghosty-installer-path-$PID-$([guid]::NewGuid().ToString('N'))"
 $stageRoot = Join-Path $testRoot 'source'
 $stageInstallerDir = Join-Path $stageRoot 'scripts\installer'
 $installDir = Join-Path $testRoot 'installed'
 $programsDir = [Environment]::GetFolderPath([Environment+SpecialFolder]::Programs)
-$shortcutDir = Join-Path $programsDir 'CodeWhale'
-$shortcut = Join-Path $shortcutDir 'CodeWhale.lnk'
+$shortcutDir = Join-Path $programsDir 'GhostyCode'
+$shortcut = Join-Path $shortcutDir 'GhostyCode.lnk'
 $environmentKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
 if ($null -eq $environmentKey) {
     throw 'Could not open or create the current-user Environment registry key.'
@@ -59,16 +59,16 @@ try {
     [void] (New-Item -ItemType Directory -Path $stageInstallerDir -Force)
     Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination (Join-Path $stageRoot 'LICENSE')
     Copy-Item `
-        -LiteralPath (Join-Path $PSScriptRoot 'codewhale.nsi') `
-        -Destination (Join-Path $stageInstallerDir 'codewhale.nsi')
+        -LiteralPath (Join-Path $PSScriptRoot 'ghosty.nsi') `
+        -Destination (Join-Path $stageInstallerDir 'ghosty.nsi')
     Copy-Item `
         -LiteralPath (Join-Path $PSScriptRoot 'update-user-path.ps1') `
         -Destination (Join-Path $stageInstallerDir 'update-user-path.ps1')
     Copy-Item `
-        -LiteralPath (Join-Path $PSScriptRoot 'codewhale.bat') `
-        -Destination (Join-Path $stageInstallerDir 'codewhale.bat')
+        -LiteralPath (Join-Path $PSScriptRoot 'ghosty.bat') `
+        -Destination (Join-Path $stageInstallerDir 'ghosty.bat')
 
-    foreach ($binary in @('codewhale.exe', 'codew.exe', 'codewhale-tui.exe')) {
+    foreach ($binary in @('ghosty.exe', 'ghosty-tui.exe', 'ghosty-tui.exe')) {
         [System.IO.File]::WriteAllBytes(
             (Join-Path $stageInstallerDir $binary),
             [byte[]] @(0x4d, 0x5a)
@@ -88,7 +88,7 @@ try {
 
     Push-Location $stageInstallerDir
     try {
-        & $makensis '/DVERSION=0.0.0-test' 'codewhale.nsi'
+        & $makensis '/DVERSION=0.0.0-test' 'ghosty.nsi'
         if ($LASTEXITCODE -ne 0) {
             throw "makensis.exe exited with code $LASTEXITCODE."
         }
@@ -97,9 +97,9 @@ try {
         Pop-Location
     }
 
-    $installer = Join-Path $stageInstallerDir 'CodeWhaleSetup.exe'
+    $installer = Join-Path $stageInstallerDir 'GhostyCodeSetup.exe'
     if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
-        throw 'CodeWhaleSetup.exe was not produced.'
+        throw 'GhostyCodeSetup.exe was not produced.'
     }
 
     $canaries = [System.Collections.Generic.List[string]]::new()
@@ -124,7 +124,7 @@ try {
         -Wait `
         -PassThru
     if ($installProcess.ExitCode -ne 0) {
-        throw "CodeWhaleSetup.exe exited with code $($installProcess.ExitCode)."
+        throw "GhostyCodeSetup.exe exited with code $($installProcess.ExitCode)."
     }
 
     $expectedBin = Join-Path $installDir 'bin'
@@ -136,16 +136,16 @@ try {
         throw 'The installer changed the user PATH registry value kind.'
     }
 
-    $launcher = Join-Path $expectedBin 'codewhale.bat'
+    $launcher = Join-Path $expectedBin 'ghosty.bat'
     if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
-        throw 'The installer did not install codewhale.bat.'
+        throw 'The installer did not install ghosty.bat.'
     }
     $launcherText = [System.IO.File]::ReadAllText($launcher)
     if ($launcherText -notmatch 'where wt') {
-        throw 'Installed codewhale.bat does not prefer Windows Terminal.'
+        throw 'Installed ghosty.bat does not prefer Windows Terminal.'
     }
-    if ($launcherText -notmatch 'codewhale\.exe') {
-        throw 'Installed codewhale.bat does not launch codewhale.exe.'
+    if ($launcherText -notmatch 'ghosty\.exe') {
+        throw 'Installed ghosty.bat does not launch ghosty.exe.'
     }
     if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) {
         throw 'The installer did not create the Start Menu shortcut.'
@@ -181,7 +181,7 @@ try {
         throw 'Install followed by uninstall did not restore the seeded long PATH exactly.'
     }
     if (Test-Path -LiteralPath $launcher -PathType Leaf) {
-        throw 'Uninstall did not remove codewhale.bat.'
+        throw 'Uninstall did not remove ghosty.bat.'
     }
     if (Test-Path -LiteralPath $shortcut -PathType Leaf) {
         throw 'Uninstall did not remove the Start Menu shortcut.'

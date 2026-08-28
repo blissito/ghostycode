@@ -142,13 +142,13 @@ pub fn default_skills_dir() -> PathBuf {
     {
         if !crate::test_support::guarded_environment_provides_state_paths() {
             return crate::test_support::unsealed_test_state_root()
-                .join(".codewhale")
+                .join(".ghosty")
                 .join("skills");
         }
     }
     crate::config::effective_home_dir().map_or_else(
-        || PathBuf::from("/tmp/codewhale/skills"),
-        |p| p.join(".codewhale").join("skills"),
+        || PathBuf::from("/tmp/ghosty/skills"),
+        |p| p.join(".ghosty").join("skills"),
     )
 }
 
@@ -173,19 +173,19 @@ pub fn agents_global_skills_dir() -> Option<PathBuf> {
 /// Session-time skill discovery scope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkillDiscoveryMode {
-    /// Preserve the existing broad compatibility scan across CodeWhale,
+    /// Preserve the existing broad compatibility scan across GhostyCode,
     /// agentskills.io, Claude, OpenCode, Cursor, and legacy DeepSeek roots.
     Compatible,
-    /// Scan only CodeWhale-owned roots. Callers that also pass an explicit
+    /// Scan only GhostyCode-owned roots. Callers that also pass an explicit
     /// `skills_dir` still get that directory because it is user configuration.
-    CodeWhaleOnly,
+    GhostyCodeOnly,
 }
 
 impl SkillDiscoveryMode {
     #[must_use]
-    pub fn from_codewhale_only(value: bool) -> Self {
+    pub fn from_ghosty_only(value: bool) -> Self {
         if value {
-            Self::CodeWhaleOnly
+            Self::GhostyCodeOnly
         } else {
             Self::Compatible
         }
@@ -922,10 +922,10 @@ fn normalize_skill_name_segment(name: &str) -> String {
 /// 3. `<workspace>/.opencode/skills` — OpenCode interop.
 /// 4. `<workspace>/.claude/skills` — Claude Code interop.
 /// 5. `<workspace>/.cursor/skills` — Cursor interop.
-/// 6. `<workspace>/.codewhale/skills` — CodeWhale workspace skills.
+/// 6. `<workspace>/.ghosty/skills` — GhostyCode workspace skills.
 /// 7. [`agents_global_skills_dir`] — agentskills.io global.
 /// 8. `~/.claude/skills` — Claude-ecosystem global (#902).
-/// 9. `~/.codewhale/skills` — CodeWhale global, primary install target.
+/// 9. `~/.ghosty/skills` — GhostyCode global, primary install target.
 /// 10. `~/.deepseek/skills` — legacy DeepSeek global fallback.
 ///
 /// Compatible audit may also observe `.codex/skills`, but that root is
@@ -948,9 +948,9 @@ fn skills_directories_with_home_and_mode(
     roots::skills_directories_with_home_and_mode(workspace, home_dir, mode)
 }
 
-pub(crate) use roots::codewhale_workspace_skills_dir;
 #[cfg(test)]
 pub(crate) use roots::existing_skill_dirs;
+pub(crate) use roots::ghosty_workspace_skills_dir;
 
 /// Walk every candidate skills directory for a workspace and merge
 /// the discovered skills into a single registry. Name conflicts are

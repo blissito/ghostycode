@@ -1,6 +1,6 @@
 //! Truthful auto-resume of the last valid session (#2934).
 //!
-//! Plain `codewhale` has always started fresh. Issue #2934 asked for the
+//! Plain `ghosty` has always started fresh. Issue #2934 asked for the
 //! previous conversation to come back automatically; the review that followed
 //! (see the 2026-07-16 comment) landed on a firm constraint: **no surprise
 //! resume**. So this is an explicit, opt-in setting, and when it is on it

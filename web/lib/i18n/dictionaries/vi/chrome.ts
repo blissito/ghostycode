@@ -7,7 +7,7 @@ import type { ChromeDict } from "../types";
  * (`crates/tui/locales/vi.json`) so the site and the runtime name the same
  * things the same way: nhà cung cấp (provider), phiên (session), kho mã
  * (repository), mức quyền (permission posture), biên nhận (receipt). Product
- * terms — Codewhale, Plan / Work / Operate, Ask / Auto-Review / Full Access,
+ * terms — Ghosty, Plan / Work / Operate, Ask / Auto-Review / Full Access,
  * Fleet, Workflow, Runtime — stay literal, as they do in the TUI.
  *
  * The masthead pairs a Vietnamese primary label with a short English
@@ -35,7 +35,7 @@ export const chrome: ChromeDict = {
 
 
   navPrimaryAria: "Điều hướng chính",
-  navHomeAria: "Trang chủ Codewhale",
+  navHomeAria: "Trang chủ Ghosty",
 
   installCta: "Cài đặt →",
 
@@ -75,7 +75,7 @@ export const chrome: ChromeDict = {
   themeTitle: "Giao diện tài liệu · tự động / sáng / tối",
 
   footerTagline:
-    "Codewhale lặn xuống biển sâu để bạn khỏi phải lặn — tài liệu, mã nguồn và cộng đồng của runtime mã nguồn mở.",
+    "Ghosty lặn xuống biển sâu để bạn khỏi phải lặn — tài liệu, mã nguồn và cộng đồng của runtime mã nguồn mở.",
   footerProduct: "Sản phẩm",
   footerProject: "Dự án",
   footerDocs: "Tài liệu",

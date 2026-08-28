@@ -2,7 +2,7 @@
 //!
 //! The report is intentionally approximate for v0.8.59. It uses the same
 //! conservative token heuristic as compaction and describes the runtime sources
-//! CodeWhale already tracks, without claiming provider-tokenizer parity.
+//! GhostyCode already tracks, without claiming provider-tokenizer parity.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -246,7 +246,7 @@ pub fn build_context_report(app: &App) -> PromptSourceMap {
         &app.workspace,
         Some(&app.skills_dir),
         app.project_context_pack_enabled,
-        app.skills_scan_codewhale_only,
+        app.skills_scan_ghosty_only,
         app.ui_locale.tag(),
         app.mode,
         Some(app.plugin_registry.as_ref()),
@@ -333,7 +333,7 @@ pub fn build_headless_context_report(config: &Config, workspace: &Path) -> Promp
         workspace,
         Some(&selected_skills_dir),
         config.project_context_pack_enabled(),
-        config.skills_config().scan_codewhale_only(),
+        config.skills_config().scan_ghosty_only(),
         "en",
         crate::tui::app::AppMode::Agent,
         None,
@@ -397,7 +397,7 @@ fn base_source_entries(
     workspace: &Path,
     skills_dir: Option<&Path>,
     project_pack_enabled: bool,
-    skills_scan_codewhale_only: bool,
+    skills_scan_ghosty_only: bool,
     locale_tag: &str,
     mode: crate::tui::app::AppMode,
     plugin_registry: Option<&crate::plugins::PluginRegistry>,
@@ -419,7 +419,7 @@ fn base_source_entries(
         builder.push(SourceEntry::text(
             SourceKind::UserConstitution,
             "User-global constitution",
-            codewhale_config::UserConstitution::path()
+            ghosty_config::UserConstitution::path()
                 .ok()
                 .map(|path| path.display().to_string()),
             ActivationReason::FilePresent,
@@ -529,7 +529,7 @@ fn base_source_entries(
     }
 
     let skill_discovery_mode =
-        crate::skills::SkillDiscoveryMode::from_codewhale_only(skills_scan_codewhale_only);
+        crate::skills::SkillDiscoveryMode::from_ghosty_only(skills_scan_ghosty_only);
     let skills_block = match skills_dir {
         Some(dir) => crate::skills::render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
             workspace,
@@ -575,7 +575,7 @@ fn base_source_entries(
     builder.push(SourceEntry::omitted(
         SourceKind::CompactionRelayTemplate,
         "Session relay template",
-        Some("bundled in this codewhale-tui build (COMPACT_TEMPLATE, compiled in)".to_string()),
+        Some("bundled in this ghosty-tui build (COMPACT_TEMPLATE, compiled in)".to_string()),
         Some(3),
         "loaded only when /relay is requested; automatic compaction owns its successor brief",
     ));
@@ -951,7 +951,7 @@ mod tests {
     use crate::models::Role;
     use crate::models::Tool;
     use crate::route_runtime::{ContextWindowResolution, ContextWindowSource};
-    use codewhale_config::route::RouteLimits;
+    use ghosty_config::route::RouteLimits;
     use std::fs;
     use tempfile::tempdir;
 
@@ -1004,9 +1004,9 @@ mod tests {
     fn context_report_surfaces_repo_constitution_source_and_warnings() {
         let tmp = tempdir().expect("tempdir");
         fs::create_dir(tmp.path().join(".git")).expect("mkdir .git");
-        fs::create_dir(tmp.path().join(".codewhale")).expect("mkdir .codewhale");
+        fs::create_dir(tmp.path().join(".ghosty")).expect("mkdir .ghosty");
         fs::write(
-            tmp.path().join(".codewhale").join("constitution.json"),
+            tmp.path().join(".ghosty").join("constitution.json"),
             r#"{
                 "schema_version": 1,
                 "authority": ["current user request"],
@@ -1021,7 +1021,7 @@ mod tests {
                 entry.source_kind == SourceKind::RepoConstitution
                     && entry.source_path.as_deref().is_some_and(|path| {
                         path.replace('\\', "/")
-                            .ends_with(".codewhale/constitution.json")
+                            .ends_with(".ghosty/constitution.json")
                     })
             }),
             "repo constitution source should be an explicit source-map entry: {:?}",

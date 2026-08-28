@@ -16,7 +16,7 @@ pub(crate) fn try_apply_model_and_compaction_update(
     engine_handle: &EngineHandle,
     compaction: crate::compaction::CompactionConfig,
     mode: AppMode,
-    route_limits: Option<codewhale_config::route::RouteLimits>,
+    route_limits: Option<ghosty_config::route::RouteLimits>,
 ) -> bool {
     if engine_handle
         .try_send(Op::SetModel {

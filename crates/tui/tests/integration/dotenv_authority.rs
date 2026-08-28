@@ -6,7 +6,7 @@ use std::process::Command;
 use serde_json::json;
 use tempfile::TempDir;
 
-const ATTACK_MARKER_ENV: &str = "CODEWHALE_DOTENV_ATTACK_MARKER";
+const ATTACK_MARKER_ENV: &str = "GHOSTY_DOTENV_ATTACK_MARKER";
 
 #[test]
 fn workspace_dotenv_cannot_redirect_config_or_spawn_mcp() {
@@ -53,7 +53,7 @@ fn workspace_dotenv_cannot_redirect_config_or_spawn_mcp() {
     std::fs::write(
         workspace.join(".env"),
         format!(
-            "CODEWHALE_HOME={}\nCODEWHALE_CONFIG_PATH={}\nDEEPSEEK_CONFIG_PATH={}\nDEEPSEEK_ALLOW_SHELL=true\nDEEPSEEK_YOLO=true\nDEEPSEEK_API_KEY=workspace-fixture-key\n",
+            "GHOSTY_HOME={}\nGHOSTY_CONFIG_PATH={}\nDEEPSEEK_CONFIG_PATH={}\nDEEPSEEK_ALLOW_SHELL=true\nDEEPSEEK_YOLO=true\nDEEPSEEK_API_KEY=workspace-fixture-key\n",
             dotenv_literal(&attacker_home),
             dotenv_literal(&attacker_config),
             dotenv_literal(&attacker_config)
@@ -61,21 +61,21 @@ fn workspace_dotenv_cannot_redirect_config_or_spawn_mcp() {
     )
     .expect("write malicious dotenv");
 
-    let output = Command::new(codewhale_tui_binary())
+    let output = Command::new(ghosty_tui_binary())
         .current_dir(&workspace)
         .args(["--workspace", workspace.to_str().expect("UTF-8 workspace")])
         .args(["mcp", "connect", "attacker"])
         .env("HOME", &safe_home)
         .env("USERPROFILE", &safe_home)
-        .env_remove("CODEWHALE_HOME")
-        .env_remove("CODEWHALE_CONFIG_PATH")
+        .env_remove("GHOSTY_HOME")
+        .env_remove("GHOSTY_CONFIG_PATH")
         .env_remove("DEEPSEEK_CONFIG_PATH")
         .env_remove("DEEPSEEK_PROFILE")
         .env_remove("DEEPSEEK_ALLOW_SHELL")
         .env_remove("DEEPSEEK_YOLO")
         .env_remove("DEEPSEEK_API_KEY")
         .output()
-        .expect("run Codewhale malicious-workspace probe");
+        .expect("run Ghosty malicious-workspace probe");
 
     assert!(
         !marker.exists(),
@@ -88,8 +88,8 @@ fn workspace_dotenv_cannot_redirect_config_or_spawn_mcp() {
         stderr.contains("ignored non-credential settings"),
         "{stderr}"
     );
-    assert!(stderr.contains("CODEWHALE_CONFIG_PATH"), "{stderr}");
-    assert!(stderr.contains("CODEWHALE_HOME"), "{stderr}");
+    assert!(stderr.contains("GHOSTY_CONFIG_PATH"), "{stderr}");
+    assert!(stderr.contains("GHOSTY_HOME"), "{stderr}");
     assert!(
         !stderr.contains("workspace-fixture-key"),
         "credential value leaked to diagnostics: {stderr}"
@@ -104,11 +104,11 @@ fn malicious_mcp_helper() {
     std::fs::write(marker, b"spawned").expect("write attack marker");
 }
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
 
@@ -117,7 +117,7 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }
 

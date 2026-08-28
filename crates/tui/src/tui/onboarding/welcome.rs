@@ -14,6 +14,16 @@ use crate::tui::app::App;
 
 pub fn lines(app: &App, width: usize) -> Vec<Line<'static>> {
     let mut out = Vec::new();
+    // El mismo fantasma que el estado vacío del chat, con la misma animación,
+    // para que la bienvenida y la pantalla de inicio coincidan.
+    for row in crate::tui::underwater::ghost_rows(app) {
+        let inset = " ".repeat(width.saturating_sub(row.chars().count()) / 2);
+        out.push(Line::from(Span::styled(
+            format!("{inset}{row}"),
+            Style::default().fg(app.ui_theme.accent_primary),
+        )));
+    }
+    out.push(Line::from(""));
     headline(&mut out, app, MessageId::OnboardWelcomeTitle, width);
     out.push(Line::from(""));
     body(&mut out, app, MessageId::OnboardWelcomeLead, width);
@@ -45,7 +55,7 @@ pub fn ready_lines(app: &App, width: usize) -> Vec<Line<'static>> {
 
 /// A headline is a whole sentence in several locales, so it wraps like the
 /// body it sits above. Returning a single unwrapped `Line` left the very first
-/// screen of first run reading "Codewhale arbeitet mit dir in diesem O" at 40
+/// screen of first run reading "Ghosty arbeitet mit dir in diesem O" at 40
 /// columns — cut mid-word, on the screen that introduces the product.
 fn headline(out: &mut Vec<Line<'static>>, app: &App, id: MessageId, width: usize) {
     for segment in super::wrap_words(&app.tr(id), width) {
@@ -142,7 +152,7 @@ mod narrow_locale_tests {
 
     /// The welcome headline is a whole sentence in most locales. It used to be
     /// emitted as one unwrapped line, so the first screen of first run read
-    /// "Codewhale arbeitet mit dir in diesem O" in German at 40 columns.
+    /// "Ghosty arbeitet mit dir in diesem O" in German at 40 columns.
     #[test]
     fn the_welcome_headline_survives_a_small_terminal_in_every_locale() {
         let mut app = probe_app();

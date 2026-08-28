@@ -25,7 +25,7 @@ pub(super) fn has_control_like_modifier_for_platform(
 
 /// Compatibility path for enhanced terminal clients that forward `Cmd+C` or
 /// `Ctrl+Shift+C` as key events. Most terminals consume these locally, so the
-/// user-visible Codewhale binding remains `Ctrl+C` with an active selection.
+/// user-visible Ghosty binding remains `Ctrl+C` with an active selection.
 pub(super) fn is_copy_shortcut(key: &KeyEvent) -> bool {
     let is_c = matches!(key.code, KeyCode::Char('c') | KeyCode::Char('C'));
     if !is_c {

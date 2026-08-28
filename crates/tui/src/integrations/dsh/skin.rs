@@ -1,11 +1,11 @@
-//! Codewhale palette for the DeepSeek Harness web surface.
+//! Ghosty palette for the DeepSeek Harness web surface.
 //!
 //! DSH 0.1.0-rc.6 applies alias tokens as inline `body.style.setProperty`
 //! values, so a stylesheet cannot win. The documented token-level override is
 //! `ctx.theme.overrideTokens`. This module is the single source of truth for
 //! that layer: alias name → (light, dark), both rendered from the TUI Blue
 //! Stage palettes. The generated bundle also mounts a plugin-owned Whale
-//! Brothers / Codewhale identity lockup; it leaves DSH-owned branding intact.
+//! Brothers / Ghosty identity lockup; it leaves DSH-owned branding intact.
 
 use std::collections::BTreeMap;
 
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::palette::{LIGHT_UI_THEME, UI_THEME, UiTheme, hex_rgb_string};
 
 /// Source id passed to `overrideTokens` and used as the client module id.
-pub(crate) const SKIN_SOURCE: &str = "codewhale-dsh-bundle";
+pub(crate) const SKIN_SOURCE: &str = "ghosty-dsh-bundle";
 
 /// One alias token's light/dark CSS values, rendered from the TUI palette.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,7 +37,7 @@ pub(crate) fn skin_tokens() -> BTreeMap<String, (String, String)> {
     let mut add = |name: &str, pick: fn(&UiTheme) -> Color| {
         map.insert(name.to_string(), (hex(pick(light)), hex(pick(dark))));
     };
-    // Bounded mapping of DSH `--dsw-alias-*` variables onto Codewhale tokens.
+    // Bounded mapping of DSH `--dsw-alias-*` variables onto Ghosty tokens.
     // Names come from dsh-client-ui-theme/lib/styles/design-platform.css.
     add("--dsw-alias-bg-base", |t| t.surface_bg);
     add("--dsw-alias-bg-layer-1", |t| t.panel_bg);
@@ -117,14 +117,14 @@ fn indent_json_block(json: &str, indent: &str) -> String {
 /// self/ancestor provided) services on `ctx`; reading either sibling service
 /// without it fails the whole web boot.
 ///
-/// The Whale Brothers / Codewhale lockup is spliced in for every skin and
+/// The Whale Brothers / Ghosty lockup is spliced in for every skin and
 /// registered into DSH's additive `shell.overlay` slot. With `ocean` the
 /// ambient scene (`scene::bundle_scene_js`) is also spliced in: the module
 /// mounts the canvas inside another `ctx.effect`, follows `theme/change` for
 /// light/dark, and re-issues the veil tokens (`scene::ocean_veil_tokens`) as
 /// translucent rgba over the opaque table. The browser-side off switch
-/// (`localStorage["codewhale.ocean"] = "off"` or body class
-/// `codewhale-ocean-off`) skips both the canvas and the veil.
+/// (`localStorage["ghosty.ocean"] = "off"` or body class
+/// `ghosty-ocean-off`) skips both the canvas and the veil.
 pub(crate) fn bundle_client_js(ocean: bool) -> String {
     let version = env!("CARGO_PKG_VERSION");
     let tokens = indent_json_block(&skin_tokens_json(), "\t\t");
@@ -147,7 +147,7 @@ pub(crate) fn bundle_client_js(ocean: bool) -> String {
             .to_string()
     };
     format!(
-        "/* codewhale-skin/{version} */\n\
+        "/* ghosty-skin/{version} */\n\
 window.__ModuleLoader__.load({{\n\
 \tid: \"{SKIN_SOURCE}\",\n\
 \tfactory: (require) => {{\n\
@@ -165,8 +165,8 @@ window.__ModuleLoader__.load({{\n\
 \t\t\tvar tokens = oceanOn ? Object.assign({{}}, TOKENS, OCEAN_VEIL) : TOKENS;\n\
 \t\t\tctx.effect(() => ctx.theme?.overrideTokens(\"{SKIN_SOURCE}\", tokens));\n\
 \t\t\tctx.slots.inject(\"shell.overlay\", () => ctx.slots.register(\n\
-\t\t\t\t{{ name: \"shell.overlay\", id: \"codewhale-brand-lockup\", order: 100, label: \"Codewhale\" }},\n\
-\t\t\t\t() => React.createElement(CodewhaleBrand),\n\
+\t\t\t\t{{ name: \"shell.overlay\", id: \"ghosty-brand-lockup\", order: 100, label: \"Ghosty\" }},\n\
+\t\t\t\t() => React.createElement(GhostyBrand),\n\
 \t\t\t));\n\
 \t\t\tif (oceanOn) {{\n\
 \t\t\t\tctx.effect(() => {{\n\

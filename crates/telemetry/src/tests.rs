@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use codewhale_config::{
+use ghosty_config::{
     CliRuntimeOverrides, ConfigToml, ResolvedRuntimeOptions, SetupState, TELEMETRY_NOTICE_VERSION,
 };
 use serde_json::Value;
@@ -238,7 +238,7 @@ fn closed_enum_values() -> Vec<String> {
     // `providers` entries: `ProviderKind::as_str()` is a `&'static str` from a
     // closed enum, and `Custom` yields the literal "custom".
     values.extend(
-        codewhale_config::ProviderKind::all()
+        ghosty_config::ProviderKind::all()
             .iter()
             .map(|kind| kind.as_str().to_string()),
     );
@@ -330,7 +330,7 @@ fn no_event_field_is_ever_omitted() {
 fn redaction_kinds_over_leaves(json: &Value) -> Vec<String> {
     let mut kinds = Vec::new();
     for (_, value) in string_leaves(json) {
-        let redaction = codewhale_workflow::redaction::redact_for_disclosure(&value);
+        let redaction = ghosty_workflow::redaction::redact_for_disclosure(&value);
         if redaction.redacted() {
             kinds.extend(redaction.kinds());
         }
@@ -377,7 +377,7 @@ fn panic_site_is_the_only_field_that_may_carry_a_path() {
     // `panic_site` is a repo-relative path by design, so it is the one
     // documented exemption. Prove the redactor would flag such a value, and
     // that no other leaf in a real payload carries one.
-    let planted = codewhale_workflow::redaction::redact_for_disclosure("crates/tui/src/main.rs");
+    let planted = ghosty_workflow::redaction::redact_for_disclosure("crates/tui/src/main.rs");
     assert!(
         planted.kinds().iter().any(|k| k == "relative_path"),
         "the redactor no longer classifies a repo-relative path: {:?}",
@@ -389,7 +389,7 @@ fn panic_site_is_the_only_field_that_may_carry_a_path() {
         if path.ends_with(".site") {
             continue;
         }
-        let redaction = codewhale_workflow::redaction::redact_for_disclosure(&value);
+        let redaction = ghosty_workflow::redaction::redact_for_disclosure(&value);
         assert!(
             !redaction.kinds().iter().any(|k| k.ends_with("path")),
             "a non-exempt leaf carries a path: {path} = {value:?}"
@@ -404,7 +404,7 @@ fn panic_site_is_the_only_field_that_may_carry_a_path() {
 /// Every bound above is a property of how this process *builds* an event.
 /// `flush` re-reads `buffer.jsonl` and hands the lines to `serde`, and any
 /// process running as the user can append to that file — including a `Bash`
-/// tool call the session made on the model's behalf, since `$CODEWHALE_HOME`
+/// tool call the session made on the model's behalf, since `$GHOSTY_HOME`
 /// is a predictable path. Before `Event::is_bounded` existed, an appended
 /// `{"event":"panic","site":"…/Users/victim/secret-repo"}` was POSTed verbatim
 /// to the configured endpoint under the user's install id; the process-level
@@ -460,9 +460,9 @@ fn every_legitimately_recorded_event_survives_the_drain() {
     // but `ApiProvider::kind()` yields them for real routes. Narrowing the
     // provider bound to the catalog would drop those users' `session_end`.
     for kind in [
-        codewhale_config::ProviderKind::DeepseekAnthropic,
-        codewhale_config::ProviderKind::MinimaxAnthropic,
-        codewhale_config::ProviderKind::Custom,
+        ghosty_config::ProviderKind::DeepseekAnthropic,
+        ghosty_config::ProviderKind::MinimaxAnthropic,
+        ghosty_config::ProviderKind::Custom,
     ] {
         assert!(
             crate::event::is_known_provider_id(kind.as_str()),
@@ -526,13 +526,13 @@ fn panic_site_reduces_dependency_frames() {
 
 #[test]
 fn git_sha_is_null_without_release_env() {
-    // The build script emits `CODEWHALE_RELEASE_BUILD_SHA` only when
-    // `CODEWHALE_BUILD_SHA` (or a build-only compatibility alias) was in the
+    // The build script emits `GHOSTY_RELEASE_BUILD_SHA` only when
+    // `GHOSTY_BUILD_SHA` (or a build-only compatibility alias) was in the
     // build environment, so on a developer machine this is `None` and on
     // release CI it is twelve hex characters. Both are asserted, because the
     // test has to pass in both places and neither shape may ever be a path, a
     // version, or a full sha.
-    // The rule that produces it lives in `codewhale-build-support` and is
+    // The rule that produces it lives in `ghosty-build-support` and is
     // tested there against an injected environment; what is asserted here is
     // that whatever reaches the payload is `null` or twelve lowercase hex
     // characters, and never a path, a version, or a full sha.
@@ -681,7 +681,7 @@ fn decision_matrix_is_exhaustive() {
 
 #[test]
 fn an_unparseable_env_value_forces_off_and_does_not_wipe() {
-    // The floor in `codewhale-config` turns an unreadable `CODEWHALE_TELEMETRY`
+    // The floor in `ghosty-config` turns an unreadable `GHOSTY_TELEMETRY`
     // into `telemetry == false` *without* setting `telemetry_explicit_off`. A
     // typo is not a user answer and must never destroy state.
     let home = temp_home();
@@ -825,7 +825,7 @@ fn the_tombstone_outlives_every_run_the_opt_out_covers() {
 
 #[test]
 fn a_run_scoped_kill_switch_costs_a_consenting_user_nothing() {
-    // The documented one-command recipe — `CODEWHALE_TELEMETRY=0 codewhale` —
+    // The documented one-command recipe — `GHOSTY_TELEMETRY=0 ghosty` —
     // used to take the destructive opt-out branch, so it deleted the install
     // id and truncated the user's own dry-run records every time it was used.
     // The resolver now reports that as "off, but nobody revoked anything", and
@@ -986,13 +986,13 @@ fn plain_http_is_rejected_except_on_loopback() {
 
 #[test]
 fn no_environment_variable_can_authorize_plaintext() {
-    // `CODEWHALE_ALLOW_INSECURE_HTTP` is a *provider* trust decision — it
+    // `GHOSTY_ALLOW_INSECURE_HTTP` is a *provider* trust decision — it
     // permits an insecure model base URL for harnesses that intercept model
     // traffic. Honouring it here would let that decision also authorize
     // telemetry POSTs to an arbitrary host. No override of any kind exists.
-    unsafe { std::env::set_var("CODEWHALE_ALLOW_INSECURE_HTTP", "1") };
+    unsafe { std::env::set_var("GHOSTY_ALLOW_INSECURE_HTTP", "1") };
     let with_env = validate_endpoint("http://example.com/t");
-    unsafe { std::env::remove_var("CODEWHALE_ALLOW_INSECURE_HTTP") };
+    unsafe { std::env::remove_var("GHOSTY_ALLOW_INSECURE_HTTP") };
     assert_eq!(with_env, Err(EndpointError::InsecureScheme));
 }
 
@@ -1037,7 +1037,7 @@ fn install_id_is_random_and_rotates() {
         rotated_at: (chrono::Utc::now() - chrono::Duration::days(91))
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
     };
-    codewhale_config::persistence::atomic_write_json(&buffer::install_id_path(&first_root), &stale)
+    ghosty_config::persistence::atomic_write_json(&buffer::install_id_path(&first_root), &stale)
         .expect("write stale id");
     let rotated = envelope::read_or_create_install_id(&first_root).expect("rotate");
     assert_ne!(rotated.install_id, first.install_id);
@@ -1355,7 +1355,7 @@ fn wipe_and_delivery_share_one_ordering_boundary() {
     let send = std::thread::spawn(move || {
         crate::client::send_with_transport(
             &send_root,
-            Some("https://telemetry.codewhale.ai/v1/batch"),
+            Some("https://telemetry.ghosty.ai/v1/batch"),
             &every_field_batch(),
             move |_, _, _| {
                 send_entered.wait();
@@ -1441,9 +1441,9 @@ fn exit_class_round_trips_through_the_atomic_encoding() {
 #[test]
 fn custom_provider_emits_literal_custom() {
     let counters = crate::SessionCounters::default();
-    counters.record_provider(codewhale_config::ProviderKind::Custom);
-    counters.record_provider(codewhale_config::ProviderKind::Deepseek);
-    counters.record_provider(codewhale_config::ProviderKind::Custom);
+    counters.record_provider(ghosty_config::ProviderKind::Custom);
+    counters.record_provider(ghosty_config::ProviderKind::Deepseek);
+    counters.record_provider(ghosty_config::ProviderKind::Custom);
     let providers = counters.providers();
     assert_eq!(
         providers,
@@ -1722,7 +1722,7 @@ fn golden_payload_v1() {
     // is also the artifact a future receiver author reads to know exactly what
     // v1 was.
     //
-    // Re-bless with: `CODEWHALE_BLESS_TELEMETRY_GOLDEN=1 cargo test -p codewhale-telemetry`
+    // Re-bless with: `GHOSTY_BLESS_TELEMETRY_GOLDEN=1 cargo test -p ghosty-telemetry`
     let batch = every_field_batch();
     assert_eq!(
         batch.schema_version, SCHEMA_VERSION,
@@ -1731,7 +1731,7 @@ fn golden_payload_v1() {
     let mut rendered = serde_json::to_string_pretty(&batch).expect("serialize");
     rendered.push('\n');
 
-    if std::env::var("CODEWHALE_BLESS_TELEMETRY_GOLDEN").is_ok() {
+    if std::env::var("GHOSTY_BLESS_TELEMETRY_GOLDEN").is_ok() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/v1.json");
         std::fs::create_dir_all(path.parent().expect("parent")).expect("create golden dir");
         std::fs::write(&path, &rendered).expect("write golden");
@@ -1838,7 +1838,7 @@ fn the_notice_summarizes_what_the_schema_collects_and_states_every_red_line() {
     // The modal names the persistent opt-out because that is the switch that
     // also fulfils its deletion promise. Run-only kill switches stay in the
     // linked schema document, which explains that they erase nothing.
-    assert!(body.contains("codewhale config set telemetry false"));
-    assert!(!body.contains("CODEWHALE_TELEMETRY=0"));
+    assert!(body.contains("ghosty config set telemetry false"));
+    assert!(!body.contains("GHOSTY_TELEMETRY=0"));
     assert!(body.contains("docs/TELEMETRY.md"));
 }

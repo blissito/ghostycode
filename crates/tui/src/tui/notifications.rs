@@ -268,7 +268,7 @@ fn build_escape(method: Method, in_tmux: bool, msg: &str) -> Vec<u8> {
         }
         Method::Ghostty => {
             // Ghostty notification: OSC 777 ; notify ; title ; message BEL
-            let seq = format!("\x1b]777;notify;codewhale;{msg}\x07");
+            let seq = format!("\x1b]777;notify;ghosty;{msg}\x07");
             wrap_for_multiplexer(&seq, in_tmux).into_bytes()
         }
         // Auto and Off and MacOS should not reach build_escape.
@@ -699,7 +699,7 @@ pub fn set_title_prefix(prefix: Option<&str>) {
     if TITLE_ANIMATION_RUNNING.load(Ordering::SeqCst) {
         let base = title_animation_base()
             .lock()
-            .map_or_else(|_| "Codewhale".to_string(), |base| base.clone());
+            .map_or_else(|_| "Ghosty".to_string(), |base| base.clone());
         let motion = TITLE_MOTION_ENABLED.load(Ordering::SeqCst);
         set_terminal_title(&title_activity_label(
             &base,
@@ -722,7 +722,7 @@ fn resting_title_body() -> &'static str {
     if COMPLETION_MARKER_SHOWN.load(Ordering::SeqCst) {
         "✓ done"
     } else {
-        "Codewhale"
+        "Ghosty"
     }
 }
 
@@ -746,7 +746,7 @@ const TITLE_FRAME_HOLD: Duration = Duration::from_millis(800);
 const TITLE_WHALE_FRAMES: &[&str] = &["🐳", "🐋", "🐳", "🐋"];
 
 fn title_animation_base() -> &'static Mutex<String> {
-    TITLE_ANIMATION_BASE.get_or_init(|| Mutex::new("Codewhale".to_string()))
+    TITLE_ANIMATION_BASE.get_or_init(|| Mutex::new("Ghosty".to_string()))
 }
 
 fn title_activity_verb() -> &'static Mutex<String> {
@@ -779,7 +779,7 @@ pub fn set_title_activity_verb(verb: &str) {
     }
     let base = title_animation_base()
         .lock()
-        .map_or_else(|_| "Codewhale".to_string(), |base| base.clone());
+        .map_or_else(|_| "Ghosty".to_string(), |base| base.clone());
     set_terminal_title(&title_activity_label(
         &base,
         Duration::ZERO,
@@ -911,7 +911,7 @@ pub fn set_terminal_focused(focused: bool) {
     }
     let base = title_animation_base()
         .lock()
-        .map_or_else(|_| "Codewhale".to_string(), |base| base.clone());
+        .map_or_else(|_| "Ghosty".to_string(), |base| base.clone());
     let motion = TITLE_MOTION_ENABLED.load(Ordering::SeqCst);
     set_terminal_title(&title_activity_label(
         &base,
@@ -946,7 +946,7 @@ pub fn stop_title_animation_quietly() {
     TITLE_ANIMATION_RUNNING.store(false, Ordering::SeqCst);
     TITLE_ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst);
     COMPLETION_MARKER_SHOWN.store(false, Ordering::SeqCst);
-    set_terminal_title(&decorate_title("Codewhale"));
+    set_terminal_title(&decorate_title("Ghosty"));
 }
 
 /// Clear the completion marker from the title when the user interacts.
@@ -955,7 +955,7 @@ pub fn stop_title_animation_quietly() {
 /// marker doesn't persist once the user is back at the terminal.
 pub fn reset_title_on_interaction() {
     if COMPLETION_MARKER_SHOWN.swap(false, Ordering::SeqCst) {
-        set_terminal_title(&decorate_title("Codewhale"));
+        set_terminal_title(&decorate_title("Ghosty"));
     }
 }
 
@@ -1076,7 +1076,7 @@ fn completion_sound_state_for_tests() -> (crate::config::CompletionSound, Option
 /// Runs on a dedicated background thread so the caller is not blocked.
 ///
 /// The notification includes:
-/// - **Title**: "Codewhale"
+/// - **Title**: "Ghosty"
 /// - **Subtitle**: [`NotificationPayload::headline`] (≤ 80 chars)
 /// - **Body**: [`NotificationPayload::body`] (≤ 322 chars: a ≤ 120-char
 ///   detail, a separator, and a ≤ 200-char preview)
@@ -1106,7 +1106,7 @@ fn completion_sound_state_for_tests() -> (crate::config::CompletionSound, Option
 /// swallowed.
 #[cfg(target_os = "macos")]
 const MACOS_DISPLAY_NOTIFICATION_SCRIPT: &str =
-    "display notification theBody with title \"Codewhale\" subtitle theSubtitle";
+    "display notification theBody with title \"Ghosty\" subtitle theSubtitle";
 
 #[cfg(target_os = "macos")]
 fn macos_display_notification(payload: &NotificationPayload) {
@@ -1291,7 +1291,7 @@ pub fn subagent_terminal_payload(
     let result_line = result
         .lines()
         .map(str::trim)
-        .find(|line| !line.is_empty() && !line.starts_with("<codewhale:subagent.done>"));
+        .find(|line| !line.is_empty() && !line.starts_with("<ghosty:subagent.done>"));
     let label = match status {
         SubAgentStatus::Completed => MessageId::NotificationSubagentComplete,
         SubAgentStatus::Failed(_) => MessageId::NotificationSubagentFailed,
@@ -1423,19 +1423,19 @@ mod tests {
             "in the current…".clone_into(&mut *verb);
         }
         assert_eq!(
-            title_activity_label("Codewhale", Duration::ZERO, true, true),
+            title_activity_label("Ghosty", Duration::ZERO, true, true),
             "🐳 in the current…"
         );
         assert_eq!(
-            title_activity_label("Codewhale", Duration::ZERO, false, false),
+            title_activity_label("Ghosty", Duration::ZERO, false, false),
             "🐳 in the current…"
         );
         assert_eq!(
-            title_activity_label("Codewhale", Duration::ZERO, false, true),
+            title_activity_label("Ghosty", Duration::ZERO, false, true),
             "🐳 in the current…"
         );
         assert_eq!(
-            title_activity_label("Codewhale", Duration::from_millis(800), false, true),
+            title_activity_label("Ghosty", Duration::from_millis(800), false, true),
             "🐋 in the current…"
         );
     }
@@ -1460,16 +1460,16 @@ mod tests {
             "reasoning…".clone_into(&mut *verb);
         }
         assert_eq!(
-            title_activity_label("Codewhale", Duration::ZERO, true, true),
+            title_activity_label("Ghosty", Duration::ZERO, true, true),
             "[task-7] 🐳 reasoning…"
         );
         assert_eq!(
-            title_activity_label("Codewhale", Duration::ZERO, false, true),
+            title_activity_label("Ghosty", Duration::ZERO, false, true),
             "[task-7] 🐳 reasoning…"
         );
         set_title_prefix(None);
         assert_eq!(
-            title_activity_label("Codewhale", Duration::ZERO, true, true),
+            title_activity_label("Ghosty", Duration::ZERO, true, true),
             "🐳 reasoning…"
         );
     }
@@ -1478,14 +1478,14 @@ mod tests {
     fn title_prefix_decorates_rest_and_completion_titles() {
         let _guard = prefix_lock();
         set_title_prefix(Some("feature/x"));
-        assert_eq!(decorate_title("Codewhale"), "[feature/x] Codewhale");
+        assert_eq!(decorate_title("Ghosty"), "[feature/x] Ghosty");
         assert_eq!(decorate_title("✓ done"), "[feature/x] ✓ done");
         set_title_prefix(None);
-        assert_eq!(decorate_title("Codewhale"), "Codewhale");
+        assert_eq!(decorate_title("Ghosty"), "Ghosty");
         assert_eq!(decorate_title("✓ done"), "✓ done");
         // Empty/whitespace prefixes behave exactly like `None`.
         set_title_prefix(Some("   "));
-        assert_eq!(decorate_title("Codewhale"), "Codewhale");
+        assert_eq!(decorate_title("Ghosty"), "Ghosty");
         set_title_prefix(None);
     }
 
@@ -1512,7 +1512,7 @@ mod tests {
         // whole render loop. Exercise the exact path: prefix change while
         // the animation worker is running.
         let _guard = prefix_lock();
-        start_title_animation("Codewhale");
+        start_title_animation("Ghosty");
         assert!(TITLE_ANIMATION_RUNNING.load(Ordering::SeqCst));
         set_title_prefix(Some("task-7"));
         assert_eq!(title_prefix_slot().lock().unwrap().as_str(), "task-7");
@@ -1829,8 +1829,8 @@ mod tests {
 
     #[test]
     fn osc9_body_format() {
-        let out = capture(Method::Osc9, false, "codewhale: done", 0, 1);
-        assert_eq!(out, b"\x1b]9;codewhale: done\x07");
+        let out = capture(Method::Osc9, false, "ghosty: done", 0, 1);
+        assert_eq!(out, b"\x1b]9;ghosty: done\x07");
     }
 
     #[test]
@@ -1900,12 +1900,12 @@ mod tests {
         TITLE_ANIMATION_RUNNING.store(false, Ordering::SeqCst);
         COMPLETION_MARKER_SHOWN.store(false, Ordering::SeqCst);
         set_title_prefix(Some("Alpha"));
-        assert_eq!(decorate_title(resting_title_body()), "[Alpha] Codewhale");
+        assert_eq!(decorate_title(resting_title_body()), "[Alpha] Ghosty");
         COMPLETION_MARKER_SHOWN.store(true, Ordering::SeqCst);
         assert_eq!(decorate_title(resting_title_body()), "[Alpha] ✓ done");
         COMPLETION_MARKER_SHOWN.store(false, Ordering::SeqCst);
         set_title_prefix(None);
-        assert_eq!(decorate_title(resting_title_body()), "Codewhale");
+        assert_eq!(decorate_title(resting_title_body()), "Ghosty");
     }
 
     #[test]
@@ -1922,7 +1922,7 @@ mod tests {
         let out = capture(Method::Ghostty, false, "done", 0, 1);
         let s = String::from_utf8(out).unwrap();
         assert!(
-            s.contains("777;notify;codewhale;done"),
+            s.contains("777;notify;ghosty;done"),
             "should have ghostty seq"
         );
     }
@@ -1978,7 +1978,7 @@ mod tests {
         assert!(!MACOS_DISPLAY_NOTIFICATION_SCRIPT.contains("sound name"));
         assert_eq!(
             MACOS_DISPLAY_NOTIFICATION_SCRIPT,
-            "display notification theBody with title \"Codewhale\" subtitle theSubtitle"
+            "display notification theBody with title \"Ghosty\" subtitle theSubtitle"
         );
     }
 

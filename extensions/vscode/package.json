@@ -1,13 +1,13 @@
 {
-  "name": "codewhale-vscode",
-  "displayName": "CodeWhale",
-  "description": "Official CodeWhale VS Code integration scaffold for local runtime attach and terminal launch.",
-  "version": "0.9.11",
-  "publisher": "codewhale",
+  "name": "ghosty-vscode",
+  "displayName": "GhostyCode",
+  "description": "Official GhostyCode VS Code integration scaffold for local runtime attach and terminal launch.",
+  "version": "0.0.15",
+  "publisher": "ghosty",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Hmbown/CodeWhale.git",
+    "url": "https://github.com/blissito/ghostycode.git",
     "directory": "extensions/vscode"
   },
   "engines": {
@@ -17,13 +17,13 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:codewhale.openTerminal",
-    "onCommand:codewhale.startRuntime",
-    "onCommand:codewhale.checkRuntime",
-    "onCommand:codewhale.refreshAgentView",
-    "onCommand:codewhale.refreshSnapshots",
-    "onCommand:codewhale.openRuntimeDocs",
-    "onView:codewhale.runtimeStatus"
+    "onCommand:ghosty.openTerminal",
+    "onCommand:ghosty.startRuntime",
+    "onCommand:ghosty.checkRuntime",
+    "onCommand:ghosty.refreshAgentView",
+    "onCommand:ghosty.refreshSnapshots",
+    "onCommand:ghosty.openRuntimeDocs",
+    "onView:ghosty.runtimeStatus"
   ],
   "main": "./out/extension.js",
   "files": [
@@ -35,56 +35,56 @@
   "contributes": {
     "commands": [
       {
-        "command": "codewhale.openTerminal",
-        "title": "CodeWhale: Open Terminal"
+        "command": "ghosty.openTerminal",
+        "title": "GhostyCode: Open Terminal"
       },
       {
-        "command": "codewhale.startRuntime",
-        "title": "CodeWhale: Start Local Runtime"
+        "command": "ghosty.startRuntime",
+        "title": "GhostyCode: Start Local Runtime"
       },
       {
-        "command": "codewhale.checkRuntime",
-        "title": "CodeWhale: Check Runtime"
+        "command": "ghosty.checkRuntime",
+        "title": "GhostyCode: Check Runtime"
       },
       {
-        "command": "codewhale.refreshAgentView",
-        "title": "CodeWhale: Refresh Agent View"
+        "command": "ghosty.refreshAgentView",
+        "title": "GhostyCode: Refresh Agent View"
       },
       {
-        "command": "codewhale.refreshSnapshots",
-        "title": "CodeWhale: Refresh Restore Points"
+        "command": "ghosty.refreshSnapshots",
+        "title": "GhostyCode: Refresh Restore Points"
       },
       {
-        "command": "codewhale.openRuntimeDocs",
-        "title": "CodeWhale: Open Runtime API Docs"
+        "command": "ghosty.openRuntimeDocs",
+        "title": "GhostyCode: Open Runtime API Docs"
       }
     ],
     "configuration": {
-      "title": "CodeWhale",
+      "title": "GhostyCode",
       "properties": {
-        "codewhale.commandPath": {
+        "ghosty.commandPath": {
           "type": "string",
-          "default": "codewhale",
-          "description": "Command or absolute path used to launch CodeWhale."
+          "default": "ghosty",
+          "description": "Command or absolute path used to launch GhostyCode."
         },
-        "codewhale.runtimeHost": {
+        "ghosty.runtimeHost": {
           "type": "string",
           "default": "127.0.0.1",
-          "description": "Local host used for CodeWhale runtime attach checks."
+          "description": "Local host used for GhostyCode runtime attach checks."
         },
-        "codewhale.runtimePort": {
+        "ghosty.runtimePort": {
           "type": "number",
           "default": 7878,
           "minimum": 1,
           "maximum": 65535,
-          "description": "Local port used for CodeWhale runtime attach checks."
+          "description": "Local port used for GhostyCode runtime attach checks."
         },
-        "codewhale.runtimeToken": {
+        "ghosty.runtimeToken": {
           "type": "string",
           "default": "",
           "description": "Optional bearer token for authenticated runtime endpoints."
         },
-        "codewhale.agentViewRefreshIntervalSeconds": {
+        "ghosty.agentViewRefreshIntervalSeconds": {
           "type": "number",
           "default": 15,
           "minimum": 0,
@@ -96,17 +96,17 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "codewhale",
-          "title": "CodeWhale",
-          "icon": "media/codewhale.svg"
+          "id": "ghosty",
+          "title": "GhostyCode",
+          "icon": "media/ghosty.svg"
         }
       ]
     },
     "views": {
-      "codewhale": [
+      "ghosty": [
         {
           "type": "webview",
-          "id": "codewhale.runtimeStatus",
+          "id": "ghosty.runtimeStatus",
           "name": "Agent View"
         }
       ]

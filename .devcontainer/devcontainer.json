@@ -1,5 +1,5 @@
 {
-  "name": "CodeWhale",
+  "name": "GhostyCode",
   "build": {
     "context": "..",
     "dockerfile": "Dockerfile",
@@ -22,12 +22,12 @@
   },
   "remoteEnv": {
     "DEEPSEEK_API_KEY": "${localEnv:DEEPSEEK_API_KEY}",
-    "CARGO_TARGET_DIR": "/home/codewhale/.cargo/target"
+    "CARGO_TARGET_DIR": "/home/ghosty/.cargo/target"
   },
   "mounts": [
-    "source=codewhale-state,target=/home/codewhale/.codewhale,type=volume",
-    "source=codewhale-cargo-target,target=/home/codewhale/.cargo/target,type=volume"
+    "source=ghosty-state,target=/home/ghosty/.ghosty,type=volume",
+    "source=ghosty-cargo-target,target=/home/ghosty/.cargo/target,type=volume"
   ],
   "postCreateCommand": "cargo build --locked",
-  "remoteUser": "codewhale"
+  "remoteUser": "ghosty"
 }

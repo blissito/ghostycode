@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# EXPERIMENTAL — tears down the CodeWhale DigitalOcean smoke lab and lists
+# EXPERIMENTAL — tears down the GhostyCode DigitalOcean smoke lab and lists
 # anything billable that remains (droplets, volumes, snapshots, reserved
 # IPs). Safe to re-run; prints what it finds before deleting.
 set -euo pipefail
 
-DROPLET_NAME="${DROPLET_NAME:-codewhale-smoke}"
+DROPLET_NAME="${DROPLET_NAME:-ghosty-smoke}"
 SSH_KEY_NAME="${SSH_KEY_NAME:-${DROPLET_NAME}-key}"
 FIREWALL_NAME="${FIREWALL_NAME:-${DROPLET_NAME}-ssh-only}"
 

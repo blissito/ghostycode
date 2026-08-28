@@ -6,7 +6,7 @@ Feature: Eval smoke test (binary load and eval step reporting)
   harness reports step-level success for a shell command.
 
   Scenario: Binary loads and reports step-level success via eval
-    Given a clean CodeWhale evaluation workspace
+    Given a clean GhostyCode evaluation workspace
     When the evaluation harness runs a shell command
     Then the binary exits without crashing
     And the JSON report contains execution steps

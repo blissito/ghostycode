@@ -8,7 +8,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const packageDir = path.join(repoRoot, "npm", "codewhale");
+const packageDir = path.join(repoRoot, "npm", "ghosty");
 const prepareAssetsScript = path.join(
   repoRoot,
   "scripts",
@@ -148,9 +148,9 @@ async function removeSmokeWorkspace(tempRoot, remove = fsp.rm) {
 }
 
 async function main() {
-  const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "codewhale-npm-smoke-"));
+  const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "ghosty-npm-smoke-"));
   const suppliedAssetsDir = String(
-    process.env.CODEWHALE_SMOKE_ASSETS_DIR || "",
+    process.env.GHOSTY_SMOKE_ASSETS_DIR || "",
   ).trim();
   const releaseAssetsDir = suppliedAssetsDir
     ? path.resolve(suppliedAssetsDir)
@@ -158,7 +158,7 @@ async function main() {
   const packDir = path.join(tempRoot, "pack");
   const installDir = path.join(tempRoot, "install");
   let keepTemp =
-    process.env.CODEWHALE_KEEP_SMOKE_DIR === "1" ||
+    process.env.GHOSTY_KEEP_SMOKE_DIR === "1" ||
     process.env.DEEPSEEK_TUI_KEEP_SMOKE_DIR === "1";
   let server;
 
@@ -169,7 +169,7 @@ async function main() {
     if (suppliedAssetsDir) {
       const assetDirectoryStat = await fsp.stat(releaseAssetsDir);
       if (!assetDirectoryStat.isDirectory()) {
-        throw new Error(`CODEWHALE_SMOKE_ASSETS_DIR is not a directory: ${releaseAssetsDir}`);
+        throw new Error(`GHOSTY_SMOKE_ASSETS_DIR is not a directory: ${releaseAssetsDir}`);
       }
       console.log(`Using preassembled release assets from ${releaseAssetsDir}`);
     } else {
@@ -186,8 +186,8 @@ async function main() {
     server = served.server;
 
     const env = {
-      CODEWHALE_FORCE_DOWNLOAD: "1",
-      CODEWHALE_RELEASE_BASE_URL: served.baseUrl,
+      GHOSTY_FORCE_DOWNLOAD: "1",
+      GHOSTY_RELEASE_BASE_URL: served.baseUrl,
     };
     const pack = await runCommand(
       "npm",
@@ -202,11 +202,11 @@ async function main() {
 
     await runCommand("npm", ["init", "-y"], { cwd: installDir });
     await runCommand("npm", ["install", tarball], { cwd: installDir, env });
-    await runCommand("npx", ["--no-install", "codewhale", "doctor", "--help"], {
+    await runCommand("npx", ["--no-install", "ghosty", "doctor", "--help"], {
       cwd: installDir,
       env,
     });
-    await runCommand("npx", ["--no-install", "codew", "--version"], {
+    await runCommand("npx", ["--no-install", "ghosty-tui", "--version"], {
       cwd: installDir,
       env,
     });

@@ -1,7 +1,7 @@
 //! The kill switch has to reach the in-process runtime that would emit.
 //!
-//! The single `codewhale` binary resolves dispatcher overrides, states the
-//! telemetry floor in its environment, and then calls `codewhale_tui::run`.
+//! The single `ghosty` binary resolves dispatcher overrides, states the
+//! telemetry floor in its environment, and then calls `ghosty_tui::run`.
 //! That runtime re-resolves telemetry before it can arm. These tests drive the
 //! real binary through the keyless `features list` command and use the local
 //! dry-run sink as the end-to-end observable: an enabled positive control must
@@ -12,10 +12,10 @@
 use std::fs;
 use std::process::Command;
 
-use codewhale_config::{SetupState, TELEMETRY_NOTICE_VERSION};
+use ghosty_config::{SetupState, TELEMETRY_NOTICE_VERSION};
 use tempfile::TempDir;
 
-/// `CODEWHALE_TELEMETRY=0` beats `--telemetry true`, end to end.
+/// `GHOSTY_TELEMETRY=0` beats `--telemetry true`, end to end.
 ///
 /// The positive control proves the runtime is enabled before the kill switch is
 /// applied, so the zero-state assertion cannot pass vacuously.
@@ -37,7 +37,7 @@ fn env_off_beats_cli_on_end_to_end() {
     let off = dispatch_and_read_telemetry(Some("0"));
     assert!(
         !off.telemetry_dir_exists && off.dry_run.is_none(),
-        "`CODEWHALE_TELEMETRY=0` must beat `--telemetry true` before the runtime arms"
+        "`GHOSTY_TELEMETRY=0` must beat `--telemetry true` before the runtime arms"
     );
 }
 
@@ -77,15 +77,15 @@ fn an_unparseable_telemetry_env_value_keeps_the_in_process_runtime_off() {
 fn config_set_true_reenables_a_historical_decline() {
     let fixture = TempDir::new().expect("fixture root");
     let home = fixture.path().join("home");
-    let codewhale_home = fixture.path().join("codewhale-home");
+    let ghosty_home = fixture.path().join("ghosty-home");
     let workspace = fixture.path().join("workspace");
-    for dir in [&home, &codewhale_home, &workspace] {
+    for dir in [&home, &ghosty_home, &workspace] {
         fs::create_dir_all(dir).expect("create fixture dir");
     }
 
     let mut state = SetupState::default();
     state.record_telemetry_notice("1", false);
-    let state_path = codewhale_home.join("setup_state.json");
+    let state_path = ghosty_home.join("setup_state.json");
     state
         .save_to(&state_path)
         .expect("write historical decline");
@@ -93,14 +93,14 @@ fn config_set_true_reenables_a_historical_decline() {
     let config_path = fixture.path().join("config.toml");
     fs::write(&config_path, "telemetry = false\n").expect("write config");
 
-    let output = Command::new(codewhale_binary())
+    let output = Command::new(ghosty_binary())
         .current_dir(&workspace)
         .env_clear()
         .env("PATH", std::env::var_os("PATH").expect("PATH"))
         .env("HOME", &home)
         .env("USERPROFILE", &home)
-        .env("CODEWHALE_HOME", &codewhale_home)
-        .env("CODEWHALE_SECRET_BACKEND", "file")
+        .env("GHOSTY_HOME", &ghosty_home)
+        .env("GHOSTY_SECRET_BACKEND", "file")
         .args([
             "--config",
             config_path.to_str().expect("config path"),
@@ -145,9 +145,9 @@ fn dispatch_and_read_telemetry_with_endpoint(
 ) -> DispatchEvidence {
     let fixture = TempDir::new().expect("fixture root");
     let home = fixture.path().join("home");
-    let codewhale_home = fixture.path().join("codewhale-home");
+    let ghosty_home = fixture.path().join("ghosty-home");
     let workspace = fixture.path().join("workspace");
-    for dir in [&home, &codewhale_home, &workspace] {
+    for dir in [&home, &ghosty_home, &workspace] {
         fs::create_dir_all(dir).expect("create fixture dir");
     }
 
@@ -158,26 +158,26 @@ fn dispatch_and_read_telemetry_with_endpoint(
     }
     fs::write(&config_path, config).expect("write config");
 
-    let mut command = Command::new(codewhale_binary());
+    let mut command = Command::new(ghosty_binary());
     command
         .current_dir(&workspace)
         .env_clear()
         .env("PATH", std::env::var_os("PATH").expect("PATH"))
         .env("HOME", &home)
         .env("USERPROFILE", &home)
-        .env("CODEWHALE_HOME", &codewhale_home)
-        .env("CODEWHALE_SECRET_BACKEND", "file")
+        .env("GHOSTY_HOME", &ghosty_home)
+        .env("GHOSTY_SECRET_BACKEND", "file")
         .env(
-            "CODEWHALE_RELEASE_BASE_URL",
+            "GHOSTY_RELEASE_BASE_URL",
             "https://example.invalid/releases",
         )
         .arg("--config")
         .arg(&config_path)
         .args(["--telemetry", "true", "features", "list"]);
     if let Some(value) = telemetry_env {
-        command.env("CODEWHALE_TELEMETRY", value);
+        command.env("GHOSTY_TELEMETRY", value);
     }
-    let output = command.output().expect("run codewhale dispatcher");
+    let output = command.output().expect("run ghosty dispatcher");
     assert!(
         output.status.success(),
         "the in-process feature command must succeed\nstdout:\n{}\nstderr:\n{}",
@@ -191,7 +191,7 @@ fn dispatch_and_read_telemetry_with_endpoint(
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let telemetry_dir = codewhale_home.join("telemetry");
+    let telemetry_dir = ghosty_home.join("telemetry");
     let dry_run = match fs::read_to_string(telemetry_dir.join("dryrun.jsonl")) {
         Ok(contents) => Some(contents),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -209,6 +209,6 @@ fn dispatch_and_read_telemetry_with_endpoint(
     }
 }
 
-fn codewhale_binary() -> &'static str {
-    env!("CARGO_BIN_EXE_codewhale")
+fn ghosty_binary() -> &'static str {
+    env!("CARGO_BIN_EXE_ghosty")
 }

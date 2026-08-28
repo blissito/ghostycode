@@ -7,8 +7,8 @@ import type { HomeDict } from "../types";
  * people" framing is intentionally gone.
  *
  * Product terms stay literal, matching `crates/tui/locales/ko.json`:
- * Plan / Work / Operate, Ask / Auto-Review / Full Access, Codewhale, Fleet,
- * `codewhale exec`. "permission posture" renders as 권한 상태 everywhere;
+ * Plan / Work / Operate, Ask / Auto-Review / Full Access, Ghosty, Fleet,
+ * `ghosty exec`. "permission posture" renders as 권한 상태 everywhere;
  * "provider route" as 프로바이더 경로 (the TUI pack uses 경로 for route);
  * "receipt" as 기록, the reading the TUI pack uses in prose.
  *
@@ -17,9 +17,9 @@ import type { HomeDict } from "../types";
  * sentences.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — 깊은 곳으로 대신 잠수하니, 당신은 잠수하지 않아도 됩니다.",
+  metaTitle: "Ghosty — 깊은 곳으로 대신 잠수하니, 당신은 잠수하지 않아도 됩니다.",
   metaDescription:
-    "Codewhale이 깊은 곳으로 대신 잠수하니 당신은 잠수하지 않아도 됩니다 — 오픈 소스 터미널 코딩 에이전트. 원하는 모델을 가져오세요. 당신의 머신에서 실행됩니다. Rust, MIT.",
+    "Ghosty이 깊은 곳으로 대신 잠수하니 당신은 잠수하지 않아도 됩니다 — 오픈 소스 터미널 코딩 에이전트. 원하는 모델을 가져오세요. 당신의 머신에서 실행됩니다. Rust, MIT.",
 
   kicker: "오픈 소스 · 원하는 모델을 그대로 · 터미널에서 실행",
   heroTitleA: "깊은 곳으로 대신 잠수하고,",
@@ -45,8 +45,8 @@ export const home: HomeDict = {
 
   shotSession: "현재 세션",
   screenshotAlt:
-    "Operate 모드, 고래, 입력창, 하단 바가 보이는 현재 Codewhale 터미널 세션",
-  figcaption: "현재 Codewhale 세션 · Operate 모드 · Ask 권한 상태",
+    "Operate 모드, 고래, 입력창, 하단 바가 보이는 현재 Ghosty 터미널 세션",
+  figcaption: "현재 Ghosty 세션 · Operate 모드 · Ask 권한 상태",
 
   proofHeading: "수중 터미널 셸. 어떤 모델이든. 당신의 머신에서.",
   proofBody:
@@ -72,7 +72,7 @@ export const home: HomeDict = {
   receiptReport: "검사 통과 · 기록 저장됨",
 
   sealStart: "起",
-  startHeading: "Codewhale이 처음인가요? 네 단계면 끝입니다.",
+  startHeading: "Ghosty이 처음인가요? 네 단계면 끝입니다.",
   startLede:
     "설치 → 키 없는 첫 세션 → 프로바이더 연결 → 첫 Fleet 워크플로. 용어는 용어 페이지에 정의되어 있습니다.",
   startGuideLink: "시작 가이드 읽기 →",
@@ -92,7 +92,7 @@ export const home: HomeDict = {
   surfacesHeading: "작업이 일어나는 자리에서 런타임을 사용하세요.",
   surfaces: [
     ["TUI", "대화형 터미널 작업"],
-    ["codewhale exec", "스크립트와 CI"],
+    ["ghosty exec", "스크립트와 CI"],
     ["웹 클라이언트", "루프백 전용 브라우저 클라이언트"],
     ["Runtime API + MCP", "로컬 통합"],
     ["Fleet", "지속형 멀티 에이전트 작업"],

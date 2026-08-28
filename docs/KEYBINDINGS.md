@@ -56,7 +56,7 @@ Editing the message you're about to send.
 | `Shift-Home` / `Shift-End`  | Extend the selection to the start / end of the line     |
 | `Ctrl-Shift-Home` / `Ctrl-Shift-End` | Extend the selection to the start / end of the draft |
 | `Ctrl-Shift-A` / `Cmd-A`    | Select the whole draft (see note below)                 |
-| `Ctrl-Shift-U`           | Run `/update install` from the keyboard: check for and install the latest CodeWhale release without leaving the TUI. Managed installs (Homebrew/npm/cargo) keep their package-manager gate; when already current the updater's "Already up to date." result is shown and nothing changes |
+| `Ctrl-Shift-U`           | Run `/update install` from the keyboard: check for and install the latest GhostyCode release without leaving the TUI. Managed installs (Homebrew/npm/cargo) keep their package-manager gate; when already current the updater's "Already up to date." result is shown and nothing changes |
 | Mouse drag                  | Select composer text; click moves the cursor            |
 | `Cmd-V` / `Ctrl-Shift-V`    | Terminal-local paste (arrives as bracketed paste when supported) |
 | `Ctrl-V`                    | Direct clipboard paste in a local or forwarded graphical session |
@@ -158,15 +158,15 @@ When `[memory] enabled = true`, typing `# foo` and pressing `Enter` appends `foo
 | `Y`                  | Copy the focused transcript block with metadata    |
 | `Enter`              | Open the focused transcript block fullscreen       |
 | `r`                  | Open the focused block's raw markdown/detail view  |
-| Mouse drag           | Select transcript text in Codewhale                |
-| `Ctrl-C`             | Copy an active Codewhale selection                 |
+| Mouse drag           | Select transcript text in Ghosty                |
+| `Ctrl-C`             | Copy an active Ghosty selection                 |
 | `Cmd-click` (macOS) / `Ctrl-click` (Linux/Windows) | Open an OSC 8 link in a supporting terminal (terminal-owned) |
 
 For terminal-native selection, hold `Shift` while dragging (terminal support
 varies), then use the terminal's own copy command: usually `Cmd-C` on macOS or
 `Ctrl-Shift-C` on Linux/Windows. Those commands are handled by the local
-terminal and are intentionally separate from Codewhale's `Ctrl-C` selection
-binding. Over SSH, Codewhale sends copy requests back through OSC 52, or via
+terminal and are intentionally separate from Ghosty's `Ctrl-C` selection
+binding. Over SSH, Ghosty sends copy requests back through OSC 52, or via
 tmux's `load-buffer -w` path when running inside tmux.
 
 ## Work bar (after `Alt-W` claims focus)
@@ -241,5 +241,5 @@ destructive one and keeps its confirmation.
 - **Ctrl-S is stash, not history search.** Fixed in this revision — `Alt-R` is history search.
 - **Phantom `Alt+Up` removed.** The "Edit last queued message" binding was listed in README but never existed in the key dispatch code.
 - **Bare Up/Down arrows scroll transcript when composer empty (v0.8.13).** Previously the `should_scroll_with_arrows` gate was hardcoded to false, meaning bare arrows always navigated composer history even when the composer was empty. Users in virtual terminals (Ghostty, Codex, Kitty-protocol) were especially affected because they couldn't use Cmd+Up / Alt+Up shortcuts.
-- **Configurable keymap (#436) and `tui.toml` (#437) remain deferred.** The `TuiPrefs` struct and loader exist in `settings.rs` but are not wired at startup. The named-binding registry that would let `~/.codewhale/tui.toml` override individual entries is still pending.
+- **Configurable keymap (#436) and `tui.toml` (#437) remain deferred.** The `TuiPrefs` struct and loader exist in `settings.rs` but are not wired at startup. The named-binding registry that would let `~/.ghosty/tui.toml` override individual entries is still pending.
 - **No other broken bindings found.** Every other chord listed above resolves to a live handler in `crates/tui/src/tui/ui.rs` (key-event dispatch) or `crates/tui/src/tui/app.rs` (mode + state transitions).

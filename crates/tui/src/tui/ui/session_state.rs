@@ -287,16 +287,16 @@ pub(crate) fn recover_stalled_runtime_turn(app: &mut App, message: &str, level: 
     // signal. Until now a wedged turn was only visible as this toast; with
     // the outbox enabled a supervisor can react to the same moment.
     // No-op when the feature is disabled.
-    app.lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+    app.lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
         event: "turn_stalled".to_string(),
         kind: "turn.stalled".to_string(),
         thread_id: stalled_session_id,
         turn_id: stalled_turn_id,
         item_id: None,
         payload: serde_json::json!({
-            "message": codewhale_hooks::bounded_text(
+            "message": ghosty_hooks::bounded_text(
                 message,
-                codewhale_hooks::OUTBOX_DETAIL_MAX_CHARS,
+                ghosty_hooks::OUTBOX_DETAIL_MAX_CHARS,
             ),
             "workspace": app.workspace.display().to_string(),
         }),
@@ -355,7 +355,7 @@ pub(crate) fn recover_engine_event_disconnect(app: &mut App) -> bool {
     }
 
     app.add_message(HistoryCell::Error {
-        message: "Engine stopped before completing the turn. Check ~/.codewhale/crashes and retry."
+        message: "Engine stopped before completing the turn. Check ~/.ghosty/crashes and retry."
             .to_string(),
         severity: crate::error_taxonomy::ErrorSeverity::Error,
     });
@@ -578,7 +578,7 @@ pub(crate) fn launch_worktree_slug(requested: &str) -> String {
 pub(crate) fn launch_worktree_spec(
     workspace: &std::path::Path,
     requested: &str,
-) -> Result<codewhale_lane::WorktreeProvision> {
+) -> Result<ghosty_lane::WorktreeProvision> {
     let output = std::process::Command::new("git")
         .current_dir(workspace)
         .args(["rev-parse", "--show-toplevel"])
@@ -596,12 +596,12 @@ pub(crate) fn launch_worktree_spec(
     let slug = launch_worktree_slug(requested);
     let parent = repo_root.parent().unwrap_or(repo_root.as_path());
     let path = parent
-        .join(".codewhale-worktrees")
+        .join(".ghosty-worktrees")
         .join(format!("{repo_name}-{slug}"));
     if path.exists() {
         anyhow::bail!("worktree path already exists: {}", path.display());
     }
-    Ok(codewhale_lane::WorktreeProvision {
+    Ok(ghosty_lane::WorktreeProvision {
         repo_root,
         branch: format!("codex/{slug}"),
         path,
@@ -614,10 +614,9 @@ pub(crate) async fn provision_launch_worktree(
     requested: String,
 ) -> Result<PathBuf> {
     let spec = launch_worktree_spec(&workspace, &requested)?;
-    let provisioned =
-        tokio::task::spawn_blocking(move || codewhale_lane::provision_worktree(&spec))
-            .await
-            .context("new worktree task failed")??;
+    let provisioned = tokio::task::spawn_blocking(move || ghosty_lane::provision_worktree(&spec))
+        .await
+        .context("new worktree task failed")??;
     Ok(provisioned.path)
 }
 
@@ -728,7 +727,7 @@ pub(crate) fn restore_failed_immediate_submit(
 /// rather than deleting the key. This is an explicit reset, so any custom
 /// bindings are replaced with the recommended set.
 pub(crate) fn restore_hotbar_defaults(app: &mut App, config: &mut Config) {
-    let defaults = codewhale_config::default_hotbar_bindings_toml();
+    let defaults = ghosty_config::default_hotbar_bindings_toml();
     match crate::config_persistence::persist_hotbar_bindings(app.config_path.as_deref(), &defaults)
     {
         Ok(path) => {
@@ -751,16 +750,14 @@ pub(crate) fn restore_hotbar_defaults(app: &mut App, config: &mut Config) {
 pub(crate) fn persist_rules_from_approval(
     app: &mut App,
     config: &mut Config,
-    rules: &[codewhale_config::ToolAskRule],
+    rules: &[ghosty_config::ToolAskRule],
 ) {
     let action = rules.first().map(|rule| rule.action);
-    match codewhale_config::ConfigStore::load(app.config_path.clone()).and_then(|mut store| {
+    match ghosty_config::ConfigStore::load(app.config_path.clone()).and_then(|mut store| {
         let added = match action {
-            Some(codewhale_execpolicy::PermissionAction::Ask) => store.append_ask_rules(rules)?,
-            Some(codewhale_execpolicy::PermissionAction::Allow) => {
-                store.append_allow_rules(rules)?
-            }
-            Some(codewhale_execpolicy::PermissionAction::Deny) => {
+            Some(ghosty_execpolicy::PermissionAction::Ask) => store.append_ask_rules(rules)?,
+            Some(ghosty_execpolicy::PermissionAction::Allow) => store.append_allow_rules(rules)?,
+            Some(ghosty_execpolicy::PermissionAction::Deny) => {
                 anyhow::bail!("the approval UI cannot persist deny rules")
             }
             None => 0,
@@ -771,7 +768,7 @@ pub(crate) fn persist_rules_from_approval(
     }) {
         Ok((added, path)) if added > 0 => {
             let action = match action {
-                Some(codewhale_execpolicy::PermissionAction::Allow) => "allow",
+                Some(ghosty_execpolicy::PermissionAction::Allow) => "allow",
                 _ => "ask",
             };
             app.status_message = Some(format!(
@@ -781,7 +778,7 @@ pub(crate) fn persist_rules_from_approval(
         }
         Ok((_added, path)) => {
             let action = match action {
-                Some(codewhale_execpolicy::PermissionAction::Allow) => "Allow",
+                Some(ghosty_execpolicy::PermissionAction::Allow) => "Allow",
                 _ => "Ask",
             };
             app.status_message = Some(format!(
@@ -800,7 +797,10 @@ pub(crate) fn mirror_saved_model_in_config(
     provider: ApiProvider,
     model: String,
 ) {
-    if matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN) {
+    if matches!(
+        provider,
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits
+    ) {
         config.default_text_model = Some(model);
         return;
     }
@@ -827,7 +827,10 @@ pub(crate) fn mirror_saved_api_key_in_config(
     provider: ApiProvider,
     api_key: String,
 ) {
-    if matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN) {
+    if matches!(
+        provider,
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits
+    ) {
         config.api_key = Some(api_key);
         config.auth_mode = Some("api_key".to_string());
         return;
@@ -855,7 +858,7 @@ pub(crate) fn mirror_saved_api_key_in_config(
         .providers
         .get_or_insert_with(ProvidersConfig::default);
     let entry: &mut ProviderConfig = match provider {
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN => return,
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits => return,
         ApiProvider::Custom => providers
             .custom
             .entry(custom_key.expect("custom key captured for custom provider"))
@@ -945,7 +948,7 @@ pub(crate) fn restore_loaded_session_provider(
         .clamp(1, crate::config::MAX_SUBAGENTS);
     app.provider_chain = provider
         .kind()
-        .map(|kind| codewhale_config::ProviderChain::new(kind, &config.fallback_providers))
+        .map(|kind| ghosty_config::ProviderChain::new(kind, &config.fallback_providers))
         .filter(|chain| chain.providers().len() > 1);
     app.last_fallback_reason = None;
     app.model_ids_passthrough = config.model_ids_pass_through();
@@ -1095,7 +1098,7 @@ mod stall_outbox_tests {
         let outbox_path = dir.path().join("outbox.jsonl");
 
         let config = Config {
-            lifecycle_outbox: Some(codewhale_config::LifecycleOutboxToml {
+            lifecycle_outbox: Some(ghosty_config::LifecycleOutboxToml {
                 path: Some(outbox_path.clone()),
                 webhook_url: None,
                 webhook_token: None,
@@ -1151,7 +1154,7 @@ mod stall_outbox_tests {
         let message = line["payload"]["message"].as_str().expect("message");
         assert!(message.contains("stalled"));
         assert!(
-            message.chars().count() <= codewhale_hooks::OUTBOX_DETAIL_MAX_CHARS,
+            message.chars().count() <= ghosty_hooks::OUTBOX_DETAIL_MAX_CHARS,
             "stall message must be bounded"
         );
     }

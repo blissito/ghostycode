@@ -76,7 +76,7 @@ pub struct ProviderModelOffering {
 
 // Transport snapshot verified against https://opencode.ai/docs/zen on
 // 2026-07-17. Gemini rows are intentionally absent because they use Google's
-// model-specific wire protocol, which CodeWhale does not currently implement.
+// model-specific wire protocol, which GhostyCode does not currently implement.
 /// Token Plan text models (Text Generation / Reasoning, coding scope).
 ///
 /// Available on both Token Plan Personal and Team. The same model set is also

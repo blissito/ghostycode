@@ -87,7 +87,7 @@ pub struct SettingsSection {
     pub theme: UiThemeValue,
     #[schemars(
         title = "Custom theme name",
-        description = "Theme slug from the fixed Codewhale themes directory; used only when theme is custom."
+        description = "Theme slug from the fixed Ghosty themes directory; used only when theme is custom."
     )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_theme_name: Option<String>,
@@ -396,7 +396,7 @@ pub enum StatusItemValue {
 pub fn parse_mode(arg: Option<&str>) -> Result<ConfigUiMode, String> {
     let raw = arg.unwrap_or("").trim();
     // Bare `/config` opens the legacy native modal — it matches the rest
-    // of the codewhale-tui navy chrome out of the box. Power users can
+    // of the ghosty-tui navy chrome out of the box. Power users can
     // opt into the schemaui-driven editor with `/config tui`, or the
     // browser surface with `/config web` (web feature only).
     if raw.is_empty() || raw.eq_ignore_ascii_case("native") {
@@ -493,7 +493,7 @@ pub fn build_document(app: &App, config: &Config) -> Result<ConfigUiDocument> {
 
 pub fn build_schema() -> Value {
     let mut schema = serde_json::to_value(schema_for!(ConfigUiDocument)).expect("config ui schema");
-    schema["title"] = Value::String("Codewhale Config".to_string());
+    schema["title"] = Value::String("Ghosty Config".to_string());
     schema["description"] = Value::String(
         "Tune live runtime choices and durable TUI defaults. Provider switching stays in /provider."
             .to_string(),
@@ -510,7 +510,7 @@ pub fn run_tui_editor(app: &App, config: &Config) -> Result<ConfigUiDocument> {
     let document = build_document(app, config)?;
     let value = SchemaUI::new(serde_json::to_value(document.clone())?)
         .with_schema(build_schema())
-        .with_title("Codewhale Config")
+        .with_title("Ghosty Config")
         .with_description("Review the live route, then save the settings you want to keep.")
         .run(FrontendOptions::Tui(
             UiOptions::default()
@@ -528,7 +528,7 @@ pub async fn start_web_editor(app: &App, config: &Config) -> Result<WebConfigSes
     let initial = serde_json::to_value(build_document(app, config)?)?;
     let session = WebSessionBuilder::new(build_schema())
         .with_initial_data(initial)
-        .with_title("Codewhale Config")
+        .with_title("Ghosty Config")
         .with_description(
             "Save updates this browser draft. Exit returns the reviewed changes to the TUI.",
         )
@@ -1578,18 +1578,18 @@ mod tests {
     #[test]
     fn persisted_config_ui_reasoning_updates_the_startup_precedence_layer() {
         let _lock = lock_test_env();
-        let temp_root = tempfile::tempdir().expect("isolated Codewhale home");
-        let codewhale_home = temp_root.path().join(".codewhale");
-        fs::create_dir_all(&codewhale_home).expect("settings dir");
+        let temp_root = tempfile::tempdir().expect("isolated Ghosty home");
+        let ghosty_home = temp_root.path().join(".ghosty");
+        fs::create_dir_all(&ghosty_home).expect("settings dir");
         fs::write(
-            codewhale_home.join("settings.toml"),
+            ghosty_home.join("settings.toml"),
             "default_model = \"auto\"\nreasoning_effort = \"max\"\n",
         )
         .expect("seed settings");
         let config_path = temp_root.path().join("config.toml");
         fs::write(&config_path, "reasoning_effort = \"max\"\n").expect("seed config");
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
-        let _codewhale_config = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
+        let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
 
         let mut app = app();
@@ -1645,7 +1645,7 @@ mod tests {
             .expect("clock")
             .as_nanos();
         let temp_root = std::env::temp_dir().join(format!(
-            "codewhale-config-ui-cost-currency-{}-{}",
+            "ghosty-config-ui-cost-currency-{}-{}",
             std::process::id(),
             nanos
         ));
@@ -1677,7 +1677,7 @@ cost_currency = "cny"
             .expect("clock")
             .as_nanos();
         let temp_root = std::env::temp_dir().join(format!(
-            "codewhale-config-ui-background-color-{}-{}",
+            "ghosty-config-ui-background-color-{}-{}",
             std::process::id(),
             nanos
         ));
@@ -1704,13 +1704,13 @@ background_color = "#1A1B26"
     #[test]
     fn build_document_accepts_every_shipped_locale_from_settings() {
         let _lock = lock_test_env();
-        let temp_root = tempfile::tempdir().expect("isolated Codewhale home");
-        let codewhale_home = temp_root.path().join(".codewhale");
-        fs::create_dir_all(&codewhale_home).expect("settings dir");
-        let settings_path = codewhale_home.join("settings.toml");
+        let temp_root = tempfile::tempdir().expect("isolated Ghosty home");
+        let ghosty_home = temp_root.path().join(".ghosty");
+        fs::create_dir_all(&ghosty_home).expect("settings dir");
+        let settings_path = ghosty_home.join("settings.toml");
         fs::write(&settings_path, "").expect("seed settings");
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
-        let _codewhale_config = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
+        let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
 
         let app = app();
@@ -1735,9 +1735,9 @@ background_color = "#1A1B26"
     #[test]
     fn custom_theme_round_trips_through_typed_config_document() {
         let _lock = lock_test_env();
-        let temp_root = tempfile::tempdir().expect("isolated Codewhale home");
-        let codewhale_home = temp_root.path().join(".codewhale");
-        let themes_dir = codewhale_home.join("themes");
+        let temp_root = tempfile::tempdir().expect("isolated Ghosty home");
+        let ghosty_home = temp_root.path().join(".ghosty");
+        let themes_dir = ghosty_home.join("themes");
         fs::create_dir_all(&themes_dir).expect("themes dir");
         fs::write(
             themes_dir.join("ocean.json"),
@@ -1745,13 +1745,13 @@ background_color = "#1A1B26"
         )
         .expect("custom theme");
         fs::write(
-            codewhale_home.join("settings.toml"),
+            ghosty_home.join("settings.toml"),
             r#"theme = "custom:ocean"
 "#,
         )
         .expect("settings");
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
-        let _codewhale_config = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
+        let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
 
         let mut app = app();
@@ -1770,7 +1770,7 @@ background_color = "#1A1B26"
     #[test]
     fn schema_contains_typed_enums() {
         let schema = build_schema();
-        assert_eq!(schema["title"], serde_json::json!("Codewhale Config"));
+        assert_eq!(schema["title"], serde_json::json!("Ghosty Config"));
         assert!(
             schema["description"]
                 .as_str()
@@ -1896,7 +1896,7 @@ background_color = "#1A1B26"
             .expect("clock")
             .as_nanos();
         let temp_root = std::env::temp_dir().join(format!(
-            "codewhale-config-ui-session-only-{}-{}",
+            "ghosty-config-ui-session-only-{}-{}",
             std::process::id(),
             nanos
         ));

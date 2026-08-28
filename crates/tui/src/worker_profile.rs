@@ -1,4 +1,4 @@
-//! Worker runtime profile — the per-role capability contract for a CodeWhale
+//! Worker runtime profile — the per-role capability contract for a GhostyCode
 //! worker (#3217, #3211, #3213, and the child-permission-intersection issues
 //! #414 / #426 / #1186).
 //!
@@ -249,7 +249,7 @@ impl WorkerRuntimeProfile {
             // wins via `derive_child`, same as every other role.
             reasoning_effort: matches!(role, FleetRole::Consultant).then(|| "high".to_string()),
             denied_tools: Vec::new(),
-            max_spawn_depth: codewhale_config::DEFAULT_SPAWN_DEPTH,
+            max_spawn_depth: ghosty_config::DEFAULT_SPAWN_DEPTH,
             max_steps: Self::default_max_steps(role.clone()),
             background: true,
         }
@@ -301,7 +301,7 @@ impl WorkerRuntimeProfile {
         let max_spawn_depth = requested
             .max_spawn_depth
             .min(self.max_spawn_depth.saturating_sub(1))
-            .min(codewhale_config::MAX_SPAWN_DEPTH_CEILING);
+            .min(ghosty_config::MAX_SPAWN_DEPTH_CEILING);
         WorkerRuntimeProfile {
             role: requested.role.clone(),
             permissions,

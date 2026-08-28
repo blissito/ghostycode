@@ -56,7 +56,7 @@ class PersistenceBacklogMeasurementTests(unittest.TestCase):
                 "--locked",
                 "--all-features",
                 "-p",
-                "codewhale-tui",
+                "ghosty-tui",
                 "--lib",
                 mod.TEST_NAME,
                 "--",

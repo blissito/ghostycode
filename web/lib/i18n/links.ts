@@ -10,15 +10,15 @@
  */
 import type { ChromeDict } from "./dictionaries/types";
 
-export const REPO_URL = "https://github.com/Hmbown/CodeWhale";
+export const REPO_URL = "https://github.com/blissito/ghostycode";
 export const REPO_ISSUES_URL = `${REPO_URL}/issues`;
 export const REPO_RELEASES_URL = `${REPO_URL}/releases`;
 export const REPO_LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
 /** Community chat. A brand name, so it is not a dictionary string. */
 export const DISCORD_URL = "https://discord.gg/37gfS3ksug";
 
-/** The hosted Codewhale app (account sign-in / sign-up). */
-export const APP_URL = "https://app.codewhale.net";
+/** The hosted Ghosty app (account sign-in / sign-up). */
+export const APP_URL = "https://app.ghosty.net";
 export const APP_LOGIN_URL = `${APP_URL}/login`;
 export const APP_SIGNUP_URL = `${APP_URL}/signup`;
 

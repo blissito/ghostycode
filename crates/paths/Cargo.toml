@@ -1,11 +1,11 @@
 [package]
-name = "codewhale-paths"
+name = "ghosty-paths"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "User-scoped runtime path authority for Codewhale"
+description = "User-scoped runtime path authority for Ghosty"
 
 [lints]
 workspace = true

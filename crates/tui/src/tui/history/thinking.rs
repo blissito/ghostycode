@@ -240,7 +240,7 @@ fn collapsed_thinking_body(
         }
     };
     // #4146/#4148 used to scrub snake_case here. That rule could not tell
-    // CodeWhale identifiers from user identifiers: paths, env vars, and
+    // GhostyCode identifiers from user identifiers: paths, env vars, and
     // module names became bare ellipses while the full body remained one
     // keypress away. Keep the default view readable; do not revive the scrub.
     let mut lines = if body_text.trim().is_empty() {

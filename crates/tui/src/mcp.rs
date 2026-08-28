@@ -589,11 +589,11 @@ pub struct McpServerConfig {
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub env_headers: HashMap<String, String>,
     /// Environment variable containing a bearer token. When present and set,
-    /// CodeWhale sends `Authorization: Bearer <value>` for URL-based servers.
+    /// GhostyCode sends `Authorization: Bearer <value>` for URL-based servers.
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bearer_token_env_var: Option<String>,
-    /// OAuth scopes requested during `codewhale mcp login`.
+    /// OAuth scopes requested during `ghosty mcp login`.
     #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub scopes: Vec<String>,
@@ -749,7 +749,7 @@ impl ReviewedPluginMcpSource {
         // Catalog exposure is an authority boundary too: stale tool, prompt,
         // or resource descriptions can steer the model even when the later
         // operation would be denied. Revalidate both the mutable reviewed
-        // source and the Codewhale-owned stage before publishing any entry.
+        // source and the Ghosty-owned stage before publishing any entry.
         crate::plugins::registry::verify_plugin_component_authority(
             &self.authority,
             self.required_capability(),
@@ -892,7 +892,7 @@ impl ReviewedStdioLaunch {
             .context("reviewed plugin executable is absent from its byte inventory")?;
         let mut file = open_reviewed_launch_file(path)?;
         let mut hasher = sha2::Sha256::new();
-        hasher.update(b"codewhale-plugin-file-bytes-v1\0");
+        hasher.update(b"ghosty-plugin-file-bytes-v1\0");
         let mut buffer = [0_u8; 64 * 1024];
         loop {
             let read = file
@@ -1717,7 +1717,7 @@ impl McpConnection {
             "params": {
                 "protocolVersion": "2024-11-05",
                 "clientInfo": {
-                    "name": "codewhale-tui",
+                    "name": "ghosty-tui",
                     "version": env!("CARGO_PKG_VERSION")
                 },
                 "capabilities": {
@@ -2441,7 +2441,7 @@ impl McpPool {
     }
 
     /// Create a pool from global MCP config plus workspace-local
-    /// `.codewhale/mcp.json`. Project servers override same-name global
+    /// `.ghosty/mcp.json`. Project servers override same-name global
     /// servers and default stdio `cwd` to the workspace root.
     #[cfg(test)]
     pub fn from_config_path_with_workspace(
@@ -3916,7 +3916,7 @@ pub fn load_config(path: &Path) -> Result<McpConfig> {
     serde_json::from_str(&contents).map_err(|_| {
         anyhow::anyhow!(
             "Failed to parse MCP config {}; file contents were omitted",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         )
     })
 }
@@ -3960,7 +3960,7 @@ fn open_mcp_config_file(path: &Path) -> std::io::Result<fs::File> {
 
 pub fn workspace_mcp_config_path(workspace: &Path) -> PathBuf {
     normalize_workspace_path(workspace)
-        .join(".codewhale")
+        .join(".ghosty")
         .join("mcp.json")
 }
 
@@ -4188,7 +4188,7 @@ fn workspace_allows_project_mcp_config(workspace: &Path) -> bool {
 
 fn checked_workspace_mcp_config_path(workspace: &Path) -> Result<PathBuf> {
     Ok(checked_workspace_path(workspace)?
-        .join(".codewhale")
+        .join(".ghosty")
         .join("mcp.json"))
 }
 
@@ -4572,7 +4572,7 @@ pub async fn discover_manager_snapshot_with_workspace_and_plugins(
 }
 
 pub(crate) fn format_mcp_error_for_display(error: &anyhow::Error) -> String {
-    codewhale_config::persistence::redact_secrets(&format!("{error:#}"))
+    ghosty_config::persistence::redact_secrets(&format!("{error:#}"))
 }
 
 impl McpPool {
@@ -4661,8 +4661,8 @@ fn snapshot_from_config(
                         // A count of connected servers and nothing else. The
                         // name, the command or URL, and the error string are
                         // user-chosen and routinely name internal infra.
-                        codewhale_telemetry::session_counters()
-                            .bump(codewhale_telemetry::Counter::McpServerConnected);
+                        ghosty_telemetry::session_counters()
+                            .bump(ghosty_telemetry::Counter::McpServerConnected);
                     }
                     snapshot.tools = conn
                         .tools()

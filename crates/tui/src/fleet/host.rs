@@ -14,7 +14,7 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use codewhale_protocol::fleet::FleetHostSpec;
+use ghosty_protocol::fleet::FleetHostSpec;
 use thiserror::Error;
 
 #[cfg(unix)]
@@ -252,7 +252,7 @@ impl LocalProcessFleetHostAdapter {
         }
 
         // Fleet owns the complete worker tree, not only the dispatcher PID.
-        // `codewhale` spawns `codewhale-tui`, which can in turn spawn tool
+        // `ghosty` spawns `ghosty-tui`, which can in turn spawn tool
         // processes; isolating the root prevents a stop from signalling the
         // operator's own process group.
         #[cfg(unix)]
@@ -314,7 +314,7 @@ impl LocalProcessFleetHostAdapter {
             FleetHostKind::Ssh => "ssh",
         };
         self.workspace
-            .join(".codewhale")
+            .join(".ghosty")
             .join("fleet-host")
             .join(host_dir)
             .join(format!("{}.log", safe_path_segment(worker_id)))
@@ -487,7 +487,7 @@ pub struct SshFleetHostConfig {
     pub host_key_fingerprint: Option<String>,
     pub working_directory: PathBuf,
     pub env_allowlist: BTreeSet<String>,
-    pub codewhale_binary: String,
+    pub ghosty_binary: String,
     pub ssh_binary: String,
     pub connect_timeout_seconds: u64,
 }
@@ -503,7 +503,7 @@ impl SshFleetHostConfig {
             host_key_fingerprint: None,
             working_directory: working_directory.into(),
             env_allowlist: BTreeSet::new(),
-            codewhale_binary: "codewhale".to_string(),
+            ghosty_binary: "ghosty".to_string(),
             ssh_binary: "ssh".to_string(),
             connect_timeout_seconds: DEFAULT_CONNECT_TIMEOUT_SECONDS,
         }
@@ -519,7 +519,7 @@ impl SshFleetHostConfig {
             host_key_fingerprint,
             working_directory,
             env_allowlist,
-            codewhale_binary,
+            ghosty_binary,
         } = spec
         else {
             return Err(FleetHostError::configuration(
@@ -529,8 +529,8 @@ impl SshFleetHostConfig {
         let working_directory = working_directory.clone().ok_or_else(|| {
             FleetHostError::configuration("SSH fleet host spec requires working_directory")
         })?;
-        let codewhale_binary = codewhale_binary.clone().ok_or_else(|| {
-            FleetHostError::configuration("SSH fleet host spec requires codewhale_binary")
+        let ghosty_binary = ghosty_binary.clone().ok_or_else(|| {
+            FleetHostError::configuration("SSH fleet host spec requires ghosty_binary")
         })?;
         let mut config = Self::new(host.clone(), working_directory);
         config.port = *port;
@@ -539,7 +539,7 @@ impl SshFleetHostConfig {
         config.known_hosts = known_hosts.clone();
         config.host_key_fingerprint = host_key_fingerprint.clone();
         config.env_allowlist = env_allowlist.iter().cloned().collect();
-        config.codewhale_binary = codewhale_binary;
+        config.ghosty_binary = ghosty_binary;
         config.validate()?;
         Ok(config)
     }
@@ -550,9 +550,9 @@ impl SshFleetHostConfig {
                 "SSH fleet host requires an explicit host",
             ));
         }
-        if self.codewhale_binary.trim().is_empty() {
+        if self.ghosty_binary.trim().is_empty() {
             return Err(FleetHostError::configuration(
-                "SSH fleet host requires an explicit codewhale binary path",
+                "SSH fleet host requires an explicit ghosty binary path",
             ));
         }
         if self.working_directory.as_os_str().is_empty() {
@@ -643,7 +643,7 @@ impl SshFleetHostAdapter {
             shell_quote(&self.config.working_directory.display().to_string()),
             "&&".to_string(),
             "exec".to_string(),
-            shell_quote(&self.config.codewhale_binary),
+            shell_quote(&self.config.ghosty_binary),
         ];
         parts.extend(request.command.args.iter().map(|arg| shell_quote(arg)));
         parts.join(" ")
@@ -1405,7 +1405,7 @@ fn process_base_env() -> BTreeMap<String, String> {
 /// here means a worker can never emit, can never inherit an ambient "on", and
 /// can never write telemetry state into the operator's home.
 fn force_worker_telemetry_off(env: &mut BTreeMap<String, String>) {
-    env.insert("CODEWHALE_TELEMETRY".to_string(), "false".to_string());
+    env.insert("GHOSTY_TELEMETRY".to_string(), "false".to_string());
     env.insert("DEEPSEEK_TELEMETRY".to_string(), "false".to_string());
 }
 
@@ -1413,7 +1413,7 @@ fn force_worker_telemetry_off(env: &mut BTreeMap<String, String>) {
 ///
 /// The caller's allowlisted entries are merged over the process base, then
 /// telemetry is forced off again: an allowlist that happens to name
-/// `CODEWHALE_TELEMETRY` must not be able to switch a worker back on.
+/// `GHOSTY_TELEMETRY` must not be able to switch a worker back on.
 fn worker_env(
     request_env: &BTreeMap<String, String>,
     allowlist: &BTreeSet<String>,
@@ -2014,16 +2014,16 @@ mod tests {
     #[test]
     fn fleet_host_ssh_command_uses_sendenv_without_argv_secret_values() {
         let tmp = TempDir::new().unwrap();
-        let mut config = SshFleetHostConfig::new("builder.example.test", "/srv/codewhale");
+        let mut config = SshFleetHostConfig::new("builder.example.test", "/srv/ghosty");
         config.user = Some("fleet".to_string());
         config.port = Some(2222);
         config.identity = Some(PathBuf::from("/tmp/fleet_id"));
-        config.codewhale_binary = "/usr/local/bin/codewhale".to_string();
+        config.ghosty_binary = "/usr/local/bin/ghosty".to_string();
         config.env_allowlist = BTreeSet::from(["FLEET_PROFILE".to_string()]);
         let adapter = SshFleetHostAdapter::new(tmp.path(), config).unwrap();
         let mut request = FleetWorkerStartRequest::new(
             "ssh-1",
-            FleetWorkerCommand::new("codewhale", ["fleet-worker", "noop"]),
+            FleetWorkerCommand::new("ghosty", ["fleet-worker", "noop"]),
         );
         request.env.insert(
             "FLEET_PROFILE".to_string(),
@@ -2037,7 +2037,7 @@ mod tests {
         assert!(argv.contains("BatchMode=yes"));
         assert!(argv.contains("SendEnv=FLEET_PROFILE"));
         assert!(argv.contains("fleet@builder.example.test"));
-        assert!(argv.contains("/usr/local/bin/codewhale"));
+        assert!(argv.contains("/usr/local/bin/ghosty"));
         assert!(argv.contains("fleet-worker"));
         assert!(!argv.contains("super-secret-profile-value"));
     }
@@ -2045,7 +2045,7 @@ mod tests {
     #[test]
     fn fleet_host_ssh_config_requires_explicit_safe_fields() {
         let tmp = TempDir::new().unwrap();
-        let mut config = SshFleetHostConfig::new("", "/srv/codewhale");
+        let mut config = SshFleetHostConfig::new("", "/srv/ghosty");
         config.env_allowlist = BTreeSet::from(["SAFE_FLAG".to_string()]);
 
         let err = SshFleetHostAdapter::new(tmp.path(), config).unwrap_err();
@@ -2063,9 +2063,9 @@ mod tests {
             identity: Some(PathBuf::from("/tmp/fleet_id")),
             known_hosts: None,
             host_key_fingerprint: None,
-            working_directory: Some(PathBuf::from("/srv/codewhale")),
+            working_directory: Some(PathBuf::from("/srv/ghosty")),
             env_allowlist: vec!["FLEET_PROFILE".to_string()],
-            codewhale_binary: Some("/usr/local/bin/codewhale".to_string()),
+            ghosty_binary: Some("/usr/local/bin/ghosty".to_string()),
         };
 
         let config = SshFleetHostConfig::from_host_spec(&spec).unwrap();
@@ -2073,9 +2073,9 @@ mod tests {
         assert_eq!(config.host, "builder.example.test");
         assert_eq!(config.port, Some(2222));
         assert_eq!(config.user.as_deref(), Some("fleet"));
-        assert_eq!(config.working_directory, PathBuf::from("/srv/codewhale"));
+        assert_eq!(config.working_directory, PathBuf::from("/srv/ghosty"));
         assert!(config.env_allowlist.contains("FLEET_PROFILE"));
-        assert_eq!(config.codewhale_binary, "/usr/local/bin/codewhale");
+        assert_eq!(config.ghosty_binary, "/usr/local/bin/ghosty");
     }
 
     #[test]
@@ -2084,7 +2084,7 @@ mod tests {
         // absent here simply does not exist inside the worker.
         let base = process_base_env();
         assert_eq!(
-            base.get("CODEWHALE_TELEMETRY").map(String::as_str),
+            base.get("GHOSTY_TELEMETRY").map(String::as_str),
             Some("false")
         );
         assert_eq!(
@@ -2094,19 +2094,19 @@ mod tests {
 
         // A caller that allowlists the switch cannot switch it back on.
         let request_env = BTreeMap::from([
-            ("CODEWHALE_TELEMETRY".to_string(), "true".to_string()),
+            ("GHOSTY_TELEMETRY".to_string(), "true".to_string()),
             ("DEEPSEEK_TELEMETRY".to_string(), "1".to_string()),
             ("FLEET_PROFILE".to_string(), "builder".to_string()),
         ]);
         let allowlist = BTreeSet::from([
-            "CODEWHALE_TELEMETRY".to_string(),
+            "GHOSTY_TELEMETRY".to_string(),
             "DEEPSEEK_TELEMETRY".to_string(),
             "FLEET_PROFILE".to_string(),
         ]);
 
         let env = worker_env(&request_env, &allowlist).expect("worker env");
         assert_eq!(
-            env.get("CODEWHALE_TELEMETRY").map(String::as_str),
+            env.get("GHOSTY_TELEMETRY").map(String::as_str),
             Some("false")
         );
         assert_eq!(
@@ -2122,19 +2122,19 @@ mod tests {
 
     /// The env map above is only a claim about a function. This dispatches a
     /// real worker through the real spawn path and reads what the worker
-    /// process actually received, because that is the environment a Codewhale
+    /// process actually received, because that is the environment a Ghosty
     /// worker would resolve telemetry from.
     ///
     /// Also asserts the operator's own home stays clean: a worker is an
     /// implementation detail of the parent session, and the parent already
     /// accounts for the dispatch, so a worker that wrote telemetry state into
-    /// `$CODEWHALE_HOME` would double-count every fleet run.
+    /// `$GHOSTY_HOME` would double-count every fleet run.
     #[cfg(unix)]
     #[test]
     fn fleet_worker_env_carries_telemetry_off() {
         let fixture = TempDir::new().expect("fixture root");
         let workspace = fixture.path().join("workspace");
-        let operator_home = fixture.path().join("operator-codewhale-home");
+        let operator_home = fixture.path().join("operator-ghosty-home");
         std::fs::create_dir_all(&workspace).expect("workspace");
         std::fs::create_dir_all(&operator_home).expect("operator home");
         let receipt = fixture.path().join("worker-env.txt");
@@ -2151,22 +2151,20 @@ mod tests {
         // a worker on.
         request
             .env
-            .insert("CODEWHALE_TELEMETRY".to_string(), "true".to_string());
+            .insert("GHOSTY_TELEMETRY".to_string(), "true".to_string());
         request.env.insert(
-            "CODEWHALE_HOME".to_string(),
+            "GHOSTY_HOME".to_string(),
             operator_home.display().to_string(),
         );
-        request
-            .env_allowlist
-            .insert("CODEWHALE_TELEMETRY".to_string());
-        request.env_allowlist.insert("CODEWHALE_HOME".to_string());
+        request.env_allowlist.insert("GHOSTY_TELEMETRY".to_string());
+        request.env_allowlist.insert("GHOSTY_HOME".to_string());
 
         adapter.start_worker(request).expect("start worker");
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let mut dumped = None;
         while std::time::Instant::now() < deadline {
             if let Ok(contents) = std::fs::read_to_string(&receipt)
-                && contents.contains("CODEWHALE_TELEMETRY=")
+                && contents.contains("GHOSTY_TELEMETRY=")
                 && contents.contains("DEEPSEEK_TELEMETRY=")
             {
                 dumped = Some(contents);
@@ -2185,7 +2183,7 @@ mod tests {
                 .map(str::to_string)
         };
         assert_eq!(
-            value("CODEWHALE_TELEMETRY").as_deref(),
+            value("GHOSTY_TELEMETRY").as_deref(),
             Some("false"),
             "worker environment:\n{dumped}"
         );

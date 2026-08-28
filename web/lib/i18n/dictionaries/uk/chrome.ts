@@ -30,7 +30,7 @@ export const chrome: ChromeDict = {
 
 
   navPrimaryAria: "Основна навігація",
-  navHomeAria: "Головна сторінка Codewhale",
+  navHomeAria: "Головна сторінка Ghosty",
 
   installCta: "Встановити →",
 
@@ -70,7 +70,7 @@ export const chrome: ChromeDict = {
   themeTitle: "Тема документації · авто / світла / темна",
 
   footerTagline:
-    "Codewhale занурюється в глибину, щоб не довелося вам — документація, код і спільнота рантайму з відкритим кодом.",
+    "Ghosty занурюється в глибину, щоб не довелося вам — документація, код і спільнота рантайму з відкритим кодом.",
   footerProduct: "Продукт",
   footerProject: "Проєкт",
   footerDocs: "Документація",

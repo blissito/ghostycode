@@ -12,18 +12,18 @@ describe("FAQPage structured data", () => {
   it("maps every question to an acceptedAnswer with flattened text", () => {
     const items = [
       {
-        q: "What is Codewhale?",
+        q: "What is Ghosty?",
         a: createElement(
           "p",
           null,
           "A terminal-native agent. Run ",
-          createElement("code", null, "codewhale"),
+          createElement("code", null, "ghosty"),
           ".",
         ),
       },
       {
         q: "How do I install?",
-        a: ["npm install -g codewhale", createElement("span", null, " or Cargo.")],
+        a: ["npm install -g ghosty", createElement("span", null, " or Cargo.")],
       },
     ];
     const schema = buildFaqPageJsonLd({
@@ -35,15 +35,15 @@ describe("FAQPage structured data", () => {
     expect(schema).toEqual({
       "@context": "https://schema.org",
       "@type": "FAQPage",
-      url: "https://codewhale.net/en/faq",
+      url: "https://ghosty.net/en/faq",
       inLanguage: "en",
       mainEntity: [
         {
           "@type": "Question",
-          name: "What is Codewhale?",
+          name: "What is Ghosty?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "A terminal-native agent. Run codewhale .",
+            text: "A terminal-native agent. Run ghosty .",
           },
         },
         {
@@ -51,7 +51,7 @@ describe("FAQPage structured data", () => {
           name: "How do I install?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "npm install -g codewhale or Cargo.",
+            text: "npm install -g ghosty or Cargo.",
           },
         },
       ],
@@ -78,13 +78,13 @@ describe("extractText", () => {
       "div",
       null,
       "Hello ",
-      createElement("code", null, "codewhale"),
+      createElement("code", null, "ghosty"),
       false,
       createElement("span", null, [" ", 2]),
     );
 
-    expect(extractText(node)).toContain("codewhale");
-    expect(flattenExtractedText(node)).toBe("Hello codewhale 2");
+    expect(extractText(node)).toContain("ghosty");
+    expect(flattenExtractedText(node)).toBe("Hello ghosty 2");
   });
 
   it("escapes angle brackets so JSON-LD cannot close the script tag", () => {

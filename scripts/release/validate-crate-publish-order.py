@@ -102,7 +102,7 @@ def validate_order(
 
     workspace_by_name = {package["name"]: package for package in packages}
     release_names = sorted(
-        name for name in workspace_by_name if name.startswith("codewhale-")
+        name for name in workspace_by_name if name.startswith("ghosty-")
     )
     ordered_set = set(ordered_crates)
     missing = sorted(set(release_names) - ordered_set)
@@ -139,7 +139,7 @@ def validate_order(
             if dependency_name not in positions:
                 raise ValidationError(
                     f"{dependent} depends on workspace crate {dependency_name} "
-                    f"[{kind}], which is not in the codewhale-* release inventory"
+                    f"[{kind}], which is not in the ghosty-* release inventory"
                 )
             publish_edges.add((dependency_name, dependent, str(kind)))
 

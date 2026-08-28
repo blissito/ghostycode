@@ -1,6 +1,6 @@
 # Catalog refresh
 
-How CodeWhale keeps model metadata current — what already auto-updates, what
+How GhostyCode keeps model metadata current — what already auto-updates, what
 is hand-maintained, and what a scheduled catalog job should (and should not) do.
 
 Related docs: [`PROVIDERS.md`](./PROVIDERS.md), RFC
@@ -13,7 +13,7 @@ Related docs: [`PROVIDERS.md`](./PROVIDERS.md), RFC
 | Question | Answer |
 |---|---|
 | Do users need a special model just to refresh models? | **No.** |
-| Does CodeWhale auto-update the public model catalog? | **Yes, at runtime**, from [Models.dev](https://models.dev/catalog.json), ~24 h TTL. |
+| Does GhostyCode auto-update the public model catalog? | **Yes, at runtime**, from [Models.dev](https://models.dev/catalog.json), ~24 h TTL. |
 | Is the offline bundled seed auto-committed in CI? | **Not yet.** Live cache covers running installs; the in-repo seed is still manual / PR-driven. |
 | Should an LLM rewrite catalog JSON? | **No.** Ingest is deterministic public JSON. An LLM can *review* a PR, not own the source of truth. |
 
@@ -34,7 +34,7 @@ pricing-ish metadata). Live wins over bundled when present.
       crates/tui/assets/model_catalog.bundled.json
 (2) Live Models.dev catalog (preferred when available)
       https://models.dev/catalog.json
-      → disk cache ~/.codewhale/catalog/models-dev-catalog.json
+      → disk cache ~/.ghosty/catalog/models-dev-catalog.json
       → 24 h TTL
 (1) User / custom overrides (pinned models, custom endpoints)
 (0) Special: ChatGPT/Codex OAuth roster
@@ -62,9 +62,9 @@ When the TUI/runtime starts (and is not disabled):
 
 1. Seed pickers from the **on-disk cache** if present (even if stale).
 2. If the cache is missing or older than **24 hours**, **background-fetch**
-   Models.dev (15 s timeout, explicit CodeWhale user-agent, **no credentials**).
+   Models.dev (15 s timeout, explicit GhostyCode user-agent, **no credentials**).
 3. On success: atomic write to
-   `~/.codewhale/catalog/models-dev-catalog.json` and publish rows into
+   `~/.ghosty/catalog/models-dev-catalog.json` and publish rows into
    ProviderLake as `CatalogSource::Live`.
 4. On failure: keep prior cache or fall back to the **bundled** seed. Model
    selection never hard-fails because Models.dev is down.
@@ -86,15 +86,15 @@ the composer). Implementation lives under
 
 | Variable | Effect |
 |---|---|
-| `CODEWHALE_MODELS_DEV_URL` | Override base URL or full `*.json` catalog URL |
-| `CODEWHALE_MODELS_DEV_PATH` | Load catalog from a local file; skip network |
-| `CODEWHALE_DISABLE_MODELS_DEV_FETCH` | Truthy → never hit the network (`1` / `true` / `yes` / `on`) |
+| `GHOSTY_MODELS_DEV_URL` | Override base URL or full `*.json` catalog URL |
+| `GHOSTY_MODELS_DEV_PATH` | Load catalog from a local file; skip network |
+| `GHOSTY_DISABLE_MODELS_DEV_FETCH` | Truthy → never hit the network (`1` / `true` / `yes` / `on`) |
 
 Defaults:
 
 - Catalog URL: `https://models.dev/catalog.json`
 - TTL: `24 * 60 * 60` seconds (`DEFAULT_MODELS_DEV_TTL_SECS`)
-- Cache file name: `models-dev-catalog.json` under the CodeWhale `catalog`
+- Cache file name: `models-dev-catalog.json` under the GhostyCode `catalog`
   state dir
 
 Freshness values exposed for UI / status chips: `bundled` | `live` | `stale` |
@@ -149,7 +149,7 @@ Design constraints of the script (intentional):
 ### Staging a new offline seed (manual)
 
 1. Fetch Models.dev to a local file (curl / browser), or use
-   `CODEWHALE_MODELS_DEV_PATH` against a saved copy.
+   `GHOSTY_MODELS_DEV_PATH` against a saved copy.
 2. Scrub to the allowlisted shape (`models`, `providers`, optional `_meta`).
    Prefer the script’s public-document rules as the checklist.
 3. Keep seed **compact** — verified defaults for shipped providers, not a
@@ -197,7 +197,7 @@ cron (daily or weekly)
 
 ### Suggested workflow home
 
-`CodeWhale/.github/workflows/catalog-refresh.yml` (or similar), reusing
+`GhostyCode/.github/workflows/catalog-refresh.yml` (or similar), reusing
 `scripts/catalog_models_dev.py` after a deliberate **write-safe** extension
 that only runs in CI with a bot token for PR creation — still not on
 `workflow_dispatch` without review if writes land in-repo.
@@ -226,7 +226,7 @@ truth** for catalog JSON.
 ## Auth note (Claude / Anthropic)
 
 Anthropic model **catalog** refresh does not require Claude Pro/Max OAuth.
-Models.dev is public. CodeWhale’s Anthropic route remains **API-key-based**
+Models.dev is public. GhostyCode’s Anthropic route remains **API-key-based**
 for inference (`ANTHROPIC_API_KEY`). Do not couple catalog automation to
 subscription OAuth or Claude Code identity headers.
 
@@ -236,8 +236,8 @@ subscription OAuth or Claude Code identity headers.
 
 - [ ] Running install: confirm network not blocked; optional
       `/model refresh` after a big vendor launch.
-- [ ] Offline / CI hermetic: set `CODEWHALE_DISABLE_MODELS_DEV_FETCH=1` or
-      point `CODEWHALE_MODELS_DEV_PATH` at a fixture.
+- [ ] Offline / CI hermetic: set `GHOSTY_DISABLE_MODELS_DEV_FETCH=1` or
+      point `GHOSTY_MODELS_DEV_PATH` at a fixture.
 - [ ] Before release: `snapshot --check` on the bundled seed; skim
       `PROVIDERS.md` for known drift.
 - [ ] After Models.dev adds a major family you ship by default: consider
@@ -252,4 +252,4 @@ subscription OAuth or Claude Code identity headers.
 - Live Models.dev layer: #4187
 - Bundled seed demoted (not competing truth): #4188
 - Catalog automation script (validate / dry-run): #4117
-- Deeper metadata inventory and drift list: the `codewhale-ops` repo
+- Deeper metadata inventory and drift list: the `ghosty-ops` repo

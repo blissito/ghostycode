@@ -17,16 +17,16 @@ function expectedLanguages(path: string): Record<string, string> {
 
 describe("page metadata", () => {
   it.each([
-    ["en", "/faq", "FAQ · Codewhale", "en_US", "en"],
-    ["zh", "/faq", "常见问题 · Codewhale", "zh_CN", "zh"],
-    ["en", "/feed", "Activity · Codewhale", "en_US", "en"],
-    ["zh", "/feed", "动态 · Codewhale", "zh_CN", "zh"],
-    ["en", "/roadmap", "Roadmap · Codewhale", "en_US", "en"],
-    ["zh", "/roadmap", "路线图 · Codewhale", "zh_CN", "zh"],
-    ["ru", "/faq", "FAQ · Codewhale", "en_US", "en"],
-    ["uk", "/faq", "FAQ · Codewhale", "en_US", "en"],
-    ["pt-BR", "/install", "Install · Codewhale", "en_US", "en"],
-    ["ja", "/", "Codewhale", "ja_JP", "ja"],
+    ["en", "/faq", "FAQ · Ghosty", "en_US", "en"],
+    ["zh", "/faq", "常见问题 · Ghosty", "zh_CN", "zh"],
+    ["en", "/feed", "Activity · Ghosty", "en_US", "en"],
+    ["zh", "/feed", "动态 · Ghosty", "zh_CN", "zh"],
+    ["en", "/roadmap", "Roadmap · Ghosty", "en_US", "en"],
+    ["zh", "/roadmap", "路线图 · Ghosty", "zh_CN", "zh"],
+    ["ru", "/faq", "FAQ · Ghosty", "en_US", "en"],
+    ["uk", "/faq", "FAQ · Ghosty", "en_US", "en"],
+    ["pt-BR", "/install", "Install · Ghosty", "en_US", "en"],
+    ["ja", "/", "Ghosty", "ja_JP", "ja"],
   ])(
     "builds canonical, hreflang, Open Graph, and Twitter fields for %s%s",
     (locale, path, title, ogLocale, canonicalLocale) => {
@@ -100,7 +100,7 @@ describe("page metadata", () => {
     const brand = new RegExp(`\\b${SITE_NAME}\\b`, "gi");
     const ogImage = readFileSync(new URL("../app/opengraph-image.tsx", import.meta.url), "utf8");
 
-    expect(IDENTITY_PHRASE).toBe("Codewhale dives into the deep so you don't have to.");
+    expect(IDENTITY_PHRASE).toBe("Ghosty dives into the deep so you don't have to.");
     expect(OG_ALT).toBe(IDENTITY_PHRASE);
     expect(OG_ALT.match(brand)).toHaveLength(1);
     expect(ogImage).toContain("{IDENTITY_PHRASE}");

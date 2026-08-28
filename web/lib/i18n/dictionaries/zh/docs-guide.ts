@@ -6,7 +6,7 @@ import type { DocsGuideDict } from "../types";
  * `app/[locale]/docs/guide/page.tsx`.
  */
 export const docsGuide: DocsGuideDict = {
-  metaTitle: "新手指引 · Codewhale 文档",
+  metaTitle: "新手指引 · Ghosty 文档",
   metaDescription:
     "从安装到配置理想 Fleet 的完整路径：安装、无需密钥的首次会话、连接提供商、设置 Fleet。",
   bodyClassName: "text-ink-soft leading-[1.9] tracking-wide",

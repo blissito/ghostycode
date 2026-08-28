@@ -77,16 +77,16 @@ fn write_demo_bundle(dir: &Path) {
     .unwrap();
 }
 
-fn marketplace_state_path(codewhale_home: &Path) -> std::path::PathBuf {
-    codewhale_home.join("plugins/marketplaces.json")
+fn marketplace_state_path(ghosty_home: &Path) -> std::path::PathBuf {
+    ghosty_home.join("plugins/marketplaces.json")
 }
 
 #[test]
 fn marketplace_add_list_show_remove_roundtrip() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let codewhale_home = root.path().join("home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = root.path().join("home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let (mut app, _temp) = create_test_app(root.path());
     let catalogs = root.path().join("catalogs");
     fs::create_dir_all(&catalogs).unwrap();
@@ -106,7 +106,7 @@ fn marketplace_add_list_show_remove_roundtrip() {
     assert!(message.contains("Added marketplace `kimi`"), "{message}");
     assert!(message.contains("2 candidate(s)"), "{message}");
     assert!(message.contains("display-only"), "{message}");
-    assert!(marketplace_state_path(&codewhale_home).exists());
+    assert!(marketplace_state_path(&ghosty_home).exists());
 
     let list = plugins(&mut app, Some("marketplace list")).message.unwrap();
     assert!(list.contains("`kimi`"), "{list}");
@@ -134,10 +134,10 @@ fn marketplace_add_list_show_remove_roundtrip() {
     assert!(show.contains("catalogs"), "{show}");
 
     // read-only verbs never rewrite the store
-    let before = fs::read_to_string(marketplace_state_path(&codewhale_home)).unwrap();
+    let before = fs::read_to_string(marketplace_state_path(&ghosty_home)).unwrap();
     plugins(&mut app, Some("marketplace list"));
     plugins(&mut app, Some("marketplace show kimi"));
-    let after = fs::read_to_string(marketplace_state_path(&codewhale_home)).unwrap();
+    let after = fs::read_to_string(marketplace_state_path(&ghosty_home)).unwrap();
     assert_eq!(
         before, after,
         "list/show must not rewrite marketplace state"
@@ -167,8 +167,8 @@ fn marketplace_add_list_show_remove_roundtrip() {
 fn marketplace_add_rejects_symlinks_and_bad_documents() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let codewhale_home = root.path().join("home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = root.path().join("home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let (mut app, _temp) = create_test_app(root.path());
     let catalogs = root.path().join("catalogs");
     fs::create_dir_all(&catalogs).unwrap();
@@ -211,7 +211,7 @@ fn marketplace_add_rejects_symlinks_and_bad_documents() {
     );
 
     // corrupt stored state fails closed and is never rewritten
-    let store_path = marketplace_state_path(&codewhale_home);
+    let store_path = marketplace_state_path(&ghosty_home);
     fs::create_dir_all(store_path.parent().unwrap()).unwrap();
     fs::write(&store_path, "{ not json").unwrap();
     let corrupt = plugins(&mut app, Some("marketplace list"));
@@ -224,8 +224,8 @@ fn marketplace_add_rejects_symlinks_and_bad_documents() {
 fn marketplace_install_routes_through_reviewed_installer() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let codewhale_home = root.path().join("home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = root.path().join("home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let (mut app, _temp) = create_test_app(root.path());
     let catalogs = root.path().join("catalogs");
     fs::create_dir_all(&catalogs).unwrap();
@@ -266,7 +266,7 @@ fn marketplace_install_routes_through_reviewed_installer() {
         assert!(!plugin.enabled);
         assert!(!plugin.trusted());
         assert!(
-            codewhale_home
+            ghosty_home
                 .join("plugins/demo-bundle/.installed-from")
                 .exists()
         );
@@ -280,8 +280,8 @@ fn marketplace_install_routes_through_reviewed_installer() {
 fn marketplace_codex_installed_by_default_never_auto_installs() {
     let _lock = crate::test_support::lock_test_env();
     let root = TempDir::new().unwrap();
-    let codewhale_home = root.path().join("home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = root.path().join("home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let (mut app, _temp) = create_test_app(root.path());
     let catalogs = root.path().join("catalogs");
     fs::create_dir_all(&catalogs).unwrap();
@@ -309,6 +309,6 @@ fn marketplace_codex_installed_by_default_never_auto_installs() {
     assert!(list.contains("not installable"), "{list}");
     assert!(list.contains("npm"), "{list}");
     // Foreign auto-install policy never ran anything: no bundle on disk.
-    assert!(!codewhale_home.join("plugins/defaulted-thing").exists());
+    assert!(!ghosty_home.join("plugins/defaulted-thing").exists());
     assert!(app.plugin_registry.get("defaulted-thing").is_none());
 }

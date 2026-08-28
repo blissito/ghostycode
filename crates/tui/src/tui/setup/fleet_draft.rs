@@ -1,7 +1,7 @@
 //! One-shot model drafting for fleet agent profiles (`/fleet setup` → `m`).
 //!
 //! Generalizes the constitution drafting contract (see `model_draft.rs`) to
-//! the `.codewhale/agents/<id>.toml` profile surface:
+//! the `.ghosty/agents/<id>.toml` profile surface:
 //!
 //! - **Minimal payload out.** The request carries exactly the two wizard
 //!   answers (role, target model), the UI language tag, and an optional
@@ -161,7 +161,7 @@ pub(crate) fn workspace_fingerprint(workspace: &Path) -> String {
 /// pin the guardrails.
 fn profile_drafting_system_prompt() -> String {
     concat!(
-        "You are helping a Codewhale user draft a fleet agent profile: a small, ",
+        "You are helping a Ghosty user draft a fleet agent profile: a small, ",
         "durable description of one worker role their agent fleet can spawn.\n\n",
         "Return ONLY one JSON object — no markdown fences, no commentary — with these ",
         "fields (include \"model\" only when a specific target model is given below; ",

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# EXPERIMENTAL — DigitalOcean smoke-lab provisioning for the CodeWhale
+# EXPERIMENTAL — DigitalOcean smoke-lab provisioning for the GhostyCode
 # remote workbench (issue #1990 "clearly documented better alternative"
 # clause). Creates ONE Ubuntu 24.04 droplet plus a cloud firewall that
 # allows inbound SSH only. Prints the monthly price from the DO API and
@@ -13,7 +13,7 @@
 #   bash scripts/remote-smoke/digitalocean/provision.sh
 #
 # Tunables (env):
-#   DROPLET_NAME    default codewhale-smoke
+#   DROPLET_NAME    default ghosty-smoke
 #   DO_REGION       default sfo3 (San Francisco)
 #   DROPLET_SIZE    default s-1vcpu-2gb (~$12/mo; prebuilt binaries mean no
 #                   Rust build, so 1 vCPU / 2 GB is enough for the smoke.
@@ -23,7 +23,7 @@
 #   RESTRICT_SSH_TO_MY_IP  default true (firewall source = caller IP /32)
 set -euo pipefail
 
-DROPLET_NAME="${DROPLET_NAME:-codewhale-smoke}"
+DROPLET_NAME="${DROPLET_NAME:-ghosty-smoke}"
 DO_REGION="${DO_REGION:-sfo3}"
 DROPLET_SIZE="${DROPLET_SIZE:-s-1vcpu-2gb}"
 DROPLET_IMAGE="${DROPLET_IMAGE:-ubuntu-24-04-x64}"
@@ -71,7 +71,7 @@ doctl compute droplet create "$DROPLET_NAME" \
   --image "$DROPLET_IMAGE" \
   --size "$DROPLET_SIZE" \
   --ssh-keys "$KEY_ID" \
-  --tag-name codewhale-smoke \
+  --tag-name ghosty-smoke \
   --wait >/dev/null
 DROPLET_ID=$(doctl compute droplet list --format ID,Name --no-header | awk -v n="$DROPLET_NAME" '$2 == n {print $1; exit}')
 IP=$(doctl compute droplet get "$DROPLET_ID" --format PublicIPv4 --no-header)

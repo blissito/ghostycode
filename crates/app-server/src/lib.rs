@@ -12,17 +12,17 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use codewhale_agent::ModelRegistry;
-use codewhale_config::ConfigStore;
-use codewhale_core::Runtime;
-use codewhale_hooks::{HookDispatcher, JsonlHookSink, StdoutHookSink, UnixSocketHookSink};
-use codewhale_mcp::McpManager;
-use codewhale_protocol::{
+use ghosty_agent::ModelRegistry;
+use ghosty_config::ConfigStore;
+use ghosty_core::Runtime;
+use ghosty_hooks::{HookDispatcher, JsonlHookSink, StdoutHookSink, UnixSocketHookSink};
+use ghosty_mcp::McpManager;
+use ghosty_protocol::{
     AppRequest, AppResponse, EventFrame, PromptRequest, PromptResponse, ResponseChannel,
     ThreadGoalClearParams, ThreadGoalGetParams, ThreadGoalSetParams, ThreadRequest, ThreadResponse,
 };
-use codewhale_state::StateStore;
-use codewhale_tools::{ToolCall, ToolRegistry};
+use ghosty_state::StateStore;
+use ghosty_tools::{ToolCall, ToolRegistry};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -35,7 +35,7 @@ mod chat_completions;
 
 /// Legacy DeepSeek-era naming kept for external compatibility.
 ///
-/// CodeWhale began life as a DeepSeek CLI; existing health probes, SDK
+/// GhostyCode began life as a DeepSeek CLI; existing health probes, SDK
 /// harnesses, and on-disk layouts still key off these names. Every remaining
 /// legacy reference in this crate routes through this shim so a future
 /// coordinated migration touches exactly one place (repo policy: preserve
@@ -101,7 +101,7 @@ type SharedRuntimeBridge = Arc<Mutex<RuntimeBridge>>;
 #[derive(Clone)]
 struct AppState {
     config_path: Option<PathBuf>,
-    config: Arc<RwLock<codewhale_config::ConfigToml>>,
+    config: Arc<RwLock<ghosty_config::ConfigToml>>,
     /// Read/write split mirrors [`Runtime`]'s own receivers: `&self`
     /// operations (tool calls, status, MCP startup) share a read guard and
     /// run concurrently; `&mut self` turns (prompt/thread) and config pushes
@@ -591,11 +591,11 @@ async fn tool_handler(
         cfg.approval_policy
             .as_deref()
             .and_then(|p| match p.trim().to_ascii_lowercase().as_str() {
-                "auto" | "yolo" => Some(codewhale_execpolicy::AskForApproval::UnlessTrusted),
-                "never" | "deny" => Some(codewhale_execpolicy::AskForApproval::Never),
+                "auto" | "yolo" => Some(ghosty_execpolicy::AskForApproval::UnlessTrusted),
+                "never" | "deny" => Some(ghosty_execpolicy::AskForApproval::Never),
                 _ => None,
             })
-            .unwrap_or(codewhale_execpolicy::AskForApproval::OnRequest)
+            .unwrap_or(ghosty_execpolicy::AskForApproval::OnRequest)
     };
     // `invoke_tool` takes `&self`, so long-running tool executions share a
     // read guard: they run concurrently with each other and with status
@@ -734,7 +734,7 @@ fn resolve_auth_token(options: &AppServerOptions) -> Result<Option<String>> {
 
     if !has_explicit_token && !options.listen.ip().is_loopback() {
         bail!(
-            "refusing non-loopback app-server bind without explicit auth token; pass --auth-token or set CODEWHALE_APP_SERVER_TOKEN"
+            "refusing non-loopback app-server bind without explicit auth token; pass --auth-token or set GHOSTY_APP_SERVER_TOKEN"
         );
     }
 
@@ -753,7 +753,7 @@ fn app_server_auth_status_lines(has_explicit_token: bool) -> Vec<&'static str> {
     }
     vec![
         "app-server auth: generated bearer token for this process (not printed).",
-        "  Pass --auth-token or set CODEWHALE_APP_SERVER_TOKEN when another client needs to connect.",
+        "  Pass --auth-token or set GHOSTY_APP_SERVER_TOKEN when another client needs to connect.",
     ]
 }
 
@@ -1194,7 +1194,7 @@ async fn interrupt_stdio_turn(
     let Some(turn) = state.in_flight_turns.lock().await.get(thread_id).cloned() else {
         return Ok(false);
     };
-    let mut request = codewhale_release::platform_http_client_builder()
+    let mut request = ghosty_release::platform_http_client_builder()
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|err| JsonRpcError::internal(err.to_string()))?
@@ -1232,7 +1232,7 @@ impl RuntimeBridge {
             .context("failed to start runtime API bridge")?;
         let mut bridge = Self {
             base_url: format!("http://127.0.0.1:{port}"),
-            client: codewhale_release::platform_http_client_builder()
+            client: ghosty_release::platform_http_client_builder()
                 .build()
                 .context("failed to build runtime API client")?,
             auth_token: Some(auth_token),
@@ -1249,11 +1249,11 @@ impl RuntimeBridge {
         let mut command = if let Some(path) = current_exe {
             Command::new(path)
         } else {
-            Command::new("codewhale")
+            Command::new("ghosty")
         };
         // Pass the runtime auth token out-of-band via env (not argv) so local
         // `ps` cannot read credential material from the child command line.
-        // The TUI/runtime server already accepts CODEWHALE_RUNTIME_TOKEN /
+        // The TUI/runtime server already accepts GHOSTY_RUNTIME_TOKEN /
         // DEEPSEEK_RUNTIME_TOKEN when --auth-token is absent.
         command
             .arg("app-server")
@@ -1262,7 +1262,7 @@ impl RuntimeBridge {
             .arg("127.0.0.1")
             .arg("--port")
             .arg(port.to_string())
-            .env("CODEWHALE_RUNTIME_TOKEN", auth_token)
+            .env("GHOSTY_RUNTIME_TOKEN", auth_token)
             .env("DEEPSEEK_RUNTIME_TOKEN", auth_token)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -1588,7 +1588,7 @@ impl RuntimeBridge {
         install_rustls_crypto_provider();
         Self {
             base_url,
-            client: codewhale_release::platform_http_client_builder()
+            client: ghosty_release::platform_http_client_builder()
                 .timeout(Duration::from_secs(5))
                 .build()
                 .expect("build reqwest test client"),
@@ -2162,8 +2162,8 @@ async fn process_app_request(
         AppRequest::ThreadLoadedList => {
             let mut runtime = state.runtime.write().await;
             let response = runtime
-                .handle_thread(codewhale_protocol::ThreadRequest::List(
-                    codewhale_protocol::ThreadListParams {
+                .handle_thread(ghosty_protocol::ThreadRequest::List(
+                    ghosty_protocol::ThreadListParams {
                         include_archived: false,
                         limit: Some(50),
                     },
@@ -2226,8 +2226,8 @@ async fn process_app_request(
 /// the source of truth there.
 async fn apply_config_update(
     state: &AppState,
-    snapshot: codewhale_config::ConfigToml,
-    exec_policy: Option<codewhale_execpolicy::ExecPolicyEngine>,
+    snapshot: ghosty_config::ConfigToml,
+    exec_policy: Option<ghosty_execpolicy::ExecPolicyEngine>,
     persist: bool,
 ) {
     if persist && let Err(e) = persist_config(state, snapshot.clone()).await {
@@ -2251,7 +2251,7 @@ async fn apply_config_update(
     invalidate_runtime_bridge(state).await;
 }
 
-async fn persist_config(state: &AppState, config: codewhale_config::ConfigToml) -> Result<()> {
+async fn persist_config(state: &AppState, config: ghosty_config::ConfigToml) -> Result<()> {
     if state.config_path.is_none() {
         return Ok(());
     }
@@ -2278,7 +2278,7 @@ mod tests {
     use axum::body::{Body, to_bytes};
     use axum::extract::{Path as AxumPath, Query};
     use axum::http::header;
-    use codewhale_protocol::AppRequest;
+    use ghosty_protocol::AppRequest;
     use std::collections::HashMap;
     use std::fs;
     use tokio::io::AsyncReadExt;
@@ -2437,12 +2437,12 @@ mod tests {
         let runtime = state.runtime.read().await;
         let decision = runtime
             .exec_policy
-            .check(codewhale_execpolicy::ExecPolicyContext {
+            .check(ghosty_execpolicy::ExecPolicyContext {
                 command: "cargo test --workspace",
                 cwd: "/workspace",
                 tool: Some("exec_shell"),
                 path: None,
-                ask_for_approval: codewhale_execpolicy::AskForApproval::UnlessTrusted,
+                ask_for_approval: ghosty_execpolicy::AskForApproval::UnlessTrusted,
                 sandbox_mode: Some("workspace-write"),
             })
             .expect("policy check");
@@ -2473,12 +2473,12 @@ mod tests {
             assert_eq!(runtime.config.model.as_deref(), Some("deepseek-chat"));
             let decision = runtime
                 .exec_policy
-                .check(codewhale_execpolicy::ExecPolicyContext {
+                .check(ghosty_execpolicy::ExecPolicyContext {
                     command: "cargo test",
                     cwd: "/workspace",
                     tool: Some("exec_shell"),
                     path: None,
-                    ask_for_approval: codewhale_execpolicy::AskForApproval::UnlessTrusted,
+                    ask_for_approval: ghosty_execpolicy::AskForApproval::UnlessTrusted,
                     sandbox_mode: Some("workspace-write"),
                 })
                 .expect("policy check");
@@ -2519,12 +2519,12 @@ mod tests {
             assert_eq!(runtime.config.model.as_deref(), Some("deepseek-reasoner"));
             let decision = runtime
                 .exec_policy
-                .check(codewhale_execpolicy::ExecPolicyContext {
+                .check(ghosty_execpolicy::ExecPolicyContext {
                     command: "cargo test --workspace",
                     cwd: "/workspace",
                     tool: Some("exec_shell"),
                     path: None,
-                    ask_for_approval: codewhale_execpolicy::AskForApproval::UnlessTrusted,
+                    ask_for_approval: ghosty_execpolicy::AskForApproval::UnlessTrusted,
                     sandbox_mode: Some("workspace-write"),
                 })
                 .expect("policy check");
@@ -2568,12 +2568,12 @@ mod tests {
             // exec_policy was empty at startup and must remain empty.
             let decision = runtime
                 .exec_policy
-                .check(codewhale_execpolicy::ExecPolicyContext {
+                .check(ghosty_execpolicy::ExecPolicyContext {
                     command: "cargo test",
                     cwd: "/workspace",
                     tool: Some("exec_shell"),
                     path: None,
-                    ask_for_approval: codewhale_execpolicy::AskForApproval::UnlessTrusted,
+                    ask_for_approval: ghosty_execpolicy::AskForApproval::UnlessTrusted,
                     sandbox_mode: Some("workspace-write"),
                 })
                 .expect("policy check");
@@ -3299,7 +3299,7 @@ mod tests {
     async fn stdio_runtime_bridge_applies_thread_start_hints() {
         async fn create_thread(Json(body): Json<Value>) -> Json<Value> {
             assert_eq!(body["model"], "deepseek-v4");
-            assert_eq!(body["workspace"], "/tmp/codewhale-stdio");
+            assert_eq!(body["workspace"], "/tmp/ghosty-stdio");
             Json(json!({
                 "id": "thr_runtime",
                 "model": body["model"].clone(),
@@ -3325,7 +3325,7 @@ mod tests {
                 "legacy_thread",
                 Some(RuntimeThreadHint {
                     model: Some("deepseek-v4".to_string()),
-                    workspace: Some(PathBuf::from("/tmp/codewhale-stdio")),
+                    workspace: Some(PathBuf::from("/tmp/ghosty-stdio")),
                 }),
             )
             .await
@@ -3750,8 +3750,8 @@ mod tests {
             .collect();
         assert!(
             envs.iter()
-                .any(|(k, v)| k == "CODEWHALE_RUNTIME_TOKEN" && v == token),
-            "token must be carried via CODEWHALE_RUNTIME_TOKEN: {envs:?}"
+                .any(|(k, v)| k == "GHOSTY_RUNTIME_TOKEN" && v == token),
+            "token must be carried via GHOSTY_RUNTIME_TOKEN: {envs:?}"
         );
         assert!(
             envs.iter()
@@ -3766,7 +3766,7 @@ mod tests {
 
         assert!(!rendered.contains("Authorization: Bearer"));
         assert!(rendered.contains("not printed"));
-        assert!(rendered.contains("CODEWHALE_APP_SERVER_TOKEN"));
+        assert!(rendered.contains("GHOSTY_APP_SERVER_TOKEN"));
     }
 
     #[test]

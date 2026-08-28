@@ -2678,11 +2678,11 @@ mod tests {
             .await;
         let endpoint = format!("{}/v2/search", server.uri());
         let (entries, mode) = WebSearchTool
-            .run_firecrawl_search_at(&endpoint, "codewhale", 5, 5_000, None)
+            .run_firecrawl_search_at(&endpoint, "ghosty", 5, 5_000, None)
             .await
             .expect("keyless Firecrawl search");
         WebSearchTool
-            .run_firecrawl_search_at(&endpoint, "codewhale", 5, 5_000, Some("fc-secret"))
+            .run_firecrawl_search_at(&endpoint, "ghosty", 5, 5_000, Some("fc-secret"))
             .await
             .expect("authenticated Firecrawl search");
         let requests = server.received_requests().await.expect("recorded requests");
@@ -2953,11 +2953,9 @@ mod tests {
             "json"
         );
 
-        let (subpath_url, _) = searxng_search_url(
-            Some("https://search.example/searxng?language=en"),
-            "codewhale",
-        )
-        .expect("searxng subpath url");
+        let (subpath_url, _) =
+            searxng_search_url(Some("https://search.example/searxng?language=en"), "ghosty")
+                .expect("searxng subpath url");
         let parsed = reqwest::Url::parse(&subpath_url).expect("valid subpath url");
         assert_eq!(parsed.path(), "/searxng/search");
         assert_eq!(
@@ -2970,7 +2968,7 @@ mod tests {
         );
 
         let (search_url, _) =
-            searxng_search_url(Some("https://search.example/searxng/search"), "codewhale")
+            searxng_search_url(Some("https://search.example/searxng/search"), "ghosty")
                 .expect("searxng search endpoint");
         assert_eq!(
             reqwest::Url::parse(&search_url)

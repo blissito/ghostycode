@@ -19,7 +19,7 @@ function git(args: string[]): string | null {
 }
 
 const requestedSourceRevision =
-  process.env.CODEWHALE_SOURCE_REVISION?.trim() ||
+  process.env.GHOSTY_SOURCE_REVISION?.trim() ||
   process.env.GITHUB_SHA?.trim();
 const gitSourceRevision = git(["rev-parse", "HEAD"]);
 const sourceRevision = /^[0-9a-f]{40}$/i.test(requestedSourceRevision ?? "")
@@ -28,7 +28,7 @@ const sourceRevision = /^[0-9a-f]{40}$/i.test(requestedSourceRevision ?? "")
     ? gitSourceRevision ?? ""
     : "";
 const sourceCommittedAt =
-  process.env.CODEWHALE_SOURCE_COMMITTED_AT?.trim() ||
+  process.env.GHOSTY_SOURCE_COMMITTED_AT?.trim() ||
   (sourceRevision ? git(["show", "-s", "--format=%cI", sourceRevision]) : null) ||
   "";
 
@@ -42,8 +42,8 @@ const nextConfig: NextConfig = {
   // deployed worker. Next inlines these values into server output, allowing a
   // credential-free post-deploy comparison without dirtying tracked facts.
   env: {
-    NEXT_PUBLIC_CODEWHALE_SOURCE_REVISION: sourceRevision,
-    NEXT_PUBLIC_CODEWHALE_SOURCE_COMMITTED_AT: sourceCommittedAt,
+    NEXT_PUBLIC_GHOSTY_SOURCE_REVISION: sourceRevision,
+    NEXT_PUBLIC_GHOSTY_SOURCE_COMMITTED_AT: sourceCommittedAt,
   },
   images: {
     remotePatterns: [

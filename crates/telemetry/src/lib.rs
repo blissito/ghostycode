@@ -1,4 +1,4 @@
-//! Default-on, user-disableable anonymous product usage counting for Codewhale.
+//! Default-on, user-disableable anonymous product usage counting for Ghosty.
 //!
 //! The whole of what this crate may ever send is [`event`]. The whole of what
 //! decides whether it may send anything is [`decision`]. Nothing else in the
@@ -132,7 +132,7 @@ pub fn init(consent: TelemetryConsent) {
 /// Note that this binary's version differs from the one last seen on this
 /// machine, at most once per version.
 ///
-/// The previous version comes from `$CODEWHALE_HOME/telemetry/state.json` and
+/// The previous version comes from `$GHOSTY_HOME/telemetry/state.json` and
 /// from nowhere else. Session history and config mtimes would answer the same
 /// question and carry a different privacy contract; reading them here would put
 /// this crate one refactor away from the thread store.
@@ -230,8 +230,8 @@ pub fn record(event: Event) {
 /// `PIPE_BUF`, a `sync_data`, and return — microseconds.
 ///
 /// The append takes the shared privacy lock with `try_write()`, never a blocking
-/// acquisition. If the actor, a wipe, or another Codewhale process sharing
-/// `CODEWHALE_HOME` holds it, the event is dropped immediately. This preserves
+/// acquisition. If the actor, a wipe, or another Ghosty process sharing
+/// `GHOSTY_HOME` holds it, the event is dropped immediately. This preserves
 /// the panic/SIGINT liveness contract without allowing a write to race past a
 /// completed opt-out.
 ///

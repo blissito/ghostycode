@@ -1053,7 +1053,7 @@ mod tests {
         let policy = AutoReviewPolicy::default();
         let ctx = ctx_for(
             "exec_shell",
-            json!({ "command": "codewhale --version" }),
+            json!({ "command": "ghosty --version" }),
             RunOrigin::Interactive,
             ApprovalMode::Auto,
         );
@@ -1120,7 +1120,7 @@ mod tests {
         let policy = AutoReviewPolicy::default();
         let ctx = ctx_for(
             "exec_shell",
-            json!({ "command": "cargo test -p codewhale-tui", "background": true }),
+            json!({ "command": "cargo test -p ghosty-tui", "background": true }),
             RunOrigin::Background,
             ApprovalMode::Bypass,
         );
@@ -1549,7 +1549,7 @@ mod tests {
             ),
             (
                 "Web",
-                json!({"action": "search", "query": "Codewhale"}),
+                json!({"action": "search", "query": "Ghosty"}),
                 ToolCategory::Network,
                 ToolActionKind::External,
             ),

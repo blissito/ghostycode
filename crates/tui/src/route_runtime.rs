@@ -1,5 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
-use codewhale_config::route::{
+use ghosty_config::route::{
     LimitField, LogicalModelRef, OverrideSource, ReadyRouteCandidate, RouteLimits, RouteRequest,
     RouteResolver, SourcedLimitOverride, WireModelId,
 };
@@ -292,7 +292,7 @@ fn classify_provider_route_preflight_next_step(identity_key: &str, reason: &str)
         || lower.contains("codex access token")
     {
         return Some(format!(
-            "Run `codex login`, then retry {identity_key}; Codewhale reads that official CLI login without modifying it."
+            "Run `codex login`, then retry {identity_key}; Ghosty reads that official CLI login without modifying it."
         ));
     }
     if lower.contains("api key not found")
@@ -384,7 +384,7 @@ pub(crate) fn validate_unpinned_model_provider(
     let Some(kind) = provider.kind() else {
         return Ok(());
     };
-    let Some(owner) = codewhale_config::known_foreign_model_owner(kind, model, base_url) else {
+    let Some(owner) = ghosty_config::known_foreign_model_owner(kind, model, base_url) else {
         return Ok(());
     };
     Err(format!(
@@ -924,7 +924,7 @@ mod tests {
     #[test]
     fn provider_route_preflight_missing_key_error_surfaces_reason_and_auth_step() {
         let err = anyhow::anyhow!(
-            "Custom provider 'lm-studio' API key not found. Run 'codewhale auth set --provider custom'."
+            "Custom provider 'lm-studio' API key not found. Run 'ghosty auth set --provider custom'."
         );
         let formatted = format_provider_route_preflight_error("lm-studio", "local-model", &err);
 
@@ -941,7 +941,7 @@ mod tests {
         let missing_formatted =
             format_provider_route_preflight_error("openai-codex", "gpt-5.6-sol", &missing);
         assert!(missing_formatted.contains(
-            "Next step: Run `codex login`, then retry openai-codex; Codewhale reads that official CLI login without modifying it."
+            "Next step: Run `codex login`, then retry openai-codex; Ghosty reads that official CLI login without modifying it."
         ));
 
         let custom = anyhow::anyhow!(
@@ -1089,10 +1089,10 @@ mod tests {
         assert_eq!(candidate.limits().context_tokens, Some(1_048_576));
         assert_eq!(candidate.limits().output_tokens, Some(1_048_576));
         assert!(candidate.applied_limit_overrides().contains(
-            &codewhale_config::route::SourcedLimitOverride {
-                field: codewhale_config::route::LimitField::OutputTokens,
+            &ghosty_config::route::SourcedLimitOverride {
+                field: ghosty_config::route::LimitField::OutputTokens,
                 value: Some(1_048_576),
-                source: codewhale_config::route::OverrideSource::DocumentedRouteOutputMaximum,
+                source: ghosty_config::route::OverrideSource::DocumentedRouteOutputMaximum,
             }
         ));
         assert_eq!(
@@ -1542,7 +1542,7 @@ mod tests {
 
     #[test]
     fn custom_provider_resolves_to_custom_endpoint_and_verbatim_model() {
-        use codewhale_config::route::RequestProtocol;
+        use ghosty_config::route::RequestProtocol;
 
         let config = custom_config("https://api.example.com/v1", "vendor/custom-model-v1");
         let route = resolve_runtime_route(&config, ApiProvider::Custom, None)

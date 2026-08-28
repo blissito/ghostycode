@@ -107,7 +107,7 @@ impl SessionCounters {
     /// return the customer's own `[providers.<name>]` table key when the route
     /// is custom, and `/status` already prints it. `ProviderKind::Custom`
     /// yields the literal `"custom"` and nothing else.
-    pub fn record_provider(&self, provider: codewhale_config::ProviderKind) {
+    pub fn record_provider(&self, provider: ghosty_config::ProviderKind) {
         let name = provider.as_str();
         if let Ok(mut providers) = self.providers.lock()
             && !providers.contains(&name)

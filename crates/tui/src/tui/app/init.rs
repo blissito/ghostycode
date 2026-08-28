@@ -212,7 +212,7 @@ impl App {
                     }
                     Err(error) => {
                         tracing::warn!(
-                            target: "codewhale::xai_oauth",
+                            target: "ghosty::xai_oauth",
                             error = %error,
                             "could not clear the dangling xAI OAuth generation pointer; continuing launch"
                         );
@@ -221,7 +221,7 @@ impl App {
             }
             Some(
                 "⚠ xAI OAuth credentials are missing. Re-authenticate with \
-                 `codewhale auth xai-device` or the in-app login, or switch providers."
+                 `ghosty auth xai-device` or the in-app login, or switch providers."
                     .to_string(),
             )
         } else {
@@ -325,9 +325,9 @@ impl App {
         let provider_models = settings.provider_models.clone().unwrap_or_default();
         // `provider_models` remembers the last `/model` pick per provider. It
         // is a convenience default, not an override: when this launch named a
-        // model explicitly (`--model`, forwarded as `CODEWHALE_MODEL`), that
+        // model explicitly (`--model`, forwarded as `GHOSTY_MODEL`), that
         // request wins. Before this fix the memory won unconditionally, so
-        // `codewhale --provider moonshot --model kimi-k3` silently kept running
+        // `ghosty --provider moonshot --model kimi-k3` silently kept running
         // the remembered `kimi-k2.7-code` while `doctor` reported `kimi-k3`.
         let model = if crate::config::explicit_launch_model_override().is_some()
             || config.fleet_operator_route_applied
@@ -604,7 +604,7 @@ impl App {
         }
 
         // Initialize hooks executor from config, reviewed plugin snapshots,
-        // then project-local `.codewhale/hooks.toml` (#3026).
+        // then project-local `.ghosty/hooks.toml` (#3026).
         let hooks_config = crate::hooks::HooksConfig::load_with_project_and_plugins(
             config.hooks_config(),
             &workspace,
@@ -618,13 +618,13 @@ impl App {
             .lifecycle_outbox
             .as_ref()
             .map(|outbox| {
-                codewhale_hooks::LifecycleOutbox::new(
+                ghosty_hooks::LifecycleOutbox::new(
                     outbox.path.clone(),
                     outbox.webhook_url.clone(),
                     outbox.webhook_token.clone(),
                 )
             })
-            .unwrap_or_else(codewhale_hooks::LifecycleOutbox::disabled);
+            .unwrap_or_else(ghosty_hooks::LifecycleOutbox::disabled);
 
         // Initialize plan state
         let plan_state = new_shared_plan_state();
@@ -632,12 +632,12 @@ impl App {
         let work_runtime =
             crate::work_graph::new_shared_work_runtime(todos.clone(), plan_state.clone());
 
-        let skills_scan_codewhale_only = config.skills_config().scan_codewhale_only();
+        let skills_scan_ghosty_only = config.skills_config().scan_ghosty_only();
         let skills_dir = resolve_skills_dir(&workspace, &global_skills_dir, config);
         let cached_skills = Self::discover_cached_skills(
             &workspace,
             &skills_dir,
-            skills_scan_codewhale_only,
+            skills_scan_ghosty_only,
             plugin_registry.as_ref(),
         );
 
@@ -815,7 +815,7 @@ impl App {
                 .map(PathBuf::from),
             mcp_config_path: mcp_config_path.clone(),
             skills_dir,
-            skills_scan_codewhale_only,
+            skills_scan_ghosty_only,
             project_context_pack_enabled: config.project_context_pack_enabled(),
             memory_path,
             use_memory,

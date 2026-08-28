@@ -1,11 +1,11 @@
 [package]
-name = "codewhale-build-support"
+name = "ghosty-build-support"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Shared build-script helpers for embedding Codewhale build metadata"
+description = "Shared build-script helpers for embedding Ghosty build metadata"
 
 [lints]
 workspace = true

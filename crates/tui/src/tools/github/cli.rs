@@ -19,8 +19,7 @@ const FALLBACK_GH_PATHS: &[&str] = &[
 ];
 
 fn gh_bin() -> String {
-    if let Ok(bin) = std::env::var("CODEWHALE_GH_BIN").or_else(|_| std::env::var("DEEPSEEK_GH_BIN"))
-    {
+    if let Ok(bin) = std::env::var("GHOSTY_GH_BIN").or_else(|_| std::env::var("DEEPSEEK_GH_BIN")) {
         return bin;
     }
     for path in FALLBACK_GH_PATHS {

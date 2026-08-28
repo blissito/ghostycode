@@ -87,8 +87,8 @@ jobs:
           git checkout --detach "${SHA}"
           expected="${TAG#v}"
           workspace_version="$(grep -E '^version = "' Cargo.toml | head -n1 | sed -E 's/^version = "([^"]+)".*/\1/')"
-          npm_version="$(node -p "require('./npm/codewhale/package.json').version")"
-          binary_version="$(node -p "require('./npm/codewhale/package.json').codewhaleBinaryVersion")"
+          npm_version="$(node -p "require('./npm/ghosty/package.json').version")"
+          binary_version="$(node -p "require('./npm/ghosty/package.json').ghostyBinaryVersion")"
           sdk_version="$(node -p "require('./npm/runtime-sdk/package.json').version")"
           vscode_version="$(node -p "require('./extensions/vscode/package.json').version")"
           for pair in \
@@ -173,14 +173,14 @@ jobs:
         run: cargo test --workspace --all-features --locked
         env:
           # Match the CI test lane: test threads get the same stack the product
-          # gives itself (main.rs CODEWHALE_MAIN_STACK_BYTES). See the note in
+          # gives itself (main.rs GHOSTY_MAIN_STACK_BYTES). See the note in
           # ci.yml's "Run tests" step. Without it this gate runs the deep
           # engine/runtime futures on a stack that never ships.
           RUST_MIN_STACK: '16777216'
       - name: Protocol schema parity
-        run: cargo test -p codewhale-protocol --test parity_protocol --locked
+        run: cargo test -p ghosty-protocol --test parity_protocol --locked
       - name: State persistence parity
-        run: cargo test -p codewhale-state --test parity_state --locked
+        run: cargo test -p ghosty-state --test parity_state --locked
       - name: Lockfile drift guard
         run: git diff --exit-code -- Cargo.lock
 
@@ -205,13 +205,13 @@ jobs:
           - runner: ubuntu-latest
             platform: linux/amd64
             architecture: amd64
-            cli_artifact: codewhale-linux-x64
-            shim_artifact: codew-linux-x64
+            cli_artifact: ghosty-linux-x64
+            shim_artifact: ghosty-tui-linux-x64
           - runner: ubuntu-24.04-arm
             platform: linux/arm64
             architecture: arm64
-            cli_artifact: codewhale-linux-arm64
-            shim_artifact: codew-linux-arm64
+            cli_artifact: ghosty-linux-arm64
+            shim_artifact: ghosty-tui-linux-arm64
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -222,12 +222,12 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           path: infra
-      - name: Download Codewhale release binary
+      - name: Download Ghosty release binary
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ matrix.cli_artifact }}
           path: docker-context/bin
-      - name: Download codew release alias
+      - name: Download ghosty-tui release alias
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ matrix.shim_artifact }}
@@ -239,12 +239,12 @@ jobs:
           SHIM_ARTIFACT: ${{ matrix.shim_artifact }}
         run: |
           set -euo pipefail
-          mv -- "docker-context/bin/${CLI_ARTIFACT}" docker-context/bin/codewhale
-          mv -- "docker-context/bin/${SHIM_ARTIFACT}" docker-context/bin/codew
-          chmod 0755 docker-context/bin/codewhale docker-context/bin/codew
-          cmp docker-context/bin/codewhale docker-context/bin/codew
-          docker-context/bin/codewhale --version
-          docker-context/bin/codew --version
+          mv -- "docker-context/bin/${CLI_ARTIFACT}" docker-context/bin/ghosty
+          mv -- "docker-context/bin/${SHIM_ARTIFACT}" docker-context/bin/ghosty-tui
+          chmod 0755 docker-context/bin/ghosty docker-context/bin/ghosty-tui
+          cmp docker-context/bin/ghosty docker-context/bin/ghosty-tui
+          docker-context/bin/ghosty --version
+          docker-context/bin/ghosty-tui --version
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
       - name: Log in to GitHub Container Registry
@@ -295,8 +295,8 @@ jobs:
         run: |
           set -euo pipefail
           docker pull "${IMAGE}"
-          docker run --rm --entrypoint codewhale "${IMAGE}" --version
-          docker run --rm --entrypoint codew "${IMAGE}" --version
+          docker run --rm --entrypoint ghosty "${IMAGE}" --version
+          docker run --rm --entrypoint ghosty-tui "${IMAGE}" --version
       - name: Export image digest
         shell: bash
         env:
@@ -420,8 +420,8 @@ jobs:
             '[.manifests[] | select(.platform.os == "linux") | "linux/\(.platform.architecture)"] | unique | sort == ["linux/amd64", "linux/arm64"]' \
             <<< "${raw_manifest}"
           docker pull "${IMAGE}"
-          docker run --rm --entrypoint codewhale "${IMAGE}" --version
-          docker run --rm --entrypoint codew "${IMAGE}" --version
+          docker run --rm --entrypoint ghosty "${IMAGE}" --version
+          docker run --rm --entrypoint ghosty-tui "${IMAGE}" --version
 
   release:
     timeout-minutes: 30
@@ -441,7 +441,7 @@ jobs:
           package-manager-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: codewhale-release-assets
+          name: ghosty-release-assets
           path: artifacts
       - name: Revalidate exact authoritative asset set
         run: node repo/scripts/release/assemble-release-assets.js --verify artifacts
@@ -473,50 +473,12 @@ jobs:
           overwrite_files: false
           fail_on_unmatched_files: true
 
-  npm:
-    timeout-minutes: 20
-    needs: [release, resolve]
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-        with:
-          ref: ${{ needs.resolve.outputs.sha }}
-          fetch-depth: 0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
-          package-manager-cache: false
-      - name: Pin OIDC-capable npm CLI
-        run: npm install --global npm@12.0.2
-      - name: Revalidate release tag before npm publish
-        env:
-          EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
-          TAG: ${{ needs.resolve.outputs.tag }}
-        run: |
-          ./scripts/release/verify-remote-tag.sh \
-            "https://github.com/${GITHUB_REPOSITORY}.git" \
-            "${TAG}" \
-            "${EXPECTED_SHA}"
-      - name: Revalidate public release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: ./scripts/release/verify-release-assets.sh "${{ needs.resolve.outputs.version }}"
-      - name: Test npm wrapper
-        working-directory: npm/codewhale
-        run: npm test
-      - name: Publish npm wrapper with trusted publishing
-        working-directory: npm/codewhale
-        env:
-          # npm runs prepublishOnly in this step; that guard revalidates the
-          # public GitHub Release and therefore needs the same read token as
-          # the explicit asset gate above.
-          GH_TOKEN: ${{ github.token }}
-        run: npm publish --access public
+  # npm publish is intentionally NOT automated for ghostycode: the package is
+  # published from a developer machine (`cd npm/ghosty && npm publish`) after
+  # the GitHub Release has been created. Upstream publishes with npm trusted
+  # publishing (OIDC), which requires a trusted-publisher binding on the npm
+  # package that `ghostycode` does not have. The `prepublishOnly` hook verifies
+  # the GitHub Release assets first.
 
   homebrew:
     timeout-minutes: 20
@@ -548,7 +510,7 @@ jobs:
         run: |
           gh release download "${{ needs.resolve.outputs.tag }}" \
             --repo "${{ github.repository }}" \
-            --pattern 'codewhale-artifacts-sha256.txt' \
+            --pattern 'ghosty-artifacts-sha256.txt' \
             --dir /tmp
       - name: Revalidate release tag before Homebrew tap write
         if: steps.homebrew-token.outputs.available == 'true'
@@ -564,7 +526,7 @@ jobs:
         if: steps.homebrew-token.outputs.available == 'true'
         env:
           TAG: ${{ needs.resolve.outputs.tag }}
-          MANIFEST: /tmp/codewhale-artifacts-sha256.txt
-          TAP_REPO: Hmbown/homebrew-deepseek-tui
+          MANIFEST: /tmp/ghosty-artifacts-sha256.txt
+          TAP_REPO: blissito/homebrew-ghosty
           TOKEN: ${{ secrets.HOMEBREW_TAP_PAT || secrets.RELEASE_TAG_PAT }}
         run: bash .github/scripts/update-homebrew-tap.sh

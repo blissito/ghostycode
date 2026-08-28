@@ -1,6 +1,6 @@
 # Registri Penyedia (Provider Registry)
 
-Registri ini menjelaskan perilaku penyedia (provider) yang terhubung ke dalam basis kode Codewhale saat ini. Registri ini sengaja dibuat konservatif: entri yang dirilis terbatas pada ID penyedia, kunci konfigurasi, jalur autentikasi, URL dasar, resolusi model, dan metadata kapabilitas yang sudah dikelola oleh sistem.
+Registri ini menjelaskan perilaku penyedia (provider) yang terhubung ke dalam basis kode Ghosty saat ini. Registri ini sengaja dibuat konservatif: entri yang dirilis terbatas pada ID penyedia, kunci konfigurasi, jalur autentikasi, URL dasar, resolusi model, dan metadata kapabilitas yang sudah dikelola oleh sistem.
 
 DeepSeek tetap menjadi penyedia bawaan (default), tetapi setiap entri dalam `ProviderKind::ALL` dan `PROVIDER_REGISTRY` adalah rute penyedia yang dapat dipilih sebagai warga kelas satu. Rute ter-host, endpoint generik kompatibel-OpenAI, rute OpenAI Codex/ChatGPT, Anthropic native, dan runtime lokal semuanya menjalankan harness terminal yang sama terhadap penyedia/model/URL dasar terpilih.
 
@@ -14,9 +14,9 @@ ID penyedia kanonik yang didukung meliputi:
 
 Gunakan salah satu cara berikut untuk memilih penyedia:
 
-- CLI: `codewhale --provider <id>`
+- CLI: `ghosty --provider <id>`
 - TUI: `/provider <id>` atau melalui pemilih penyedia (provider picker)
-- Variabel Lingkungan: `CODEWHALE_PROVIDER=<id>` (atau alias lama `DEEPSEEK_PROVIDER=<id>`)
+- Variabel Lingkungan: `GHOSTY_PROVIDER=<id>` (atau alias lama `DEEPSEEK_PROVIDER=<id>`)
 - Konfigurasi (`config.toml`): `provider = "<id>"`
 
 ---

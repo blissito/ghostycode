@@ -258,7 +258,7 @@ struct RegistryMetadata {
 
 // === Cached index types ===
 //
-// The cache file (`~/.codewhale/mcp-index.json`) is the on-disk source of
+// The cache file (`~/.ghosty/mcp-index.json`) is the on-disk source of
 // truth for Registry-discovered local MCP launch metadata.
 
 /// Bumped whenever the cache shape changes. Lets the loader detect an old
@@ -352,7 +352,7 @@ impl McpSyncRegistry {
             Some(path) => Ok(path.clone()),
             None => dirs::home_dir()
                 .ok_or_else(|| ToolError::execution_failed("Cannot determine home directory"))
-                .map(|h| h.join(".codewhale").join("mcp-index.json")),
+                .map(|h| h.join(".ghosty").join("mcp-index.json")),
         }
     }
 }
@@ -371,9 +371,9 @@ const FULL_RESYNC_INTERVAL_SECS: i64 = 30 * 24 * 60 * 60;
 /// Identifies the client (RFC 9110); matches the crate-wide convention in
 /// `web/fetch.rs`. HTTP hygiene, not a fix for upstream stalls.
 const USER_AGENT: &str = concat!(
-    "Mozilla/5.0 (compatible; codewhale/",
+    "Mozilla/5.0 (compatible; ghosty/",
     env!("CARGO_PKG_VERSION"),
-    "; +https://github.com/Hmbown/CodeWhale)"
+    "; +https://github.com/blissito/ghostycode)"
 );
 /// Bounded retries for one sync. The on-disk cache only changes at the
 /// final atomic replace, so a failed fetch (HTTP/parse error) never
@@ -387,7 +387,7 @@ const REGISTRY_CONNECT_TIMEOUT_SECS: u64 = 60;
 fn cache_path() -> Result<PathBuf, ToolError> {
     dirs::home_dir()
         .ok_or_else(|| ToolError::execution_failed("Cannot determine home directory"))
-        .map(|h| h.join(".codewhale").join("mcp-index.json"))
+        .map(|h| h.join(".ghosty").join("mcp-index.json"))
 }
 
 fn read_cache(path: &Path) -> Option<McpRegistryIndex> {
@@ -1288,7 +1288,7 @@ mod tests {
     ///
     /// Ignored: needs network + minutes of wall clock (page pacing, flaky
     /// upstream). Run manually with:
-    ///   cargo test -p codewhale-tui --bin codewhale-tui --locked \
+    ///   cargo test -p ghosty-tui --bin ghosty-tui --locked \
     ///     execute_writes_cache_file_and_returns_summary -- --ignored --nocapture
     ///
     /// The cache path is injected into a tempdir so the real cache is
@@ -1305,7 +1305,7 @@ mod tests {
         // cleanup so the directory leaks — acceptable for a manual-run
         // integration smoke test that intentionally outlives its scope.
         let tmp_path = tmp.keep();
-        let cache_path = tmp_path.join(".codewhale").join("mcp-index.json");
+        let cache_path = tmp_path.join(".ghosty").join("mcp-index.json");
 
         let ctx = ToolContext::new(tmp_path.clone());
 
@@ -1779,7 +1779,7 @@ mod tests {
         use crate::tools::spec::ToolContext;
 
         let tmp = tempfile::tempdir().expect("tempdir");
-        let cache_dir = tmp.path().join(".codewhale");
+        let cache_dir = tmp.path().join(".ghosty");
         std::fs::create_dir_all(&cache_dir).expect("create cache dir");
         let cache_file = cache_dir.join("mcp-index.json");
         let index = make_test_cache();
@@ -1807,7 +1807,7 @@ mod tests {
     /// Manual smoke run: cold-start against the live Registry, wait for
     /// the background download, then print the final payload to stdout.
     /// Run with:
-    ///   cargo test -p codewhale-tui --bin codewhale-tui --locked \
+    ///   cargo test -p ghosty-tui --bin ghosty-tui --locked \
     ///     execute_and_print_catalog_for_manual_inspection -- --ignored --nocapture
     #[tokio::test]
     #[ignore = "manual smoke run; prints the tool result to stdout \
@@ -1824,7 +1824,7 @@ mod tests {
         // Persist the tempdir past the test so the cache file survives and
         // can be inspected from the shell after the test returns.
         let tmp_path = tmp.keep();
-        let cache_path = tmp_path.join(".codewhale").join("mcp-index.json");
+        let cache_path = tmp_path.join(".ghosty").join("mcp-index.json");
 
         let ctx = ToolContext::new(tmp_path.clone());
 

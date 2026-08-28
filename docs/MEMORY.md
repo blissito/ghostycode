@@ -28,7 +28,7 @@ export DEEPSEEK_MEMORY=on
 Accepted truthy values are `1`, `on`, `true`, `yes`, `y`, and
 `enabled`.
 
-…or add to `~/.codewhale/config.toml`:
+…or add to `~/.ghosty/config.toml`:
 
 ```toml
 [memory]
@@ -40,11 +40,11 @@ Restart the TUI after toggling. Disabling is the same in reverse.
 ## Layout
 
 The store lives under a `memory/` directory next to where the legacy
-`memory_path` anchor points — by default `memory_path = "~/.codewhale/memory.md"`
-re-roots to `~/.codewhale/memory/`:
+`memory_path` anchor points — by default `memory_path = "~/.ghosty/memory.md"`
+re-roots to `~/.ghosty/memory/`:
 
 ```text
-~/.codewhale/memory/
+~/.ghosty/memory/
 ├── global/MEMORY.md        # user-scoped notes (follow you everywhere)
 ├── workspace/<id>/MEMORY.md   # repo-scoped notes (hash of git origin)
 └── index.sqlite3           # rebuildable SQLite FTS5 cache
@@ -59,8 +59,8 @@ full-text cache (`/memory native reindex` rebuilds it). A configured
 `memory_path` is an **anchor only**: the filename is discarded and its
 parent gains the `memory/global/MEMORY.md` tree. Do not set
 `memory_path` to the native layout path itself — that double-nests the
-tree. The shipped example keeps `~/.codewhale/memory.md` so the store
-lands at `~/.codewhale/memory/global/MEMORY.md`.
+tree. The shipped example keeps `~/.ghosty/memory.md` so the store
+lands at `~/.ghosty/memory/global/MEMORY.md`.
 
 ## What gets injected
 
@@ -175,7 +175,7 @@ origin, so notes from one repo never leak into another repo's prompt.
 ## Configuration reference
 
 ```toml
-# ~/.codewhale/config.toml
+# ~/.ghosty/config.toml
 [memory]
 enabled = true                    # default false; or set DEEPSEEK_MEMORY=on
 # Optional explicit backend selection:
@@ -186,12 +186,12 @@ enabled = true                    # default false; or set DEEPSEEK_MEMORY=on
 |-----------------------|-------------------------------|---------------------------------------|
 | Memory enabled        | `false`                       | `[memory] enabled = true` or `DEEPSEEK_MEMORY=on` |
 | Backend               | `off`                         | `[memory] backend = "native"`         |
-| Store root            | `~/.codewhale/memory/`        | derived from `memory_path`            |
+| Store root            | `~/.ghosty/memory/`        | derived from `memory_path`            |
 
 ## Related
 
 - `docs/SUBAGENTS.md` — sub-agents inherit memory and can use the
   `remember` tool too.
 - `docs/CONFIGURATION.md` — full config reference.
-- Issue [#489](https://github.com/Hmbown/CodeWhale/issues/489)
+- Issue [#489](https://github.com/blissito/ghostycode/issues/489)
   — phase-1 EPIC tracking the work.

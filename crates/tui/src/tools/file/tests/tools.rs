@@ -39,11 +39,11 @@ async fn test_read_file_tool() {
 // while awaiting the tool path.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test]
-async fn read_file_denies_codewhale_config_backups_and_secret_store() {
+async fn read_file_denies_ghosty_config_backups_and_secret_store() {
     let _env_lock = crate::test_support::lock_test_env();
     let tmp = tempdir().expect("tempdir");
-    let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
-    let _config_path = crate::test_support::EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
+    let _config_path = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
     let _legacy_config_path = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
 
     fs::write(tmp.path().join("config.toml"), "api_key = \"secret\"\n").expect("write config");
@@ -66,10 +66,10 @@ async fn read_file_denies_codewhale_config_backups_and_secret_store() {
         let err = ReadFileTool
             .execute(json!({"path": path}), &ctx)
             .await
-            .expect_err("credential-bearing CodeWhale file must be denied");
+            .expect_err("credential-bearing GhostyCode file must be denied");
         let message = err.to_string();
-        assert!(message.contains("cannot expose CodeWhale"), "{message}");
-        assert!(message.contains("codewhale config list"), "{message}");
+        assert!(message.contains("cannot expose GhostyCode"), "{message}");
+        assert!(message.contains("ghosty config list"), "{message}");
     }
 
     let ordinary = ReadFileTool

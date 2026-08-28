@@ -15,7 +15,7 @@ use super::RuntimeApiState;
 const WEB_HTML: &str = include_str!("../runtime_web/index.html");
 const WEB_CSS: &str = include_str!("../runtime_web/styles.css");
 const WEB_JS: &str = include_str!("../runtime_web/app.mjs");
-const WEB_ICON: &[u8] = include_bytes!("../runtime_web/codewhale-192.png");
+const WEB_ICON: &[u8] = include_bytes!("../runtime_web/ghosty-192.png");
 // The nonce remains single-use and loopback-only, but it is handed to a
 // person through the browser launcher or terminal. Two minutes proved too
 // short when the launcher was delayed or did not open a tab.
@@ -23,7 +23,7 @@ pub(super) const BOOTSTRAP_TTL: Duration = Duration::from_secs(10 * 60);
 const WEB_SESSION_TTL: Duration = Duration::from_secs(12 * 60 * 60);
 const BOOTSTRAP_PREFIX: &str = "cwwb_";
 const WEB_SESSION_PREFIX: &str = "cwws_";
-const WEB_SESSION_COOKIE_NAME: &str = "codewhale_web_session";
+const WEB_SESSION_COOKIE_NAME: &str = "ghosty_web_session";
 const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'";
 
 #[derive(Clone)]
@@ -103,7 +103,7 @@ impl RuntimeWebState {
 }
 
 pub(super) fn bootstrap_url(addr: SocketAddr, nonce: &str) -> String {
-    format!("http://{addr}/__codewhale/bootstrap/{nonce}")
+    format!("http://{addr}/__ghosty/bootstrap/{nonce}")
 }
 
 pub(super) async fn exchange_bootstrap(
@@ -282,7 +282,7 @@ mod tests {
             "the same process-local session remains valid across a page reload"
         );
         assert!(!state.matches_session_cookie(Some(
-            "codewhale_web_session=cwws_0000000000000000000000000000000000000000000000000000000000000000"
+            "ghosty_web_session=cwws_0000000000000000000000000000000000000000000000000000000000000000"
         )));
 
         let (expired, _nonce) =
@@ -327,7 +327,7 @@ mod tests {
         let cookie = web_session_cookie(&session_token);
         assert_eq!(
             cookie,
-            format!("codewhale_web_session={session_token}; HttpOnly; SameSite=Strict; Path=/")
+            format!("ghosty_web_session={session_token}; HttpOnly; SameSite=Strict; Path=/")
         );
         assert!(!cookie.contains(runtime_bearer));
         assert!(!cookie.contains("Domain="));
@@ -349,7 +349,7 @@ mod tests {
         for asset in [WEB_HTML, WEB_JS] {
             assert!(!asset.contains("localStorage"));
             assert!(!asset.contains("sessionStorage"));
-            assert!(!asset.contains("codewhale_runtime_token"));
+            assert!(!asset.contains("ghosty_runtime_token"));
             assert!(!asset.contains("innerHTML"));
             assert!(!asset.contains("http://"));
             assert!(!asset.contains("https://"));

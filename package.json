@@ -1,8 +1,8 @@
 {
-  "name": "codewhale",
+  "name": "ghosty",
   "private": true,
   "workspaces": [
-    "npm/codewhale",
+    "npm/ghosty",
     "npm/deepseek-tui",
     "npm/runtime-sdk"
   ],

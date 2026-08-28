@@ -9,9 +9,9 @@ the one mechanism DSH actually supports.
 
 ## Goal
 
-`dsh --profile codewhale` (the `install-bundle` profile) renders in the
-Codewhale palette — Blue Stage dark and light — with an explicit Whale
-Brothers / Codewhale identity lockup, applied through
+`dsh --profile ghosty` (the `install-bundle` profile) renders in the
+Ghosty palette — Blue Stage dark and light — with an explicit Whale
+Brothers / Ghosty identity lockup, applied through
 `ctx.theme.overrideTokens`, the documented token-level override in
 `@deepseek-ai/dsh-client-ui-theme`. No build toolchain, no runtime deps, no
 injection hacks.
@@ -36,7 +36,7 @@ injection hacks.
    without inject`, which fails the web boot). The package-level
    `dsh.client.inject` only orders the boot manifest.
 3. Overlay row insert: `cordis.patch.yml` gains
-   `- insert: [{ id: codewhale-skin, name: codewhale-dsh-bundle }]` under
+   `- insert: [{ id: ghosty-skin, name: ghosty-dsh-bundle }]` under
    the existing root-entry list, appending our entry last (patch rows apply
    in order; last wins).
 
@@ -53,14 +53,14 @@ injection hacks.
   `theme_block()`.
 - New: `pub(crate) fn bundle_client_js() -> String` — renders the client
   half: `__ModuleLoader__.load` wrapper + `factory` whose module applies
-  `ctx.theme?.overrideTokens("codewhale-dsh-bundle", TOKENS)` inside
+  `ctx.theme?.overrideTokens("ghosty-dsh-bundle", TOKENS)` inside
   `ctx.effect(() => ...)` and returns the disposer, with
   `exports.inject = ["theme"]` so cordis defers `apply` until the theme
   service exists (plus a belt-and-braces `if (!ctx.theme) return;`).
   TOKENS is a JSON
   literal rendered from `skin_tokens()`; values are palette constants only —
   no secrets, no user data, no environment. Include a
-  `codewhale-skin/<version>` comment header for diffability.
+  `ghosty-skin/<version>` comment header for diffability.
 - Delete: `skin_css()`, `skin_preview_html()`, `SKIN_FILE`,
   `SKIN_PREVIEW_FILE`, and their call sites. The `--skin` flag survives with
   new semantics (below). Keep `hex()`/`mark_data_uri()` only if still used.
@@ -82,7 +82,7 @@ injection hacks.
 - Stale detection: a missing/modified `lib/client.js` while the receipt says
   skin=true (or present while receipt says false) reports `stale-config`,
   same as a drifted patch. `remove-bundle` deletes the client half with the
-  rest of the Codewhale-owned bundle files.
+  rest of the Ghosty-owned bundle files.
 - `connect --skin` stays accepted, means true, and now only controls the
   future bundle (the `--patch` overlay path never carries code — palette is
   bundle-profile only; `launch --profile web|headless` stays overlay-only).
@@ -92,7 +92,7 @@ injection hacks.
 - `theme` service never provided (non-web composition) → the client entry
   stays pending on its `inject`; the Node half never throws.
 - `overrideTokens` validation errors surface in the browser console with
-  source id `codewhale-dsh-bundle` (dsh behavior; we do not catch/swallow).
+  source id `ghosty-dsh-bundle` (dsh behavior; we do not catch/swallow).
 - pnpm missing → unchanged refusal (existing behavior).
 
 ## Tests
@@ -111,8 +111,8 @@ injection hacks.
 4. Stale detection unit tests for present/absent/modified client half vs
    receipt decision.
 5. Live check (manual, this machine — dsh 0.1.0-rc.6 + pnpm installed):
-   `codewhale integrations dsh install-bundle`, `launch`, then a browser
-   screenshot asserting `body` background equals the Codewhale surface color
+   `ghosty integrations dsh install-bundle`, `launch`, then a browser
+   screenshot asserting `body` background equals the Ghosty surface color
    in BOTH schemes (flip `ui-theme.preference`); `remove-bundle` restores
    stock DSH.
 
@@ -128,7 +128,7 @@ injection hacks.
 
 ## Ocean scene (v0.9.9 addendum, owner request 2026-08-17)
 
-The palette alone recolors DSH; it does not make it *look* like Codewhale.
+The palette alone recolors DSH; it does not make it *look* like Ghosty.
 `crates/tui/src/integrations/dsh/scene.js` (owned by `scene.rs`,
 `include_str!`) is a plain-script fragment that `skin::bundle_client_js(true)`
 splices into the client half. It defines `createOcean(palette)`; the client
@@ -172,11 +172,11 @@ navigation distinct. Every other layer stays opaque.
 Budget and guards: rAF capped at ~30 fps, `visibilitychange` pause,
 `prefers-reduced-motion: reduce` → one settled static frame, DPR ≤ 2,
 typed arrays reused, no per-frame string/array allocation. Off switch:
-`localStorage["codewhale.ocean"] = "off"` or body class
-`codewhale-ocean-off` (both also skip the veil); `window.__codewhaleOcean`
+`localStorage["ghosty.ocean"] = "off"` or body class
+`ghosty-ocean-off` (both also skip the veil); `window.__ghostyOcean`
 exposes `start/stop/setIntensity/setScheme`. Config: `update --ocean
-true|false` (default on; receipt `ocean`, package.json `codewhale.ocean` +
-`codewhale.ocean_scene_sha256`); the client-half byte check makes an ocean
+true|false` (default on; receipt `ocean`, package.json `ghosty.ocean` +
+`ghosty.ocean_scene_sha256`); the client-half byte check makes an ocean
 toggle or a drifted scene report `stale-config`.
 
 Live check (this machine, dsh 0.1.0-rc.6, headless Chromium): canvas
@@ -185,11 +185,11 @@ apart differ, console clean, dark via `prefers-color-scheme` follows through
 `theme/change`, reduced-motion frame is static. Screenshots:
 `docs/design/assets/dsh-ocean-light.png`, `docs/design/assets/dsh-ocean-dark.png`.
 
-## Whale Brothers / Codewhale identity (v0.9.9 addendum)
+## Whale Brothers / Ghosty identity (v0.9.9 addendum)
 
 `brand.js` renders a plugin-owned top-right lockup through DSH's additive
 `shell.overlay` slot, with the literal hierarchy
-`WHALE BROTHERS` / `CODEWHALE` / `× DEEPSEEK HARNESS`. It is deliberately
+`WHALE BROTHERS` / `GHOSTY` / `× DEEPSEEK HARNESS`. It is deliberately
 additive: no DSH-owned branding, controls, or DOM classes are replaced. The
 surface is token-driven and pointer-inert, collapses to a compact whale mark
 below 760 px via media CSS, and unmounts with the client plugin. `package.json`

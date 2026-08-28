@@ -5,7 +5,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-/// Bundled catalog generation for the default CodeWhale skill pack (#4691).
+/// Bundled catalog generation for the default GhostyCode skill pack (#4691).
 ///
 /// Generation 7 adds the explicit-only `help` router (#4698 parity slice).
 /// Generation 8 adds the explicit-only `contributor-onboarding` path
@@ -430,7 +430,7 @@ pub fn install_system_skills(skills_dir: &Path) -> std::io::Result<()> {
         changed |= install_one(skills_dir, skill, installed_version.as_deref())?;
     }
 
-    // Safe retirement: remove only an unchanged CodeWhale-owned v4-best-practices.
+    // Safe retirement: remove only an unchanged GhostyCode-owned v4-best-practices.
     changed |= retire_unchanged_v4_best_practices(skills_dir)?;
 
     // Feishu is optional: do not install for every user. If an older bundle

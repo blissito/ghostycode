@@ -1307,7 +1307,7 @@ fn coordination_detail_projection_reports_process_lock_ownership() {
     );
 }
 
-/// A second Codewhale session in the same workspace is ordinary usage. Losing
+/// A second Ghosty session in the same workspace is ordinary usage. Losing
 /// the coordination flock means "I cannot append to the shared ledger" — it
 /// must never mean "my agents are dead". Bookkeeping failure and liveness are
 /// separate concerns (owner report, 2026-08-04).
@@ -1609,7 +1609,7 @@ fn coordination_acceptance_preserves_scopes_candidates_and_replay() {
         repo.path(),
         &[
             "-c",
-            "user.name=codewhale Tests",
+            "user.name=ghosty Tests",
             "-c",
             "user.email=tests@example.com",
             "-c",
@@ -1631,7 +1631,7 @@ fn coordination_acceptance_preserves_scopes_candidates_and_replay() {
         repo.path(),
         &[
             "-c",
-            "user.name=codewhale Tests",
+            "user.name=ghosty Tests",
             "-c",
             "user.email=tests@example.com",
             "-c",
@@ -1909,7 +1909,7 @@ fn init_subagent_git_repo() -> tempfile::TempDir {
     let commit = Command::new("git")
         .args([
             "-c",
-            "user.name=codewhale Tests",
+            "user.name=ghosty Tests",
             "-c",
             "user.email=tests@example.com",
             "-c",
@@ -3712,7 +3712,7 @@ fn test_parse_spawn_request_rejects_invalid_session_name() {
 
 #[test]
 fn test_parse_spawn_request_rejects_out_of_range_max_depth() {
-    let ceiling = codewhale_config::MAX_SPAWN_DEPTH_CEILING;
+    let ceiling = ghosty_config::MAX_SPAWN_DEPTH_CEILING;
     let input = json!({
         "name": "review.parser",
         "prompt": "inspect parser",
@@ -3725,9 +3725,9 @@ fn test_parse_spawn_request_rejects_out_of_range_max_depth() {
     );
 }
 
-fn fleet_roster_with(id: &str, profile: codewhale_config::FleetProfile) -> FleetRoster {
+fn fleet_roster_with(id: &str, profile: ghosty_config::FleetProfile) -> FleetRoster {
     let tmp = tempdir().expect("tempdir");
-    let config = codewhale_config::FleetConfigToml {
+    let config = ghosty_config::FleetConfigToml {
         profiles: std::collections::BTreeMap::from([(id.to_string(), profile)]),
         ..Default::default()
     };
@@ -3736,11 +3736,8 @@ fn fleet_roster_with(id: &str, profile: codewhale_config::FleetProfile) -> Fleet
 
 /// A roster with a single explicit member and no personal/workspace profiles.
 /// Used for tests that resolve by role name (e.g. `type: "builder"`) and must
-/// not be shadowed by the operator's personal `~/.codewhale/agents/*.toml`.
-fn isolated_fleet_roster_with(
-    id: &str,
-    mut profile: codewhale_config::FleetProfile,
-) -> FleetRoster {
+/// not be shadowed by the operator's personal `~/.ghosty/agents/*.toml`.
+fn isolated_fleet_roster_with(id: &str, mut profile: ghosty_config::FleetProfile) -> FleetRoster {
     if profile.role.name.trim().is_empty() {
         profile.role.name = id.to_string();
     }
@@ -3756,10 +3753,10 @@ fn isolated_fleet_roster_with(
     }])
 }
 
-fn custom_fleet_profile(role: &str) -> codewhale_config::FleetProfile {
-    codewhale_config::FleetProfile {
-        slot: codewhale_config::FleetSlot::from_name(role),
-        role: codewhale_config::FleetRole {
+fn custom_fleet_profile(role: &str) -> ghosty_config::FleetProfile {
+    ghosty_config::FleetProfile {
+        slot: ghosty_config::FleetSlot::from_name(role),
+        role: ghosty_config::FleetRole {
             name: role.to_string(),
             description: None,
             instructions: None,
@@ -3852,7 +3849,7 @@ async fn agent_roster_action_and_spawn_resolve_the_same_member() {
 #[tokio::test]
 async fn agent_roster_action_redacts_selected_fleet_load_details() {
     let tmp = tempdir().expect("tempdir");
-    let fleets = tmp.path().join(".codewhale/fleets");
+    let fleets = tmp.path().join(".ghosty/fleets");
     std::fs::create_dir_all(&fleets).expect("fleet dir");
     std::fs::write(fleets.join("selected"), "Broken\n").expect("selection");
     let secret_marker = "sk-live-abcdef0123456789abcdef";
@@ -3863,7 +3860,7 @@ async fn agent_roster_action_redacts_selected_fleet_load_details() {
     .expect("broken Fleet");
 
     let roster = crate::fleet::identity::load_effective_roster(
-        &codewhale_config::FleetConfigToml::default(),
+        &ghosty_config::FleetConfigToml::default(),
         tmp.path(),
         None,
     );
@@ -4057,7 +4054,7 @@ fn spawn_model_selection_has_stable_four_tier_precedence_and_source() {
     assert_eq!(selected.source, SpawnRouteSource::AgentProfileModel);
 
     let mut strong_profile = custom_fleet_profile("reviewer");
-    strong_profile.loadout = codewhale_config::FleetLoadout::Custom("strong".to_string());
+    strong_profile.loadout = ghosty_config::FleetLoadout::Custom("strong".to_string());
     let strong_roster = fleet_roster_with("architect", strong_profile);
     let selected =
         resolve_spawn_model_selection(&runtime, &request, strong_roster.get("architect"))
@@ -4066,7 +4063,7 @@ fn spawn_model_selection_has_stable_four_tier_precedence_and_source() {
     assert_eq!(selected.source, SpawnRouteSource::RunModel);
 
     let mut fast_profile = custom_fleet_profile("reviewer");
-    fast_profile.loadout = codewhale_config::FleetLoadout::Fast;
+    fast_profile.loadout = ghosty_config::FleetLoadout::Fast;
     let fast_roster = fleet_roster_with("fast-reviewer", fast_profile);
     let selected =
         resolve_spawn_model_selection(&runtime, &request, fast_roster.get("fast-reviewer"))
@@ -4206,9 +4203,9 @@ fn spawn_route_sources_refresh_reads_current_disk() {
     // mid-session profile edit. The spawn path must re-read.
     let _env_lock = crate::test_support::lock_test_env();
     let home = tempfile::tempdir().expect("home tempdir");
-    let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
     let workspace = tempfile::tempdir().expect("workspace tempdir");
-    let agents = workspace.path().join(".codewhale").join("agents");
+    let agents = workspace.path().join(".ghosty").join("agents");
     std::fs::create_dir_all(&agents).expect("agents dir");
     std::fs::write(
         agents.join("builder.toml"),
@@ -4256,12 +4253,7 @@ fn test_child_max_spawn_depth_profile_hint_only_narrows() {
     // Explicit request alone still cannot widen past the inherited budget (#5253).
     assert_eq!(child_max_spawn_depth_for_spawn(2, 0, Some(3), None), 2);
     assert_eq!(
-        child_max_spawn_depth_for_spawn(
-            2,
-            0,
-            Some(codewhale_config::MAX_SPAWN_DEPTH_CEILING),
-            None
-        ),
+        child_max_spawn_depth_for_spawn(2, 0, Some(ghosty_config::MAX_SPAWN_DEPTH_CEILING), None),
         2
     );
     // Neither request nor hint: inherit unchanged.
@@ -4280,12 +4272,7 @@ fn test_child_max_spawn_depth_request_cannot_widen_inherited_budget() {
     // MAX_SPAWN_DEPTH_CEILING (8), letting the descendant keep spawning past
     // the root's chosen boundary.
     assert_eq!(
-        child_max_spawn_depth_for_spawn(
-            2,
-            2,
-            Some(codewhale_config::MAX_SPAWN_DEPTH_CEILING),
-            None
-        ),
+        child_max_spawn_depth_for_spawn(2, 2, Some(ghosty_config::MAX_SPAWN_DEPTH_CEILING), None),
         2
     );
     // The inherited budget also caps an explicit request paired with a hint.
@@ -4318,7 +4305,7 @@ fn test_apply_spawn_profile_depth_hint_flows_from_member() {
 }
 
 /// A saved Fleet profile's reasoning tier must reach the spawn itself, not
-/// only the headless `codewhale exec` argv. Direct and workflow spawns share
+/// only the headless `ghosty exec` argv. Direct and workflow spawns share
 /// `apply_spawn_profile`, so this covers both.
 #[test]
 fn test_apply_spawn_profile_carries_profile_reasoning_into_the_spawn() {
@@ -4863,9 +4850,9 @@ fn forked_subagent_messages_preserve_parent_prefix_then_append_task() {
     assert_eq!(messages.first(), Some(&parent_message));
     assert_eq!(messages.len(), 4);
     assert_eq!(messages[1].role, "system");
-    assert!(message_text(&messages[1]).contains("<codewhale:fork_state>"));
+    assert!(message_text(&messages[1]).contains("<ghosty:fork_state>"));
     assert_eq!(messages[2].role, "system");
-    assert!(message_text(&messages[2]).contains("<codewhale:subagent_context>"));
+    assert!(message_text(&messages[2]).contains("<ghosty:subagent_context>"));
     assert_eq!(messages[3].role, "user");
     assert!(message_text(&messages[3]).contains("inspect parser"));
 }
@@ -5051,7 +5038,7 @@ fn test_invalid_role_error_lists_real_aliases() {
 fn plugin_agent_profile_survives_restart_and_spawn_rechecks_disable() {
     let _lock = crate::test_support::lock_test_env();
     let fixture = crate::plugins::test_fixture::DeclarativePluginFixture::new();
-    let config = codewhale_config::FleetConfigToml::default();
+    let config = ghosty_config::FleetConfigToml::default();
     let roster = FleetRoster::load_with_plugins(&config, &fixture.workspace, &fixture.registry);
     let member = roster.get("plugin-scout").expect("plugin Agent is loaded");
     assert_eq!(member.origin, crate::fleet::roster::ProfileOrigin::Plugin);
@@ -7083,7 +7070,7 @@ async fn small_surface_read_only_child_discovers_web_deferred() {
             &mut surface,
             &request_active,
             "Web",
-            json!({"action": "search", "query": "codewhale"}),
+            json!({"action": "search", "query": "ghosty"}),
         )
         .await
         .expect("same-batch first use hydrates instead of executing");
@@ -9811,7 +9798,7 @@ fn explicit_state_roots_isolate_managers_for_the_same_execution_workspace() {
         "a sibling state root must not see another session's transcript"
     );
     assert!(
-        !workspace.join(".codewhale").exists(),
+        !workspace.join(".ghosty").exists(),
         "an explicit state root must keep control-plane files out of the execution workspace"
     );
 }
@@ -9822,9 +9809,9 @@ fn persist_state_rejects_symlinked_state_directory() {
     let tmp = tempdir().expect("tempdir");
     let workspace = tmp.path().join("workspace");
     let outside = tmp.path().join("outside-state");
-    let codewhale_dir = workspace.join(".codewhale");
-    let state_dir = codewhale_dir.join("state");
-    std::fs::create_dir_all(&codewhale_dir).expect("mkdir codewhale");
+    let ghosty_dir = workspace.join(".ghosty");
+    let state_dir = ghosty_dir.join("state");
+    std::fs::create_dir_all(&ghosty_dir).expect("mkdir ghosty");
     std::fs::create_dir_all(&outside).expect("mkdir outside");
     std::os::unix::fs::symlink(&outside, &state_dir).expect("symlink state dir");
 
@@ -9962,7 +9949,7 @@ fn git_repo_root_finds_repo_from_direct_cwd() {
 fn git_repo_root_discovers_one_level_nested_repo_from_harness() {
     let repo = init_subagent_git_repo();
     let harness = tempdir().expect("harness dir");
-    let nested = harness.path().join("CodeWhale");
+    let nested = harness.path().join("GhostyCode");
     Command::new("git")
         .args([
             "clone",
@@ -9985,7 +9972,7 @@ fn git_repo_root_reports_attempted_paths_when_no_repo_found() {
     // contains sibling checkouts) would otherwise make the harness itself
     // resolve to that parent repo and never exercise the no-repository path.
     let harness = TempDirBuilder::new()
-        .prefix(".codewhale-no-repo-")
+        .prefix(".ghosty-no-repo-")
         .tempdir_in(std::env::temp_dir())
         .expect("empty harness outside any repository");
     // Keep the probe beyond `git_repo_root`'s parent-search limit so the walk
@@ -10086,7 +10073,7 @@ fn init_git_repo_at(path: &std::path::Path) {
     let commit = Command::new("git")
         .args([
             "-c",
-            "user.name=codewhale Tests",
+            "user.name=ghosty Tests",
             "-c",
             "user.email=tests@example.com",
             "commit",
@@ -10103,7 +10090,7 @@ fn init_git_repo_at(path: &std::path::Path) {
 #[test]
 fn create_isolated_worktree_discovers_nested_repo_from_harness_parent() {
     let harness = tempdir().expect("harness");
-    let nested = harness.path().join("CodeWhale");
+    let nested = harness.path().join("GhostyCode");
     std::fs::create_dir_all(&nested).expect("nested checkout dir");
     init_git_repo_at(&nested);
     let worktree_home = tempdir().expect("worktree home");
@@ -10218,10 +10205,10 @@ fn build_subagent_system_prompt_skips_role_when_blank() {
 fn fresh_forked_and_nested_subagents_share_authority_bound_skill_catalogs() {
     let _env = crate::test_support::lock_test_env();
     let tmp = tempdir().expect("tempdir");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path().join("home"));
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path().join("home"));
     let workspace = tmp.path().join("workspace");
     let native_skill = workspace.join(".agents/skills/native-review");
-    let plugin_root = workspace.join(".codewhale/plugins/demo");
+    let plugin_root = workspace.join(".ghosty/plugins/demo");
     std::fs::create_dir_all(&native_skill).expect("native Skill dir");
     std::fs::create_dir_all(plugin_root.join("skills/review")).expect("plugin Skill dir");
     std::fs::write(
@@ -10242,7 +10229,7 @@ fn fresh_forked_and_nested_subagents_share_authority_bound_skill_catalogs() {
     let config = crate::plugins::discovery::DiscoveryConfig {
         workspace: workspace.clone(),
         user_plugins_dir: tmp.path().join("user-plugins"),
-        workspace_plugins_dir: workspace.join(".codewhale/plugins"),
+        workspace_plugins_dir: workspace.join(".ghosty/plugins"),
         builtin_plugin_dirs: Vec::new(),
         state_path: tmp.path().join("plugin-state/state.json"),
     };
@@ -10332,13 +10319,13 @@ fn fresh_forked_and_nested_subagents_share_authority_bound_skill_catalogs() {
 fn subagent_done_sentinel_format_is_well_formed() {
     let res = make_snapshot(SubAgentStatus::Completed);
     let sentinel = subagent_done_sentinel("agent_xyz", &res, false);
-    assert!(sentinel.starts_with("<codewhale:subagent.done>"));
-    assert!(sentinel.ends_with("</codewhale:subagent.done>"));
+    assert!(sentinel.starts_with("<ghosty:subagent.done>"));
+    assert!(sentinel.ends_with("</ghosty:subagent.done>"));
 
     // The inner JSON parses and carries the expected fields.
     let inner = sentinel
-        .trim_start_matches("<codewhale:subagent.done>")
-        .trim_end_matches("</codewhale:subagent.done>");
+        .trim_start_matches("<ghosty:subagent.done>")
+        .trim_end_matches("</ghosty:subagent.done>");
     let parsed: serde_json::Value = serde_json::from_str(inner).expect("inner JSON parses");
     assert_eq!(parsed["agent_id"], "agent_xyz");
     assert_eq!(parsed["status"], "completed");
@@ -10361,8 +10348,8 @@ fn subagent_done_sentinel_keeps_large_result_out_of_metadata() {
     res.result = Some("x".repeat(2048));
     let sentinel = subagent_done_sentinel("agent_big", &res, false);
     let inner = sentinel
-        .trim_start_matches("<codewhale:subagent.done>")
-        .trim_end_matches("</codewhale:subagent.done>");
+        .trim_start_matches("<ghosty:subagent.done>")
+        .trim_end_matches("</ghosty:subagent.done>");
     let parsed: serde_json::Value = serde_json::from_str(inner).expect("inner JSON parses");
     assert_eq!(parsed["agent_id"], "agent_big");
     assert_eq!(parsed["summary_location"], "previous_line");
@@ -10383,8 +10370,8 @@ fn subagent_done_sentinel_marks_truncated_summaries() {
     let res = make_snapshot(SubAgentStatus::Completed);
     let sentinel = subagent_done_sentinel("agent_trunc", &res, true);
     let inner = sentinel
-        .trim_start_matches("<codewhale:subagent.done>")
-        .trim_end_matches("</codewhale:subagent.done>");
+        .trim_start_matches("<ghosty:subagent.done>")
+        .trim_end_matches("</ghosty:subagent.done>");
     let parsed: serde_json::Value = serde_json::from_str(inner).expect("inner JSON parses");
     assert_eq!(parsed["summary_kind"], "truncated");
 }
@@ -10495,8 +10482,8 @@ fn subagent_failed_sentinel_format_is_well_formed() {
     result.name = "agent_zzz".to_string();
     let sentinel = subagent_failed_sentinel(&result, "boom");
     let inner = sentinel
-        .trim_start_matches("<codewhale:subagent.done>")
-        .trim_end_matches("</codewhale:subagent.done>");
+        .trim_start_matches("<ghosty:subagent.done>")
+        .trim_end_matches("</ghosty:subagent.done>");
     let parsed: serde_json::Value = serde_json::from_str(inner).expect("inner JSON parses");
     assert_eq!(parsed["agent_id"], "agent_zzz");
     assert_eq!(parsed["status"], "failed");
@@ -10718,7 +10705,7 @@ fn would_exceed_depth_at_boundary() {
 
 #[test]
 fn clamp_child_max_spawn_depth_enforces_absolute_ceiling() {
-    let ceiling = codewhale_config::MAX_SPAWN_DEPTH_CEILING;
+    let ceiling = ghosty_config::MAX_SPAWN_DEPTH_CEILING;
     // Deep child re-supplying max_depth cannot push the cap past the ceiling —
     // this is the recursion-ring-limit bypass fix. Once at the ceiling, the
     // resulting cap equals the ceiling, so `would_exceed_depth` blocks.
@@ -11224,8 +11211,8 @@ fn subagent_registry_with_mcp_action(auto_approve: bool) -> SubAgentToolRegistry
 #[tokio::test]
 async fn child_write_tool_fails_closed_outside_registered_scope() {
     let _env_lock = crate::test_support::lock_test_env();
-    let home = tempdir().expect("isolated CODEWHALE_HOME");
-    let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+    let home = tempdir().expect("isolated GHOSTY_HOME");
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
     let tmp = tempdir().expect("tempdir");
     std::fs::create_dir_all(tmp.path().join("src")).unwrap();
     std::fs::create_dir_all(tmp.path().join("outside")).unwrap();
@@ -12682,7 +12669,7 @@ fn persisted_advisory_assignment_roles_replay_and_repersist_as_consultant() {
 pub(crate) fn stub_runtime() -> SubAgentRuntime {
     use tokio_util::sync::CancellationToken;
 
-    let workspace = std::env::temp_dir().join("codewhale-test-stub");
+    let workspace = std::env::temp_dir().join("ghosty-test-stub");
     let context = ToolContext::new(workspace.clone());
     // A real session always carries its config; spawn-time protocol
     // rebinding (#5042) needs it to rebuild the client for model-aware
@@ -13350,7 +13337,7 @@ fn coexisting_ollama_cloud_config(active_provider: &str) -> crate::config::Confi
         providers: Some(crate::config::ProvidersConfig {
             ollama: crate::config::ProviderConfig {
                 api_key: Some("legacy-cloud-inline-key".to_string()),
-                base_url: Some(codewhale_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
+                base_url: Some(ghosty_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
                 model: Some("legacy-cloud-model".to_string()),
                 ..Default::default()
             },
@@ -14851,7 +14838,7 @@ fn nested_tool_runtime_routes_child_completions_to_local_inbox() {
     let sent = emit_parent_completion(
         &nested_child_runtime,
         "agent_nested",
-        "nested child summary\n<codewhale:subagent.done>{}</codewhale:subagent.done>",
+        "nested child summary\n<ghosty:subagent.done>{}</ghosty:subagent.done>",
     );
 
     assert!(sent, "nested child should report to the local parent inbox");
@@ -14900,9 +14887,9 @@ fn subagent_budget_exhaustion_completion_carries_budget_exhausted_sentinel() {
     );
     let inner = completion
         .payload
-        .split("<codewhale:subagent.done>")
+        .split("<ghosty:subagent.done>")
         .nth(1)
-        .and_then(|chunk| chunk.split("</codewhale:subagent.done>").next())
+        .and_then(|chunk| chunk.split("</ghosty:subagent.done>").next())
         .expect("sentinel json");
     let parsed: serde_json::Value = serde_json::from_str(inner).expect("sentinel parses");
     assert_eq!(parsed["event"], "subagent.failed");
@@ -14924,7 +14911,7 @@ fn subagent_completion_inlines_evidence_before_sentinel() {
         .expect("evidence block");
     let sentinel_pos = completion
         .payload
-        .find("<codewhale:subagent.done>")
+        .find("<ghosty:subagent.done>")
         .expect("sentinel");
     assert!(evidence_pos < sentinel_pos, "evidence before sentinel");
     assert!(completion.payload.contains("src/lib.rs:1-3"));
@@ -15023,7 +15010,7 @@ fn child_runtime_preserves_step_api_timeout() {
 fn subagent_completion_payload_carries_existing_sentinel_format() {
     // The payload format is the same one already documented in
     // prompts/text.rs (SUBAGENT_OUTPUT_FORMAT): human summary on line 1,
-    // `<codewhale:subagent.done>` sentinel on line 2. This test pins the
+    // `<ghosty:subagent.done>` sentinel on line 2. This test pins the
     // format so future refactors don't silently break the model's parsing
     // contract.
     let mut snap = make_snapshot(SubAgentStatus::Completed);
@@ -15037,14 +15024,14 @@ fn subagent_completion_payload_carries_existing_sentinel_format() {
     let first = lines.next().expect("first line is summary");
     let second = lines.next().expect("second line is sentinel");
     assert!(
-        !first.starts_with("<codewhale:subagent.done>"),
+        !first.starts_with("<ghosty:subagent.done>"),
         "summary should not be the sentinel itself"
     );
     assert!(
-        second.starts_with("<codewhale:subagent.done>"),
+        second.starts_with("<ghosty:subagent.done>"),
         "second line is the sentinel"
     );
-    assert!(second.ends_with("</codewhale:subagent.done>"));
+    assert!(second.ends_with("</ghosty:subagent.done>"));
     assert!(
         second.contains("\"agent_id\":\"agent_test\""),
         "sentinel JSON includes agent_id"
@@ -17143,7 +17130,7 @@ fn write_json_atomic_survives_concurrent_writers() {
     // symlink); otherwise the workspace-relative path check would reject it.
     let base = dir.path().canonicalize().expect("canonicalize tempdir");
     let workspace = Arc::new(base.clone());
-    let path = Arc::new(base.join(".codewhale").join("subagents").join("state.json"));
+    let path = Arc::new(base.join(".ghosty").join("subagents").join("state.json"));
     let mut handles = Vec::new();
     for i in 0..16 {
         let ws = Arc::clone(&workspace);
@@ -17175,8 +17162,8 @@ fn write_json_atomic_survives_concurrent_writers() {
 
 #[test]
 fn coordination_process_lock_rejects_second_process() {
-    const ROLE_ENV: &str = "CODEWHALE_TEST_COORDINATION_LOCK_ROLE";
-    const WORKSPACE_ENV: &str = "CODEWHALE_TEST_COORDINATION_LOCK_WORKSPACE";
+    const ROLE_ENV: &str = "GHOSTY_TEST_COORDINATION_LOCK_ROLE";
+    const WORKSPACE_ENV: &str = "GHOSTY_TEST_COORDINATION_LOCK_WORKSPACE";
     const TEST_NAME: &str =
         "tools::subagent::tests::coordination_process_lock_rejects_second_process";
 
@@ -18029,8 +18016,8 @@ async fn child_work_state_publishes_only_real_changes_from_its_own_list() {
 fn an_exact_member_with_tools_false_gets_no_model_tools_at_all() {
     let tmp = tempdir().expect("tempdir");
     let authority = crate::fleet::exact::ChildAuthority::clamp(
-        codewhale_workflow::PermissionCeiling::ROUTER,
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::ROUTER,
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
     );
     assert_eq!(authority.allowed_tools.as_deref(), Some(&[] as &[String]));
 
@@ -18067,8 +18054,8 @@ fn an_exact_member_with_tools_false_gets_no_model_tools_at_all() {
 async fn an_exact_member_without_a_network_tool_really_loses_the_network_surface() {
     let tmp = tempdir().expect("tempdir");
     let authority = crate::fleet::exact::ChildAuthority::clamp(
-        codewhale_workflow::PermissionCeiling::preset("read_write").expect("preset"),
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("read_write").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
     );
     assert!(authority.ceiling.tools);
     assert!(!authority.ceiling.network_tool);
@@ -18198,11 +18185,11 @@ async fn an_exact_member_without_a_network_tool_really_loses_the_network_surface
 #[tokio::test]
 async fn a_read_only_inspection_member_gets_only_bounded_web_search() {
     let tmp = tempdir().expect("tempdir");
-    let parent = codewhale_workflow::PermissionCeiling {
+    let parent = ghosty_workflow::PermissionCeiling {
         write: true,
         network_tool: false,
-        shell: codewhale_workflow::ShellCeiling::Full,
-        delegation_depth: codewhale_config::DEFAULT_SPAWN_DEPTH,
+        shell: ghosty_workflow::ShellCeiling::Full,
+        delegation_depth: ghosty_config::DEFAULT_SPAWN_DEPTH,
         tools: true,
     };
     let authority = crate::fleet::exact::ChildAuthority::from_runtime_role("scout", parent);
@@ -18272,7 +18259,7 @@ async fn a_read_only_inspection_member_gets_only_bounded_web_search() {
     // A Runtime builder under a full parent keeps the whole family.
     let full_authority = crate::fleet::exact::ChildAuthority::from_runtime_role(
         "builder",
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
     );
     assert!(full_authority.ceiling.network_tool);
     assert!(full_authority.disallowed_tools.is_empty());
@@ -18314,8 +18301,8 @@ async fn a_read_only_inspection_member_gets_only_bounded_web_search() {
 fn the_unified_rlm_action_cannot_bypass_a_denied_alias() {
     let tmp = tempdir().expect("tempdir");
     let authority = crate::fleet::exact::ChildAuthority::clamp(
-        codewhale_workflow::PermissionCeiling::preset("read_write").expect("preset"),
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("read_write").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
     );
     assert!(!authority.ceiling.network_tool);
 
@@ -18486,10 +18473,7 @@ fn a_read_only_member_cannot_smuggle_commands_through_the_verifier_surface() {
 #[test]
 fn a_shell_capable_read_only_member_keeps_test_selection_arguments() {
     for (name, input) in [
-        (
-            "Run",
-            json!({"action": "tests", "args": "-p codewhale-tui"}),
-        ),
+        ("Run", json!({"action": "tests", "args": "-p ghosty-tui"})),
         (
             "Run",
             json!({"action": "tests", "args": "--lib fleet::exact"}),
@@ -18545,15 +18529,15 @@ fn a_shell_capable_read_only_member_keeps_test_selection_arguments() {
 #[tokio::test]
 async fn a_parent_read_only_session_narrows_a_full_exact_member_in_the_child_registry() {
     let tmp = tempdir().expect("tempdir");
-    let session = codewhale_workflow::PermissionCeiling {
+    let session = ghosty_workflow::PermissionCeiling {
         write: false,
         network_tool: false,
-        shell: codewhale_workflow::ShellCeiling::ReadOnly,
+        shell: ghosty_workflow::ShellCeiling::ReadOnly,
         delegation_depth: 0,
         tools: true,
     };
     let authority = crate::fleet::exact::ChildAuthority::clamp(
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
         session,
     );
     assert!(!authority.ceiling.write);
@@ -18637,7 +18621,7 @@ fn the_session_ceiling_reflects_the_live_parent_posture() {
     no_shell.allow_shell = false;
     assert_ne!(
         crate::fleet::exact::session_permission_ceiling(&no_shell).shell,
-        codewhale_workflow::ShellCeiling::Full
+        ghosty_workflow::ShellCeiling::Full
     );
 }
 
@@ -18662,7 +18646,7 @@ fn read_only_with_shell_registry() -> (tempfile::TempDir, SubAgentToolRegistry) 
     let tmp = tempdir().expect("tempdir");
     let authority = crate::fleet::exact::ChildAuthority::from_runtime_role(
         "verifier",
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
     );
     assert!(
         !authority.ceiling.write,
@@ -18670,7 +18654,7 @@ fn read_only_with_shell_registry() -> (tempfile::TempDir, SubAgentToolRegistry) 
     );
     assert_eq!(
         authority.ceiling.shell,
-        codewhale_workflow::ShellCeiling::Full,
+        ghosty_workflow::ShellCeiling::Full,
         "…that nonetheless kept `shell = full` so it can run checks"
     );
 
@@ -18735,7 +18719,7 @@ fn a_verifier_runs_bounded_test_selections_and_nothing_else_at_dispatch() {
         ("Run", json!({"action": "tests"})),
         (
             "Run",
-            json!({"action": "tests", "args": "-p codewhale-tui exact_fleet"}),
+            json!({"action": "tests", "args": "-p ghosty-tui exact_fleet"}),
         ),
         ("Run", json!({"action": "tests", "args": "--lib --exact"})),
         ("Run", json!({"action": "verifiers"})),
@@ -18926,7 +18910,7 @@ fn a_write_capable_member_keeps_every_execution_gate() {
     let tmp = tempdir().expect("tempdir");
     let authority = crate::fleet::exact::ChildAuthority::from_runtime_role(
         "builder",
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
     );
     assert!(authority.ceiling.write);
 
@@ -19003,8 +18987,8 @@ fn the_durable_work_families_resolve_their_actions_through_the_policy_seam() {
 #[test]
 fn posture_denials_survive_a_child_that_declines_to_inherit() {
     let authority = crate::fleet::exact::ChildAuthority::clamp(
-        codewhale_workflow::PermissionCeiling::preset("read_write").expect("preset"),
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("read_write").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
     );
     assert!(!authority.ceiling.network_tool);
 
@@ -19053,7 +19037,7 @@ fn posture_denials_survive_a_child_that_declines_to_inherit() {
 /// proves nothing.
 #[test]
 fn the_authority_fingerprint_distinguishes_every_envelope_it_names() {
-    let session = codewhale_workflow::PermissionCeiling::preset("full").expect("preset");
+    let session = ghosty_workflow::PermissionCeiling::preset("full").expect("preset");
     let fingerprint = |role: &str| {
         crate::fleet::exact::ChildAuthority::from_runtime_role(role, session).fingerprint()
     };
@@ -19081,7 +19065,7 @@ fn the_authority_fingerprint_distinguishes_every_envelope_it_names() {
     // parent is a different envelope.
     let narrow = crate::fleet::exact::ChildAuthority::from_runtime_role(
         "builder",
-        codewhale_workflow::PermissionCeiling::preset("read_only").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("read_only").expect("preset"),
     );
     assert_ne!(narrow.fingerprint(), fingerprint("builder"));
 }
@@ -19093,7 +19077,7 @@ fn the_authority_fingerprint_distinguishes_every_envelope_it_names() {
 fn the_spawn_boundary_fails_closed_on_a_missing_or_mismatched_authority() {
     let authority = crate::fleet::exact::ChildAuthority::from_runtime_role(
         "verifier",
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
     );
     let fingerprint = authority.fingerprint();
 
@@ -19155,7 +19139,7 @@ fn the_spawn_boundary_fails_closed_on_a_missing_or_mismatched_authority() {
 fn the_launched_authority_is_the_one_the_spawn_boundary_accepts() {
     let authority = crate::fleet::exact::ChildAuthority::from_runtime_role(
         "auditor",
-        codewhale_workflow::PermissionCeiling::preset("analyst").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("analyst").expect("preset"),
     );
     // Free-form Fleet identity maps to Runtime `custom`; the read-only parent
     // still narrows the effective capability envelope.
@@ -19176,7 +19160,7 @@ fn the_launched_authority_is_the_one_the_spawn_boundary_accepts() {
     // A different member's envelope must not satisfy it.
     let other = crate::fleet::exact::ChildAuthority::from_runtime_role(
         "builder",
-        codewhale_workflow::PermissionCeiling::preset("full").expect("preset"),
+        ghosty_workflow::PermissionCeiling::preset("full").expect("preset"),
     );
     assert!(
         verify_fleet_authority_input(&other.fingerprint(), &input).is_err(),
@@ -19841,7 +19825,7 @@ fn resume_from_loads_transcript_artifact_when_available() {
     assert_eq!(message_text(&loaded[0]), "initial task");
     assert_eq!(message_text(&loaded[1]), "step one done");
     assert!(
-        !workspace.join(".codewhale").exists(),
+        !workspace.join(".ghosty").exists(),
         "resume transcript reads must not fall back to the execution workspace"
     );
 }
@@ -19956,7 +19940,7 @@ fn validate_resume_from_source(
 /// Owner report 2026-08-04: a model/provider switch spawns the new engine's
 /// manager while the old engine still holds the workspace coordination flock
 /// in this same process. That losing acquisition must classify itself as a
-/// same-process handover (not "another Codewhale process"), and must
+/// same-process handover (not "another Ghosty process"), and must
 /// self-heal via the projection retry once the previous owner drops.
 #[test]
 fn coordination_lock_loss_to_own_process_reads_as_handover_and_self_heals() {
@@ -20712,8 +20696,8 @@ fn the_agent_surface_never_names_a_retired_tool() {
 #[tokio::test]
 async fn agent_claim_expands_the_callers_write_scope() {
     let _env_lock = crate::test_support::lock_test_env();
-    let home = tempdir().expect("isolated CODEWHALE_HOME");
-    let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+    let home = tempdir().expect("isolated GHOSTY_HOME");
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
     let tmp = tempdir().expect("tempdir");
     std::fs::create_dir_all(tmp.path().join("src")).unwrap();
     std::fs::create_dir_all(tmp.path().join("docs")).unwrap();

@@ -32,7 +32,7 @@ export const chrome: ChromeDict = {
   skipToContent: "Ana içeriğe geç",
 
   navPrimaryAria: "Ana gezinme",
-  navHomeAria: "Codewhale ana sayfası",
+  navHomeAria: "Ghosty ana sayfası",
 
   installCta: "Kur →",
 
@@ -72,7 +72,7 @@ export const chrome: ChromeDict = {
   themeTitle: "Belge teması · otomatik / açık / koyu",
 
   footerTagline:
-    "Derinlere Codewhale dalar — senin dalmana gerek yok: açık kaynak çalışma zamanı için belgeler, kaynak ve topluluk.",
+    "Derinlere Ghosty dalar — senin dalmana gerek yok: açık kaynak çalışma zamanı için belgeler, kaynak ve topluluk.",
   footerProduct: "Ürün",
   footerProject: "Proje",
   footerDocs: "Belgeler",

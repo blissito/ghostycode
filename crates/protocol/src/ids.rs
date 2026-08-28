@@ -1,6 +1,6 @@
 //! Typed `ThreadId` / `SessionId` for the `crates/core` boundary (issue #5261).
 //!
-//! `codewhale`'s `Session` is really a thread. The new boundary introduces
+//! `ghosty`'s `Session` is really a thread. The new boundary introduces
 //! two ids so every consumer — TUI, CLI, app-server, tests — can name the
 //! right scope:
 //! - `ThreadId` — long-lived conversation (persisted in `state.json` / `threads/`)

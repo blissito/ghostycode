@@ -317,7 +317,7 @@ fn parse_claude_entry(
     if obj.get("strict") == Some(&Value::Bool(false)) {
         entry_diags.push(MarketplaceDiagnostic::warning(
             "NON_STRICT_ENTRY",
-            format!("Claude plugin `{name}` sets strict=false; Codewhale always reviews the installed manifest"),
+            format!("Claude plugin `{name}` sets strict=false; Ghosty always reviews the installed manifest"),
             Some(name.clone()),
             Some(index),
         ));
@@ -361,7 +361,7 @@ fn parse_claude_entry(
 
 /// Claude documents per-entry component config arrays (`skills`,
 /// `commands`, `agents`, `hooks`, `lspServers`) and an `mcpServers` map.
-/// These are catalog-side declarations; Codewhale counts them for
+/// These are catalog-side declarations; Ghosty counts them for
 /// display and compatibility only — the reviewed installed manifest
 /// remains the authority.
 fn count_declared_components(
@@ -492,7 +492,7 @@ fn normalize_claude_source(
             if git_ref.is_some() || sha.is_some() {
                 diags.push(MarketplaceDiagnostic::warning(
                     "UNAPPLIED_PIN",
-                    "Codewhale's GitHub installer resolves the default branch; ref/sha pins are recorded but not yet applied".to_string(),
+                    "Ghosty's GitHub installer resolves the default branch; ref/sha pins are recorded but not yet applied".to_string(),
                     None,
                     None,
                 ));
@@ -513,7 +513,7 @@ fn normalize_claude_source(
             if let Some((owner, repo)) = github_url_parts(url) {
                 diags.push(MarketplaceDiagnostic::warning(
                     "UNAPPLIED_PIN",
-                    "Codewhale's GitHub installer resolves the default branch; ref/sha pins are recorded but not yet applied".to_string(),
+                    "Ghosty's GitHub installer resolves the default branch; ref/sha pins are recorded but not yet applied".to_string(),
                     None,
                     None,
                 ));
@@ -543,7 +543,7 @@ fn normalize_claude_source(
             (
                 MarketplaceSourceSpec::Npm { package: package.to_string() },
                 MarketplaceInstallPlan::Unsupported {
-                    reason: "Codewhale does not execute npm; install the plugin from a GitHub repo, tarball, or local path".to_string(),
+                    reason: "Ghosty does not execute npm; install the plugin from a GitHub repo, tarball, or local path".to_string(),
                     raw: value.to_string(),
                 },
                 diags,
@@ -572,7 +572,7 @@ fn normalize_claude_source(
         }
         "command" => (
             MarketplaceSourceSpec::Refused {
-                reason: "Claude `command` sources execute arbitrary shell commands and are never run by Codewhale".to_string(),
+                reason: "Claude `command` sources execute arbitrary shell commands and are never run by Ghosty".to_string(),
             },
             MarketplaceInstallPlan::Unsupported {
                 reason: "command sources are never executed".to_string(),

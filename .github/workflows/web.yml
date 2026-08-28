@@ -77,7 +77,7 @@ jobs:
             echo
             echo "Revision \`${REVISION}\` passed the web gates but has **not** been deployed."
             echo
-            echo "A maintainer can publish it with \`gh workflow run web.yml --repo Hmbown/CodeWhale --ref main\`."
+            echo "A maintainer can publish it with \`gh workflow run web.yml --repo blissito/ghostycode --ref main\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
@@ -100,7 +100,7 @@ jobs:
     # leave Cloudflare serving the older bundle. Never cancel in progress: a
     # half-finished OpenNext upload is worse than a queued one.
     concurrency:
-      group: deploy-codewhale-web
+      group: deploy-ghosty-web
       cancel-in-progress: false
     defaults:
       run:

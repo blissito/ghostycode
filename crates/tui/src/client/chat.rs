@@ -113,8 +113,8 @@ fn apply_xai_grok_4_6_reasoning_effort(
 ) {
     if !(is_exact_xai_grok_4_6_route(provider, base_url, model)
         || (provider == ApiProvider::Xai
-            && codewhale_config::provider::is_exact_xai_platform_route(
-                codewhale_config::ProviderKind::Xai,
+            && ghosty_config::provider::is_exact_xai_platform_route(
+                ghosty_config::ProviderKind::Xai,
                 base_url,
             )
             && model
@@ -1768,9 +1768,9 @@ impl<'a> PromptBuilder<'a> {
     }
 }
 
-const SYSTEM_PROMPT_DUMP_ENV: &str = "CODEWHALE_DUMP_SYSTEM_PROMPT";
-const SYSTEM_PROMPT_DUMP_BEGIN: &str = "<<<CODEWHALE_SYSTEM_PROMPT_BEGIN>>>";
-const SYSTEM_PROMPT_DUMP_END: &str = "<<<CODEWHALE_SYSTEM_PROMPT_END>>>";
+const SYSTEM_PROMPT_DUMP_ENV: &str = "GHOSTY_DUMP_SYSTEM_PROMPT";
+const SYSTEM_PROMPT_DUMP_BEGIN: &str = "<<<GHOSTY_SYSTEM_PROMPT_BEGIN>>>";
+const SYSTEM_PROMPT_DUMP_END: &str = "<<<GHOSTY_SYSTEM_PROMPT_END>>>";
 const ARCEE_WAF_TEXT_SPLIT_TRIGGERS: &[(&str, &str, &str)] = &[("python -c", "python ", "-c")];
 
 fn dump_system_prompt_if_requested(messages: &[Value]) {
@@ -3025,7 +3025,7 @@ fn reasoning_effort_enables_thinking(effort: Option<&str>) -> bool {
 /// reasoning can stay omitted once a later user text turn begins.
 ///
 /// Also tallies the size of all replayed `reasoning_content` and logs it, so
-/// users on `RUST_LOG=codewhale_tui=debug` can see how much of their input
+/// users on `RUST_LOG=ghosty_tui=debug` can see how much of their input
 /// budget is being spent re-sending prior thinking traces.
 #[cfg(test)]
 pub(super) fn sanitize_thinking_mode_messages(
@@ -6139,7 +6139,7 @@ mod image_block_wire_tests {
     //! The OpenAI-compatible projection of [`ContentBlock::ImageUrl`].
     //!
     //! Chat Completions is the wire format behind the large majority of
-    //! CodeWhale's provider routes, so a regression here is a regression for
+    //! GhostyCode's provider routes, so a regression here is a regression for
     //! most of them at once. The shape is fixed by OpenAI's spec: a `user`
     //! message whose `content` is an array of parts, with the image as
     //! `{"type":"image_url","image_url":{"url":…}}`.
@@ -6680,7 +6680,7 @@ mod mistral_reasoning_tests {
     }
 
     #[test]
-    fn mistral_effort_wire_value_covers_codewhale_tiers() {
+    fn mistral_effort_wire_value_covers_ghosty_tiers() {
         assert_eq!(mistral_reasoning_effort_wire_value("off"), Some("none"));
         assert_eq!(
             mistral_reasoning_effort_wire_value("disabled"),

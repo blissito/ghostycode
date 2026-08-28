@@ -4,7 +4,7 @@ use super::detect::{
     DetectEnv, DshDetection, DshRunner, classify_version, detect, settings_namespaces,
 };
 use super::identity::{
-    CodewhaleRouteIdentity, DshAdapter, DshPermissionMode, WireProtocol, dsh_reasoning_effort,
+    DshAdapter, DshPermissionMode, GhostyRouteIdentity, WireProtocol, dsh_reasoning_effort,
     map_identity, permission_mode_for, render_overlay,
 };
 use super::receipt::{DshReceiptDocument, DshReceiptEvent};
@@ -58,8 +58,8 @@ fn identity(
     model: &str,
     base_url: &str,
     protocol: WireProtocol,
-) -> CodewhaleRouteIdentity {
-    CodewhaleRouteIdentity {
+) -> GhostyRouteIdentity {
+    GhostyRouteIdentity {
         provider_id: provider.to_string(),
         provider_label: provider.to_uppercase(),
         model: model.to_string(),
@@ -224,7 +224,7 @@ fn permission_never_broadens_without_explicit_confirmation() {
         permission_mode_for(&id, true).0,
         DshPermissionMode::DangerFullAccess
     );
-    // Codewhale at workspace-write can never be lifted to full access.
+    // Ghosty at workspace-write can never be lifted to full access.
     id.sandbox_mode = Some("workspace-write".to_string());
     assert_eq!(
         permission_mode_for(&id, true).0,
@@ -249,7 +249,7 @@ fn deepseek_route_maps_to_native_adapter_with_exact_identity() {
     assert!(overlay.contains("model: 'deepseek-v4-pro'"));
     assert!(overlay.contains("baseURL: 'https://api.deepseek.com/beta'"));
     assert!(overlay.contains("reasoningEffort: max"));
-    assert!(overlay.contains("DeepSeek Harness connected through Codewhale"));
+    assert!(overlay.contains("DeepSeek Harness connected through Ghosty"));
     assert!(
         !overlay.contains("apiKeyEnv"),
         "native adapter resolves its own default key ref"
@@ -269,11 +269,11 @@ fn ollama_keyless_route_writes_no_credential_reference() {
     assert_eq!(
         mapped.adapter,
         DshAdapter::PiAiOpenAiCompatible {
-            route_id: "codewhale-ollama".to_string()
+            route_id: "ghosty-ollama".to_string()
         }
     );
     let overlay = render_overlay(&mapped).unwrap();
-    assert!(overlay.contains("provider: 'codewhale-ollama'"));
+    assert!(overlay.contains("provider: 'ghosty-ollama'"));
     assert!(overlay.contains("api: openai-completions"));
     assert!(overlay.contains("baseURL: 'http://127.0.0.1:11434/v1'"));
     assert!(!overlay.contains("apiKeyEnv"));
@@ -372,12 +372,12 @@ fn responses_dialect_route_is_carried_not_approximated() {
     assert_eq!(
         mapped.adapter,
         DshAdapter::PiAiOpenAiCompatible {
-            route_id: "codewhale-deepseek".to_string()
+            route_id: "ghosty-deepseek".to_string()
         }
     );
-    assert_eq!(mapped.dsh_provider(), Some("codewhale-deepseek"));
+    assert_eq!(mapped.dsh_provider(), Some("ghosty-deepseek"));
     let overlay = render_overlay(&mapped).unwrap();
-    assert!(overlay.contains("provider: 'codewhale-deepseek'"));
+    assert!(overlay.contains("provider: 'ghosty-deepseek'"));
     assert!(overlay.contains("api: openai-responses"));
     assert!(!overlay.contains("api: openai-completions"));
     assert!(overlay.contains("baseURL: 'https://api.deepseek.com/beta'"));
@@ -395,7 +395,7 @@ fn responses_dialect_route_is_carried_not_approximated() {
     let detection = detection_ok();
     let plan = super::plan(&paths, &detection, &id, "web", false, false, true).unwrap();
     assert!(plan.overlay_text.contains("api: openai-responses"));
-    assert_eq!(plan.mapped.dsh_provider(), Some("codewhale-deepseek"));
+    assert_eq!(plan.mapped.dsh_provider(), Some("ghosty-deepseek"));
 }
 
 #[test]
@@ -430,7 +430,7 @@ fn status_surfaces_route_carryability_before_plan() {
     let report = compute_status(&paths, detection.clone(), Ok(id), false, avail()).unwrap();
     let line = status_line(&report);
     assert!(
-        line.contains("deepseek/deepseek-v4-flash is carryable via codewhale-deepseek"),
+        line.contains("deepseek/deepseek-v4-flash is carryable via ghosty-deepseek"),
         "{line}"
     );
 
@@ -470,7 +470,7 @@ fn avail() -> BundleAvailability {
 
 fn lab_paths() -> (tempfile::TempDir, DshPaths) {
     let dir = tempfile::tempdir().unwrap();
-    let paths = DshPaths::under(&dir.path().join("codewhale-home"));
+    let paths = DshPaths::under(&dir.path().join("ghosty-home"));
     (dir, paths)
 }
 
@@ -750,15 +750,15 @@ fn skin_flag_does_not_change_the_patch_overlay_bytes() {
 #[test]
 fn brand_lockup_css_rules_are_not_accidentally_nested() {
     // The Signal Current mark's `svg` rule was authored *inside* the
-    // `#codewhale-brand-mark { ... }` block. CSS nesting resolves a bare
-    // nested selector against its parent, so `#codewhale-brand-mark svg`
-    // nested under `#codewhale-brand-mark` means
-    // "#codewhale-brand-mark #codewhale-brand-mark svg" — which matches
+    // `#ghosty-brand-mark { ... }` block. CSS nesting resolves a bare
+    // nested selector against its parent, so `#ghosty-brand-mark svg`
+    // nested under `#ghosty-brand-mark` means
+    // "#ghosty-brand-mark #ghosty-brand-mark svg" — which matches
     // nothing, and the mark silently fell back to its inline width/height
     // attributes. Brace depth is the cheap invariant that catches it.
     let js = skin::bundle_client_js(true);
     let css_start = js
-        .find("#codewhale-brand-lockup{")
+        .find("#ghosty-brand-lockup{")
         .expect("brand lockup css block");
     // Walk only the concatenated CSS string literals for the brand block.
     let css_region = &js[css_start..];
@@ -794,7 +794,7 @@ fn brand_lockup_css_rules_are_not_accidentally_nested() {
     // what makes the inline SVG a block box inside the grid cell. In the
     // emitted CSS that means it is preceded by a closing brace, never by a
     // declaration.
-    let marker = "#codewhale-brand-mark svg{display:block;width:24px;height:24px;}";
+    let marker = "#ghosty-brand-mark svg{display:block;width:24px;height:24px;}";
     let at = css_region
         .find(marker)
         .expect("the mark's svg sizing rule must be emitted");
@@ -818,14 +818,14 @@ fn bundle_client_js_is_deterministic_override_tokens_and_not_a_stylesheet() {
     let a = skin::bundle_client_js(true);
     let b = skin::bundle_client_js(true);
     assert_eq!(a, b);
-    assert!(a.contains(&format!("codewhale-skin/{}", env!("CARGO_PKG_VERSION"))));
+    assert!(a.contains(&format!("ghosty-skin/{}", env!("CARGO_PKG_VERSION"))));
     assert!(a.contains(skin::SKIN_SOURCE));
     assert!(a.contains("ctx.effect"));
     assert!(a.contains("overrideTokens"));
-    assert!(a.contains("function CodewhaleBrand()"));
+    assert!(a.contains("function GhostyBrand()"));
     assert!(a.contains("ctx.slots.inject(\"shell.overlay\""));
     assert!(a.contains("ctx.slots.register("));
-    assert!(a.contains("React.createElement(CodewhaleBrand)"));
+    assert!(a.contains("React.createElement(GhostyBrand)"));
     assert!(a.contains("if (!ctx.theme || !ctx.slots) return;"));
     assert!(
         a.contains("exports.inject = [\"theme\", \"slots\"];"),
@@ -863,13 +863,13 @@ fn bundle_client_js_is_deterministic_override_tokens_and_not_a_stylesheet() {
 }
 
 #[test]
-fn launch_strips_only_codewhale_injected_credentials() {
+fn launch_strips_only_ghosty_injected_credentials() {
     let none = launch_env_strip_list(None, &["ZAI_API_KEY".to_string()]);
     assert_eq!(
         none,
         [
-            "CODEWHALE_CLI_API_KEY",
-            "CODEWHALE_CLI_API_KEY_SOURCE",
+            "GHOSTY_CLI_API_KEY",
+            "GHOSTY_CLI_API_KEY_SOURCE",
             "DEEPSEEK_API_KEY_SOURCE"
         ]
     );
@@ -901,7 +901,7 @@ impl DshRunner for PluginRunner {
         match args {
             ["--version"] => Ok((true, "0.1.0-rc.6\n".to_string())),
             ["--help"] => Ok((true, "--patch\n".to_string())),
-            ["plugin", "--profile", "codewhale", "add", spec] => {
+            ["plugin", "--profile", "ghosty", "add", spec] => {
                 if self.fail_add {
                     return Ok((false, "ERR_PNPM_NO_MATCHING_VERSION\n".to_string()));
                 }
@@ -917,23 +917,23 @@ impl DshRunner for PluginRunner {
                 if !bundles.contains(&name) {
                     bundles.push(name);
                 }
-                let json = serde_json::json!({"name": "dsh-profile-codewhale", "private": true, "dsh": {"profile": {"bundles": bundles}}});
+                let json = serde_json::json!({"name": "dsh-profile-ghosty", "private": true, "dsh": {"profile": {"bundles": bundles}}});
                 std::fs::write(manifest, serde_json::to_string_pretty(&json).unwrap()).unwrap();
                 Ok((
                     true,
                     format!("+ {spec} link:\nDone in 100ms using pnpm v10.23.0\n"),
                 ))
             }
-            ["plugin", "--profile", "codewhale", "remove", name] => {
+            ["plugin", "--profile", "ghosty", "remove", name] => {
                 let mut bundles = bundle::profile_bundles(&self.profile_dir).unwrap_or_default();
                 bundles.retain(|b| b != name);
-                let json = serde_json::json!({"name": "dsh-profile-codewhale", "private": true, "dsh": {"profile": {"bundles": bundles}}});
+                let json = serde_json::json!({"name": "dsh-profile-ghosty", "private": true, "dsh": {"profile": {"bundles": bundles}}});
                 std::fs::write(
                     self.profile_dir.join("package.json"),
                     serde_json::to_string_pretty(&json).unwrap(),
                 )
                 .unwrap();
-                Ok((true, "- codewhale-dsh-bundle\n".to_string()))
+                Ok((true, "- ghosty-dsh-bundle\n".to_string()))
             }
             _ => Ok((false, String::new())),
         }
@@ -1030,7 +1030,7 @@ fn bundle_files_are_npm_shaped_and_carry_the_overlay_rows() {
         ["package.json", "cordis.patch.yml", "README.md", "NOTICE.md"]
     );
     let pkg: serde_json::Value = serde_json::from_str(&files[0].1).unwrap();
-    assert_eq!(pkg["name"], "codewhale-dsh-bundle");
+    assert_eq!(pkg["name"], "ghosty-dsh-bundle");
     assert_eq!(pkg["private"], true);
     assert_eq!(pkg["license"], "MIT");
     assert_eq!(pkg["dsh"]["bundle"]["patch"], "./cordis.patch.yml");
@@ -1080,7 +1080,7 @@ fn install_update_remove_bundle_lifecycle_uses_documented_plugin_commands() {
     let mut detection = detection_ok();
     detection.binary = Some(dsh_bin);
     detection.dsh_home = dir.path().join("dsh-home");
-    let profile_dir = detection.dsh_home.join("profiles").join("codewhale");
+    let profile_dir = detection.dsh_home.join("profiles").join("ghosty");
     let runner = PluginRunner {
         profile_dir: profile_dir.clone(),
         calls: Default::default(),
@@ -1114,7 +1114,7 @@ fn install_update_remove_bundle_lifecycle_uses_documented_plugin_commands() {
     assert!(!paths.bundle_dir.exists());
 
     let record = install_bundle(&paths, &detection, &runner, &avail(), DshAppBundle::Web).unwrap();
-    assert_eq!(record.profile, "codewhale");
+    assert_eq!(record.profile, "ghosty");
     assert_eq!(record.patch_sha256, plan.overlay_sha256);
     assert!(paths.bundle_dir.join("cordis.patch.yml").is_file());
     assert_eq!(
@@ -1147,7 +1147,7 @@ fn install_update_remove_bundle_lifecycle_uses_documented_plugin_commands() {
         [
             "@deepseek-ai/dsh-base",
             "@deepseek-ai/dsh-web-app",
-            "codewhale-dsh-bundle"
+            "ghosty-dsh-bundle"
         ]
     );
 
@@ -1159,10 +1159,10 @@ fn install_update_remove_bundle_lifecycle_uses_documented_plugin_commands() {
         report.state
     );
     let spec = launch_spec(&report, None, &[], std::path::Path::new("/ws")).unwrap();
-    assert_eq!(spec.args, ["--profile", "codewhale"]);
+    assert_eq!(spec.args, ["--profile", "ghosty"]);
     let spec = launch_spec(&report, Some("web"), &[], std::path::Path::new("/ws")).unwrap();
     assert_eq!(spec.args[0..3], ["--profile", "web", "--patch"]);
-    assert!(status_line(&report).contains("bundle in profile `codewhale`"));
+    assert!(status_line(&report).contains("bundle in profile `ghosty`"));
 
     // Route drift → stale (covers the bundle), update rewrites the bundle patch.
     let mut moved = id.clone();
@@ -1239,9 +1239,9 @@ fn install_update_remove_bundle_lifecycle_uses_documented_plugin_commands() {
         [
             "plugin",
             "--profile",
-            "codewhale",
+            "ghosty",
             "remove",
-            "codewhale-dsh-bundle"
+            "ghosty-dsh-bundle"
         ]
     );
     let doc = DshReceiptDocument::load(&paths.receipt).unwrap();
@@ -1273,7 +1273,7 @@ fn failed_plugin_add_leaves_no_bundle_record_or_files() {
     detection.binary = Some(dsh_bin);
     detection.dsh_home = dir.path().join("dsh-home");
     let runner = PluginRunner {
-        profile_dir: detection.dsh_home.join("profiles/codewhale"),
+        profile_dir: detection.dsh_home.join("profiles/ghosty"),
         calls: Default::default(),
         fail_add: true,
     };
@@ -1334,7 +1334,7 @@ fn compute_status_reports_stale_config_when_client_half_drifts() {
     let mut detection = detection_ok();
     detection.binary = Some(dsh_bin);
     detection.dsh_home = dir.path().join("dsh-home");
-    let profile_dir = detection.dsh_home.join("profiles").join("codewhale");
+    let profile_dir = detection.dsh_home.join("profiles").join("ghosty");
     let runner = PluginRunner {
         profile_dir: profile_dir.clone(),
         calls: Default::default(),
@@ -1413,7 +1413,7 @@ fn ocean_scene_fragment_mounts_a_canvas_and_honours_the_guards() {
     assert!(js.contains("position:fixed;inset:0"));
     assert!(js.contains("z-index:-1"));
     assert!(js.contains("pointer-events:none"));
-    assert!(js.contains("data-codewhale-ocean"));
+    assert!(js.contains("data-ghosty-ocean"));
     // motion guards
     assert!(js.contains("prefers-reduced-motion: reduce"));
     assert!(js.contains("requestAnimationFrame"));
@@ -1445,10 +1445,10 @@ fn brand_fragment_is_explicit_responsive_and_slot_safe() {
     assert!(js.contains("fill: \"#f6c453\""), "gold body path");
     assert!(js.contains("fill: \"#48d7ff\""), "cyan current path");
     assert!(!js.contains("🐋"), "no whale emoji");
-    assert!(js.contains("function CodewhaleBrand()"));
-    assert!(js.contains("codewhale-brand-lockup"));
+    assert!(js.contains("function GhostyBrand()"));
+    assert!(js.contains("ghosty-brand-lockup"));
     assert!(js.contains("WHALE BROTHERS"));
-    assert!(js.contains("CODEWHALE"));
+    assert!(js.contains("GHOSTY"));
     assert!(js.contains("DEEPSEEK HARNESS"));
     assert!(js.contains("pointer-events:none"));
     assert!(js.contains("@media(max-width:759px)"));
@@ -1457,7 +1457,7 @@ fn brand_fragment_is_explicit_responsive_and_slot_safe() {
     assert!(!js.contains("document.createElement"));
     assert!(!js.contains("window.addEventListener"));
     assert!(!js.contains("window.removeEventListener"));
-    assert!(!js.contains("window.__codewhaleBrand"));
+    assert!(!js.contains("window.__ghostyBrand"));
     assert_eq!(super::brand::brand_sha256().len(), 64);
 }
 
@@ -1531,15 +1531,9 @@ fn bundle_manifest_records_the_ocean_decision_and_scene_sha() {
     let by_name: std::collections::BTreeMap<&str, &str> =
         on.iter().map(|(n, t)| (*n, t.as_str())).collect();
     let pkg: serde_json::Value = serde_json::from_str(by_name["package.json"]).unwrap();
-    assert_eq!(pkg["codewhale"]["ocean"], true);
-    assert_eq!(
-        pkg["codewhale"]["brand_sha256"],
-        super::brand::brand_sha256()
-    );
-    assert_eq!(
-        pkg["codewhale"]["ocean_scene_sha256"],
-        scene::scene_sha256()
-    );
+    assert_eq!(pkg["ghosty"]["ocean"], true);
+    assert_eq!(pkg["ghosty"]["brand_sha256"], super::brand::brand_sha256());
+    assert_eq!(pkg["ghosty"]["ocean_scene_sha256"], scene::scene_sha256());
     assert_eq!(
         by_name[bundle::BUNDLE_CLIENT_FILE],
         skin::bundle_client_js(true)
@@ -1554,8 +1548,8 @@ fn bundle_manifest_records_the_ocean_decision_and_scene_sha() {
     let by_name: std::collections::BTreeMap<&str, &str> =
         off.iter().map(|(n, t)| (*n, t.as_str())).collect();
     let pkg: serde_json::Value = serde_json::from_str(by_name["package.json"]).unwrap();
-    assert_eq!(pkg["codewhale"]["ocean"], false);
-    assert!(pkg["codewhale"].get("ocean_scene_sha256").is_none());
+    assert_eq!(pkg["ghosty"]["ocean"], false);
+    assert!(pkg["ghosty"].get("ocean_scene_sha256").is_none());
     assert_eq!(
         by_name[bundle::BUNDLE_CLIENT_FILE],
         skin::bundle_client_js(false)
@@ -1564,7 +1558,7 @@ fn bundle_manifest_records_the_ocean_decision_and_scene_sha() {
     // skin off ⇒ ocean off regardless
     let none = bundle::render_bundle_files("0.9.9", overlay, false, true);
     let pkg: serde_json::Value = serde_json::from_str(&none[0].1).unwrap();
-    assert_eq!(pkg["codewhale"]["ocean"], false);
+    assert_eq!(pkg["ghosty"]["ocean"], false);
 }
 
 #[test]
@@ -1600,7 +1594,7 @@ fn update_with_ocean_off_rewrites_the_client_half_and_receipt() {
     detection.binary = Some(dsh_bin);
     detection.dsh_home = dir.path().join("dsh-home");
     let runner = PluginRunner {
-        profile_dir: detection.dsh_home.join("profiles").join("codewhale"),
+        profile_dir: detection.dsh_home.join("profiles").join("ghosty"),
         calls: Default::default(),
         fail_add: false,
     };

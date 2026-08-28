@@ -1,4 +1,4 @@
-# `telemetry-ingest` — Codewhale's first-party telemetry endpoint
+# `telemetry-ingest` — Ghosty's first-party telemetry endpoint
 
 A Cloudflare Worker that accepts the batches described in
 [`docs/TELEMETRY.md`](../docs/TELEMETRY.md) and writes them to Workers Analytics
@@ -9,14 +9,14 @@ It lives here and not in `web/` because the site is a separate deploy with its
 own build (Next.js via OpenNext); this is a single 13 KiB script with no assets,
 and coupling the two would mean a telemetry change rebuilding the marketing site.
 
-**Deployed and live** at `https://telemetry.codewhale.net/v1/telemetry`, which
+**Deployed and live** at `https://telemetry.ghosty.net/v1/telemetry`, which
 is the shipped default for `telemetry_endpoint`. workers.dev is disabled; that
 hostname is the only way in.
 
 Anonymous usage counting is on by default in v0.9.6, with a clear first-run
 disclosure and a durable opt-out. Prior declines remain off. A user who wants
 to contact nobody sets `telemetry_endpoint = ""`, which writes batches to
-`$CODEWHALE_HOME/telemetry/dryrun.jsonl` instead.
+`$GHOSTY_HOME/telemetry/dryrun.jsonl` instead.
 
 ---
 
@@ -129,7 +129,7 @@ Not "does not"; **cannot**, given the code as written:
 
 **Known gap, stated plainly.** `providers` is the one field whose *value* space
 this endpoint cannot close. The authoritative list is
-`codewhale_config::provider::all_providers()`, a Rust registry with no generated
+`ghosty_config::provider::all_providers()`, a Rust registry with no generated
 artifact to read, and hard-coding a copy here would drift into silently dropping
 a real user's route. The client closes it (`Event::is_bounded` →
 `is_known_provider_id`) before the POST is made; the server enforces the shape a
@@ -157,9 +157,9 @@ npx wrangler deploy --dry-run --outdir=.wrangler/dry-run   # no account touched
 npx wrangler deploy         # <- the only command that publishes anything
 ```
 
-The `routes` block in `wrangler.jsonc` binds it to `telemetry.codewhale.net` as
+The `routes` block in `wrangler.jsonc` binds it to `telemetry.ghosty.net` as
 a custom domain, so the endpoint URL is
-`https://telemetry.codewhale.net/v1/telemetry`. The workers.dev subdomain is
+`https://telemetry.ghosty.net/v1/telemetry`. The workers.dev subdomain is
 disabled: that hostname is the only way in.
 
 Verified against the live endpoint before the client default was changed: the
@@ -176,7 +176,7 @@ points here, so a regression in this Worker is a regression in a promise
 ### Analytics Engine dataset setup
 
 There is none. The dataset named in `wrangler.jsonc`
-(`codewhale_telemetry`) is created implicitly on the first successful
+(`ghosty_telemetry`) is created implicitly on the first successful
 `writeDataPoint`, so there is nothing to provision ahead of the deploy. Confirm
 it exists after the first batch:
 
@@ -284,7 +284,7 @@ SELECT
   sumIf(_sample_interval, blob9 = 'install')                      AS first_installs,
   sumIf(_sample_interval, blob9 = 'upgrade')                      AS upgrades,
   sumIf(_sample_interval, blob13 = 'clean')                       AS clean_exits
-FROM codewhale_telemetry
+FROM ghosty_telemetry
 WHERE timestamp > NOW() - INTERVAL '7' DAY
 ```
 
@@ -309,7 +309,7 @@ SELECT
   sum(double14 * _sample_interval)          AS tool_denied_by_policy,
   sum(double15 * _sample_interval)          AS tool_timeout,
   sum(double16 * _sample_interval)          AS network_error
-FROM codewhale_telemetry
+FROM ghosty_telemetry
 WHERE timestamp > NOW() - INTERVAL '7' DAY
   AND blob1 IN ('session_end', 'panic')
 GROUP BY panic_site
@@ -341,7 +341,7 @@ above is exhaustive; there is no free slot an address could occupy. Confirm the
 deployed dataset has exactly the columns you expect:
 
 ```sh
-query "SELECT * FROM codewhale_telemetry LIMIT 1 FORMAT JSON"
+query "SELECT * FROM ghosty_telemetry LIMIT 1 FORMAT JSON"
 ```
 
 The result carries `dataset`, `timestamp`, `_sample_interval`, `index1`, and the
@@ -353,7 +353,7 @@ batches, this returns zero rows:
 
 ```sql
 SELECT count() AS suspicious
-FROM codewhale_telemetry
+FROM ghosty_telemetry
 WHERE timestamp > NOW() - INTERVAL '7' DAY
   AND (
     match(index1, '\\d+\\.\\d+\\.\\d+\\.\\d+')

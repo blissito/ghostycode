@@ -1,5 +1,5 @@
 //! End-to-end contract for the `[lifecycle_outbox]` feature on headless
-//! `codewhale exec`: with a path configured, a run appends one JSONL
+//! `ghosty exec`: with a path configured, a run appends one JSONL
 //! `RuntimeEventEnvelope` line per turn boundary (`turn_start` at message
 //! dispatch, `turn_end` at the terminal receipt), the per-file `seq` recovers
 //! across processes, and with no path configured no file is ever created.
@@ -107,7 +107,7 @@ fn preserve_host_env(command: &mut Command) {
     }
 }
 
-/// Run `codewhale exec` against the mock provider with the given
+/// Run `ghosty exec` against the mock provider with the given
 /// `[lifecycle_outbox]` config block (already TOML-formatted, may be empty).
 /// Any `__OUTBOX_PATH__` token in it is replaced with the isolated home's
 /// absolute outbox path. Returns the isolated home and workspace dirs (the
@@ -118,15 +118,15 @@ fn run_exec_with_outbox_config(server: &MockServer, outbox_toml: &str) -> (TempD
     let outbox_path = home_outbox_path(&home);
     let outbox_toml = outbox_toml.replace(OUTBOX_PATH_TOKEN, &outbox_path.display().to_string());
 
-    std::fs::create_dir_all(home.path().join(".codewhale")).expect("create codewhale config dir");
+    std::fs::create_dir_all(home.path().join(".ghosty")).expect("create ghosty config dir");
     std::fs::create_dir_all(home.path().join(".deepseek")).expect("create deepseek config dir");
     std::fs::write(
-        home.path().join(".codewhale").join("config.toml"),
+        home.path().join(".ghosty").join("config.toml"),
         format!("provider = \"deepseek\"\nmodel = \"{TEST_MODEL}\"\n{outbox_toml}"),
     )
     .expect("write exec config");
 
-    let mut command = Command::new(codewhale_tui_binary());
+    let mut command = Command::new(ghosty_tui_binary());
     preserve_host_env(&mut command);
     command
         .current_dir(workspace.path())
@@ -144,8 +144,8 @@ fn run_exec_with_outbox_config(server: &MockServer, outbox_toml: &str) -> (TempD
         .env("XDG_DATA_HOME", home.path().join(".local").join("share"))
         .env("XDG_CACHE_HOME", home.path().join(".cache"))
         .env(
-            "CODEWHALE_CONFIG_PATH",
-            home.path().join(".codewhale").join("config.toml"),
+            "GHOSTY_CONFIG_PATH",
+            home.path().join(".ghosty").join("config.toml"),
         )
         .env(
             "DEEPSEEK_CONFIG_PATH",
@@ -153,20 +153,20 @@ fn run_exec_with_outbox_config(server: &MockServer, outbox_toml: &str) -> (TempD
         )
         .env("DEEPSEEK_API_KEY", "ci-test-key-not-real")
         .env("DEEPSEEK_BASE_URL", server.uri())
-        .env("CODEWHALE_BASE_URL", server.uri())
+        .env("GHOSTY_BASE_URL", server.uri())
         .env("DEEPSEEK_MODEL", TEST_MODEL)
-        .env("CODEWHALE_MODEL", TEST_MODEL)
+        .env("GHOSTY_MODEL", TEST_MODEL)
         .env("RUST_LOG", "warn")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = command.spawn().expect("spawn codewhale-tui exec");
+    let mut child = command.spawn().expect("spawn ghosty-tui exec");
     let stdout_reader = read_pipe_in_background(child.stdout.take().expect("stdout pipe"));
     let stderr_reader = read_pipe_in_background(child.stderr.take().expect("stderr pipe"));
 
     let status = match child
         .wait_timeout(RUN_TIMEOUT)
-        .expect("wait for codewhale-tui")
+        .expect("wait for ghosty-tui")
     {
         Some(status) => status,
         None => {
@@ -175,7 +175,7 @@ fn run_exec_with_outbox_config(server: &MockServer, outbox_toml: &str) -> (TempD
             let stdout = join_pipe_reader(stdout_reader, "stdout");
             let stderr = join_pipe_reader(stderr_reader, "stderr");
             panic!(
-                "codewhale-tui exec timed out after {RUN_TIMEOUT:?}\nstdout:\n{}\nstderr:\n{}",
+                "ghosty-tui exec timed out after {RUN_TIMEOUT:?}\nstdout:\n{}\nstderr:\n{}",
                 String::from_utf8_lossy(&stdout),
                 String::from_utf8_lossy(&stderr)
             );
@@ -186,7 +186,7 @@ fn run_exec_with_outbox_config(server: &MockServer, outbox_toml: &str) -> (TempD
     let stderr = join_pipe_reader(stderr_reader, "stderr");
     assert!(
         status.success(),
-        "codewhale-tui exec failed\nstdout:\n{}\nstderr:\n{}",
+        "ghosty-tui exec failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&stdout),
         String::from_utf8_lossy(&stderr)
     );
@@ -224,11 +224,11 @@ fn read_outbox_lines(path: &Path) -> Vec<Value> {
         .collect()
 }
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
 
@@ -237,13 +237,13 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }
 
 fn home_outbox_path(home: &TempDir) -> PathBuf {
     home.path()
-        .join(".codewhale")
+        .join(".ghosty")
         .join("notifications")
         .join("outbox.jsonl")
 }

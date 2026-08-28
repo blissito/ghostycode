@@ -668,7 +668,7 @@ pub(crate) fn handle_shell_job_action(app: &mut App, action: crate::tui::app::Sh
         Err(_) => {
             add_shell_job_message(
                 app,
-                "Shell tracking hit an internal error — restart Codewhale to recover.".to_string(),
+                "Shell tracking hit an internal error — restart Ghosty to recover.".to_string(),
             );
             return;
         }
@@ -1515,7 +1515,7 @@ pub(crate) async fn handle_view_events(
                     app.needs_redraw = true;
                     continue;
                 }
-                let mut txn = codewhale_config::persistence::SetupTransaction::new();
+                let mut txn = ghosty_config::persistence::SetupTransaction::new();
                 txn.stage(target.clone(), draft.render_toml().into_bytes());
                 match txn.commit() {
                     Ok(()) => {

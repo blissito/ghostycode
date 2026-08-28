@@ -1,4 +1,4 @@
-use codewhale_protocol::{
+use ghosty_protocol::{
     AppRequest, EventFrame, ThreadGoal, ThreadGoalProgressParams, ThreadGoalSetParams,
     ThreadGoalStatus, ThreadListParams, ThreadRequest, ThreadResumeParams, ToolOutput,
     UserInputAnswerEvent, UserInputOptionEvent, UserInputQuestionEvent, UserInputRequestEvent,

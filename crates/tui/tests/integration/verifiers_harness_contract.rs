@@ -1,11 +1,11 @@
 //! Provider-free acceptance lock for the public headless launch contract that
-//! makes CodeWhale embeddable as a future Verifiers v1 harness (#4641).
+//! makes GhostyCode embeddable as a future Verifiers v1 harness (#4641).
 //!
 //! Everything here is loopback and sealed: a `wiremock` OpenAI-compatible
-//! fixture stands in for the interception endpoint, `CODEWHALE_HOME` is a fresh
+//! fixture stands in for the interception endpoint, `GHOSTY_HOME` is a fresh
 //! per-run directory, the credential is delivered only through the route's
 //! `api_key_env`, and a sentinel secret must never escape the child process.
-//! No provider credential, network egress, or installed CodeWhale is required.
+//! No provider credential, network egress, or installed GhostyCode is required.
 
 #![cfg(unix)]
 
@@ -21,7 +21,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const TEST_MODEL: &str = "verifiers-contract-model";
-const API_KEY_ENV: &str = "VF_CODEWHALE_API_KEY";
+const API_KEY_ENV: &str = "VF_GHOSTY_API_KEY";
 /// A value that appears nowhere except the child environment; any sighting in
 /// argv, stdout, stderr, the stream-json stream, or a written file is a leak.
 const SENTINEL_SECRET: &str = "vf-sentinel-do-not-leak-8f3a2b1c9d7e";
@@ -82,7 +82,7 @@ async fn mount_models(server: &MockServer) {
 struct Fixture {
     _root: TempDir,
     home: PathBuf,
-    codewhale_home: PathBuf,
+    ghosty_home: PathBuf,
     workspace: PathBuf,
     config_path: PathBuf,
     mcp_config_path: PathBuf,
@@ -94,9 +94,9 @@ impl Fixture {
     fn new(base_url: &str) -> Self {
         let root = TempDir::new().expect("fixture root");
         let home = root.path().join("home");
-        let codewhale_home = root.path().join("codewhale-home");
+        let ghosty_home = root.path().join("ghosty-home");
         let workspace = root.path().join("workspace");
-        for dir in [&home, &codewhale_home, &workspace] {
+        for dir in [&home, &ghosty_home, &workspace] {
             std::fs::create_dir_all(dir).expect("create fixture dir");
         }
 
@@ -119,7 +119,7 @@ impl Fixture {
         Fixture {
             _root: root,
             home,
-            codewhale_home,
+            ghosty_home,
             workspace,
             config_path,
             mcp_config_path,
@@ -127,7 +127,7 @@ impl Fixture {
     }
 
     /// The exact `#4641` launch shape, minus the dispatcher hop (this drives the
-    /// `codewhale-tui` runtime directly). `--no-project-config` precedes the
+    /// `ghosty-tui` runtime directly). `--no-project-config` precedes the
     /// subcommand; the prompt follows `--`.
     fn exec_argv(&self, prompt: &str) -> Vec<String> {
         vec![
@@ -160,7 +160,7 @@ impl Fixture {
             "sentinel secret must never appear in argv"
         );
 
-        let mut command = Command::new(codewhale_tui_binary());
+        let mut command = Command::new(ghosty_tui_binary());
         preserve_host_env(&mut command);
         command
             .current_dir(&self.workspace)
@@ -170,11 +170,11 @@ impl Fixture {
             .env("XDG_CONFIG_HOME", self.home.join(".config"))
             .env("XDG_DATA_HOME", self.home.join(".local").join("share"))
             .env("XDG_CACHE_HOME", self.home.join(".cache"))
-            .env("CODEWHALE_HOME", &self.codewhale_home)
-            .env("CODEWHALE_SECRET_BACKEND", "file")
-            .env("CODEWHALE_MEMORY", "false")
-            .env("CODEWHALE_TELEMETRY", "false")
-            .env("CODEWHALE_MCP_CONFIG", &self.mcp_config_path)
+            .env("GHOSTY_HOME", &self.ghosty_home)
+            .env("GHOSTY_SECRET_BACKEND", "file")
+            .env("GHOSTY_MEMORY", "false")
+            .env("GHOSTY_TELEMETRY", "false")
+            .env("GHOSTY_MCP_CONFIG", &self.mcp_config_path)
             // The interception secret lives ONLY in the child environment,
             // reached through the route's api_key_env.
             .env(API_KEY_ENV, SENTINEL_SECRET)
@@ -189,7 +189,7 @@ impl Fixture {
     /// Every regular file under the sealed roots, for secret-leak scanning.
     fn written_files(&self) -> Vec<PathBuf> {
         let mut out = Vec::new();
-        for base in [&self.home, &self.codewhale_home, &self.workspace] {
+        for base in [&self.home, &self.ghosty_home, &self.workspace] {
             collect_files(base, &mut out);
         }
         out.push(self.config_path.clone());
@@ -213,11 +213,11 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 fn run_with_timeout(mut command: Command, timeout: Duration) -> std::process::Output {
-    let mut child = command.spawn().expect("spawn codewhale-tui exec");
+    let mut child = command.spawn().expect("spawn ghosty-tui exec");
     let stdout_reader = read_pipe_in_background(child.stdout.take().expect("stdout pipe"));
     let stderr_reader = read_pipe_in_background(child.stderr.take().expect("stderr pipe"));
 
-    let status = match child.wait_timeout(timeout).expect("wait for codewhale-tui") {
+    let status = match child.wait_timeout(timeout).expect("wait for ghosty-tui") {
         Some(status) => status,
         None => {
             let _ = child.kill();
@@ -225,7 +225,7 @@ fn run_with_timeout(mut command: Command, timeout: Duration) -> std::process::Ou
             let stdout = join_pipe_reader(stdout_reader, "stdout");
             let stderr = join_pipe_reader(stderr_reader, "stderr");
             panic!(
-                "codewhale-tui exec timed out after {timeout:?}\nstdout:\n{}\nstderr:\n{}",
+                "ghosty-tui exec timed out after {timeout:?}\nstdout:\n{}\nstderr:\n{}",
                 String::from_utf8_lossy(&stdout),
                 String::from_utf8_lossy(&stderr)
             );
@@ -283,11 +283,11 @@ fn preserve_host_env(command: &mut Command) {
     }
 }
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
     let mut path = std::env::current_exe().expect("current test executable path");
@@ -295,7 +295,7 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }
 

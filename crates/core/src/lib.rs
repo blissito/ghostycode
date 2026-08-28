@@ -13,29 +13,29 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
-use codewhale_agent::ModelRegistry;
-use codewhale_config::{ConfigToml, ProviderKind};
-use codewhale_execpolicy::{
+use ghosty_agent::ModelRegistry;
+use ghosty_config::{ConfigToml, ProviderKind};
+use ghosty_execpolicy::{
     AskForApproval, ExecApprovalRequirement, ExecPolicyContext, ExecPolicyDecision,
     ExecPolicyEngine,
 };
-use codewhale_hooks::{HookDispatcher, HookEvent};
-use codewhale_mcp::{
+use ghosty_hooks::{HookDispatcher, HookEvent};
+use ghosty_mcp::{
     McpManager, McpStartupCompleteEvent, McpStartupStatus as McpManagerStartupStatus,
 };
-use codewhale_protocol::{
+use ghosty_protocol::{
     AppResponse, EventFrame, ExecApprovalRequestEvent, ResponseChannel, ReviewDecision, Status,
     Thread, ThreadForkParams, ThreadGoal, ThreadGoalClearParams, ThreadGoalGetParams,
     ThreadGoalProgressParams, ThreadGoalSetParams, ThreadGoalStatus, ThreadListParams,
     ThreadReadParams, ThreadRequest, ThreadResponse, ThreadResumeParams, ThreadSetNameParams,
     ThreadStatus, ToolPayload, UserInputRequestEvent,
 };
-use codewhale_state::{
+use ghosty_state::{
     JobStateRecord, JobStateStatus, SessionSource, StateStore, ThreadGoalRecord,
     ThreadGoalStatus as PersistedThreadGoalStatus, ThreadListFilters, ThreadMetadata,
     ThreadStatus as PersistedThreadStatus,
 };
-use codewhale_tools::{ToolCall, ToolRegistry};
+use ghosty_tools::{ToolCall, ToolRegistry};
 use serde_json::{Value, json};
 use tokio::time;
 use uuid::Uuid;
@@ -199,10 +199,8 @@ pub struct JobRecord {
 /// free-form job detail is intentionally omitted because this owner does not
 /// classify it as safe for a cross-surface read model.
 #[must_use]
-pub fn job_record_to_agent_run(
-    record: &JobRecord,
-) -> codewhale_protocol::agent_run::AgentRunSnapshot {
-    use codewhale_protocol::agent_run::{
+pub fn job_record_to_agent_run(record: &JobRecord) -> ghosty_protocol::agent_run::AgentRunSnapshot {
+    use ghosty_protocol::agent_run::{
         AgentRunSnapshot, BudgetSummary, RunSource, RunState, TerminalOutcome, TerminalSummary,
     };
 
@@ -567,11 +565,11 @@ impl ThreadManager {
             cwd: cwd.clone(),
             cli_version: self.cli_version.clone(),
             source: match source {
-                SessionSource::Interactive => codewhale_protocol::SessionSource::Interactive,
-                SessionSource::Resume => codewhale_protocol::SessionSource::Resume,
-                SessionSource::Fork => codewhale_protocol::SessionSource::Fork,
-                SessionSource::Api => codewhale_protocol::SessionSource::Api,
-                SessionSource::Unknown => codewhale_protocol::SessionSource::Unknown,
+                SessionSource::Interactive => ghosty_protocol::SessionSource::Interactive,
+                SessionSource::Resume => ghosty_protocol::SessionSource::Resume,
+                SessionSource::Fork => ghosty_protocol::SessionSource::Fork,
+                SessionSource::Api => ghosty_protocol::SessionSource::Api,
+                SessionSource::Unknown => ghosty_protocol::SessionSource::Unknown,
             },
             name: None,
         };
@@ -1607,19 +1605,17 @@ impl Runtime {
         });
         for update in updates {
             let status = match update.status {
-                McpManagerStartupStatus::Starting => codewhale_protocol::McpStartupStatus::Starting,
-                McpManagerStartupStatus::Ready => codewhale_protocol::McpStartupStatus::Ready,
+                McpManagerStartupStatus::Starting => ghosty_protocol::McpStartupStatus::Starting,
+                McpManagerStartupStatus::Ready => ghosty_protocol::McpStartupStatus::Ready,
                 McpManagerStartupStatus::Failed { error } => {
-                    codewhale_protocol::McpStartupStatus::Failed { error }
+                    ghosty_protocol::McpStartupStatus::Failed { error }
                 }
-                McpManagerStartupStatus::Cancelled => {
-                    codewhale_protocol::McpStartupStatus::Cancelled
-                }
+                McpManagerStartupStatus::Cancelled => ghosty_protocol::McpStartupStatus::Cancelled,
             };
             self.hooks
                 .emit(HookEvent::GenericEventFrame {
                     frame: Box::new(EventFrame::McpStartupUpdate {
-                        update: codewhale_protocol::McpStartupUpdateEvent {
+                        update: ghosty_protocol::McpStartupUpdateEvent {
                             server_name: update.server_name,
                             status,
                         },
@@ -1630,12 +1626,12 @@ impl Runtime {
         self.hooks
             .emit(HookEvent::GenericEventFrame {
                 frame: Box::new(EventFrame::McpStartupComplete {
-                    summary: codewhale_protocol::McpStartupCompleteEvent {
+                    summary: ghosty_protocol::McpStartupCompleteEvent {
                         ready: summary.ready.clone(),
                         failed: summary
                             .failed
                             .iter()
-                            .map(|f| codewhale_protocol::McpStartupFailure {
+                            .map(|f| ghosty_protocol::McpStartupFailure {
                                 server_name: f.server_name.clone(),
                                 error: f.error.clone(),
                             })
@@ -1865,11 +1861,11 @@ fn to_protocol_thread(thread: ThreadMetadata) -> Thread {
         cwd: thread.cwd,
         cli_version: thread.cli_version,
         source: match thread.source {
-            SessionSource::Interactive => codewhale_protocol::SessionSource::Interactive,
-            SessionSource::Resume => codewhale_protocol::SessionSource::Resume,
-            SessionSource::Fork => codewhale_protocol::SessionSource::Fork,
-            SessionSource::Api => codewhale_protocol::SessionSource::Api,
-            SessionSource::Unknown => codewhale_protocol::SessionSource::Unknown,
+            SessionSource::Interactive => ghosty_protocol::SessionSource::Interactive,
+            SessionSource::Resume => ghosty_protocol::SessionSource::Resume,
+            SessionSource::Fork => ghosty_protocol::SessionSource::Fork,
+            SessionSource::Api => ghosty_protocol::SessionSource::Api,
+            SessionSource::Unknown => ghosty_protocol::SessionSource::Unknown,
         },
         name: thread.name,
     }
@@ -1912,13 +1908,13 @@ fn to_persisted_status(status: &ThreadStatus) -> PersistedThreadStatus {
     }
 }
 
-fn to_persisted_source(source: &codewhale_protocol::SessionSource) -> SessionSource {
+fn to_persisted_source(source: &ghosty_protocol::SessionSource) -> SessionSource {
     match source {
-        codewhale_protocol::SessionSource::Interactive => SessionSource::Interactive,
-        codewhale_protocol::SessionSource::Resume => SessionSource::Resume,
-        codewhale_protocol::SessionSource::Fork => SessionSource::Fork,
-        codewhale_protocol::SessionSource::Api => SessionSource::Api,
-        codewhale_protocol::SessionSource::Unknown => SessionSource::Unknown,
+        ghosty_protocol::SessionSource::Interactive => SessionSource::Interactive,
+        ghosty_protocol::SessionSource::Resume => SessionSource::Resume,
+        ghosty_protocol::SessionSource::Fork => SessionSource::Fork,
+        ghosty_protocol::SessionSource::Api => SessionSource::Api,
+        ghosty_protocol::SessionSource::Unknown => SessionSource::Unknown,
     }
 }
 
@@ -2066,7 +2062,7 @@ fn tool_payload_value(payload: &ToolPayload) -> Value {
     )
 }
 
-fn tool_output_value(output: &codewhale_protocol::ToolOutput) -> Value {
+fn tool_output_value(output: &ghosty_protocol::ToolOutput) -> Value {
     serde_json::to_value(output).unwrap_or_else(
         |_| json!({"type":"serialization_error","message":"tool output unavailable"}),
     )
@@ -2210,12 +2206,12 @@ fn job_state_status_to_runtime(status: JobStateStatus) -> JobStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codewhale_protocol::ThreadResumeParams;
-    use codewhale_tools::ToolCallSource;
+    use ghosty_protocol::ThreadResumeParams;
+    use ghosty_tools::ToolCallSource;
 
     fn temp_core_state(name: &str) -> StateStore {
         let dir =
-            std::env::temp_dir().join(format!("codewhale-core-{name}-{}", Uuid::new_v4().simple()));
+            std::env::temp_dir().join(format!("ghosty-core-{name}-{}", Uuid::new_v4().simple()));
         std::fs::create_dir_all(&dir).expect("create temp state dir");
         StateStore::open(Some(dir.join("state.db"))).expect("open state store")
     }
@@ -2231,7 +2227,7 @@ mod tests {
             updated_at: 10,
             status: PersistedThreadStatus::Running,
             path: None,
-            cwd: PathBuf::from("/tmp/codewhale"),
+            cwd: PathBuf::from("/tmp/ghosty"),
             cli_version: "0.0.0-test".to_string(),
             source: SessionSource::Interactive,
             name: None,
@@ -2291,7 +2287,7 @@ mod tests {
         let call = ToolCall {
             name: "exec_shell".to_string(),
             payload: ToolPayload::LocalShell {
-                params: codewhale_protocol::LocalShellParams {
+                params: ghosty_protocol::LocalShellParams {
                     command: "cargo test".to_string(),
                     cwd: None,
                     timeout_ms: None,
@@ -2901,7 +2897,7 @@ mod tests {
 
     #[test]
     fn job_record_to_agent_run_maps_non_terminal_states() {
-        use codewhale_protocol::agent_run::RunState;
+        use ghosty_protocol::agent_run::RunState;
 
         for (status, expected) in [
             (JobStatus::Queued, RunState::Queued),
@@ -2914,21 +2910,21 @@ mod tests {
             assert_eq!(snapshot.parent, None);
             assert_eq!(
                 snapshot.source,
-                codewhale_protocol::agent_run::RunSource::CoreJob
+                ghosty_protocol::agent_run::RunSource::CoreJob
             );
             assert_eq!(snapshot.state, expected);
             assert!(snapshot.terminal.is_none());
             assert!(snapshot.refs.is_empty());
             assert_eq!(
                 snapshot.budget,
-                codewhale_protocol::agent_run::BudgetSummary::default()
+                ghosty_protocol::agent_run::BudgetSummary::default()
             );
         }
     }
 
     #[test]
     fn job_record_to_agent_run_maps_terminal_states_without_fabricating_fields() {
-        use codewhale_protocol::agent_run::{RunState, TerminalOutcome};
+        use ghosty_protocol::agent_run::{RunState, TerminalOutcome};
 
         let cases = [
             (
@@ -2950,7 +2946,7 @@ mod tests {
             assert_eq!(terminal.detail, None);
             assert_eq!(
                 snapshot.budget,
-                codewhale_protocol::agent_run::BudgetSummary::default()
+                ghosty_protocol::agent_run::BudgetSummary::default()
             );
             assert!(snapshot.refs.is_empty());
             assert_eq!(snapshot.parent, None);
@@ -2984,7 +2980,7 @@ mod tests {
         let spawned = manager
             .spawn_thread_with_history(
                 "deepseek".to_string(),
-                PathBuf::from("/tmp/codewhale"),
+                PathBuf::from("/tmp/ghosty"),
                 InitialHistory::New,
                 true,
             )
@@ -3010,7 +3006,7 @@ mod tests {
         let archived = manager
             .resume_thread_with_history(
                 &resume_params,
-                Path::new("/tmp/codewhale"),
+                Path::new("/tmp/ghosty"),
                 "deepseek".to_string(),
             )
             .expect("resume archived thread")
@@ -3023,7 +3019,7 @@ mod tests {
         let restored = manager
             .resume_thread_with_history(
                 &resume_params,
-                Path::new("/tmp/codewhale"),
+                Path::new("/tmp/ghosty"),
                 "deepseek".to_string(),
             )
             .expect("resume unarchived thread")
@@ -3045,7 +3041,7 @@ mod tests {
         let spawned = manager
             .spawn_thread_with_history(
                 "deepseek".to_string(),
-                PathBuf::from("/tmp/codewhale"),
+                PathBuf::from("/tmp/ghosty"),
                 InitialHistory::Forked(history.clone()),
                 true,
             )
@@ -3081,7 +3077,7 @@ mod tests {
             manager
                 .resume_thread_with_history(
                     &resume_params,
-                    Path::new("/tmp/codewhale"),
+                    Path::new("/tmp/ghosty"),
                     "deepseek".to_string(),
                 )
                 .expect("resume thread")
@@ -3103,7 +3099,7 @@ mod tests {
         manager
             .resume_thread_with_history(
                 &resume_params,
-                Path::new("/tmp/codewhale"),
+                Path::new("/tmp/ghosty"),
                 "deepseek".to_string(),
             )
             .expect("resume thread")
@@ -3143,7 +3139,7 @@ mod tests {
         manager
             .resume_thread_with_history(
                 &resume_params,
-                Path::new("/tmp/codewhale"),
+                Path::new("/tmp/ghosty"),
                 "deepseek".to_string(),
             )
             .expect("resume thread")
@@ -3161,13 +3157,13 @@ mod tests {
     #[tokio::test]
     async fn invoke_tool_returns_timeout_status_for_slow_tools() {
         use async_trait::async_trait;
-        use codewhale_agent::ModelRegistry;
-        use codewhale_config::ConfigToml;
-        use codewhale_execpolicy::{AskForApproval, ExecPolicyEngine};
-        use codewhale_hooks::HookDispatcher;
-        use codewhale_mcp::McpManager;
-        use codewhale_protocol::{ToolKind, ToolOutput, ToolPayload};
-        use codewhale_tools::{FunctionCallError, ToolDescriptor, ToolHandler, ToolInvocation};
+        use ghosty_agent::ModelRegistry;
+        use ghosty_config::ConfigToml;
+        use ghosty_execpolicy::{AskForApproval, ExecPolicyEngine};
+        use ghosty_hooks::HookDispatcher;
+        use ghosty_mcp::McpManager;
+        use ghosty_protocol::{ToolKind, ToolOutput, ToolPayload};
+        use ghosty_tools::{FunctionCallError, ToolDescriptor, ToolHandler, ToolInvocation};
 
         struct SlowTool;
         #[async_trait]
@@ -3223,7 +3219,7 @@ mod tests {
                     raw_tool_call_id: None,
                 },
                 AskForApproval::Never,
-                Path::new("/tmp/codewhale"),
+                Path::new("/tmp/ghosty"),
             )
             .await
             .expect("invoke tool");
@@ -3252,7 +3248,7 @@ mod tests {
             .thread_manager
             .spawn_thread_with_history(
                 "deepseek".to_string(),
-                PathBuf::from("/tmp/codewhale"),
+                PathBuf::from("/tmp/ghosty"),
                 InitialHistory::New,
                 true,
             )

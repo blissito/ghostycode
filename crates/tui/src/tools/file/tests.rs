@@ -142,7 +142,7 @@ async fn contract_read_uses_magic_not_extension_for_images() {
     assert_eq!(image.content_blocks.len(), 1);
     assert!(matches!(
         &image.content_blocks[0],
-        codewhale_tools::ToolResultContentBlock::Image { mime_type, .. }
+        ghosty_tools::ToolResultContentBlock::Image { mime_type, .. }
             if mime_type == "image/png"
     ));
 }

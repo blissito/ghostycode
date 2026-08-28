@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---------- root tokens — Codewhale ocean ---------- */
+/* ---------- root tokens — Ghosty ocean ---------- */
 :root {
   /* RGB channel triples backing the Tailwind surface/ink tokens (see
      tailwind.config.ts). These carry the same light values as the hex vars
@@ -99,8 +99,8 @@ body {
   position: relative;
 }
 
-.codewhale-mark-primary { fill: var(--signal-gold); }
-.codewhale-mark-current { fill: #48d7ff; }
+.ghosty-mark-primary { fill: var(--signal-gold); }
+.ghosty-mark-current { fill: #48d7ff; }
 
 main, header, footer, nav { position: relative; z-index: 1; }
 
@@ -822,7 +822,7 @@ mark.search-highlight {
     animation: cw-breath 90s ease-in-out infinite;
   }
 
-  .codewhale-caustic {
+  .ghosty-caustic {
     animation: cw-caustic 4s cubic-bezier(0.37, 0, 0.63, 1) infinite;
   }
 }
@@ -2670,7 +2670,7 @@ html[lang="ko"] .ocean-column h2 {
 }
 
 /* `❯` sits inside the plate, where the TUI puts it — a code-owned literal in
-   the same class as `Codewhale` and `npm install -g codewhale`. */
+   the same class as `Ghosty` and `npm install -g ghosty`. */
 .product-composer {
   position: relative;
 }

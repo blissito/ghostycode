@@ -2,7 +2,7 @@
 //!
 //! FEAT-014 defines shapes only. It does not implement them for `App`, change
 //! production dispatch, move localization or shared TUI types, or move command
-//! files. Later FEATs first adopt these shapes inside `codewhale-tui` one group
+//! files. Later FEATs first adopt these shapes inside `ghosty-tui` one group
 //! per PR; only after all groups are decoupled will they move to a commands
 //! crate, again one group per PR.
 

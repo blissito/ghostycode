@@ -191,7 +191,7 @@ impl Drop for InteractiveTerminalGuard {
 }
 
 pub(crate) fn emit_tool_audit(event: serde_json::Value) {
-    let Some(path) = std::env::var_os("CODEWHALE_TOOL_AUDIT_LOG")
+    let Some(path) = std::env::var_os("GHOSTY_TOOL_AUDIT_LOG")
         .or_else(|| std::env::var_os("DEEPSEEK_TOOL_AUDIT_LOG"))
     else {
         return;
@@ -510,10 +510,10 @@ impl Engine {
         // The surface-agnostic choke point for every tool call, so this one
         // bump covers exec and the CLI as well as the TUI. `memory_search` is
         // counted here for the same reason — one site, not one per tool.
-        let telemetry = codewhale_telemetry::session_counters();
-        telemetry.bump(codewhale_telemetry::Counter::ToolCalls);
+        let telemetry = ghosty_telemetry::session_counters();
+        telemetry.bump(ghosty_telemetry::Counter::ToolCalls);
         if tool_name == "memory_search" {
-            telemetry.bump(codewhale_telemetry::Counter::MemorySearch);
+            telemetry.bump(ghosty_telemetry::Counter::MemorySearch);
         }
         match &outcome {
             Ok(result) => {
@@ -543,10 +543,10 @@ impl Engine {
                 // variants render a literal source fragment the model emitted.
                 match err {
                     ToolError::PermissionDenied { .. } => {
-                        telemetry.bump_error(codewhale_telemetry::ErrorCounter::ToolDeniedByPolicy)
+                        telemetry.bump_error(ghosty_telemetry::ErrorCounter::ToolDeniedByPolicy)
                     }
                     ToolError::Timeout { .. } => {
-                        telemetry.bump_error(codewhale_telemetry::ErrorCounter::ToolTimeout);
+                        telemetry.bump_error(ghosty_telemetry::ErrorCounter::ToolTimeout);
                     }
                     _ => {}
                 }

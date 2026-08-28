@@ -10,12 +10,12 @@
 
 use std::path::{Path, PathBuf};
 
-use codewhale_config::{ResolvedRuntimeOptions, SetupState};
+use ghosty_config::{ResolvedRuntimeOptions, SetupState};
 
 use crate::buffer;
 use crate::event::Surface;
 
-/// Directory name under `$CODEWHALE_HOME` that holds every telemetry file.
+/// Directory name under `$GHOSTY_HOME` that holds every telemetry file.
 pub const TELEMETRY_DIR: &str = "telemetry";
 
 /// The outcome of the emit predicate.
@@ -23,8 +23,8 @@ pub const TELEMETRY_DIR: &str = "telemetry";
 /// The split between [`Self::OptedOut`] and [`Self::ForcedOff`] is load-bearing,
 /// not cosmetic. A run-scoped kill switch also resolves telemetry to false, so
 /// a wipe keyed on that value would delete a user's identity and unflushed
-/// buffer every time they ran one `codewhale exec` with a
-/// transient `CODEWHALE_TELEMETRY=0` — the recipe the runtime docs themselves
+/// buffer every time they ran one `ghosty exec` with a
+/// transient `GHOSTY_TELEMETRY=0` — the recipe the runtime docs themselves
 /// prescribe.
 #[derive(Debug)]
 pub enum TelemetryDecision {
@@ -78,7 +78,7 @@ impl TelemetryConsent {
     /// path can re-resolve from it.
     ///
     /// Without this the documented mid-session opt-out —
-    /// `codewhale config set telemetry false`, an external write by another
+    /// `ghosty config set telemetry false`, an external write by another
     /// process — would never be observed by a session that is already running.
     #[must_use]
     pub fn with_config_path(mut self, config_path: Option<PathBuf>) -> Self {
@@ -92,7 +92,7 @@ impl TelemetryConsent {
         self.config_path.as_deref()
     }
 
-    /// `$CODEWHALE_HOME/telemetry`.
+    /// `$GHOSTY_HOME/telemetry`.
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
@@ -155,7 +155,7 @@ impl EndpointError {
 /// where a batch never reaches a wire — that is the staging and dogfood case.
 ///
 /// There is deliberately **no environment variable that overrides this**.
-/// `CODEWHALE_ALLOW_INSECURE_HTTP` is not consulted: it authorizes an insecure
+/// `GHOSTY_ALLOW_INSECURE_HTTP` is not consulted: it authorizes an insecure
 /// *provider* base URL, for harnesses that legitimately intercept model traffic,
 /// and reusing it would let that interception decision also authorize plaintext
 /// telemetry POSTs to an arbitrary host. Two unrelated trust decisions must not
@@ -194,7 +194,7 @@ fn is_loopback_host(host: Option<&str>) -> bool {
     }
 }
 
-/// Resolve the emit predicate, reading the Codewhale home from the environment.
+/// Resolve the emit predicate, reading the Ghosty home from the environment.
 ///
 /// See [`decide_in_home`] for the injectable form used by tests.
 pub fn decide(
@@ -202,10 +202,10 @@ pub fn decide(
     setup: &SetupState,
     surface: Surface,
 ) -> TelemetryDecision {
-    // `codewhale_home()` returns `Ok(None)` when no home can be resolved, and
+    // `ghosty_home()` returns `Ok(None)` when no home can be resolved, and
     // an error when an explicit override was unusable. Both are "we have
     // nowhere to keep state", which is `ForcedOff`, never a wipe.
-    let home = codewhale_paths::codewhale_home().ok().flatten();
+    let home = ghosty_paths::ghosty_home().ok().flatten();
     decide_in_home(home.as_deref(), resolved, setup, surface)
 }
 
@@ -232,7 +232,7 @@ pub fn load_setup_state_for_decision_at(path: &Path) -> Option<SetupState> {
     }
 }
 
-/// Resolve the emit predicate against an explicit Codewhale home.
+/// Resolve the emit predicate against an explicit Ghosty home.
 ///
 /// The predicate, in order:
 ///
@@ -336,7 +336,7 @@ pub(crate) fn permission_still_enabled(config_path: Option<&Path>, expected_root
     let Ok(setup_path) = SetupState::path() else {
         return false;
     };
-    let home = codewhale_paths::codewhale_home().ok().flatten();
+    let home = ghosty_paths::ghosty_home().ok().flatten();
     permission_still_enabled_in_home(config_path, &setup_path, home.as_deref(), expected_root)
 }
 
@@ -346,12 +346,12 @@ pub(crate) fn permission_still_enabled_in_home(
     home: Option<&Path>,
     expected_root: &Path,
 ) -> bool {
-    let Ok(store) = codewhale_config::ConfigStore::load(config_path.map(Path::to_path_buf)) else {
+    let Ok(store) = ghosty_config::ConfigStore::load(config_path.map(Path::to_path_buf)) else {
         return false;
     };
     let resolved = store
         .config
-        .resolve_runtime_options(&codewhale_config::CliRuntimeOverrides::default());
+        .resolve_runtime_options(&ghosty_config::CliRuntimeOverrides::default());
     let Some(setup) = load_setup_state_for_decision_at(setup_path) else {
         return false;
     };
@@ -364,7 +364,7 @@ pub(crate) fn permission_still_enabled_in_home(
 /// Re-run the predicate from the filesystem, for the flush path.
 ///
 /// Loads the same config file the process was launched with and the current
-/// setup state, so a `codewhale config set telemetry false` written by another
+/// setup state, so a `ghosty config set telemetry false` written by another
 /// process between init and flush is honoured. Returns `ForcedOff` if either
 /// load fails: a flush is never the right place to guess.
 #[must_use]
@@ -380,12 +380,12 @@ pub(crate) fn re_decide_with_setup_path(
     setup_path: &Path,
     surface: Surface,
 ) -> TelemetryDecision {
-    let Ok(store) = codewhale_config::ConfigStore::load(config_path.map(Path::to_path_buf)) else {
+    let Ok(store) = ghosty_config::ConfigStore::load(config_path.map(Path::to_path_buf)) else {
         return TelemetryDecision::ForcedOff;
     };
     let resolved = store
         .config
-        .resolve_runtime_options(&codewhale_config::CliRuntimeOverrides::default());
+        .resolve_runtime_options(&ghosty_config::CliRuntimeOverrides::default());
     let Some(setup) = load_setup_state_for_decision_at(setup_path) else {
         return TelemetryDecision::ForcedOff;
     };

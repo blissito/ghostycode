@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-//! Feature flags and metadata for codewhale.
+//! Feature flags and metadata for ghosty.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Write as _};

@@ -22,15 +22,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-/// Filename of the on-disk update-check cache, relative to the CodeWhale home
-/// directory (`~/.codewhale/update-check.json` by default).
+/// Filename of the on-disk update-check cache, relative to the GhostyCode home
+/// directory (`~/.ghosty/update-check.json` by default).
 pub const UPDATE_CHECK_CACHE_FILE: &str = "update-check.json";
 
 /// Default hours between network update checks.
 pub const DEFAULT_CHECK_INTERVAL_HOURS: u64 = 1;
 
 /// Explicit opt-out, and the `update-notifier` convention many CLIs honour.
-const OPT_OUT_ENV: &[&str] = &["CODEWHALE_NO_UPDATE_CHECK", "NO_UPDATE_NOTIFIER"];
+const OPT_OUT_ENV: &[&str] = &["GHOSTY_NO_UPDATE_CHECK", "NO_UPDATE_NOTIFIER"];
 
 /// Environment variables whose presence means "this is an automated build".
 const CI_ENV: &[&str] = &[
@@ -160,10 +160,10 @@ impl UpdateCheckCache {
     }
 }
 
-/// Resolve the cache path inside a CodeWhale home directory.
+/// Resolve the cache path inside a GhostyCode home directory.
 #[must_use]
-pub fn cache_path_in(codewhale_home: &Path) -> PathBuf {
-    codewhale_home.join(UPDATE_CHECK_CACHE_FILE)
+pub fn cache_path_in(ghosty_home: &Path) -> PathBuf {
+    ghosty_home.join(UPDATE_CHECK_CACHE_FILE)
 }
 
 /// Current Unix time in seconds, saturating at 0 for pre-epoch clocks.
@@ -270,8 +270,8 @@ mod tests {
     #[test]
     fn suppression_reason_names_the_responsible_variable() {
         assert_eq!(
-            SuppressionReason::OptOut("CODEWHALE_NO_UPDATE_CHECK").variable(),
-            "CODEWHALE_NO_UPDATE_CHECK"
+            SuppressionReason::OptOut("GHOSTY_NO_UPDATE_CHECK").variable(),
+            "GHOSTY_NO_UPDATE_CHECK"
         );
         assert_eq!(
             SuppressionReason::ContinuousIntegration("CI").variable(),

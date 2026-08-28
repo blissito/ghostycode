@@ -5,16 +5,16 @@
 //! everything client-specific lives under `extensions`, keyed by reverse-domain
 //! namespace), a sibling `mcp.json` for MCP servers (the manifest root is
 //! closed, so servers cannot live in `plugin.json`), and a `skills/<name>/
-//! SKILL.md` tree that already matches Codewhale's skill layout.
+//! SKILL.md` tree that already matches Ghosty's skill layout.
 //!
-//! This module owns the mapping between that format and Codewhale's internal
+//! This module owns the mapping between that format and Ghosty's internal
 //! [`PluginManifest`]:
 //!
 //! * **Consume** — [`parse_plugin_json`] + [`standard_to_manifest`] and
 //!   [`parse_mcp_json`]. Unknown `extensions` namespaces are ignored, never
 //!   rejected: that is what lets a Cursor- or Copilot-authored plugin load
-//!   here. Codewhale-specific fields round-trip through
-//!   `extensions["net.codewhale"]`.
+//!   here. Ghosty-specific fields round-trip through
+//!   `extensions["net.ghosty"]`.
 //! * **Publish** — [`manifest_to_standard`], emitting a spec-valid
 //!   `plugin.json` (+ `mcp.json` when servers exist). [`validate_plugin_json`]
 //!   and [`validate_mcp_json`] re-check every emission against the standard's
@@ -41,11 +41,11 @@ use super::manifest::{
 use crate::mcp::{McpServerConfig, McpServerOAuthConfig};
 
 /// Manifest file names, in discovery preference order. `plugin.json` is the
-/// native Agent Plugins format; `plugin.toml` is the legacy Codewhale format
+/// native Agent Plugins format; `plugin.toml` is the legacy Ghosty format
 /// and stays readable.
 pub const PLUGIN_JSON_NAME: &str = "plugin.json";
 pub const PLUGIN_TOML_NAME: &str = "plugin.toml";
-/// Kimi Code's native plugin manifest. Codewhale consumes the compatible
+/// Kimi Code's native plugin manifest. Ghosty consumes the compatible
 /// Skills and MCP subset directly so official Kimi bundles do not need to be
 /// rewritten or copied by hand before installation.
 pub const KIMI_PLUGIN_JSON_NAME: &str = "kimi.plugin.json";
@@ -56,8 +56,8 @@ pub const MCP_JSON_NAME: &str = "mcp.json";
 pub const PLUGIN_SCHEMA_URL: &str = "https://agent-plugins.org/schemas/plugin.json";
 pub const MCP_SCHEMA_URL: &str = "https://agent-plugins.org/schemas/mcp.json";
 
-/// Codewhale's reverse-domain extension namespace.
-pub const CODEWHALE_NAMESPACE: &str = "net.codewhale";
+/// Ghosty's reverse-domain extension namespace.
+pub const GHOSTY_NAMESPACE: &str = "net.ghosty";
 
 /// `env` keys a plugin may never define: the host runtime owns these.
 const RESERVED_MCP_ENV_NAMES: [&str; 2] = ["PLUGIN_ROOT", "PLUGIN_DATA"];
@@ -299,7 +299,7 @@ impl KimiMcpServer {
 
 /// Parse the Skills/MCP-compatible subset of a Kimi Code plugin manifest.
 ///
-/// The input shape is deliberately closed. Kimi capabilities Codewhale does
+/// The input shape is deliberately closed. Kimi capabilities Ghosty does
 /// not yet implement (for example lifecycle hooks or prompt injection) fail
 /// validation instead of being silently dropped and then presented as fully
 /// working. In addition to the Skills-only official bundles, this accepts the
@@ -485,13 +485,13 @@ pub struct StandardAuthor {
     pub url: Option<String>,
 }
 
-/// Codewhale's own `extensions["net.codewhale"]` payload: every manifest
+/// Ghosty's own `extensions["net.ghosty"]` payload: every manifest
 /// concept the standard does not define. Unknown keys inside our own namespace
 /// are rejected (`deny_unknown_fields`) — the ignore-unknowns rule applies to
-/// *other* vendors' namespaces, not to a silently dropped Codewhale field.
+/// *other* vendors' namespaces, not to a silently dropped Ghosty field.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CodewhalePluginExtension {
+pub struct GhostyPluginExtension {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -512,7 +512,7 @@ pub struct CodewhalePluginExtension {
     pub when: Option<PluginWhen>,
 }
 
-impl CodewhalePluginExtension {
+impl GhostyPluginExtension {
     #[must_use]
     fn is_empty(&self) -> bool {
         self.display_name.is_none()
@@ -540,8 +540,8 @@ pub struct StandardMcpFile {
 
 /// One `mcp.json` server entry. Transports: `stdio` (command/args/env/cwd),
 /// `streamable-http` (url/headers), and `sse` (url/headers). `type` may be
-/// omitted and is then inferred from `command` vs `url`. Codewhale-only
-/// server options ride in `extensions["net.codewhale"]`.
+/// omitted and is then inferred from `command` vs `url`. Ghosty-only
+/// server options ride in `extensions["net.ghosty"]`.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StandardMcpServer {
@@ -563,13 +563,13 @@ pub struct StandardMcpServer {
     pub extensions: BTreeMap<String, serde_json::Value>,
 }
 
-/// Codewhale-only MCP server options, carried per-server under
-/// `extensions["net.codewhale"]` in `mcp.json` so the standard fields round-
-/// trip losslessly with Codewhale's richer review model (timeouts, tool
+/// Ghosty-only MCP server options, carried per-server under
+/// `extensions["net.ghosty"]` in `mcp.json` so the standard fields round-
+/// trip losslessly with Ghosty's richer review model (timeouts, tool
 /// filters, env-backed credentials, enablement).
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CodewhaleMcpExtension {
+pub struct GhostyMcpExtension {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env_headers: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -598,7 +598,7 @@ pub struct CodewhaleMcpExtension {
     pub oauth_resource: Option<String>,
 }
 
-impl CodewhaleMcpExtension {
+impl GhostyMcpExtension {
     #[must_use]
     fn is_empty(&self) -> bool {
         self.env_headers.is_empty()
@@ -655,7 +655,7 @@ fn standard_server_to_config(
     id: &str,
     server: StandardMcpServer,
 ) -> Result<McpServerConfig, String> {
-    let extension = codewhale_mcp_extension(&server.extensions)?;
+    let extension = ghosty_mcp_extension(&server.extensions)?;
     let transport = resolve_transport(id, &server)?;
     let (command, url, sse) = match transport {
         StandardTransport::Stdio => {
@@ -744,34 +744,34 @@ fn resolve_transport(id: &str, server: &StandardMcpServer) -> Result<StandardTra
     }
 }
 
-fn codewhale_mcp_extension(
+fn ghosty_mcp_extension(
     extensions: &BTreeMap<String, serde_json::Value>,
-) -> Result<CodewhaleMcpExtension, String> {
-    match extensions.get(CODEWHALE_NAMESPACE) {
+) -> Result<GhostyMcpExtension, String> {
+    match extensions.get(GHOSTY_NAMESPACE) {
         Some(value) => serde_json::from_value(value.clone()).map_err(|error| {
-            format!("mcp.json server extensions[\"{CODEWHALE_NAMESPACE}\"] is invalid: {error}")
+            format!("mcp.json server extensions[\"{GHOSTY_NAMESPACE}\"] is invalid: {error}")
         }),
-        None => Ok(CodewhaleMcpExtension::default()),
+        None => Ok(GhostyMcpExtension::default()),
     }
 }
 
 /// Convert a parsed `plugin.json` (+ its sibling `mcp.json` servers, when the
 /// file exists) into the internal manifest. `root` is the bundle directory:
 /// the standard fixes the skills layout at `skills/`, so a bundle with no
-/// Codewhale extension gets the default skills spec exactly when that
+/// Ghosty extension gets the default skills spec exactly when that
 /// directory exists.
 pub fn standard_to_manifest(
     standard: StandardPluginManifest,
     mcp_servers: Option<HashMap<String, McpServerConfig>>,
     root: &Path,
 ) -> Result<PluginManifest, String> {
-    let extension = match standard.extensions.get(CODEWHALE_NAMESPACE) {
+    let extension = match standard.extensions.get(GHOSTY_NAMESPACE) {
         Some(value) => {
-            serde_json::from_value::<CodewhalePluginExtension>(value.clone()).map_err(|error| {
-                format!("plugin.json extensions[\"{CODEWHALE_NAMESPACE}\"] is invalid: {error}")
+            serde_json::from_value::<GhostyPluginExtension>(value.clone()).map_err(|error| {
+                format!("plugin.json extensions[\"{GHOSTY_NAMESPACE}\"] is invalid: {error}")
             })?
         }
-        None => CodewhalePluginExtension::default(),
+        None => GhostyPluginExtension::default(),
     };
     let skills = extension.skills.or_else(|| {
         root.join("skills").is_dir().then(|| PluginPathSpec {
@@ -806,7 +806,7 @@ pub fn standard_to_manifest(
 
 /// `author: {name, email, url}` flattens onto the internal free-form author
 /// string (`name <email> (url)`). The inverse mapping keeps the whole string
-/// in `author.name`, so a Codewhale-origin author round-trips verbatim.
+/// in `author.name`, so a Ghosty-origin author round-trips verbatim.
 fn compose_author(author: StandardAuthor) -> Result<String, String> {
     let name = author.name.trim();
     if name.is_empty() {
@@ -874,7 +874,7 @@ pub fn manifest_to_standard(
         manifest.plugin.display_name.clone()
     };
 
-    let extension = CodewhalePluginExtension {
+    let extension = GhostyPluginExtension {
         display_name: display_name.clone(),
         skills: manifest
             .skills
@@ -908,8 +908,8 @@ pub fn manifest_to_standard(
             BTreeMap::new()
         } else {
             let value = serde_json::to_value(&extension)
-                .map_err(|error| format!("failed to encode Codewhale extension: {error}"))?;
-            BTreeMap::from([(CODEWHALE_NAMESPACE.to_string(), value)])
+                .map_err(|error| format!("failed to encode Ghosty extension: {error}"))?;
+            BTreeMap::from([(GHOSTY_NAMESPACE.to_string(), value)])
         },
     };
 
@@ -953,7 +953,7 @@ fn config_to_standard_server(
     id: &str,
     config: &McpServerConfig,
 ) -> Result<StandardMcpServer, String> {
-    let extension = CodewhaleMcpExtension {
+    let extension = GhostyMcpExtension {
         env_headers: config
             .env_headers
             .iter()
@@ -976,8 +976,8 @@ fn config_to_standard_server(
         BTreeMap::new()
     } else {
         let value = serde_json::to_value(&extension)
-            .map_err(|error| format!("failed to encode Codewhale MCP extension: {error}"))?;
-        BTreeMap::from([(CODEWHALE_NAMESPACE.to_string(), value)])
+            .map_err(|error| format!("failed to encode Ghosty MCP extension: {error}"))?;
+        BTreeMap::from([(GHOSTY_NAMESPACE.to_string(), value)])
     };
     match (config.command.as_deref(), config.url.as_deref()) {
         (Some(command), None) => {
@@ -1036,7 +1036,7 @@ fn config_to_standard_server(
 // Emission conformance checks
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Every document Codewhale writes is re-validated against the standard's shape
+// Every document Ghosty writes is re-validated against the standard's shape
 // before it hits disk; the same functions back the schema-conformance tests.
 
 /// Validate a serialized `plugin.json` value against the standard's shape:
@@ -1287,7 +1287,7 @@ fn optional_string(
 mod tests {
     use super::*;
 
-    /// A full-featured legacy manifest: every Codewhale-specific field the
+    /// A full-featured legacy manifest: every Ghosty-specific field the
     /// standard does not define, plus both MCP transports.
     const ROUND_TRIP_TOML: &str = r#"schema_version = 1
 
@@ -1432,21 +1432,17 @@ env_headers = { Authorization = "ROUND_TRIP_REMOTE_TOKEN" }
         let internal: PluginManifest = toml::from_str(ROUND_TRIP_TOML).unwrap();
         let emission = manifest_to_standard(&internal, &BTreeSet::new()).unwrap();
         let plugin_value = serde_json::to_value(&emission.plugin_json).unwrap();
-        // mcp_servers never leak into the closed plugin.json root; Codewhale
+        // mcp_servers never leak into the closed plugin.json root; Ghosty
         // data is namespaced.
         assert!(plugin_value.get("mcp_servers").is_none());
         assert!(plugin_value.get("mcpServers").is_none());
-        assert!(
-            plugin_value["extensions"]
-                .get(CODEWHALE_NAMESPACE)
-                .is_some()
-        );
+        assert!(plugin_value["extensions"].get(GHOSTY_NAMESPACE).is_some());
         let mcp_value = serde_json::to_value(emission.mcp_json.as_ref().unwrap()).unwrap();
         assert_eq!(mcp_value["$schema"], serde_json::json!(MCP_SCHEMA_URL));
         assert_eq!(mcp_value["mcpServers"]["local"]["type"], "stdio");
         assert_eq!(mcp_value["mcpServers"]["remote"]["type"], "sse");
         assert_eq!(
-            mcp_value["mcpServers"]["remote"]["extensions"][CODEWHALE_NAMESPACE]["connect_timeout"],
+            mcp_value["mcpServers"]["remote"]["extensions"][GHOSTY_NAMESPACE]["connect_timeout"],
             serde_json::json!(30)
         );
     }
@@ -1459,7 +1455,7 @@ env_headers = { Authorization = "ROUND_TRIP_REMOTE_TOKEN" }
         let emission = manifest_to_standard(&internal, &BTreeSet::new()).unwrap();
         assert_eq!(emission.exported_name, "foo-bar");
         assert_eq!(emission.display_name.as_deref(), Some("Foo--Bar"));
-        let extension = emission.plugin_json.extensions[CODEWHALE_NAMESPACE].clone();
+        let extension = emission.plugin_json.extensions[GHOSTY_NAMESPACE].clone();
         assert_eq!(extension["display_name"], serde_json::json!("Foo--Bar"));
         validate_plugin_json(&serde_json::to_value(&emission.plugin_json).unwrap()).unwrap();
 
@@ -1477,7 +1473,7 @@ env_headers = { Authorization = "ROUND_TRIP_REMOTE_TOKEN" }
             "author": {"name": "Acme", "email": "plugins@acme.example", "url": "https://acme.example"},
             "extensions": {
                 "com.example.client": {"anything": [1, 2, 3], "nested": {"x": true}},
-                "net.codewhale": {"when": {"os": ["macos"]}}
+                "net.ghosty": {"when": {"os": ["macos"]}}
             }
         }"#;
         let standard = parse_plugin_json(text).unwrap();
@@ -1501,7 +1497,7 @@ env_headers = { Authorization = "ROUND_TRIP_REMOTE_TOKEN" }
         let bad_extension = r#"{
             "$schema": "https://agent-plugins.org/schemas/plugin.json",
             "name": "acme.tools",
-            "extensions": {"net.codewhale": {"surprise": true}}
+            "extensions": {"net.ghosty": {"surprise": true}}
         }"#;
         let standard = parse_plugin_json(bad_extension).unwrap();
         assert!(standard_to_manifest(standard, None, tmp.path()).is_err());
@@ -1551,7 +1547,7 @@ env_headers = { Authorization = "ROUND_TRIP_REMOTE_TOKEN" }
         }
 
         let extended = r#"{"mcpServers": {"r": {"url": "https://example.com/mcp",
-            "extensions": {"net.codewhale": {"connect_timeout": 30, "required": true,
+            "extensions": {"net.ghosty": {"connect_timeout": 30, "required": true,
                 "env_headers": {"Authorization": "TOKEN_ENV"}}}}}}"#;
         let servers = parse_mcp_json(extended).unwrap();
         assert_eq!(servers["r"].connect_timeout, Some(30));

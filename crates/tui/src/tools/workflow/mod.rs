@@ -1,6 +1,6 @@
 //! Model-facing Workflow runner over the live sub-agent runtime.
 //!
-//! The JS VM stays in `codewhale-workflow-js`; this module supplies the TUI
+//! The JS VM stays in `ghosty-workflow-js`; this module supplies the TUI
 //! driver that turns each `task(...)` call into a real `SubAgentManager` spawn.
 
 use std::collections::{HashMap, HashSet};
@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use codewhale_workflow::{
+use ghosty_workflow::{
     AgentType, BranchResult, BranchSpec, BudgetSpec, ControlNodeKind, ControlNodeResult,
     FleetRoleMap, GateKind, GateOn, GateOutcome, GateSpec, GateState, GateStatusLine,
     HandoffArtifact, LaneGateBoard, LeafResult, LeafSpec, ReduceSpec, SequenceSpec, TaskMode,
@@ -19,7 +19,7 @@ use codewhale_workflow::{
     compile_javascript_workflow, compile_typescript_workflow, leaf_wants_worktree,
     resolve_workflow_agent,
 };
-use codewhale_workflow_js::{
+use ghosty_workflow_js::{
     BudgetSnapshot, DriverError, ProgressEvent, SCHEMA_RAW_PREVIEW_CHARS, SpawnedTask,
     TaskCompletion, TaskRequest, WORKFLOW_MAX_CONCURRENT, WorkflowDriver, WorkflowRunCancel,
     WorkflowVm,
@@ -56,7 +56,7 @@ use crate::work_graph::{
 const WORKFLOW_HANDOFF_MAX_CHARS: usize = 4_000;
 
 /// Model-facing run-record payloads carry only the newest events; the full
-/// stream persists per-event in `.codewhale/workflow-runs.jsonl` (#2974).
+/// stream persists per-event in `.ghosty/workflow-runs.jsonl` (#2974).
 const WORKFLOW_RESULT_EVENTS_TAIL: usize = 50;
 /// Bounded tail for free-form progress lines in model-facing payloads.
 const WORKFLOW_RESULT_PROGRESS_TAIL: usize = 20;
@@ -536,7 +536,7 @@ struct WorkflowTaskStartedEvent {
     /// when a Router made it. `default` keeps events written before this field
     /// existed — and every legacy/non-fleet task — readable unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    fleet_receipt: Option<codewhale_workflow::FleetTaskReceipt>,
+    fleet_receipt: Option<ghosty_workflow::FleetTaskReceipt>,
 }
 
 impl WorkflowUiEventKind {
@@ -671,7 +671,7 @@ impl WorkflowRunRecord {
     /// Record one event, bounding retention to the newest
     /// `WORKFLOW_RUN_EVENTS_MAX_RETAINED` entries (#2974). Every event is
     /// journaled per-line at record time, so evicted entries remain
-    /// available in `.codewhale/workflow-runs.jsonl`.
+    /// available in `.ghosty/workflow-runs.jsonl`.
     fn push_event(&mut self, event: WorkflowUiEvent) {
         self.events_total = self.events_total.saturating_add(1);
         self.events.push(event);
@@ -867,7 +867,7 @@ impl ToolSpec for WorkflowTool {
                 },
                 "fleet": {
                     "type": "string",
-                    "description": "Named Fleet from $CODEWHALE_HOME/fleets/ or workspace fleets/; qualified origin/name accepted. Exact Fleets freeze member identity, route, and reasoning. Runtime derives authority from role and live parent; per-task route/authority overrides are rejected."
+                    "description": "Named Fleet from $GHOSTY_HOME/fleets/ or workspace fleets/; qualified origin/name accepted. Exact Fleets freeze member identity, route, and reasoning. Runtime derives authority from role and live parent; per-task route/authority overrides are rejected."
                 },
                 "plan": {
                     "type": "object",
@@ -955,7 +955,7 @@ impl ToolSpec for WorkflowTool {
         // `wait`, `list`, `inspect`, `stop`, and `abort`, and its reject arm
         // embeds the model's string verbatim.
         let action = parse_workflow_action(&input)?;
-        codewhale_telemetry::session_counters().bump(codewhale_telemetry::Counter::WorkflowRun);
+        ghosty_telemetry::session_counters().bump(ghosty_telemetry::Counter::WorkflowRun);
         match action {
             WorkflowAction::Start => {
                 let wait = optional_bool(&input, "wait", false)?;
@@ -1499,7 +1499,7 @@ fn apply_named_fleet_to_task_request(
 /// [`route_admitted_exact_task`].
 fn bind_exact_fleet_task_request(
     operation: &crate::fleet::exact::ExactFleetWorkflow,
-    session: codewhale_workflow::PermissionCeiling,
+    session: ghosty_workflow::PermissionCeiling,
     request: &mut TaskRequest,
 ) -> Result<crate::fleet::exact::ExactMemberBinding, DriverError> {
     let fleet = operation.snapshot().fleet().qualified();
@@ -1577,7 +1577,7 @@ fn bind_exact_fleet_task_request(
 /// own field. Non-Fleet tasks keep the previous metadata-then-request order
 /// exactly.
 fn displayed_resolved_role(
-    fleet_receipt: Option<&codewhale_workflow::FleetTaskReceipt>,
+    fleet_receipt: Option<&ghosty_workflow::FleetTaskReceipt>,
     metadata_role: Option<&str>,
     request_role: Option<&str>,
 ) -> Option<String> {
@@ -1592,10 +1592,7 @@ fn displayed_resolved_role(
 /// Kept separate from the recorder so the wording is testable without a live
 /// driver, and so the receipt's own content-free `line()` stays the single
 /// source of what a receipt may say.
-fn orphaned_fleet_receipt_line(
-    receipt: &codewhale_workflow::FleetTaskReceipt,
-    error: &str,
-) -> String {
+fn orphaned_fleet_receipt_line(receipt: &ghosty_workflow::FleetTaskReceipt, error: &str) -> String {
     format!(
         "fleet route {} spawn_failed=true reason={}",
         receipt.line(),
@@ -1650,7 +1647,7 @@ async fn route_admitted_exact_task(
     operation: &crate::fleet::exact::ExactFleetWorkflow,
     binding: &crate::fleet::exact::ExactMemberBinding,
     request: &mut TaskRequest,
-) -> Result<codewhale_workflow::FleetTaskReceipt, DriverError> {
+) -> Result<ghosty_workflow::FleetTaskReceipt, DriverError> {
     let fleet = operation.snapshot().fleet().qualified();
     let launch = operation
         .route_admitted_task(binding, &request.description)
@@ -1896,8 +1893,8 @@ mod report;
 use report::{bounded_raw_preview, write_run_report_artifact, write_schema_raw_artifact};
 
 fn session_workflow_config_store()
--> &'static Mutex<HashMap<PathBuf, codewhale_config::WorkflowConfigToml>> {
-    static STORE: OnceLock<Mutex<HashMap<PathBuf, codewhale_config::WorkflowConfigToml>>> =
+-> &'static Mutex<HashMap<PathBuf, ghosty_config::WorkflowConfigToml>> {
+    static STORE: OnceLock<Mutex<HashMap<PathBuf, ghosty_config::WorkflowConfigToml>>> =
         OnceLock::new();
     STORE.get_or_init(|| Mutex::new(HashMap::new()))
 }
@@ -1913,7 +1910,7 @@ fn workflow_session_key(workspace: &Path) -> PathBuf {
 /// so a refresh cannot leave the two surfaces disagreeing.
 pub(crate) fn set_session_workflow_config(
     workspace: &Path,
-    config: codewhale_config::WorkflowConfigToml,
+    config: ghosty_config::WorkflowConfigToml,
 ) {
     session_workflow_config_store()
         .lock()
@@ -1925,7 +1922,7 @@ pub(crate) fn set_session_workflow_config(
 /// one for this workspace.
 pub(crate) fn session_workflow_config(
     workspace: &Path,
-) -> Option<codewhale_config::WorkflowConfigToml> {
+) -> Option<ghosty_config::WorkflowConfigToml> {
     session_workflow_config_store()
         .lock()
         .unwrap_or_else(|poison| poison.into_inner())
@@ -1935,7 +1932,7 @@ pub(crate) fn session_workflow_config(
 
 /// The effective `[workflow]` table: the refreshed session table when one has
 /// been installed, otherwise the runtime snapshot, otherwise product defaults.
-fn workflow_config_for(runtime: &SubAgentRuntime) -> codewhale_config::WorkflowConfigToml {
+fn workflow_config_for(runtime: &SubAgentRuntime) -> ghosty_config::WorkflowConfigToml {
     session_workflow_config(&runtime.context.workspace).unwrap_or_else(|| {
         runtime
             .api_config
@@ -2035,7 +2032,7 @@ impl RunPayloadBounds {
 /// - `execution.leaf_results[*].output`: per-leaf preview capped at
 ///   `WORKFLOW_RESULT_LEAF_OUTPUT_MAX_CHARS`.
 ///
-/// Full detail remains available in `.codewhale/workflow-runs.jsonl`; every
+/// Full detail remains available in `.ghosty/workflow-runs.jsonl`; every
 /// clip adds an explicit note/pointer so the model can fetch more on demand.
 fn bounded_run_record_value(
     record: &WorkflowRunRecord,
@@ -2618,18 +2615,18 @@ fn read_workflow_source_path(
             .canonicalize()
             .unwrap_or_else(|_| context.workspace.clone());
         // The user-global saved-workflow store is a first-class source
-        // alongside the workspace: `~/.codewhale/workflows/*.workflow.js`
+        // alongside the workspace: `~/.ghosty/workflows/*.workflow.js`
         // definitions surface as slash commands and must launch from any
         // workspace without trust_mode.
         let home_store = crate::config::effective_home_dir()
-            .map(|home| home.join(".codewhale").join("workflows"))
+            .map(|home| home.join(".ghosty").join("workflows"))
             .and_then(|dir| dir.canonicalize().ok());
         let inside_home_store = home_store
             .as_deref()
             .is_some_and(|dir| canonical.starts_with(dir));
         if !canonical.starts_with(&workspace) && !inside_home_store {
             return Err(ToolError::permission_denied(format!(
-                "workflow source_path must stay inside the workspace or ~/.codewhale/workflows: {}",
+                "workflow source_path must stay inside the workspace or ~/.ghosty/workflows: {}",
                 canonical.display()
             )));
         }
@@ -2912,7 +2909,7 @@ fn leaf_task_options_expression(
     let write_roots = if spec.mode == TaskMode::ReadWrite {
         spec.file_scope
             .iter()
-            .map(|scope| codewhale_workflow::normalize_file_scope_root(scope))
+            .map(|scope| ghosty_workflow::normalize_file_scope_root(scope))
             .collect::<Vec<_>>()
     } else {
         Vec::new()
@@ -2950,7 +2947,7 @@ fn validate_leaf_runtime_contract(spec: &LeafSpec) -> Result<(), ToolError> {
         )));
     }
     for scope in &spec.file_scope {
-        let normalized = codewhale_workflow::normalize_file_scope_root(scope);
+        let normalized = ghosty_workflow::normalize_file_scope_root(scope);
         if normalized.is_empty() || normalized.contains('*') {
             return Err(ToolError::invalid_input(format!(
                 "Workflow leaf '{}' has unsupported file_scope '{}'; use a concrete path or a trailing /* or /** directory scope",
@@ -3071,8 +3068,8 @@ fn read_only_allowed_tools(agent_type: AgentType) -> &'static [&'static str] {
 
 fn is_write_or_shell_tool(tool: &str) -> bool {
     // One list, owned by the workflow crate. This used to be a second copy
-    // that drifted from `elevation.rs`'s — see `codewhale_workflow::is_write_tool`.
-    codewhale_workflow::is_write_tool(tool) || codewhale_workflow::is_shell_tool(tool)
+    // that drifted from `elevation.rs`'s — see `ghosty_workflow::is_write_tool`.
+    ghosty_workflow::is_write_tool(tool) || ghosty_workflow::is_shell_tool(tool)
 }
 
 // Pre-existing builder that grew `allowed_tools`; each arg maps 1:1 onto one
@@ -3647,7 +3644,7 @@ impl SubAgentWorkflowDriver {
         request: &TaskRequest,
         metadata: &WorkflowTaskSpawnMetadata,
         result: &crate::tools::subagent::SubAgentResult,
-        fleet_receipt: Option<codewhale_workflow::FleetTaskReceipt>,
+        fleet_receipt: Option<ghosty_workflow::FleetTaskReceipt>,
     ) {
         // Prefer typed spawn metadata over request fields so panel/history never
         // need to re-derive labels from the child prompt (#4119).
@@ -3728,7 +3725,7 @@ impl SubAgentWorkflowDriver {
     /// would make all three unrecoverable.
     fn record_orphaned_fleet_receipt(
         &self,
-        receipt: &codewhale_workflow::FleetTaskReceipt,
+        receipt: &ghosty_workflow::FleetTaskReceipt,
         error: &str,
     ) {
         self.record_run_event(WorkflowUiEvent::new(
@@ -4898,7 +4895,7 @@ fn host_run_line(record: &WorkflowRunRecord) -> HostWorkflowRunLine {
 }
 
 /// Live workspace state if this process already has it, otherwise the
-/// existing run journal. Never creates `.codewhale/` or the ledger.
+/// existing run journal. Never creates `.ghosty/` or the ledger.
 fn host_workflow_state(workspace: &Path) -> Option<Arc<WorkflowWorkspaceState>> {
     if let Some(state) = peek_shared_workflow_state(workspace) {
         return Some(state);
@@ -4921,7 +4918,7 @@ fn host_workflow_state_for_cancel(workspace: &Path) -> Option<Arc<WorkflowWorksp
 
 fn workflow_journal_exists(workspace: &Path) -> bool {
     workspace
-        .join(journal::CODEWHALE_DIR)
+        .join(journal::GHOSTY_DIR)
         .join(journal::WORKFLOW_RUNS_FILE)
         .is_file()
 }
@@ -5184,11 +5181,11 @@ mod tests {
     use crate::tools::ToolRegistryBuilder;
     use crate::tools::subagent::{SubAgentRuntime, new_shared_subagent_manager};
     use axum::{Json, Router, routing::post};
-    use codewhale_workflow::{IsolationMode, leaf_is_write_capable};
+    use ghosty_workflow::{IsolationMode, leaf_is_write_capable};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
-    fn settled_runs_leave_a_report_artifact_under_codewhale_reports() {
+    fn settled_runs_leave_a_report_artifact_under_ghosty_reports() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut record = WorkflowRunRecord::new(
             "workflow_report_1".to_string(),
@@ -5206,7 +5203,7 @@ mod tests {
 
         let path = tmp
             .path()
-            .join(".codewhale")
+            .join(".ghosty")
             .join("reports")
             .join("workflow_report_1.md");
         let body = std::fs::read_to_string(&path).expect("report written");
@@ -5229,7 +5226,7 @@ mod tests {
         );
         write_run_report_artifact(tmp.path(), &record);
         assert!(
-            !tmp.path().join(".codewhale").join("reports").exists(),
+            !tmp.path().join(".ghosty").join("reports").exists(),
             "running runs must not leave report files"
         );
     }
@@ -5239,7 +5236,7 @@ mod tests {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
         let home = tmp.path().join("home");
-        let store = home.join(".codewhale").join("workflows");
+        let store = home.join(".ghosty").join("workflows");
         std::fs::create_dir_all(&store).expect("store");
         let _home_guard = crate::test_support::EnvVarGuard::set("HOME", &home);
         let _userprofile_guard = crate::test_support::EnvVarGuard::set("USERPROFILE", &home);
@@ -5260,8 +5257,7 @@ mod tests {
         let err = read_workflow_source_path(elsewhere.to_str().expect("utf8 path"), &context)
             .expect_err("arbitrary outside paths stay denied");
         assert!(
-            err.to_string()
-                .contains("workspace or ~/.codewhale/workflows"),
+            err.to_string().contains("workspace or ~/.ghosty/workflows"),
             "{err}"
         );
     }
@@ -5692,12 +5688,12 @@ permissions = "read_only"
         }
     }
 
-    fn exact_session() -> codewhale_workflow::PermissionCeiling {
-        codewhale_workflow::PermissionCeiling {
+    fn exact_session() -> ghosty_workflow::PermissionCeiling {
+        ghosty_workflow::PermissionCeiling {
             write: true,
             network_tool: true,
-            shell: codewhale_workflow::ShellCeiling::Full,
-            delegation_depth: codewhale_config::DEFAULT_SPAWN_DEPTH,
+            shell: ghosty_workflow::ShellCeiling::Full,
+            delegation_depth: ghosty_config::DEFAULT_SPAWN_DEPTH,
             tools: true,
         }
     }
@@ -5706,10 +5702,10 @@ permissions = "read_only"
         text: &str,
         router: Option<std::sync::Arc<crate::fleet::exact::StaticFleetRouter>>,
     ) -> crate::fleet::exact::ExactFleetWorkflow {
-        let document = codewhale_workflow::FleetDocument::parse(text).expect("exact fleet parses");
+        let document = ghosty_workflow::FleetDocument::parse(text).expect("exact fleet parses");
         crate::fleet::exact::ExactFleetWorkflow::for_tests(
             &document,
-            codewhale_workflow::QualifiedFleetId {
+            ghosty_workflow::QualifiedFleetId {
                 name: "glm-pair".to_string(),
                 origin: "workspace".to_string(),
             },
@@ -5748,10 +5744,7 @@ permissions = "read_only"
 
         // Runtime's role/parent intersection reached the request before routing.
         assert_eq!(request.write_authority.as_deref(), Some("workspace_write"));
-        assert_eq!(
-            request.max_depth,
-            Some(codewhale_config::DEFAULT_SPAWN_DEPTH)
-        );
+        assert_eq!(request.max_depth, Some(ghosty_config::DEFAULT_SPAWN_DEPTH));
         assert!(request.thinking.is_none(), "reasoning is not decided yet");
 
         route_admitted_exact_task(&operation, &binding, &mut request)
@@ -5808,7 +5801,7 @@ permissions = "read_only"
         );
 
         let config = crate::config::Config {
-            workflow: Some(codewhale_config::WorkflowConfigToml {
+            workflow: Some(ghosty_config::WorkflowConfigToml {
                 require_approval_for_writes: false,
                 ..Default::default()
             }),
@@ -5831,7 +5824,7 @@ permissions = "read_only"
             }
         });
         let config = crate::config::Config {
-            workflow: Some(codewhale_config::WorkflowConfigToml {
+            workflow: Some(ghosty_config::WorkflowConfigToml {
                 auto_start_read_only: false,
                 ..Default::default()
             }),
@@ -5872,7 +5865,7 @@ permissions = "read_only"
             role: "scout".to_string(),
             on: GateOn::RoleComplete,
             gate: GateKind::Approve,
-            on_fail: codewhale_workflow::GateOnFail::Block,
+            on_fail: ghosty_workflow::GateOnFail::Block,
             blocks_role: Some("builder".to_string()),
             max_retries: 0,
             artifact_kind: Some("findings".to_string()),
@@ -6251,10 +6244,10 @@ permissions = "read_only"
     #[test]
     fn a_read_only_session_narrows_a_write_capable_exact_member() {
         let operation = exact_workflow(EXACT_GLM_FLEET);
-        let session = codewhale_workflow::PermissionCeiling {
+        let session = ghosty_workflow::PermissionCeiling {
             write: false,
             network_tool: false,
-            shell: codewhale_workflow::ShellCeiling::ReadOnly,
+            shell: ghosty_workflow::ShellCeiling::ReadOnly,
             delegation_depth: 0,
             tools: true,
         };
@@ -6421,10 +6414,10 @@ permissions = "read_only"
         let second = {
             let text = EXACT_GLM_FLEET.replace("name = \"glm-pair\"", "name = \"glm-solo\"");
             let document =
-                codewhale_workflow::FleetDocument::parse(&text).expect("second fleet parses");
+                ghosty_workflow::FleetDocument::parse(&text).expect("second fleet parses");
             crate::fleet::exact::ExactFleetWorkflow::for_tests(
                 &document,
-                codewhale_workflow::QualifiedFleetId {
+                ghosty_workflow::QualifiedFleetId {
                     name: "glm-solo".to_string(),
                     origin: "workspace".to_string(),
                 },
@@ -6470,12 +6463,12 @@ permissions = "read_only"
         let path = fleets.join("glm-pair.toml");
         std::fs::write(&path, EXACT_GLM_FLEET).expect("write fleet");
 
-        let roots = vec![codewhale_workflow::FleetSearchRoot::new(
+        let roots = vec![ghosty_workflow::FleetSearchRoot::new(
             "workspace",
             tmp.path(),
         )];
         let (document, id) =
-            codewhale_workflow::FleetDocument::load_by_name("glm-pair", &roots).expect("load");
+            ghosty_workflow::FleetDocument::load_by_name("glm-pair", &roots).expect("load");
         let operation = crate::fleet::exact::ExactFleetWorkflow::for_tests(
             &document,
             id,
@@ -6520,7 +6513,7 @@ permissions = "read_only"
 
         // A fresh Workflow does see the edit.
         let (reloaded, reloaded_id) =
-            codewhale_workflow::FleetDocument::load_by_name("glm-pair", &roots).expect("reload");
+            ghosty_workflow::FleetDocument::load_by_name("glm-pair", &roots).expect("reload");
         let next = crate::fleet::exact::ExactFleetWorkflow::for_tests(
             &reloaded,
             reloaded_id,
@@ -6667,7 +6660,7 @@ workflow({
         let _retry_guard = workflow_test_retry_guard();
         let _env_lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
         let fleet_dir = tmp.path().join("fleets");
         std::fs::create_dir_all(&fleet_dir).expect("fleet dir");
         std::fs::write(
@@ -7622,7 +7615,7 @@ export default workflow({
         let _retry_guard = workflow_test_retry_guard();
         let _env_lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
         std::fs::create_dir_all(tmp.path().join("fleets")).expect("fleets dir");
         std::fs::write(
             tmp.path().join("fleets/offline.toml"),
@@ -8149,7 +8142,7 @@ reviewer = "reviewer"
             role: "scout".to_string(),
             on: GateOn::RoleComplete,
             gate: GateKind::Approve,
-            on_fail: codewhale_workflow::GateOnFail::Block,
+            on_fail: ghosty_workflow::GateOnFail::Block,
             blocks_role: Some("implementer".to_string()),
             max_retries: 0,
             artifact_kind: Some("findings".to_string()),
@@ -8328,7 +8321,7 @@ reviewer = "reviewer"
             role: "scout".to_string(),
             on: GateOn::RoleComplete,
             gate: GateKind::Approve,
-            on_fail: codewhale_workflow::GateOnFail::Block,
+            on_fail: ghosty_workflow::GateOnFail::Block,
             blocks_role: Some("implementer".to_string()),
             max_retries: 0,
             artifact_kind: Some("findings".to_string()),
@@ -8453,7 +8446,7 @@ reviewer = "reviewer"
             role: "scout".to_string(),
             on: GateOn::RoleComplete,
             gate: GateKind::Approve,
-            on_fail: codewhale_workflow::GateOnFail::Block,
+            on_fail: ghosty_workflow::GateOnFail::Block,
             blocks_role: Some("implementer".to_string()),
             max_retries: 0,
             artifact_kind: Some("findings".to_string()),
@@ -8587,7 +8580,7 @@ reviewer = "reviewer"
             role: "scout".to_string(),
             on: GateOn::RoleComplete,
             gate: GateKind::Approve,
-            on_fail: codewhale_workflow::GateOnFail::Block,
+            on_fail: ghosty_workflow::GateOnFail::Block,
             blocks_role: Some("implementer".to_string()),
             max_retries: 0,
             artifact_kind: Some("findings".to_string()),
@@ -8911,7 +8904,7 @@ reviewer = "reviewer"
             role: "reviewer".to_string(),
             on: GateOn::RoleComplete,
             gate: GateKind::Review,
-            on_fail: codewhale_workflow::GateOnFail::Block,
+            on_fail: ghosty_workflow::GateOnFail::Block,
             blocks_role: Some("verifier".to_string()),
             max_retries: 0,
             artifact_kind: Some("review_report".to_string()),
@@ -9134,7 +9127,7 @@ reviewer = "reviewer"
         let run_payload: Value = serde_json::from_str(&run.content).expect("run json");
         let run_id = run_payload["run_id"].as_str().expect("run id");
 
-        let journal_path = tmp.path().join(".codewhale/workflow-runs.jsonl");
+        let journal_path = tmp.path().join(".ghosty/workflow-runs.jsonl");
         assert!(
             journal_path.exists(),
             "journal should be created under workspace"
@@ -9503,7 +9496,7 @@ reviewer = "reviewer"
         let _retry_guard = workflow_test_retry_guard();
         let _env_lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
         let workflow_dir = tmp.path().join("workflows");
         let fleet_dir = tmp.path().join("fleets");
         std::fs::create_dir_all(&workflow_dir).expect("workflow dir");
@@ -9523,13 +9516,13 @@ reviewer = "reviewer"
         let source = std::fs::read_to_string(workflow_dir.join("stopship.workflow.js"))
             .expect("read stopship acceptance fixture");
         let compiled =
-            codewhale_workflow::compile_javascript_workflow("stopship.workflow.js", &source)
+            ghosty_workflow::compile_javascript_workflow("stopship.workflow.js", &source)
                 .expect("compile stopship acceptance fixture");
-        let codewhale_workflow::WorkflowNode::Sequence(sequence) = &compiled.nodes[0] else {
+        let ghosty_workflow::WorkflowNode::Sequence(sequence) = &compiled.nodes[0] else {
             panic!("stopship fixture should be one ordered role chain");
         };
         for (index, node) in sequence.children.iter().enumerate() {
-            let codewhale_workflow::WorkflowNode::Leaf(leaf) = node else {
+            let ghosty_workflow::WorkflowNode::Leaf(leaf) = node else {
                 panic!("stopship role chain must contain only leaves");
             };
             let tools = leaf_allowed_tools(leaf).expect("lower stopship child tools");

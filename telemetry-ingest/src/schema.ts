@@ -1,5 +1,5 @@
 /**
- * The published Codewhale telemetry schema, transcribed from `docs/TELEMETRY.md`
+ * The published Ghosty telemetry schema, transcribed from `docs/TELEMETRY.md`
  * and enforced as a **closed** field set.
  *
  * The doc is the promise; this file is the enforcement. `test/schema-doc.test.ts`
@@ -217,7 +217,7 @@ const SENT_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
  * `docs/TELEMETRY.md` and `envelope.rs` both say v4, and `Uuid::new_v4()` only
  * ever produces this form. The client's own read path accepts any parseable
  * UUID, so this is marginally stricter than the client — deliberately: an
- * `install_id.json` hand-written by something other than Codewhale is exactly
+ * `install_id.json` hand-written by something other than Ghosty is exactly
  * the input this endpoint should refuse, and refusing costs the user nothing
  * because the client drops rejected batches silently.
  */
@@ -237,7 +237,7 @@ const PANIC_SITE_RE = /^crates\/[A-Za-z0-9_/.-]+\.rs:\d+:\d+$/;
  * `ProviderKind::as_str()` shape.
  *
  * This is the one field whose *value* space the endpoint cannot close: the
- * authoritative list is `codewhale_config::provider::all_providers()`, a Rust
+ * authoritative list is `ghosty_config::provider::all_providers()`, a Rust
  * registry with no generated artifact to read, and hard-coding a copy here
  * would drift into silently dropping a real user's route. The client closes it
  * with `Event::is_bounded` -> `is_known_provider_id` before the POST is made;

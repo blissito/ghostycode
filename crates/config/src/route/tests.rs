@@ -277,7 +277,11 @@ fn descriptor_for_every_kind_has_nonempty_transport_facts() {
 fn descriptor_protocol_matches_provider_wire() {
     for kind in ProviderKind::ALL {
         let d = ProviderDescriptor::for_kind(kind);
-        if matches!(kind, ProviderKind::Deepseek | ProviderKind::OpencodeZen) {
+        // EasyBits revende DeepSeek: mismo wire ModelAware.
+        if matches!(
+            kind,
+            ProviderKind::Deepseek | ProviderKind::OpencodeZen | ProviderKind::Easybits
+        ) {
             assert_eq!(d.wire_policy(), crate::provider::WirePolicy::ModelAware);
             assert_eq!(
                 d.protocol_for_endpoint("chat"),

@@ -1,4 +1,4 @@
-//! Exact Codewhale route identity → DeepSeek Harness overlay mapping.
+//! Exact Ghosty route identity → DeepSeek Harness overlay mapping.
 //!
 //! The mapping carries *identity only*: provider id, model id, endpoint,
 //! reasoning tier, permission posture, and the *name* of the credential
@@ -8,9 +8,9 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// Non-secret facts about the route Codewhale is currently configured to use.
+/// Non-secret facts about the route Ghosty is currently configured to use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct CodewhaleRouteIdentity {
+pub(crate) struct GhostyRouteIdentity {
     /// Exact configured provider id (e.g. `deepseek`, `ollama`, `zai`, or a
     /// named custom table key).
     pub(crate) provider_id: String,
@@ -20,18 +20,18 @@ pub(crate) struct CodewhaleRouteIdentity {
     pub(crate) model: String,
     /// Resolved base URL (structural; must not carry credentials).
     pub(crate) base_url: String,
-    /// Wire protocol Codewhale speaks to this endpoint.
+    /// Wire protocol Ghosty speaks to this endpoint.
     pub(crate) protocol: WireProtocol,
     /// Canonical credential env var name for the provider, if it has one.
     pub(crate) api_key_env: Option<String>,
     /// True when the route is a keyless self-hosted endpoint (loopback
     /// Ollama/LM Studio/vLLM/SGLang): no credential reference is written.
     pub(crate) keyless_local: bool,
-    /// Codewhale reasoning tier as configured (`off|low|medium|high|xhigh|max|ultra`).
+    /// Ghosty reasoning tier as configured (`off|low|medium|high|xhigh|max|ultra`).
     pub(crate) reasoning_effort: Option<String>,
-    /// Codewhale sandbox mode (`read-only|workspace-write|danger-full-access|external-sandbox`).
+    /// Ghosty sandbox mode (`read-only|workspace-write|danger-full-access|external-sandbox`).
     pub(crate) sandbox_mode: Option<String>,
-    /// Codewhale approval policy (`suggest|auto|never`).
+    /// Ghosty approval policy (`suggest|auto|never`).
     pub(crate) approval_policy: Option<String>,
     pub(crate) yolo: bool,
     /// Workspace the launch is bound to.
@@ -46,7 +46,7 @@ pub(crate) enum WireProtocol {
     AnthropicMessages,
 }
 
-/// DSH permission mode mirrored from the Codewhale posture.
+/// DSH permission mode mirrored from the Ghosty posture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum DshPermissionMode {
@@ -82,10 +82,10 @@ pub(crate) enum DshAdapter {
 /// The identity as it will be written into the overlay, plus disclosures.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct MappedIdentity {
-    pub(crate) source: CodewhaleRouteIdentity,
+    pub(crate) source: GhostyRouteIdentity,
     pub(crate) adapter: DshAdapter,
     /// DSH `reasoningEffort` (`off|high|max`) for the native adapter; `None`
-    /// when Codewhale has no explicit tier or the adapter cannot express it.
+    /// when Ghosty has no explicit tier or the adapter cannot express it.
     pub(crate) dsh_reasoning_effort: Option<String>,
     pub(crate) permission_mode: DshPermissionMode,
     /// Facts the user must know that the overlay cannot enforce.
@@ -107,7 +107,7 @@ impl MappedIdentity {
     }
 }
 
-/// Map a Codewhale reasoning tier onto DSH's `off | high | max`.
+/// Map a Ghosty reasoning tier onto DSH's `off | high | max`.
 pub(crate) fn dsh_reasoning_effort(effort: Option<&str>) -> Option<&'static str> {
     match effort.map(|e| e.trim().to_ascii_lowercase()).as_deref() {
         None | Some("") => None,
@@ -118,10 +118,10 @@ pub(crate) fn dsh_reasoning_effort(effort: Option<&str>) -> Option<&'static str>
     }
 }
 
-/// Mirror the Codewhale posture. Full access is only granted when Codewhale
+/// Mirror the Ghosty posture. Full access is only granted when Ghosty
 /// itself runs with full access *and* the caller confirmed it explicitly.
 pub(crate) fn permission_mode_for(
-    identity: &CodewhaleRouteIdentity,
+    identity: &GhostyRouteIdentity,
     allow_full_access: bool,
 ) -> (DshPermissionMode, Option<String>) {
     let sandbox = identity
@@ -132,7 +132,7 @@ pub(crate) fn permission_mode_for(
         .approval_policy
         .as_deref()
         .map(|s| s.trim().to_ascii_lowercase());
-    let codewhale_full = identity.yolo
+    let ghosty_full = identity.yolo
         || matches!(
             sandbox.as_deref(),
             Some("danger-full-access" | "external-sandbox")
@@ -140,12 +140,12 @@ pub(crate) fn permission_mode_for(
     if matches!(sandbox.as_deref(), Some("read-only")) {
         return (DshPermissionMode::ReadOnly, None);
     }
-    if codewhale_full {
+    if ghosty_full {
         if allow_full_access {
             return (
                 DshPermissionMode::DangerFullAccess,
                 Some(
-                    "DSH danger-full-access mirrors Codewhale full access; DSH will not ask before file effects."
+                    "DSH danger-full-access mirrors Ghosty full access; DSH will not ask before file effects."
                         .to_string(),
                 ),
             );
@@ -153,14 +153,14 @@ pub(crate) fn permission_mode_for(
         return (
             DshPermissionMode::WorkspaceWrite,
             Some(
-                "Codewhale runs with full access, but the DSH overlay stays at workspace-write; pass --allow-full-access to mirror it."
+                "Ghosty runs with full access, but the DSH overlay stays at workspace-write; pass --allow-full-access to mirror it."
                     .to_string(),
             ),
         );
     }
     let note = match approval.as_deref() {
         Some("never" | "deny" | "denied") => Some(
-            "Codewhale approval policy is `never`; DSH keeps its own ask-before-effects policy at workspace-write."
+            "Ghosty approval policy is `never`; DSH keeps its own ask-before-effects policy at workspace-write."
                 .to_string(),
         ),
         _ => None,
@@ -190,7 +190,7 @@ fn base_url_is_structural(url: &str) -> Result<(), String> {
 }
 
 /// The `api:` dialect a hand-declared `dsh-llm-pi-ai` route names for a
-/// Codewhale wire protocol — identity-preserving, never an approximation.
+/// Ghosty wire protocol — identity-preserving, never an approximation.
 ///
 /// Verified against the installed `@deepseek-ai/dsh@0.1.0-rc.6`:
 /// `@deepseek-ai/dsh-llm-pi-ai`'s exported profile schema accepts exactly
@@ -211,7 +211,7 @@ pub(crate) fn pi_ai_api_for(protocol: WireProtocol) -> &'static str {
 }
 
 fn route_id_for(provider_id: &str) -> String {
-    let mut out = String::from("codewhale-");
+    let mut out = String::from("ghosty-");
     for ch in provider_id.chars() {
         if ch.is_ascii_alphanumeric() {
             out.push(ch.to_ascii_lowercase());
@@ -223,7 +223,7 @@ fn route_id_for(provider_id: &str) -> String {
 }
 
 pub(crate) fn map_identity(
-    identity: &CodewhaleRouteIdentity,
+    identity: &GhostyRouteIdentity,
     allow_full_access: bool,
 ) -> MappedIdentity {
     let mut disclosures = Vec::new();
@@ -247,12 +247,12 @@ pub(crate) fn map_identity(
     if is_deepseek && identity.protocol == WireProtocol::ChatCompletions {
         if identity.reasoning_effort.is_some() && dsh_effort.is_none() {
             disclosures.push(format!(
-                "Codewhale reasoning tier `{}` has no DSH equivalent; DSH keeps its default (high).",
+                "Ghosty reasoning tier `{}` has no DSH equivalent; DSH keeps its default (high).",
                 identity.reasoning_effort.as_deref().unwrap_or("")
             ));
         }
         disclosures.push(
-            "DSH resolves DEEPSEEK_API_KEY from its own environment or $DSH_HOME/.credentials.yaml; Codewhale does not hand over a key."
+            "DSH resolves DEEPSEEK_API_KEY from its own environment or $DSH_HOME/.credentials.yaml; Ghosty does not hand over a key."
                 .to_string(),
         );
         return MappedIdentity {
@@ -264,7 +264,7 @@ pub(crate) fn map_identity(
         };
     }
 
-    // Every wire dialect Codewhale can speak, `dsh-llm-pi-ai` declares a
+    // Every wire dialect Ghosty can speak, `dsh-llm-pi-ai` declares a
     // hand-declared route for (see `pi_ai_api_for`), so the route is carried
     // in its own dialect rather than refused or approximated as completions.
     if identity.protocol != WireProtocol::ChatCompletions {
@@ -288,7 +288,7 @@ pub(crate) fn map_identity(
         );
     } else if let Some(env) = identity.api_key_env.as_deref() {
         disclosures.push(format!(
-            "DSH resolves {env} from its own environment or $DSH_HOME/.credentials.yaml; Codewhale does not hand over a key."
+            "DSH resolves {env} from its own environment or $DSH_HOME/.credentials.yaml; Ghosty does not hand over a key."
         ));
     } else {
         disclosures.push(
@@ -325,11 +325,11 @@ fn yaml_str(value: &str) -> String {
 pub(crate) fn render_overlay(mapped: &MappedIdentity) -> Option<String> {
     let src = &mapped.source;
     let mut out = String::new();
-    out.push_str("# DeepSeek Harness connected through Codewhale.\n");
-    out.push_str("# Generated by `codewhale integrations dsh connect`; do not edit by hand.\n");
+    out.push_str("# DeepSeek Harness connected through Ghosty.\n");
+    out.push_str("# Generated by `ghosty integrations dsh connect`; do not edit by hand.\n");
     out.push_str("# Identity only: no API key, token, or credential document is written here.\n");
     out.push_str(&format!(
-        "# codewhale.provider={} codewhale.model={} codewhale.workspace={}\n",
+        "# ghosty.provider={} ghosty.model={} ghosty.workspace={}\n",
         src.provider_id, src.model, src.workspace
     ));
     match &mapped.adapter {
@@ -363,7 +363,7 @@ pub(crate) fn render_overlay(mapped: &MappedIdentity) -> Option<String> {
             out.push_str(&format!("      {}:\n", yaml_str(route_id)));
             out.push_str(&format!(
                 "        displayName: {}\n",
-                yaml_str(&format!("{} (via Codewhale)", src.provider_label))
+                yaml_str(&format!("{} (via Ghosty)", src.provider_label))
             ));
             if !src.keyless_local
                 && let Some(env) = src.api_key_env.as_deref()

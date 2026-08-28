@@ -201,7 +201,36 @@ pub(super) fn build_model_tool_catalog_with_surface(
     native_tools.sort_by(|a, b| a.name.cmp(&b.name));
     mcp_tools.sort_by(|a, b| a.name.cmp(&b.name));
     native_tools.extend(mcp_tools);
+    warn_if_over_deepseek_tool_limit(&native_tools);
     native_tools
+}
+
+/// La API compatible con OpenAI de DeepSeek (y revendedores como EasyBits)
+/// rechaza cualquier petición cuyo array `tools` exceda este largo:
+/// `Invalid 'tools': array too long ... maximum length 128`.
+///
+/// A diferencia de Anthropic, DeepSeek **ignora `defer_loading`** y cuenta cada
+/// tool anunciada, así que el tope aplica al catálogo completo y no solo a la
+/// cabeza activa. Por eso `apply_tool_surface_budget` no basta: marca tools como
+/// diferidas pero no las saca del array.
+const DEEPSEEK_MAX_TOOLS: usize = 128;
+
+/// Avisa antes de enviar la petición. **No truncamos**: descartar tools en
+/// silencio podría quitar la equivocada, y la cabeza debe quedar estable byte a
+/// byte para la caché de prefijo. El usuario reduce la cuenta acotando sus
+/// servidores MCP (p. ej. EasyBits `?tools=core` en vez de `core,sandbox`).
+fn warn_if_over_deepseek_tool_limit(catalog: &[Tool]) {
+    let total = catalog.len();
+    if total > DEEPSEEK_MAX_TOOLS {
+        tracing::warn!(
+            total,
+            limit = DEEPSEEK_MAX_TOOLS,
+            "tool catalog has {total} tools, over the DeepSeek/EasyBits cap of \
+             {DEEPSEEK_MAX_TOOLS}; this request will fail with \"Invalid 'tools': \
+             array too long\". Reduce MCP tool groups (e.g. EasyBits ?tools=core \
+             instead of core,sandbox) or disable an MCP server."
+        );
+    }
 }
 
 const REGISTRY_FIRST_SHELL_GUIDANCE: &str = "Before using this tool for a task whose core operation is a specialized capability (for example media or document conversion, data transformation, browser automation, database or service access, or a developer utility), call registry_sync with a query describing that capability; it returns at most eight scored matches from the host-side Registry snapshot. If a returned match plausibly covers the operation, call start_registry_mcp_server and inspect the connected tools before using a shell alternative. Use the shell directly for ordinary repo-native work and simple file operations, or after no match (or one refined query) is plausible or the matching server fails to start.";

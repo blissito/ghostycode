@@ -118,9 +118,9 @@ class CiWiringTests(unittest.TestCase):
         start = ci.index("Hermetic safety and authorization tests")
         next_step = ci.index("- name:", start + 1)
         block = ci[start:next_step]
-        self.assertIn("CODEWHALE_HOME:", block)
+        self.assertIn("GHOSTY_HOME:", block)
         self.assertIn("cw-hermetic-home", block)
-        self.assertIn("unset CODEWHALE_CONFIG_PATH DEEPSEEK_CONFIG_PATH DEEPSEEK_HOME", block)
+        self.assertIn("unset GHOSTY_CONFIG_PATH DEEPSEEK_CONFIG_PATH DEEPSEEK_HOME", block)
         self.assertIn("command_safety auto_review authority sandbox", block)
 
     def test_valid_wiring_passes_all_assertions(self) -> None:

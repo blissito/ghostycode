@@ -69,7 +69,7 @@ pub fn anchor(app: &mut App, content: Option<&str>) -> CommandResult {
 }
 
 fn anchors_path(app: &App) -> std::path::PathBuf {
-    let primary = app.workspace.join(".codewhale").join("anchors.md");
+    let primary = app.workspace.join(".ghosty").join("anchors.md");
     if primary.exists() {
         return primary;
     }

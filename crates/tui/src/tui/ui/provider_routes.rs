@@ -541,7 +541,7 @@ pub(crate) async fn switch_provider(
         .clamp(1, crate::config::MAX_SUBAGENTS);
     app.provider_chain = target
         .kind()
-        .map(|kind| codewhale_config::ProviderChain::new(kind, &config.fallback_providers))
+        .map(|kind| ghosty_config::ProviderChain::new(kind, &config.fallback_providers))
         .filter(|chain| chain.providers().len() > 1);
     app.last_fallback_reason = None;
     app.model_ids_passthrough = config.model_ids_pass_through();
@@ -605,6 +605,14 @@ pub(crate) async fn switch_provider(
     switch_summary.push_str(&format!("Model: {previous_model} → {new_model}"));
     switch_summary.push(char::from(10));
     switch_summary.push_str(&format!("Endpoint: {new_endpoint}"));
+    // El cambio vive solo en esta sesión (diseño de upstream: un switch hecho
+    // en una carpeta no puede reescribir en silencio el default que otra
+    // terminal lee al arrancar). `/model` ya lo dice; el picker de proveedor
+    // no lo decía, y el usuario reabría Ghosty en el proveedor anterior sin
+    // saber por qué.
+    switch_summary.push(char::from(10));
+    switch_summary
+        .push_str("Session only — /model save-default remembers this as the startup default.");
     if let Some(ref warning) = persist_warning {
         switch_summary.push(char::from(10));
         switch_summary.push_str(warning);
@@ -699,7 +707,7 @@ pub(crate) fn mcp_ui_action_refreshes_discovery(action: &crate::tui::app::McpUiA
 }
 
 pub(crate) fn mcp_import_consent_path() -> PathBuf {
-    codewhale_config::codewhale_home()
+    ghosty_config::ghosty_home()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("mcp-import-consent.json")
 }
@@ -707,7 +715,7 @@ pub(crate) fn mcp_import_consent_path() -> PathBuf {
 pub(crate) fn mcp_external_import_status_text(workspace: &std::path::Path) -> String {
     use crate::mcp::external_import::{discover_external_sources, format_candidates_for_display};
     let home = crate::config::effective_home_dir().unwrap_or_else(|| PathBuf::from("."));
-    let market_path = codewhale_config::codewhale_home()
+    let market_path = ghosty_config::ghosty_home()
         .ok()
         .map(|h| h.join("mcp-marketplace.json"));
     let markets: Vec<PathBuf> = market_path.into_iter().collect();
@@ -731,7 +739,7 @@ pub(crate) fn mcp_import_apply(
     use std::time::{SystemTime, UNIX_EPOCH};
 
     let home = crate::config::effective_home_dir().unwrap_or_else(|| PathBuf::from("."));
-    let market_path = codewhale_config::codewhale_home()
+    let market_path = ghosty_config::ghosty_home()
         .ok()
         .map(|h| h.join("mcp-marketplace.json"));
     let markets: Vec<PathBuf> = market_path.into_iter().collect();
@@ -836,7 +844,7 @@ pub(crate) fn record_provider_model_setup_progress(app: &mut App, config: &Confi
     }
 }
 
-/// Persist the typed API key to `~/.codewhale/config.toml`, refresh the
+/// Persist the typed API key to `~/.ghosty/config.toml`, refresh the
 /// in-memory config so the engine can see it, then switch to the provider.
 pub(crate) fn set_active_custom_provider_in_memory(config: &mut Config, provider_id: &str) {
     let provider_id = provider_id.trim();

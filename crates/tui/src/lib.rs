@@ -1,4 +1,4 @@
-//! Codewhale TUI library — single-binary entry point.
+//! Ghosty TUI library — single-binary entry point.
 
 #![allow(clippy::uninlined_format_args)]
 
@@ -142,9 +142,9 @@ mod task_manager;
 mod telemetry_notice;
 #[cfg(test)]
 mod test_support;
-// TLS bootstrap and platform client builders live in codewhale-release;
+// TLS bootstrap and platform client builders live in ghosty-release;
 // `crate::tls::*` keeps resolving for every caller.
-use codewhale_release::tls;
+use ghosty_release::tls;
 mod todo_snapshot;
 mod tool_history_repair;
 mod tool_inspection;
@@ -194,12 +194,12 @@ fn install_rustls_crypto_provider() {
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "codewhale-tui",
-    bin_name = "codewhale-tui",
+    name = "ghosty-tui",
+    bin_name = "ghosty-tui",
     author,
-    version = env!("CODEWHALE_BUILD_VERSION"),
-    about = "Codewhale terminal coding agent",
-    long_about = "Terminal-native TUI and CLI for open-source and open-weight coding models.\n\nRun 'codewhale' to start.\n\nProvider routes include DeepSeek, Arcee, Hugging Face, OpenRouter, Xiaomi MiMo, local vLLM/SGLang/Ollama, and more."
+    version = env!("GHOSTY_BUILD_VERSION"),
+    about = "Ghosty terminal coding agent",
+    long_about = "Terminal-native TUI and CLI for open-source and open-weight coding models.\n\nRun 'ghosty' to start.\n\nProvider routes include DeepSeek, Arcee, Hugging Face, OpenRouter, Xiaomi MiMo, local vLLM/SGLang/Ollama, and more."
 )]
 struct Cli {
     /// Subcommand to run
@@ -267,7 +267,7 @@ struct Cli {
     #[arg(long = "fresh")]
     fresh: bool,
 
-    /// Skip loading project-level config from $WORKSPACE/.codewhale/config.toml
+    /// Skip loading project-level config from $WORKSPACE/.ghosty/config.toml
     #[arg(long = "no-project-config")]
     no_project_config: bool,
 }
@@ -281,7 +281,7 @@ enum Commands {
     SessionDiagnostics(SessionDiagnosticsArgs),
     /// Bootstrap MCP config and/or skills directories
     Setup(SetupArgs),
-    /// Generate a remote Codewhale agent deploy bundle (cloud + chat bridge)
+    /// Generate a remote Ghosty agent deploy bundle (cloud + chat bridge)
     RemoteSetup(remote_setup::RemoteSetupArgs),
     /// Generate shell completions
     Completions {
@@ -352,7 +352,7 @@ enum Commands {
     },
     /// Inspect feature flags
     Features(FeaturesCli),
-    /// Connect third-party harnesses through Codewhale (currently: DeepSeek Harness `dsh`)
+    /// Connect third-party harnesses through Ghosty (currently: DeepSeek Harness `dsh`)
     Integrations {
         #[command(subcommand)]
         command: IntegrationsCommand,
@@ -384,11 +384,11 @@ enum Commands {
 #[derive(Args, Debug, Clone)]
 #[command(after_help = "\
 Examples:
-  codewhale exec \"explain this function\"
-  codewhale exec --auto \"list crates/ with ls\"
-  codewhale exec --auto --output-format stream-json \"fix the failing test\"
+  ghosty exec \"explain this function\"
+  ghosty exec --auto \"list crates/ with ls\"
+  ghosty exec --auto --output-format stream-json \"fix the failing test\"
 
-Plain `codewhale exec` is a one-shot model response. Use `--auto` for
+Plain `ghosty exec` is a one-shot model response. Use `--auto` for
 non-interactive agent-with-tools execution. `--auto` does not change the
 sandbox posture or elevate a denied tool. Use `--sandbox danger-full-access`
 or `--allow-sandbox-elevation` to explicitly authorize sandbox elevation.
@@ -497,7 +497,7 @@ enum TuiAuthCommand {
     XaiDevice,
 }
 
-const CODEWHALE_TOOL_SURFACE_ENV: &str = "CODEWHALE_TOOL_SURFACE";
+const GHOSTY_TOOL_SURFACE_ENV: &str = "GHOSTY_TOOL_SURFACE";
 const SHELL_ONLY_EXEC_TOOLS: &[&str] = &["bash"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -506,12 +506,12 @@ enum ExecToolSurface {
 }
 
 fn exec_tool_surface_from_env() -> Option<ExecToolSurface> {
-    std::env::var(CODEWHALE_TOOL_SURFACE_ENV)
+    std::env::var(GHOSTY_TOOL_SURFACE_ENV)
         .ok()
         .and_then(|value| {
             if should_warn_unknown_exec_tool_surface(&value) {
                 eprintln!(
-                    "warning: unrecognized {CODEWHALE_TOOL_SURFACE_ENV}; leaving exec tool surface unchanged. Use `shell-only`, `full`, or `native-tools`."
+                    "warning: unrecognized {GHOSTY_TOOL_SURFACE_ENV}; leaving exec tool surface unchanged. Use `shell-only`, `full`, or `native-tools`."
                 );
             }
             parse_exec_tool_surface(&value)
@@ -577,32 +577,32 @@ enum FleetCommand {
     Status,
     /// Inspect one worker's status, heartbeat, latest event, and artifacts
     Inspect {
-        /// Worker id printed by `codewhale fleet run`
+        /// Worker id printed by `ghosty fleet run`
         worker_id: String,
     },
     /// Print bounded log artifacts for one worker
     Logs {
-        /// Worker id printed by `codewhale fleet run`
+        /// Worker id printed by `ghosty fleet run`
         worker_id: String,
     },
     /// List artifact refs for one worker
     Artifacts {
-        /// Worker id printed by `codewhale fleet run`
+        /// Worker id printed by `ghosty fleet run`
         worker_id: String,
     },
     /// Interrupt a running worker task and record a terminal cancellation
     Interrupt {
-        /// Worker id printed by `codewhale fleet run`
+        /// Worker id printed by `ghosty fleet run`
         worker_id: String,
     },
     /// Restart the latest task for a worker
     Restart {
-        /// Worker id printed by `codewhale fleet run`
+        /// Worker id printed by `ghosty fleet run`
         worker_id: String,
     },
     /// Resume a run from durable ledger state, reconciling orphaned/stale leases
     Resume {
-        /// Run id printed by `codewhale fleet run`
+        /// Run id printed by `ghosty fleet run`
         run_id: String,
         /// Seconds without heartbeat before a leased task is treated as stale
         #[arg(long, default_value_t = 300)]
@@ -658,16 +658,16 @@ struct FleetAlertDryRunArgs {
     #[arg(long, value_enum, default_value_t = FleetAlertAdapterArg::Slack)]
     adapter: FleetAlertAdapterArg,
     /// Environment variable containing the Slack webhook URL
-    #[arg(long, default_value = "CODEWHALE_FLEET_SLACK_WEBHOOK")]
+    #[arg(long, default_value = "GHOSTY_FLEET_SLACK_WEBHOOK")]
     slack_webhook_env: String,
     /// Environment variable containing the generic webhook URL
-    #[arg(long, default_value = "CODEWHALE_FLEET_WEBHOOK_URL")]
+    #[arg(long, default_value = "GHOSTY_FLEET_WEBHOOK_URL")]
     webhook_url_env: String,
     /// Optional environment variable containing the generic webhook secret
     #[arg(long)]
     webhook_secret_env: Option<String>,
     /// Environment variable containing the PagerDuty routing key
-    #[arg(long, default_value = "CODEWHALE_FLEET_PAGERDUTY_ROUTING_KEY")]
+    #[arg(long, default_value = "GHOSTY_FLEET_PAGERDUTY_ROUTING_KEY")]
     pagerduty_routing_key_env: String,
     /// PagerDuty severity to render
     #[arg(long, default_value = "error")]
@@ -723,7 +723,7 @@ fn spawn_signal_cleanup_task() {
             // Nothing async survives the `exit` below, so this is the last
             // chance to say how the session ended. `record_blocking` is one
             // `O_APPEND` write with no lock: taking the compaction lock here
-            // would let a second Codewhale process sharing CODEWHALE_HOME hang
+            // would let a second Ghosty process sharing GHOSTY_HOME hang
             // Ctrl-C, and the second-signal short-circuit below has to stay
             // reachable. A no-op unless this process was armed.
             //
@@ -751,17 +751,17 @@ static TELEMETRY_SESSION_START: std::sync::OnceLock<std::time::Instant> =
 /// The cold-start bucket is `None` unless the interactive event loop actually
 /// began, which is what keeps it absent rather than invented on the surfaces
 /// that have no event loop.
-fn telemetry_session_end() -> codewhale_telemetry::Event {
-    let counters = codewhale_telemetry::session_counters();
-    codewhale_telemetry::Event::SessionEnd {
-        duration_bucket: codewhale_telemetry::DurationBucket::from_secs(
+fn telemetry_session_end() -> ghosty_telemetry::Event {
+    let counters = ghosty_telemetry::session_counters();
+    ghosty_telemetry::Event::SessionEnd {
+        duration_bucket: ghosty_telemetry::DurationBucket::from_secs(
             TELEMETRY_SESSION_START
                 .get()
                 .map_or(0, |start| start.elapsed().as_secs()),
         ),
-        exit_class: codewhale_telemetry::exit_class(),
+        exit_class: ghosty_telemetry::exit_class(),
         cold_start_bucket: crate::startup_trace::cold_start_ms()
-            .map(codewhale_telemetry::ColdStartBucket::from_millis),
+            .map(ghosty_telemetry::ColdStartBucket::from_millis),
         providers: counters.providers(),
         counters: counters.counters(),
         errors: counters.errors(),
@@ -773,8 +773,8 @@ fn telemetry_session_end() -> codewhale_telemetry::Event {
 ///
 /// A no-op unless this process was armed.
 fn record_signal_session_end() {
-    codewhale_telemetry::set_exit_class(codewhale_telemetry::ExitClass::Signal);
-    codewhale_telemetry::record_blocking(telemetry_session_end());
+    ghosty_telemetry::set_exit_class(ghosty_telemetry::ExitClass::Signal);
+    ghosty_telemetry::record_blocking(telemetry_session_end());
 }
 
 /// Terminating-signal streams, registered up front and awaited later.
@@ -880,7 +880,7 @@ fn apply_exec_provider_override(config: &mut Config, provider_arg: &str) -> Resu
 
 fn exec_model_env_override() -> Option<String> {
     let read = || {
-        ["CODEWHALE_MODEL", "DEEPSEEK_MODEL"]
+        ["GHOSTY_MODEL", "DEEPSEEK_MODEL"]
             .into_iter()
             .find_map(|key| {
                 std::env::var(key)
@@ -913,7 +913,7 @@ fn resolve_exec_resume_session_id(args: &ExecArgs, workspace: &Path) -> Result<O
     latest_session_id_for_workspace(workspace)?.map_or_else(
         || {
             bail!(
-                "No saved sessions found for workspace {}. Use `codewhale sessions` to list sessions, or pass `codewhale exec --resume <SESSION_ID> ...`.",
+                "No saved sessions found for workspace {}. Use `ghosty sessions` to list sessions, or pass `ghosty exec --resume <SESSION_ID> ...`.",
                 workspace.display()
             )
         },
@@ -957,7 +957,7 @@ fn resolve_exec_resume_route(
             .map_err(anyhow::Error::msg)
             .with_context(|| {
                 format!(
-                    "saved session provider '{}' is unavailable; Codewhale will not fall back",
+                    "saved session provider '{}' is unavailable; Ghosty will not fall back",
                     saved_provider_identity
                 )
             })?;
@@ -1258,13 +1258,13 @@ struct ServeArgs {
     workers: usize,
     /// Additional CORS origin to allow (repeatable). Stacks on top of the
     /// built-in defaults (localhost:3000, localhost:1420, tauri://localhost).
-    /// Also reads `CODEWHALE_CORS_ORIGINS` (comma-separated), then
+    /// Also reads `GHOSTY_CORS_ORIGINS` (comma-separated), then
     /// `DEEPSEEK_CORS_ORIGINS` as an alias, and `[runtime_api] cors_origins`
     /// from `config.toml`. Whalescale#255.
     #[arg(long = "cors-origin", value_name = "URL")]
     cors_origin: Vec<String>,
     /// Require this bearer token for `/v1/*` runtime API routes. Also reads
-    /// `CODEWHALE_RUNTIME_TOKEN` when omitted, then `DEEPSEEK_RUNTIME_TOKEN`
+    /// `GHOSTY_RUNTIME_TOKEN` when omitted, then `DEEPSEEK_RUNTIME_TOKEN`
     /// as an alias.
     #[arg(long = "auth-token", value_name = "TOKEN")]
     auth_token: Option<String>,
@@ -1401,17 +1401,17 @@ enum McpCommand {
     },
     /// Validate MCP config and required servers
     Validate,
-    /// Register this Codewhale binary as a local MCP stdio server.
+    /// Register this Ghosty binary as a local MCP stdio server.
     ///
-    /// This adds a config entry that runs `codewhale serve --mcp` (stdio protocol).
-    /// For the HTTP/SSE runtime API, use `codewhale serve --http` directly instead.
+    /// This adds a config entry that runs `ghosty serve --mcp` (stdio protocol).
+    /// For the HTTP/SSE runtime API, use `ghosty serve --http` directly instead.
     #[command(
         name = "add-self",
-        long_about = "Register this Codewhale binary as a local MCP stdio server.\n\nAdds a config entry to ~/.codewhale/mcp.json that launches `codewhale serve --mcp`\nvia the stdio transport. Other Codewhale sessions (or any MCP client) can then\ndiscover and call tools exposed by this server.\n\nUse `codewhale serve --http` instead if you need the HTTP/SSE runtime API."
+        long_about = "Register this Ghosty binary as a local MCP stdio server.\n\nAdds a config entry to ~/.ghosty/mcp.json that launches `ghosty serve --mcp`\nvia the stdio transport. Other Ghosty sessions (or any MCP client) can then\ndiscover and call tools exposed by this server.\n\nUse `ghosty serve --http` instead if you need the HTTP/SSE runtime API."
     )]
     AddSelf {
-        /// Server name in mcp.json (default: "codewhale")
-        #[arg(long, default_value = "codewhale")]
+        /// Server name in mcp.json (default: "ghosty")
+        #[arg(long, default_value = "ghosty")]
         name: String,
         /// Workspace directory for the MCP server
         #[arg(long)]
@@ -1421,7 +1421,7 @@ enum McpCommand {
 
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum IntegrationsCommand {
-    /// Official DeepSeek Harness (`dsh`) connected through Codewhale
+    /// Official DeepSeek Harness (`dsh`) connected through Ghosty
     Dsh {
         #[command(subcommand)]
         command: DshIntegrationCommand,
@@ -1443,14 +1443,14 @@ pub(crate) enum DshIntegrationCommand {
         /// DSH profile the overlay targets (`web` or `headless`)
         #[arg(long, default_value = "web")]
         profile: String,
-        /// Mirror Codewhale full access as DSH danger-full-access (only when Codewhale itself runs with full access)
+        /// Mirror Ghosty full access as DSH danger-full-access (only when Ghosty itself runs with full access)
         #[arg(long, default_value_t = false)]
         allow_full_access: bool,
-        /// Record the Codewhale palette (skin) decision for the bundle profile; applied via DSH's `overrideTokens`, never through the overlay
+        /// Record the Ghosty palette (skin) decision for the bundle profile; applied via DSH's `overrideTokens`, never through the overlay
         #[arg(long, default_value_t = false)]
         skin: bool,
     },
-    /// Write the overlay and receipt under $CODEWHALE_HOME/integrations/dsh
+    /// Write the overlay and receipt under $GHOSTY_HOME/integrations/dsh
     Connect {
         #[arg(long, default_value = "web")]
         profile: String,
@@ -1462,7 +1462,7 @@ pub(crate) enum DshIntegrationCommand {
         #[arg(long, default_value_t = false)]
         yes: bool,
     },
-    /// Re-derive the overlay from the current Codewhale route
+    /// Re-derive the overlay from the current Ghosty route
     Update {
         #[arg(long)]
         profile: Option<String>,
@@ -1477,7 +1477,7 @@ pub(crate) enum DshIntegrationCommand {
         #[arg(long, default_value_t = false)]
         yes: bool,
     },
-    /// Run dsh with the Codewhale overlay; extra args go to the dsh app
+    /// Run dsh with the Ghosty overlay; extra args go to the dsh app
     Launch {
         /// Override the recorded profile (`web` or `headless`)
         #[arg(long)]
@@ -1492,12 +1492,12 @@ pub(crate) enum DshIntegrationCommand {
     Disable,
     /// Allow launches again
     Enable,
-    /// Delete Codewhale-owned files only; $DSH_HOME is never touched
+    /// Delete Ghosty-owned files only; $DSH_HOME is never touched
     Remove {
         #[arg(long, default_value_t = false)]
         yes: bool,
     },
-    /// Documented DSH plugin path: install the Codewhale bundle into a dedicated `codewhale` DSH profile via `dsh plugin add` (pnpm required)
+    /// Documented DSH plugin path: install the Ghosty bundle into a dedicated `ghosty` DSH profile via `dsh plugin add` (pnpm required)
     InstallBundle {
         /// Which shipped DSH app the dedicated profile boots (`web` or `headless`)
         #[arg(long, default_value = "web")]
@@ -1505,7 +1505,7 @@ pub(crate) enum DshIntegrationCommand {
         #[arg(long, default_value_t = false)]
         yes: bool,
     },
-    /// `dsh plugin --profile codewhale remove codewhale-dsh-bundle`, then delete only Codewhale-owned bundle files
+    /// `dsh plugin --profile ghosty remove ghosty-dsh-bundle`, then delete only Ghosty-owned bundle files
     RemoveBundle {
         #[arg(long, default_value_t = false)]
         yes: bool,
@@ -1561,7 +1561,7 @@ enum SandboxCommand {
     },
 }
 
-const CODEWHALE_MAIN_STACK_BYTES: usize = 16 * 1024 * 1024;
+const GHOSTY_MAIN_STACK_BYTES: usize = 16 * 1024 * 1024;
 
 /// Entry point for the single binary. Takes argv including binary name at 0,
 /// parses with clap, and runs the TUI/runtime dispatch. Returns process exit
@@ -1584,7 +1584,7 @@ pub fn run(args: Vec<String>) -> std::process::ExitCode {
 /// directly.
 fn run_with_args(args: Vec<String>) -> Result<()> {
     // Match the dispatcher entrypoint: Unix shells and supervisors may inherit
-    // SIGPIPE ignored, which turns short pipelines such as `codewhale doctor |
+    // SIGPIPE ignored, which turns short pipelines such as `ghosty doctor |
     // head` into BrokenPipe panics once this delegated TUI binary prints.
     #[cfg(unix)]
     unsafe {
@@ -1644,12 +1644,12 @@ fn run_with_args(args: Vec<String>) -> Result<()> {
         // The site is allowlist-reduced and `msg` is deliberately not read: a
         // slicing panic embeds the entire string being sliced, and this tree
         // slices user and model text in dozens of places.
-        codewhale_telemetry::set_exit_class(codewhale_telemetry::ExitClass::Panic);
+        ghosty_telemetry::set_exit_class(ghosty_telemetry::ExitClass::Panic);
         if let Some(site) = panic_info
             .location()
-            .map(|loc| codewhale_telemetry::reduce_panic_site(loc.file(), loc.line(), loc.column()))
+            .map(|loc| ghosty_telemetry::reduce_panic_site(loc.file(), loc.line(), loc.column()))
         {
-            codewhale_telemetry::record_blocking(codewhale_telemetry::Event::Panic { site });
+            ghosty_telemetry::record_blocking(ghosty_telemetry::Event::Panic { site });
         }
         // Write crash dump best-effort
         if let Some(home) = crate::config::effective_home_dir() {
@@ -1678,7 +1678,7 @@ fn run_with_args(args: Vec<String>) -> Result<()> {
             e.exit();
         }
     };
-    // #5098: project-scope fleet agent profiles (`.codewhale/agents/*.toml`)
+    // #5098: project-scope fleet agent profiles (`.ghosty/agents/*.toml`)
     // join the dispatch roster under the same trust decision as the rest of
     // project-level config — `--no-project-config` opts the layer out for
     // every roster read in this process.
@@ -1708,10 +1708,10 @@ fn run_with_args(args: Vec<String>) -> Result<()> {
     // explicit stack while keeping process hardening and the global panic hook
     // above this boundary, before Tokio or any worker thread exists.
     let runtime_thread = std::thread::Builder::new()
-        .name("codewhale-main".to_string())
-        .stack_size(CODEWHALE_MAIN_STACK_BYTES)
+        .name("ghosty-main".to_string())
+        .stack_size(GHOSTY_MAIN_STACK_BYTES)
         .spawn(move || run_async_main(cli, command, plugin_discovery, plugin_registry))
-        .context("Failed to start the Codewhale runtime thread")?;
+        .context("Failed to start the Ghosty runtime thread")?;
     match runtime_thread.join() {
         Ok(result) => result,
         Err(payload) => {
@@ -1720,7 +1720,7 @@ fn run_with_args(args: Vec<String>) -> Result<()> {
                 .map(|value| (*value).to_string())
                 .or_else(|| payload.downcast_ref::<String>().cloned())
                 .unwrap_or_else(|| "unknown panic payload".to_string());
-            Err(anyhow!("Codewhale runtime thread panicked: {message}"))
+            Err(anyhow!("Ghosty runtime thread panicked: {message}"))
         }
     }
 }
@@ -1742,8 +1742,8 @@ fn run_async_main(
 /// Build the runtime that owns every async task in this binary.
 ///
 /// `#[tokio::main]` used to expand here, which left every worker thread on
-/// tokio's 2 MiB default while only the `codewhale-main` owner thread above
-/// received `CODEWHALE_MAIN_STACK_BYTES`. The engine does not run on that owner
+/// tokio's 2 MiB default while only the `ghosty-main` owner thread above
+/// received `GHOSTY_MAIN_STACK_BYTES`. The engine does not run on that owner
 /// thread — `core::engine::spawn_engine` hands `Engine::run` to
 /// `utils::spawn_supervised`, a bare `tokio::spawn` — so the explicit stack
 /// never applied where the depth actually is.
@@ -1763,8 +1763,8 @@ fn run_async_main(
 /// the default sizing unchanged.
 ///
 /// `#[tokio::main]` used to expand here, which left every worker thread on
-/// tokio's 2 MiB default while only the `codewhale-main` owner thread above
-/// received `CODEWHALE_MAIN_STACK_BYTES`. The engine does not run on that owner
+/// tokio's 2 MiB default while only the `ghosty-main` owner thread above
+/// received `GHOSTY_MAIN_STACK_BYTES`. The engine does not run on that owner
 /// thread — `core::engine::spawn_engine` hands `Engine::run` to
 /// `utils::spawn_supervised`, a bare `tokio::spawn` — so the explicit stack
 /// never applied where the depth actually is.
@@ -1785,7 +1785,7 @@ pub(crate) fn build_runtime(command: Option<&Commands>) -> Result<tokio::runtime
     }
     builder
         .build()
-        .context("Failed to build the Codewhale Tokio runtime")
+        .context("Failed to build the Ghosty Tokio runtime")
 }
 
 /// Number of async workers to request from tokio.
@@ -1817,7 +1817,7 @@ fn tokio_runtime_builder() -> tokio::runtime::Builder {
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     builder
         .enable_all()
-        .thread_stack_size(CODEWHALE_MAIN_STACK_BYTES);
+        .thread_stack_size(GHOSTY_MAIN_STACK_BYTES);
     builder
 }
 
@@ -1826,8 +1826,8 @@ fn tokio_runtime_builder() -> tokio::runtime::Builder {
 /// A function of the parsed subcommand, never of the executable: this one
 /// binary serves at least five surfaces, so `current_exe()` would label all of
 /// them the same.
-fn telemetry_surface(command: Option<&Commands>) -> codewhale_telemetry::Surface {
-    use codewhale_telemetry::Surface;
+fn telemetry_surface(command: Option<&Commands>) -> ghosty_telemetry::Surface {
+    use ghosty_telemetry::Surface;
     match command {
         None | Some(Commands::Resume { .. } | Commands::Fork { .. } | Commands::Pr { .. }) => {
             Surface::Tui
@@ -1845,8 +1845,8 @@ fn telemetry_surface(command: Option<&Commands>) -> codewhale_telemetry::Surface
 }
 
 /// How this session was started, for `session_start`.
-fn telemetry_session_source(command: Option<&Commands>) -> codewhale_telemetry::SessionSource {
-    use codewhale_telemetry::SessionSource;
+fn telemetry_session_source(command: Option<&Commands>) -> ghosty_telemetry::SessionSource {
+    use ghosty_telemetry::SessionSource;
     match command {
         None | Some(Commands::Pr { .. }) => SessionSource::Interactive,
         Some(Commands::Resume { .. }) => SessionSource::Resume,
@@ -1868,45 +1868,45 @@ fn telemetry_command_is_read_only(command: Option<&Commands>) -> bool {
 ///
 /// This is the read that v1 of the design was missing entirely:
 /// `resolve_runtime_options` had no non-test caller in this crate, so neither
-/// `telemetry = false` in the config file nor `CODEWHALE_TELEMETRY=0` was ever
+/// `telemetry = false` in the config file nor `GHOSTY_TELEMETRY=0` was ever
 /// consulted by a process that would have emitted.
 ///
 /// `CliRuntimeOverrides::default()` is correct here. The dispatcher has already
 /// applied the kill-switch floor and forwarded the *resolved* value through
-/// `CODEWHALE_TELEMETRY`, which `EnvRuntimeOverrides::load()` picks up — and
-/// re-reading `CODEWHALE_TELEMETRY` inside the telemetry crate would fork
+/// `GHOSTY_TELEMETRY`, which `EnvRuntimeOverrides::load()` picks up — and
+/// re-reading `GHOSTY_TELEMETRY` inside the telemetry crate would fork
 /// `parse_bool`, the `DEEPSEEK_TELEMETRY` alias, and the floor into a second
 /// source of truth.
 fn arm_telemetry_with_setup(
     config_path: Option<PathBuf>,
-    surface: codewhale_telemetry::Surface,
-    source: codewhale_telemetry::SessionSource,
-    setup_override: Option<&codewhale_config::SetupState>,
+    surface: ghosty_telemetry::Surface,
+    source: ghosty_telemetry::SessionSource,
+    setup_override: Option<&ghosty_config::SetupState>,
 ) {
-    let Ok(store) = codewhale_config::ConfigStore::load(config_path) else {
+    let Ok(store) = ghosty_config::ConfigStore::load(config_path) else {
         return;
     };
     let resolved = store
         .config
-        .resolve_runtime_options(&codewhale_config::CliRuntimeOverrides::default());
+        .resolve_runtime_options(&ghosty_config::CliRuntimeOverrides::default());
     let setup = if let Some(setup) = setup_override {
         setup.clone()
     } else {
-        let Some(setup) = codewhale_telemetry::load_setup_state_for_decision() else {
+        let Some(setup) = ghosty_telemetry::load_setup_state_for_decision() else {
             // An existing unreadable privacy record may contain a decline.
             // Failing closed is safer than replacing it with default-on.
             return;
         };
         setup
     };
-    let codewhale_telemetry::TelemetryDecision::Enabled(consent) =
-        codewhale_telemetry::decide(&resolved, &setup, surface)
+    let ghosty_telemetry::TelemetryDecision::Enabled(consent) =
+        ghosty_telemetry::decide(&resolved, &setup, surface)
     else {
         return;
     };
-    codewhale_telemetry::init(consent.with_config_path(Some(store.path().to_path_buf())));
+    ghosty_telemetry::init(consent.with_config_path(Some(store.path().to_path_buf())));
     let _ = TELEMETRY_SESSION_START.set(std::time::Instant::now());
-    codewhale_telemetry::record(codewhale_telemetry::Event::SessionStart { source });
+    ghosty_telemetry::record(ghosty_telemetry::Event::SessionStart { source });
 }
 
 fn arm_telemetry(cli: &Cli, command: Option<&Commands>) {
@@ -1929,11 +1929,11 @@ fn arm_telemetry(cli: &Cli, command: Option<&Commands>) {
 /// wiped whenever the telemetry home remains reachable.
 pub(crate) fn apply_tui_telemetry_decision(
     pending: &crate::telemetry_notice::PendingTelemetryNotice,
-    setup: &codewhale_config::SetupState,
+    setup: &ghosty_config::SetupState,
 ) {
     arm_telemetry_with_setup(
         pending.config_path.clone(),
-        codewhale_telemetry::Surface::Tui,
+        ghosty_telemetry::Surface::Tui,
         pending.session_source,
         Some(setup),
     );
@@ -1944,24 +1944,21 @@ pub(crate) fn apply_tui_telemetry_decision(
 /// Short CLI (`config`, `doctor`, `auth`, …) records `session_end`, seals the
 /// local queue within a much smaller deadline, and returns. The 3s network
 /// flush is a TUI/exec concern: a hung TLS handshake must not hold
-/// `codewhale config list`. A configured endpoint remains buffered for the
+/// `ghosty config list`. A configured endpoint remains buffered for the
 /// next interactive session; an explicitly empty endpoint writes its local
 /// dry-run batch immediately.
-async fn finish_telemetry(outcome: &Result<()>, surface: codewhale_telemetry::Surface) {
-    if !codewhale_telemetry::is_armed() {
+async fn finish_telemetry(outcome: &Result<()>, surface: ghosty_telemetry::Surface) {
+    if !ghosty_telemetry::is_armed() {
         return;
     }
     // Only escalate: the panic hook and the signal path have already spoken if
     // they ran, and a stated class must not be overwritten by an inferred one.
-    if outcome.is_err()
-        && codewhale_telemetry::exit_class() == codewhale_telemetry::ExitClass::Clean
-    {
-        codewhale_telemetry::set_exit_class(codewhale_telemetry::ExitClass::Error);
+    if outcome.is_err() && ghosty_telemetry::exit_class() == ghosty_telemetry::ExitClass::Clean {
+        ghosty_telemetry::set_exit_class(ghosty_telemetry::ExitClass::Error);
     }
-    codewhale_telemetry::record(telemetry_session_end());
-    if surface == codewhale_telemetry::Surface::Cli {
-        let _ =
-            codewhale_telemetry::persist_local_blocking(codewhale_telemetry::CLI_PERSIST_TIMEOUT);
+    ghosty_telemetry::record(telemetry_session_end());
+    if surface == ghosty_telemetry::Surface::Cli {
+        let _ = ghosty_telemetry::persist_local_blocking(ghosty_telemetry::CLI_PERSIST_TIMEOUT);
         return;
     }
     // `shutdown_blocking` parks a thread waiting on the writer, so it goes to
@@ -1969,9 +1966,9 @@ async fn finish_telemetry(outcome: &Result<()>, surface: codewhale_telemetry::Su
     // unbounded `let _ = task.await` next door is not a pattern to copy here: a
     // hung TLS handshake would hold the process open past the last frame.
     let _ = tokio::time::timeout(
-        codewhale_telemetry::SHUTDOWN_FLUSH_TIMEOUT,
+        ghosty_telemetry::SHUTDOWN_FLUSH_TIMEOUT,
         tokio::task::spawn_blocking(|| {
-            codewhale_telemetry::shutdown_blocking(codewhale_telemetry::SHUTDOWN_FLUSH_TIMEOUT)
+            ghosty_telemetry::shutdown_blocking(ghosty_telemetry::SHUTDOWN_FLUSH_TIMEOUT)
         }),
     )
     .await;
@@ -2011,7 +2008,7 @@ async fn run_async_main_inner(
     // immediate Disable choice stop this very session without printing or
     // blocking on a shell questionnaire first.
     let surface = telemetry_surface(command.as_ref());
-    let telemetry_notice_plan = if surface == codewhale_telemetry::Surface::Tui {
+    let telemetry_notice_plan = if surface == ghosty_telemetry::Surface::Tui {
         crate::telemetry_notice::plan_if_due(
             cli.config.clone(),
             telemetry_session_source(command.as_ref()),
@@ -2019,8 +2016,8 @@ async fn run_async_main_inner(
     } else {
         crate::telemetry_notice::TelemetryNoticePlan::NotDue
     };
-    let should_arm_before_dispatch = surface != codewhale_telemetry::Surface::Tui
-        || telemetry_notice_plan.should_arm_before_tui();
+    let should_arm_before_dispatch =
+        surface != ghosty_telemetry::Surface::Tui || telemetry_notice_plan.should_arm_before_tui();
     let pending_telemetry_notice = telemetry_notice_plan.into_pending();
     if should_arm_before_dispatch {
         arm_telemetry(&cli, command.as_ref());
@@ -2155,10 +2152,10 @@ async fn run_async_main_dispatch(
                     let _ = parse_sandbox_policy(sandbox, true, Vec::new(), false, false)?;
                     config.sandbox_mode = Some(sandbox.to_ascii_lowercase());
                 }
-                // Honour CODEWHALE_BASE_URL / DEEPSEEK_BASE_URL forwarded by
+                // Honour GHOSTY_BASE_URL / DEEPSEEK_BASE_URL forwarded by
                 // the CLI dispatcher from --base-url.
-                if let Ok(env_url) = std::env::var("CODEWHALE_BASE_URL")
-                    .or_else(|_| std::env::var("DEEPSEEK_BASE_URL"))
+                if let Ok(env_url) =
+                    std::env::var("GHOSTY_BASE_URL").or_else(|_| std::env::var("DEEPSEEK_BASE_URL"))
                 {
                     let trimmed = env_url.trim();
                     if !trimmed.is_empty() {
@@ -2374,7 +2371,7 @@ async fn run_async_main_dispatch(
                     let cors_origins = resolve_cors_origins(&config, &args.cors_origin);
                     let bind_host = resolve_serve_bind_host(args.mobile, args.host);
                     if args.web && bind_host.host != "127.0.0.1" {
-                        bail!("Codewhale web is loopback-only and must bind to 127.0.0.1");
+                        bail!("Ghosty web is loopback-only and must bind to 127.0.0.1");
                     }
                     if bind_host.mobile_rebound_to_lan {
                         println!(
@@ -2440,7 +2437,7 @@ async fn run_async_main_dispatch(
     }
 
     // Top-level prompt mode: submit the initial prompt, then keep the TUI alive
-    // for follow-up messages. Use `codewhale exec` for explicit non-interactive
+    // for follow-up messages. Use `ghosty exec` for explicit non-interactive
     // one-shot behavior (#2370).
     let config = load_config_from_cli(&cli)?;
     if let Some(initial_input) = top_level_prompt_initial_input(&cli.prompt) {
@@ -2455,7 +2452,7 @@ async fn run_async_main_dispatch(
         .await;
     }
 
-    // Handle session resume. Plain `codewhale` starts fresh: interrupted
+    // Handle session resume. Plain `ghosty` starts fresh: interrupted
     // snapshots are preserved for explicit resume, but never auto-attached.
     let mut startup_notice = None;
     let resume_session_id = if cli.continue_session {
@@ -2468,7 +2465,7 @@ async fn run_async_main_dispatch(
         let workspace = resolve_workspace(&cli);
         preserve_interrupted_checkpoint_for_explicit_resume(&workspace);
         // Opt-in auto-resume (#2934). Off by default, so the historical
-        // "plain `codewhale` starts fresh" behaviour is unchanged unless the
+        // "plain `ghosty` starts fresh" behaviour is unchanged unless the
         // user asked for something else. The decision never resumes an
         // archived, unreadable, or foreign-workspace session; every fallback
         // carries a receipt rather than silently starting blank.
@@ -2495,8 +2492,8 @@ async fn run_async_main_dispatch(
 
 /// Resolve the opt-in auto-resume setting into a session id plus a receipt.
 ///
-/// Deliberately scoped to the plain interactive launch. `codewhale "do X"`
-/// (top-level prompt) and `codewhale exec` are not covered: silently prefixing
+/// Deliberately scoped to the plain interactive launch. `ghosty "do X"`
+/// (top-level prompt) and `ghosty exec` are not covered: silently prefixing
 /// a one-shot task with a prior conversation would change what is sent to the
 /// model, which is not a layout preference the user opted into.
 fn resolve_auto_resume(workspace: &Path) -> (Option<String>, Option<String>) {
@@ -2547,7 +2544,7 @@ struct WorkspaceDotenvReport {
 /// Load the narrow, data-plane subset of a workspace `.env` before Tokio.
 ///
 /// Repository content is not product authority. In particular, a committed
-/// `.env` must not be able to redirect `CODEWHALE_HOME`, config/profile files,
+/// `.env` must not be able to redirect `GHOSTY_HOME`, config/profile files,
 /// MCP servers, plugin trust, executable lookup, sandbox/approval posture, or
 /// network destinations. Shell-exported values and config/CLI arguments remain
 /// the explicit surfaces for those controls.
@@ -2555,7 +2552,7 @@ fn warn_on_workspace_dotenv_result() {
     match load_workspace_dotenv_credentials() {
         Ok(Some(report)) if !report.ignored.is_empty() => {
             eprintln!(
-                "Codewhale ignored non-credential settings in {}: {}. Use config.toml, CLI flags, or the launching shell for control settings.",
+                "Ghosty ignored non-credential settings in {}: {}. Use config.toml, CLI flags, or the launching shell for control settings.",
                 report.path.display(),
                 display_env_key_set(&report.ignored)
             );
@@ -2565,7 +2562,7 @@ fn warn_on_workspace_dotenv_result() {
             // The error intentionally contains no file contents or parsed
             // values. A malformed or unsafe workspace file fails closed while
             // shell/config credentials remain available.
-            eprintln!("Codewhale did not load workspace .env: {error}");
+            eprintln!("Ghosty did not load workspace .env: {error}");
         }
     }
 }
@@ -2655,7 +2652,7 @@ fn load_workspace_dotenv_credentials_from_path(path: &Path) -> Result<WorkspaceD
 
         // SAFETY: this loader runs synchronously in `main` before the runtime
         // owner or Tokio workers are spawned. No concurrent environment reader
-        // exists inside Codewhale, and later startup code treats this process
+        // exists inside Ghosty, and later startup code treats this process
         // environment as immutable.
         unsafe { std::env::set_var(&key, value) };
         report.loaded.insert(key);
@@ -2664,7 +2661,7 @@ fn load_workspace_dotenv_credentials_from_path(path: &Path) -> Result<WorkspaceD
 }
 
 fn is_workspace_dotenv_credential_key(key: &str) -> bool {
-    codewhale_config::provider::providers_sorted_for_display()
+    ghosty_config::provider::providers_sorted_for_display()
         .into_iter()
         .any(|provider| provider.env_vars().contains(&key))
         || matches!(
@@ -2995,11 +2992,11 @@ async fn run_fleet_command(workspace: &Path, config: &Config, args: FleetArgs) -
     use crate::fleet::control as fleet_control;
     use crate::fleet::executor::FleetExecutor;
     use crate::fleet::manager::{FleetManager, FleetStatusSnapshot, FleetWorkerInspection};
-    use codewhale_lane::{ControlOperation, ControlSurface};
-    use codewhale_protocol::fleet::{FleetAlertEventClass, FleetArtifactKind, FleetRunId};
+    use ghosty_lane::{ControlOperation, ControlSurface};
+    use ghosty_protocol::fleet::{FleetAlertEventClass, FleetArtifactKind, FleetRunId};
 
     // Every label and every row below comes from the shared Fleet control
-    // surface, so `codewhale fleet …` and `/fleet …` cannot drift in how they
+    // surface, so `ghosty fleet …` and `/fleet …` cannot drift in how they
     // describe the same durable ledger (#1888, #4022).
     fn print_status(status: &FleetStatusSnapshot) {
         println!("{}", fleet_control::render_fleet_status_snapshot(status));
@@ -3014,7 +3011,7 @@ async fn run_fleet_command(workspace: &Path, config: &Config, args: FleetArgs) -
     }
 
     /// Print one shared control receipt on the CLI surface.
-    fn emit_fleet_receipt(receipt: &codewhale_lane::ControlReceipt) -> Result<()> {
+    fn emit_fleet_receipt(receipt: &ghosty_lane::ControlReceipt) -> Result<()> {
         if receipt.is_error() {
             eprintln!("{}", receipt.render());
             let detail = receipt
@@ -3117,13 +3114,13 @@ async fn run_fleet_command(workspace: &Path, config: &Config, args: FleetArgs) -
         config.subagent_token_budget_for_provider(provider),
     );
     // Probe the durable ledger *before* opening the manager: FleetManager::open
-    // creates `.codewhale/fleet.jsonl` as a side effect, so a later probe would
+    // creates `.ghosty/fleet.jsonl` as a side effect, so a later probe would
     // always find a ledger and the CLI would report availability differently
     // from the slash surface for the same workspace (#4022).
     let fleet_context = fleet_control::fleet_control_context(workspace);
     // Probing is not enough on its own: `FleetManager::open` *creates* the
     // ledger, and it used to run for every subcommand before this match. That
-    // made `codewhale fleet status` in a ledgerless workspace print
+    // made `ghosty fleet status` in a ledgerless workspace print
     // "no_fleet_ledger" while simultaneously creating the file it said was
     // missing — and the next invocation then reported an empty ledger as if a
     // Fleet had existed all along. Refuse the control verbs here, before the
@@ -3139,7 +3136,7 @@ async fn run_fleet_command(workspace: &Path, config: &Config, args: FleetArgs) -
         let descriptor = operation.descriptor();
         let availability = descriptor.availability(ControlSurface::Cli, fleet_context);
         if !availability.is_available() {
-            return emit_fleet_receipt(&codewhale_lane::ControlReceipt::unavailable(
+            return emit_fleet_receipt(&ghosty_lane::ControlReceipt::unavailable(
                 descriptor,
                 ControlSurface::Cli,
                 availability,
@@ -3181,16 +3178,16 @@ async fn run_fleet_command(workspace: &Path, config: &Config, args: FleetArgs) -
                 return Ok(());
             }
             println!(
-                "manager loop running; use `codewhale fleet status`, `inspect`, `interrupt`, or `stop --all` from another terminal."
+                "manager loop running; use `ghosty fleet status`, `inspect`, `interrupt`, or `stop --all` from another terminal."
             );
             let mut executor = FleetExecutor::new(workspace);
-            let codewhale_binary = fleet::executor::configured_codewhale_binary();
+            let ghosty_binary = fleet::executor::configured_ghosty_binary();
             let status = manager
                 .run_to_completion(
                     &report.run_id,
                     max_workers,
                     &mut executor,
-                    &codewhale_binary,
+                    &ghosty_binary,
                     None,
                     Duration::from_secs(2),
                 )
@@ -3241,17 +3238,17 @@ async fn run_fleet_command(workspace: &Path, config: &Config, args: FleetArgs) -
             let report = manager.restart_worker(&worker_id)?;
             print_inspection(&report.inspection);
             println!(
-                "manager loop running for restarted run {}; use `codewhale fleet status`, `inspect`, `interrupt`, or `stop --all` from another terminal.",
+                "manager loop running for restarted run {}; use `ghosty fleet status`, `inspect`, `interrupt`, or `stop --all` from another terminal.",
                 report.run_id.0
             );
             let mut executor = FleetExecutor::new(workspace);
-            let codewhale_binary = fleet::executor::configured_codewhale_binary();
+            let ghosty_binary = fleet::executor::configured_ghosty_binary();
             let status = manager
                 .run_to_completion(
                     &report.run_id,
                     report.max_workers,
                     &mut executor,
-                    &codewhale_binary,
+                    &ghosty_binary,
                     None,
                     Duration::from_secs(2),
                 )
@@ -3412,9 +3409,9 @@ fn init_skills_dir(skills_dir: &Path, force: bool) -> Result<(PathBuf, WriteStat
 fn tools_readme_template() -> &'static str {
     "# Local tools\n\n\
      Drop self-describing scripts here so they can be discovered by\n\
-     `codewhale-tui setup --status` and surfaced in `codewhale-tui doctor`.\n\n\
+     `ghosty_tui setup --status` and surfaced in `ghosty_tui doctor`.\n\n\
      When `[tools.plugin_dir]` is set in config.toml (or when the default\n\
-     `~/.codewhale/tools/` directory exists), they are auto-discovered and\n\
+     `~/.ghosty/tools/` directory exists), they are auto-discovered and\n\
      registered as model-visible tools.\n\n\
      Each script should start with a frontmatter-style header so the\n\
      description is visible without executing the file and the agent knows\n\
@@ -3434,7 +3431,7 @@ fn tools_example_script() -> &'static str {
      # name: example\n\
      # description: Print a confirmation that local tool discovery works\n\
      # usage: example [name]\n\
-     printf 'codewhale-tui local tool ok: %s\\n' \"${1:-world}\"\n"
+     printf 'ghosty_tui local tool ok: %s\\n' \"${1:-world}\"\n"
 }
 
 fn init_tools_dir(tools_dir: &Path, force: bool) -> Result<(PathBuf, WriteStatus, WriteStatus)> {
@@ -3452,9 +3449,9 @@ fn init_tools_dir(tools_dir: &Path, force: bool) -> Result<(PathBuf, WriteStatus
 
 fn plugins_readme_template() -> &'static str {
     "# Local plugins\n\n\
-     Each Codewhale plugin bundle lives in its own subdirectory with a\n\
+     Each Ghosty plugin bundle lives in its own subdirectory with a\n\
      versioned `plugin.toml`. User bundles live here; workspace bundles live\n\
-     under `<workspace>/.codewhale/plugins/`. Both are discovered read-only,\n\
+     under `<workspace>/.ghosty/plugins/`. Both are discovered read-only,\n\
      untrusted, and disabled by default.\n\n\
      A v0.9.1 bundle layout looks like:\n\n\
      ```\n\
@@ -3470,12 +3467,12 @@ fn plugins_readme_template() -> &'static str {
      content-addressed runtime snapshot, then enable the bundle. Remote MCP\n\
      authentication must name environment sources; never store secret values\n\
      in `plugin.toml`.\n\n\
-     Codewhale activates declarative Skills, MCP servers, Commands, Agent\n\
+     Ghosty activates declarative Skills, MCP servers, Commands, Agent\n\
      profiles, and Hooks through their existing engines. LSP, native\n\
      extensions, filesystem grants, and lifecycle mutation stay inventoried\n\
      and inactive; a mixed bundle can still activate supported components.\n\
      Marketplace catalogs, install, update, and uninstall all feed this same\n\
-     disabled-and-untrusted review path; none grants automatic trust. Codewhale\n\
+     disabled-and-untrusted review path; none grants automatic trust. Ghosty\n\
      does not scan other applications for ambient plugins.\n"
 }
 
@@ -3484,7 +3481,7 @@ fn plugin_example_manifest_template() -> &'static str {
      [plugin]\n\
      name = \"example\"\n\
      version = \"0.1.0\"\n\
-     description = \"Starter Codewhale plugin bundle\"\n\n\
+     description = \"Starter Ghosty plugin bundle\"\n\n\
      [skills]\n\
      path = \"skills\"\n"
 }
@@ -3538,11 +3535,11 @@ fn init_plugins_dir(
     ))
 }
 
-/// Resolve the user-supplied CORS origins for `codewhale serve --http`.
+/// Resolve the user-supplied CORS origins for `ghosty serve --http`.
 ///
 /// Sources, in priority order (later sources extend earlier ones):
 /// 1. `--cors-origin URL` flags (repeatable)
-/// 2. `CODEWHALE_CORS_ORIGINS` env var (comma-separated),
+/// 2. `GHOSTY_CORS_ORIGINS` env var (comma-separated),
 ///    then `DEEPSEEK_CORS_ORIGINS` as an alias
 /// 3. `[runtime_api] cors_origins = [...]` in `config.toml`
 ///
@@ -3565,7 +3562,7 @@ fn resolve_cors_origins(config: &Config, flag_origins: &[String]) -> Vec<String>
         push(o);
     }
     if let Ok(env_value) =
-        std::env::var("CODEWHALE_CORS_ORIGINS").or_else(|_| std::env::var("DEEPSEEK_CORS_ORIGINS"))
+        std::env::var("GHOSTY_CORS_ORIGINS").or_else(|_| std::env::var("DEEPSEEK_CORS_ORIGINS"))
     {
         for piece in env_value.split(',') {
             push(piece);
@@ -3582,9 +3579,9 @@ fn resolve_cors_origins(config: &Config, flag_origins: &[String]) -> Vec<String>
 }
 
 fn deepseek_home_dir() -> PathBuf {
-    codewhale_config::codewhale_home().unwrap_or_else(|_| {
+    ghosty_config::ghosty_home().unwrap_or_else(|_| {
         crate::config::effective_home_dir()
-            .map_or_else(|| PathBuf::from(".codewhale"), |h| h.join(".codewhale"))
+            .map_or_else(|| PathBuf::from(".ghosty"), |h| h.join(".ghosty"))
     })
 }
 
@@ -3663,7 +3660,7 @@ fn run_setup(
 
     println!(
         "{}",
-        "Codewhale Setup".truecolor(aqua_r, aqua_g, aqua_b).bold()
+        "Ghosty Setup".truecolor(aqua_r, aqua_g, aqua_b).bold()
     );
     println!("{}", "==============".truecolor(sky_r, sky_g, sky_b));
     println!("Workspace: {}", crate::utils::display_path(workspace));
@@ -3682,9 +3679,7 @@ fn run_setup(
                 println!("  · MCP config already exists at {}", mcp_path.display());
             }
         }
-        println!(
-            "    Next: edit the file, then run `codewhale mcp list` or `codewhale mcp tools`."
-        );
+        println!("    Next: edit the file, then run `ghosty mcp list` or `ghosty mcp tools`.");
     }
 
     if run_skills {
@@ -4004,7 +3999,7 @@ fn run_setup_status(
 
     println!(
         "{}",
-        "Codewhale Status".truecolor(aqua_r, aqua_g, aqua_b).bold()
+        "Ghosty Status".truecolor(aqua_r, aqua_g, aqua_b).bold()
     );
     println!("{}", "===============".truecolor(sky_r, sky_g, sky_b));
     println!("workspace: {}", workspace.display());
@@ -4032,7 +4027,7 @@ fn run_setup_status(
             "!".truecolor(sky_r, sky_g, sky_b)
         ),
         ApiKeySource::OAuth => println!(
-            "  {} oauth: Codewhale-owned route selected (token availability not probed)",
+            "  {} oauth: Ghosty-owned route selected (token availability not probed)",
             "·".dimmed()
         ),
         ApiKeySource::ExternalConsent => println!(
@@ -4143,7 +4138,7 @@ fn run_setup_status(
     println!("  {} {}", "·".dimmed(), dotenv_status_line(workspace));
 
     println!();
-    println!("Run `codewhale doctor --json` for a machine-readable check.");
+    println!("Run `ghosty doctor --json` for a machine-readable check.");
     Ok(())
 }
 
@@ -4275,7 +4270,7 @@ async fn run_doctor(
 
     println!(
         "{}",
-        "codewhale Doctor"
+        "ghosty Doctor"
             .truecolor(accent_r, accent_g, accent_b)
             .bold()
     );
@@ -4284,7 +4279,7 @@ async fn run_doctor(
 
     // Version info
     println!("{}", "Version Information:".bold());
-    println!("  codewhale-tui: {}", env!("CODEWHALE_BUILD_VERSION"));
+    println!("  ghosty-tui: {}", env!("GHOSTY_BUILD_VERSION"));
     println!("  rust: {}", rustc_version());
     println!();
 
@@ -4341,7 +4336,7 @@ async fn run_doctor(
         println!("  · {label}: {}", crate::utils::display_path(path));
     }
 
-    let secret_backend = codewhale_secrets::diagnose_secret_backend();
+    let secret_backend = ghosty_secrets::diagnose_secret_backend();
     println!();
     println!("{}", "Secret Backend (structural only):".bold());
     for line in crate::doctor::secret_backend_human_lines(&secret_backend) {
@@ -4362,7 +4357,7 @@ async fn run_doctor(
     println!("  active: {}", crate::utils::display_path(active_root));
     if active_root != &code_home {
         println!(
-            "  note: legacy {} found; start Codewhale once to trigger safe migration where available.",
+            "  note: legacy {} found; start Ghosty once to trigger safe migration where available.",
             crate::utils::display_path(&legacy_home)
         );
     }
@@ -4377,7 +4372,7 @@ async fn run_doctor(
     let session_recovery = doctor_session_recovery_report(
         &code_home,
         &legacy_home,
-        codewhale_config::codewhale_home_is_explicit(),
+        ghosty_config::ghosty_home_is_explicit(),
     );
     print_doctor_legacy_state_report(
         &legacy_state_report,
@@ -4573,7 +4568,7 @@ async fn run_doctor(
                 );
                 if error_msg.contains("401") || error_msg.contains("Unauthorized") {
                     println!(
-                        "    Invalid API key. Check `codewhale auth status`, DEEPSEEK_API_KEY, or config.toml"
+                        "    Invalid API key. Check `ghosty auth status`, DEEPSEEK_API_KEY, or config.toml"
                     );
                 } else if error_msg.contains("403") || error_msg.contains("Forbidden") {
                     println!(
@@ -4611,14 +4606,14 @@ async fn run_doctor(
                 "·".dimmed()
             );
             println!(
-                "    Run `codewhale doctor --probe-local` to opt in; the request may start a local service."
+                "    Run `ghosty doctor --probe-local` to opt in; the request may start a local service."
             );
         } else {
             println!(
                 "  {} Live hosted connectivity not checked (offline default)",
                 "·".dimmed()
             );
-            println!("    Run `codewhale doctor --probe-api` to opt in.");
+            println!("    Run `ghosty doctor --probe-api` to opt in.");
         }
     }
 
@@ -4679,7 +4674,7 @@ async fn run_doctor(
         Ok(cfg) if cfg.servers.is_empty() => {
             println!("  {} 0 merged server(s) configured", "·".dimmed());
             if !mcp_config_path.exists() && !project_mcp_config_path.exists() {
-                println!("    Run `codewhale mcp init` or add `.codewhale/mcp.json`.");
+                println!("    Run `ghosty mcp init` or add `.ghosty/mcp.json`.");
             }
         }
         Ok(cfg) => {
@@ -4718,7 +4713,7 @@ async fn run_doctor(
                     println!("      disabled; live health not checked");
                 } else {
                     println!(
-                        "      process/protocol/backend: not checked; `codewhale mcp validate` explicitly starts and initializes configured servers"
+                        "      process/protocol/backend: not checked; `ghosty mcp validate` explicitly starts and initializes configured servers"
                     );
                 }
             }
@@ -4763,7 +4758,7 @@ async fn run_doctor(
                 }
             } else {
                 println!(
-                    "    Use codewhale doctor --probe-mcp to opt in to live process/protocol checks; it may start configured servers."
+                    "    Use ghosty doctor --probe-mcp to opt in to live process/protocol checks; it may start configured servers."
                 );
             }
         }
@@ -4902,7 +4897,7 @@ async fn run_doctor(
             .is_some_and(|dir| dir.exists())
         && !global_skills_dir.exists()
     {
-        println!("    Run `codewhale setup --skills` (or add --local for ./skills).");
+        println!("    Run `ghosty setup --skills` (or add --local for ./skills).");
     }
 
     // Tools directory
@@ -4923,7 +4918,7 @@ async fn run_doctor(
             "·".dimmed(),
             crate::utils::display_path(&tools_dir)
         );
-        println!("    Run `codewhale setup --tools` to scaffold a starter dir.");
+        println!("    Run `ghosty setup --tools` to scaffold a starter dir.");
     }
 
     // Plugins directory
@@ -4944,7 +4939,7 @@ async fn run_doctor(
             "·".dimmed(),
             crate::utils::display_path(&plugins_dir)
         );
-        println!("    Run `codewhale setup --plugins` to scaffold a starter dir.");
+        println!("    Run `ghosty setup --plugins` to scaffold a starter dir.");
     }
 
     // Storage surfaces (#422 / #440 / #500)
@@ -5127,7 +5122,7 @@ async fn run_doctor(
         }
     }
 
-    // PDF text extraction is an optional integration. Codewhale itself stays
+    // PDF text extraction is an optional integration. Ghosty itself stays
     // a single required executable; file and web tools report a typed
     // failed `binary_unavailable` result when Poppler is not installed.
     match crate::dependencies::resolve_pdftotext() {
@@ -5312,7 +5307,7 @@ struct DoctorSessionRecoveryReport {
     status: DoctorSessionRecoveryStatus,
     primary_sessions_path: PathBuf,
     legacy_sessions_path: PathBuf,
-    codewhale_home_is_explicit: bool,
+    ghosty_home_is_explicit: bool,
     legacy_session_file_count: usize,
     already_present_file_count: usize,
     recoverable_file_count: usize,
@@ -5345,12 +5340,11 @@ fn doctor_legacy_state_status(
 }
 
 fn doctor_state_roots() -> (PathBuf, PathBuf) {
-    let code_home =
-        codewhale_config::codewhale_home().unwrap_or_else(|_| PathBuf::from("~/.codewhale"));
-    let legacy_home = if codewhale_config::codewhale_home_is_explicit() {
-        code_home.join(codewhale_config::LEGACY_APP_DIR)
+    let code_home = ghosty_config::ghosty_home().unwrap_or_else(|_| PathBuf::from("~/.ghosty"));
+    let legacy_home = if ghosty_config::ghosty_home_is_explicit() {
+        code_home.join(ghosty_config::LEGACY_APP_DIR)
     } else {
-        codewhale_config::legacy_deepseek_home().unwrap_or_else(|_| PathBuf::from("~/.deepseek"))
+        ghosty_config::legacy_deepseek_home().unwrap_or_else(|_| PathBuf::from("~/.deepseek"))
     };
     (code_home, legacy_home)
 }
@@ -5394,7 +5388,7 @@ fn doctor_legacy_state_report(
 fn doctor_session_recovery_report(
     primary_root: &Path,
     legacy_root: &Path,
-    codewhale_home_is_explicit: bool,
+    ghosty_home_is_explicit: bool,
 ) -> DoctorSessionRecoveryReport {
     let primary_sessions_path = primary_root.join("sessions");
     let legacy_sessions_path = legacy_root.join("sessions");
@@ -5402,7 +5396,7 @@ fn doctor_session_recovery_report(
         status: DoctorSessionRecoveryStatus::NoLegacySessions,
         primary_sessions_path,
         legacy_sessions_path,
-        codewhale_home_is_explicit,
+        ghosty_home_is_explicit,
         legacy_session_file_count: 0,
         already_present_file_count: 0,
         recoverable_file_count: 0,
@@ -5410,7 +5404,7 @@ fn doctor_session_recovery_report(
         error: None,
     };
 
-    if codewhale_home_is_explicit {
+    if ghosty_home_is_explicit {
         report.status = DoctorSessionRecoveryStatus::Isolated;
         return report;
     }
@@ -5661,7 +5655,7 @@ fn print_doctor_legacy_state_report(
             }
         }
         println!(
-            "    Start Codewhale once to trigger safe migration where available, then rerun `codewhale doctor`."
+            "    Start Ghosty once to trigger safe migration where available, then rerun `ghosty doctor`."
         );
     }
 
@@ -5678,11 +5672,11 @@ fn print_doctor_session_recovery_report(
     match report.status {
         DoctorSessionRecoveryStatus::Isolated => {
             println!(
-                "  {} legacy sessions: ambient ~/.deepseek/sessions was not inspected because CODEWHALE_HOME is set",
+                "  {} legacy sessions: ambient ~/.deepseek/sessions was not inspected because GHOSTY_HOME is set",
                 "·".dimmed()
             );
             println!(
-                "    This preserves the explicit home boundary. To inspect the default home, use a separate shell with CODEWHALE_HOME unset and rerun `codewhale doctor`."
+                "    This preserves the explicit home boundary. To inspect the default home, use a separate shell with GHOSTY_HOME unset and rerun `ghosty doctor`."
             );
         }
         DoctorSessionRecoveryStatus::NoLegacySessions => {
@@ -5726,7 +5720,7 @@ fn print_doctor_session_recovery_report(
             }
             if report.recoverable_file_count > DOCTOR_SESSION_RECOVERY_HUMAN_SAMPLE_LIMIT {
                 println!(
-                    "    · {} more filename(s); `codewhale doctor --json` includes a bounded metadata-only sample",
+                    "    · {} more filename(s); `ghosty doctor --json` includes a bounded metadata-only sample",
                     report.recoverable_file_count - DOCTOR_SESSION_RECOVERY_HUMAN_SAMPLE_LIMIT
                 );
             }
@@ -5737,10 +5731,10 @@ fn print_doctor_session_recovery_report(
                 crate::utils::display_path(&report.primary_sessions_path),
             );
             println!(
-                "      2. Close other Codewhale processes, then run `codewhale sessions`; migration adds only missing files, never overwrites primary files, and leaves legacy originals in place."
+                "      2. Close other Ghosty processes, then run `ghosty sessions`; migration adds only missing files, never overwrites primary files, and leaves legacy originals in place."
             );
             println!(
-                "      3. Rerun `codewhale doctor`. If filenames remain, keep both backups and report only the listed source/destination names."
+                "      3. Rerun `ghosty doctor`. If filenames remain, keep both backups and report only the listed source/destination names."
             );
         }
         DoctorSessionRecoveryStatus::ScanFailed => {
@@ -5752,7 +5746,7 @@ fn print_doctor_session_recovery_report(
                 println!("    {error}");
             }
             println!(
-                "    Keep both session directories unchanged, back them up, fix path permissions or shape, and rerun `codewhale doctor` before attempting migration."
+                "    Keep both session directories unchanged, back them up, fix path permissions or shape, and rerun `ghosty doctor` before attempting migration."
             );
         }
     }
@@ -5787,7 +5781,7 @@ fn doctor_session_recovery_json(report: &DoctorSessionRecoveryReport) -> serde_j
         "checkpoint_internals_scanned": false,
         "session_descriptors_compared": false,
         "counterpart_check": "top_level_filename_and_regular_file_only",
-        "codewhale_home_is_explicit": report.codewhale_home_is_explicit,
+        "ghosty_home_is_explicit": report.ghosty_home_is_explicit,
         "legacy_sessions_path": report.legacy_sessions_path.display().to_string(),
         "primary_sessions_path": report.primary_sessions_path.display().to_string(),
         "legacy_session_file_count": report.legacy_session_file_count,
@@ -5797,7 +5791,7 @@ fn doctor_session_recovery_json(report: &DoctorSessionRecoveryReport) -> serde_j
         "recoverable_files_truncated": report.recoverable_file_count > report.recoverable.len(),
         "error": report.error,
         "recovery_command": if report.needs_attention() && report.status != DoctorSessionRecoveryStatus::ScanFailed {
-            Some("codewhale sessions")
+            Some("ghosty sessions")
         } else {
             None
         },
@@ -5848,13 +5842,13 @@ fn doctor_legacy_state_json(
 fn doctor_setup_state(
     config: &Config,
     workspace: &Path,
-) -> (codewhale_config::SetupState, &'static str) {
-    if let Ok(Some(state)) = codewhale_config::SetupState::load() {
+) -> (ghosty_config::SetupState, &'static str) {
+    if let Ok(Some(state)) = ghosty_config::SetupState::load() {
         return (state, "persisted");
     }
 
     (
-        codewhale_config::SetupState::derive_inherited(&doctor_inherited_setup_facts(
+        ghosty_config::SetupState::derive_inherited(&doctor_inherited_setup_facts(
             config, workspace,
         )),
         "derived",
@@ -5864,21 +5858,21 @@ fn doctor_setup_state(
 fn doctor_inherited_setup_facts(
     config: &Config,
     workspace: &Path,
-) -> codewhale_config::InheritedConfigFacts {
-    let user_constitution = codewhale_config::UserConstitution::load().ok();
+) -> ghosty_config::InheritedConfigFacts {
+    let user_constitution = ghosty_config::UserConstitution::load().ok();
     let user_constitution_validity = user_constitution.as_ref().map_or(
-        codewhale_config::ConstitutionValidity::Unknown,
-        codewhale_config::UserConstitutionLoad::validity,
+        ghosty_config::ConstitutionValidity::Unknown,
+        ghosty_config::UserConstitutionLoad::validity,
     );
     let has_user_constitution = user_constitution
         .as_ref()
-        .is_some_and(|loaded| !matches!(loaded, codewhale_config::UserConstitutionLoad::Missing));
-    let has_expert_override = codewhale_config::codewhale_home()
+        .is_some_and(|loaded| !matches!(loaded, ghosty_config::UserConstitutionLoad::Missing));
+    let has_expert_override = ghosty_config::ghosty_home()
         .ok()
         .map(|home| home.join(Path::new(crate::prompts::CONSTITUTION_OVERRIDE_FILE)))
         .is_some_and(|path| path.exists());
 
-    codewhale_config::InheritedConfigFacts {
+    ghosty_config::InheritedConfigFacts {
         language: None,
         has_provider_route: !config.default_model().trim().is_empty(),
         has_credentials_or_local_runtime: doctor_has_credentials_or_local_runtime(config),
@@ -5898,7 +5892,7 @@ fn doctor_has_credentials_or_local_runtime(config: &Config) -> bool {
 fn print_doctor_setup_report(
     config: &Config,
     workspace: &Path,
-    state: &codewhale_config::SetupState,
+    state: &ghosty_config::SetupState,
     source: &str,
     ok_rgb: (u8, u8, u8),
     warn_rgb: (u8, u8, u8),
@@ -5978,7 +5972,7 @@ fn print_doctor_setup_report(
     println!(
         "  · next actions: /constitution (standing law), /setup report (readiness), /setup provider or /provider setup <name> (provider credentials), /model (route), /config (runtime posture), /setup fleet (Operate/Fleet readiness), /fleet setup (explicit profile authoring), /setup hotbar (optional shortcuts), /setup tools (Tools/MCP readiness), /setup remote (remote runtime on-ramp), /setup persistence (path review)"
     );
-    for step in codewhale_config::SetupStep::ALL {
+    for step in ghosty_config::SetupStep::ALL {
         let entry = state.steps.get(&step);
         let required = entry.is_some_and(|entry| entry.required);
         let version = entry.and_then(|entry| entry.version.as_deref());
@@ -6031,12 +6025,9 @@ fn doctor_ready_label(ready: bool) -> &'static str {
 /// The setup transaction writes `constitution.json` and `setup_state.json`
 /// together, so a persisted state that points at a user-global constitution
 /// which is missing or unusable on disk means a write was interrupted or a
-/// file was removed out-of-band. Stale `.tmp*` files in `$CODEWHALE_HOME`
+/// file was removed out-of-band. Stale `.tmp*` files in `$GHOSTY_HOME`
 /// are the other fingerprint of an interrupted atomic write.
-fn doctor_setup_consistency(
-    state: &codewhale_config::SetupState,
-    source: &str,
-) -> serde_json::Value {
+fn doctor_setup_consistency(state: &ghosty_config::SetupState, source: &str) -> serde_json::Value {
     use serde_json::json;
 
     let mut issues: Vec<&'static str> = Vec::new();
@@ -6044,28 +6035,28 @@ fn doctor_setup_consistency(
     if source == "persisted"
         && matches!(
             state.constitution_source,
-            codewhale_config::ConstitutionSource::UserGlobal
+            ghosty_config::ConstitutionSource::UserGlobal
         )
     {
-        match codewhale_config::UserConstitution::load() {
-            Ok(codewhale_config::UserConstitutionLoad::Missing) => {
+        match ghosty_config::UserConstitution::load() {
+            Ok(ghosty_config::UserConstitutionLoad::Missing) => {
                 issues.push("setup_state_points_at_missing_user_constitution");
             }
-            Ok(codewhale_config::UserConstitutionLoad::Empty) => {
+            Ok(ghosty_config::UserConstitutionLoad::Empty) => {
                 issues.push("user_constitution_empty");
             }
-            Ok(codewhale_config::UserConstitutionLoad::Invalid(_)) => {
+            Ok(ghosty_config::UserConstitutionLoad::Invalid(_)) => {
                 issues.push("user_constitution_invalid");
             }
-            Ok(codewhale_config::UserConstitutionLoad::Unreadable(_)) | Err(_) => {
+            Ok(ghosty_config::UserConstitutionLoad::Unreadable(_)) | Err(_) => {
                 issues.push("user_constitution_unreadable");
             }
-            Ok(codewhale_config::UserConstitutionLoad::Loaded(_)) => {}
+            Ok(ghosty_config::UserConstitutionLoad::Loaded(_)) => {}
         }
     }
 
     if doctor_home_has_stale_setup_temp_files() {
-        issues.push("stale_setup_temp_files_in_codewhale_home");
+        issues.push("stale_setup_temp_files_in_ghosty_home");
     }
 
     json!({
@@ -6076,7 +6067,7 @@ fn doctor_setup_consistency(
 }
 
 fn doctor_home_has_stale_setup_temp_files() -> bool {
-    let Ok(home) = codewhale_config::codewhale_home() else {
+    let Ok(home) = ghosty_config::ghosty_home() else {
         return false;
     };
     let Ok(entries) = std::fs::read_dir(&home) else {
@@ -6088,26 +6079,26 @@ fn doctor_home_has_stale_setup_temp_files() -> bool {
     })
 }
 
-fn doctor_constitution_autonomy_preference() -> codewhale_config::AutonomyPreference {
-    codewhale_config::UserConstitution::load()
+fn doctor_constitution_autonomy_preference() -> ghosty_config::AutonomyPreference {
+    ghosty_config::UserConstitution::load()
         .ok()
         .and_then(|load| {
             load.constitution()
                 .map(|constitution| constitution.autonomy_preference)
         })
-        .unwrap_or(codewhale_config::AutonomyPreference::Unspecified)
+        .unwrap_or(ghosty_config::AutonomyPreference::Unspecified)
 }
 
 fn doctor_constitution_autonomy_preference_id() -> &'static str {
     autonomy_preference_id(doctor_constitution_autonomy_preference())
 }
 
-fn autonomy_preference_id(preference: codewhale_config::AutonomyPreference) -> &'static str {
+fn autonomy_preference_id(preference: ghosty_config::AutonomyPreference) -> &'static str {
     match preference {
-        codewhale_config::AutonomyPreference::Unspecified => "unspecified",
-        codewhale_config::AutonomyPreference::Cautious => "cautious",
-        codewhale_config::AutonomyPreference::Balanced => "balanced",
-        codewhale_config::AutonomyPreference::Autonomous => "autonomous",
+        ghosty_config::AutonomyPreference::Unspecified => "unspecified",
+        ghosty_config::AutonomyPreference::Cautious => "cautious",
+        ghosty_config::AutonomyPreference::Balanced => "balanced",
+        ghosty_config::AutonomyPreference::Autonomous => "autonomous",
     }
 }
 
@@ -6178,9 +6169,9 @@ fn doctor_runtime_posture_line(config: &Config, workspace: &Path) -> String {
 ///
 /// Telemetry ships ON by default, and no posture surface reported that — a
 /// user who never opted in saw nothing saying "telemetry: on (default)".
-/// Truth change only: the resolution itself is [`codewhale_config`]'s.
+/// Truth change only: the resolution itself is [`ghosty_config`]'s.
 fn doctor_runtime_telemetry(config: &Config) -> (bool, &'static str) {
-    let (on, source) = codewhale_config::resolved_telemetry_consent(config.telemetry);
+    let (on, source) = ghosty_config::resolved_telemetry_consent(config.telemetry);
     (on, source.as_str())
 }
 
@@ -6324,7 +6315,7 @@ fn doctor_provider_model_report_json(config: &Config) -> serde_json::Value {
             "credential_docs_url": credential_docs_url,
             "credential_guidance": credential_help.guidance,
             "oauth_only": credential_help.acquisition
-                == codewhale_config::provider::CredentialAcquisition::OAuth,
+                == ghosty_config::provider::CredentialAcquisition::OAuth,
         },
         "health": {
             "live_validation": false,
@@ -6344,7 +6335,7 @@ fn doctor_dsh_integration_report(
     use crate::integrations::dsh;
     let paths = dsh::DshPaths::from_process()?;
     let detection = dsh::detect::detect(&dsh::DetectEnv::from_process(), &dsh::ProcessRunner);
-    let identity = dsh::codewhale_route_identity(config, workspace);
+    let identity = dsh::ghosty_route_identity(config, workspace);
     dsh::compute_status(
         &paths,
         detection,
@@ -6398,7 +6389,7 @@ fn doctor_dsh_integration_json(config: &Config, workspace: &Path) -> serde_json:
 
 fn doctor_external_credential_consent_statuses(
     config: &Config,
-) -> Vec<codewhale_config::ExternalCredentialConsentStatus> {
+) -> Vec<ghosty_config::ExternalCredentialConsentStatus> {
     [
         crate::config::ApiProvider::OpenaiCodex,
         crate::config::ApiProvider::Xai,
@@ -6421,7 +6412,7 @@ fn doctor_external_credential_consent_lines(config: &Config) -> Vec<String> {
                     status.provider,
                     status.source.as_str(),
                     status.owner,
-                    codewhale_config::quote_os_path(&status.path),
+                    ghosty_config::quote_os_path(&status.path),
                     status.consent_version,
                     status.route_state,
                     status.ambient_path_changed,
@@ -6447,7 +6438,7 @@ fn doctor_external_credential_consent_json(config: &Config) -> serde_json::Value
                     "access": status.access.as_str(),
                     "source": status.source.as_str(),
                     "owner": status.owner,
-                    "path": codewhale_config::quote_os_path(&status.path),
+                    "path": ghosty_config::quote_os_path(&status.path),
                     "consent_version": status.consent_version,
                     "scope_valid": status.scope_valid,
                     "ambient_path_changed": status.ambient_path_changed,
@@ -6498,7 +6489,7 @@ fn doctor_setup_report_json(config: &Config, workspace: &Path) -> serde_json::Va
     let workspace_trusted = !crate::tui::onboarding::needs_trust(workspace);
     let credential = resolve_credential_diagnostic(config);
     let credential_ready = credential.availability.certifies_ready();
-    let steps: Vec<_> = codewhale_config::SetupStep::ALL
+    let steps: Vec<_> = ghosty_config::SetupStep::ALL
         .into_iter()
         .map(|step| {
             let entry = state.steps.get(&step);
@@ -6589,68 +6580,68 @@ fn doctor_setup_report_json(config: &Config, workspace: &Path) -> serde_json::Va
     })
 }
 
-fn setup_step_id(step: codewhale_config::SetupStep) -> &'static str {
+fn setup_step_id(step: ghosty_config::SetupStep) -> &'static str {
     match step {
-        codewhale_config::SetupStep::Language => "language",
-        codewhale_config::SetupStep::ProviderModel => "provider_model",
-        codewhale_config::SetupStep::TrustSandbox => "trust_sandbox",
-        codewhale_config::SetupStep::ToolsMcp => "tools_mcp",
-        codewhale_config::SetupStep::Hotbar => "hotbar",
-        codewhale_config::SetupStep::RemoteRuntime => "remote_runtime",
-        codewhale_config::SetupStep::Persistence => "persistence",
-        codewhale_config::SetupStep::Constitution => "constitution",
-        codewhale_config::SetupStep::OperateFleet => "operate_fleet",
-        codewhale_config::SetupStep::Verification => "verification",
+        ghosty_config::SetupStep::Language => "language",
+        ghosty_config::SetupStep::ProviderModel => "provider_model",
+        ghosty_config::SetupStep::TrustSandbox => "trust_sandbox",
+        ghosty_config::SetupStep::ToolsMcp => "tools_mcp",
+        ghosty_config::SetupStep::Hotbar => "hotbar",
+        ghosty_config::SetupStep::RemoteRuntime => "remote_runtime",
+        ghosty_config::SetupStep::Persistence => "persistence",
+        ghosty_config::SetupStep::Constitution => "constitution",
+        ghosty_config::SetupStep::OperateFleet => "operate_fleet",
+        ghosty_config::SetupStep::Verification => "verification",
     }
 }
 
-fn setup_status_id(status: codewhale_config::StepStatus) -> &'static str {
+fn setup_status_id(status: ghosty_config::StepStatus) -> &'static str {
     match status {
-        codewhale_config::StepStatus::NotStarted => "not_started",
-        codewhale_config::StepStatus::Recommended => "recommended",
-        codewhale_config::StepStatus::Optional => "optional",
-        codewhale_config::StepStatus::Deferred => "deferred",
-        codewhale_config::StepStatus::InProgress => "in_progress",
-        codewhale_config::StepStatus::Verified => "verified",
-        codewhale_config::StepStatus::NeedsAction => "needs_action",
-        codewhale_config::StepStatus::Failed => "failed",
-        codewhale_config::StepStatus::Skipped => "skipped",
+        ghosty_config::StepStatus::NotStarted => "not_started",
+        ghosty_config::StepStatus::Recommended => "recommended",
+        ghosty_config::StepStatus::Optional => "optional",
+        ghosty_config::StepStatus::Deferred => "deferred",
+        ghosty_config::StepStatus::InProgress => "in_progress",
+        ghosty_config::StepStatus::Verified => "verified",
+        ghosty_config::StepStatus::NeedsAction => "needs_action",
+        ghosty_config::StepStatus::Failed => "failed",
+        ghosty_config::StepStatus::Skipped => "skipped",
     }
 }
 
-fn constitution_choice_id(choice: codewhale_config::ConstitutionChoice) -> &'static str {
+fn constitution_choice_id(choice: ghosty_config::ConstitutionChoice) -> &'static str {
     match choice {
-        codewhale_config::ConstitutionChoice::Unset => "unset",
-        codewhale_config::ConstitutionChoice::Bundled => "bundled",
-        codewhale_config::ConstitutionChoice::GuidedCustom => "guided_custom",
-        codewhale_config::ConstitutionChoice::ExpertOverride => "expert_override",
-        codewhale_config::ConstitutionChoice::Deferred => "deferred",
+        ghosty_config::ConstitutionChoice::Unset => "unset",
+        ghosty_config::ConstitutionChoice::Bundled => "bundled",
+        ghosty_config::ConstitutionChoice::GuidedCustom => "guided_custom",
+        ghosty_config::ConstitutionChoice::ExpertOverride => "expert_override",
+        ghosty_config::ConstitutionChoice::Deferred => "deferred",
     }
 }
 
-fn constitution_source_id(source: codewhale_config::ConstitutionSource) -> &'static str {
+fn constitution_source_id(source: ghosty_config::ConstitutionSource) -> &'static str {
     match source {
-        codewhale_config::ConstitutionSource::Bundled => "bundled",
-        codewhale_config::ConstitutionSource::UserGlobal => "user_global",
-        codewhale_config::ConstitutionSource::ExpertOverride => "expert_override",
+        ghosty_config::ConstitutionSource::Bundled => "bundled",
+        ghosty_config::ConstitutionSource::UserGlobal => "user_global",
+        ghosty_config::ConstitutionSource::ExpertOverride => "expert_override",
     }
 }
 
-fn constitution_validity_id(validity: codewhale_config::ConstitutionValidity) -> &'static str {
+fn constitution_validity_id(validity: ghosty_config::ConstitutionValidity) -> &'static str {
     match validity {
-        codewhale_config::ConstitutionValidity::Unknown => "unknown",
-        codewhale_config::ConstitutionValidity::Valid => "valid",
-        codewhale_config::ConstitutionValidity::Invalid => "invalid",
-        codewhale_config::ConstitutionValidity::Empty => "empty",
-        codewhale_config::ConstitutionValidity::Unreadable => "unreadable",
+        ghosty_config::ConstitutionValidity::Unknown => "unknown",
+        ghosty_config::ConstitutionValidity::Valid => "valid",
+        ghosty_config::ConstitutionValidity::Invalid => "invalid",
+        ghosty_config::ConstitutionValidity::Empty => "empty",
+        ghosty_config::ConstitutionValidity::Unreadable => "unreadable",
     }
 }
 
-fn runtime_posture_source_id(source: codewhale_config::RuntimePostureSource) -> &'static str {
+fn runtime_posture_source_id(source: ghosty_config::RuntimePostureSource) -> &'static str {
     match source {
-        codewhale_config::RuntimePostureSource::Unset => "unset",
-        codewhale_config::RuntimePostureSource::Inherited => "inherited",
-        codewhale_config::RuntimePostureSource::Confirmed => "confirmed",
+        ghosty_config::RuntimePostureSource::Unset => "unset",
+        ghosty_config::RuntimePostureSource::Inherited => "inherited",
+        ghosty_config::RuntimePostureSource::Confirmed => "confirmed",
     }
 }
 
@@ -6687,7 +6678,7 @@ fn run_doctor_json(
 
     let doctor_paths = crate::doctor::DoctorPathReport::resolve(config_path_override)?;
     let config_path = &doctor_paths.config;
-    let secret_backend = codewhale_secrets::diagnose_secret_backend();
+    let secret_backend = ghosty_secrets::diagnose_secret_backend();
 
     let credential = resolve_credential_diagnostic(config);
 
@@ -6779,7 +6770,7 @@ fn run_doctor_json(
     // until the two PRs land and it can be replaced with a single
     // method call.)
     let memory_path = config.memory_path();
-    let memory_enabled_env = std::env::var("CODEWHALE_MEMORY")
+    let memory_enabled_env = std::env::var("GHOSTY_MEMORY")
         .or_else(|_| std::env::var("DEEPSEEK_MEMORY"))
         .ok()
         .map(|raw| {
@@ -6804,7 +6795,7 @@ fn run_doctor_json(
     let session_recovery = doctor_session_recovery_report(
         &code_home,
         &legacy_home,
-        codewhale_config::codewhale_home_is_explicit(),
+        ghosty_config::ghosty_home_is_explicit(),
     );
 
     let stash = crate::composer_stash::diagnostic_stash_report();
@@ -6923,7 +6914,7 @@ fn run_doctor_json(
         "api_connectivity": {
             "checked": false,
             "status": "not_probed",
-            "note": "JSON doctor is offline; use `codewhale doctor --probe-api` or `--probe-local` for an explicit live check.",
+            "note": "JSON doctor is offline; use `ghosty doctor --probe-api` or `--probe-local` for an explicit live check.",
         },
         "capability": provider_capability_report(config),
     });
@@ -7097,13 +7088,13 @@ fn doctor_wire_protocol(provider: crate::config::ApiProvider) -> &'static str {
     let policy = provider
         .metadata()
         .map(|metadata| metadata.wire_policy())
-        .unwrap_or(codewhale_config::provider::WirePolicy::Fixed(
-            codewhale_config::provider::WireFormat::ChatCompletions,
+        .unwrap_or(ghosty_config::provider::WirePolicy::Fixed(
+            ghosty_config::provider::WireFormat::ChatCompletions,
         ));
     match policy.fixed() {
-        Some(codewhale_config::provider::WireFormat::ChatCompletions) => "chat_completions",
-        Some(codewhale_config::provider::WireFormat::Responses) => "responses",
-        Some(codewhale_config::provider::WireFormat::AnthropicMessages) => "anthropic_messages",
+        Some(ghosty_config::provider::WireFormat::ChatCompletions) => "chat_completions",
+        Some(ghosty_config::provider::WireFormat::Responses) => "responses",
+        Some(ghosty_config::provider::WireFormat::AnthropicMessages) => "anthropic_messages",
         None => "model_aware",
     }
 }
@@ -7387,7 +7378,7 @@ fn doctor_timeout_recovery_lines(config: &Config) -> Vec<String> {
                 && !target.base_url.contains("api.deepseeki.com") =>
         {
             lines.push(
-                "If this is a custom DeepSeek-compatible endpoint, set its HTTPS base URL in ~/.codewhale/config.toml and rerun `codewhale doctor`."
+                "If this is a custom DeepSeek-compatible endpoint, set its HTTPS base URL in ~/.ghosty/config.toml and rerun `ghosty doctor`."
                     .to_string(),
             );
         }
@@ -7406,7 +7397,7 @@ fn doctor_timeout_recovery_lines(config: &Config) -> Vec<String> {
     }
 
     lines.push(
-        "Run `codewhale doctor --json` and include `base_url`, `default_text_model`, and `api_connectivity` when filing an issue."
+        "Run `ghosty doctor --json` and include `base_url`, `default_text_model`, and `api_connectivity` when filing an issue."
             .to_string(),
     );
     lines
@@ -7614,7 +7605,7 @@ mod speech_cli_tests {
     #[test]
     fn speech_command_parses_cli_passthrough_smoke() {
         let cli = Cli::try_parse_from([
-            "codewhale-tui",
+            "ghosty-tui",
             "speech",
             "hello",
             "--model",
@@ -7701,7 +7692,7 @@ fn rustc_version() -> String {
 
 /// List saved sessions
 fn sessions_resume_command() -> &'static str {
-    "codewhale resume"
+    "ghosty resume"
 }
 
 fn list_sessions(limit: usize, search: Option<String>) -> Result<()> {
@@ -7726,7 +7717,7 @@ fn list_sessions(limit: usize, search: Option<String>) -> Result<()> {
         println!("{}", "No sessions found.".truecolor(sky_r, sky_g, sky_b));
         println!(
             "Start a new session with: {}",
-            "codewhale".truecolor(human_r, human_g, human_b)
+            "ghosty".truecolor(human_r, human_g, human_b)
         );
         return Ok(());
     }
@@ -7766,7 +7757,7 @@ fn list_sessions(limit: usize, search: Option<String>) -> Result<()> {
     );
     println!(
         "Continue latest in this workspace: {}",
-        "codewhale --continue".truecolor(action_r, action_g, action_b)
+        "ghosty --continue".truecolor(action_r, action_g, action_b)
     );
 
     Ok(())
@@ -7803,7 +7794,7 @@ fn init_project() -> Result<()> {
             );
             println!();
             println!("Edit this file to customize how the AI agent works with your project.");
-            println!("The instructions will be loaded automatically when you run codewhale.");
+            println!("The instructions will be loaded automatically when you run ghosty.");
         }
         Err(e) => {
             println!(
@@ -7851,7 +7842,7 @@ fn load_structural_config_from_cli(cli: &Cli) -> Result<Config> {
 fn effective_config_profile(cli: &Cli) -> Option<String> {
     cli.profile
         .clone()
-        .or_else(|| std::env::var("CODEWHALE_PROFILE").ok())
+        .or_else(|| std::env::var("GHOSTY_PROFILE").ok())
         .or_else(|| std::env::var("DEEPSEEK_PROFILE").ok())
 }
 
@@ -8034,8 +8025,8 @@ async fn run_xai_device_auth(config_path: Option<&Path>) -> Result<()> {
     let activation = xai_oauth::activate_device_login(pending, config_path, None)?;
     println!(
         "xAI OAuth is ready; activated {} via {}",
-        codewhale_config::quote_os_path(&activation.auth_path),
-        codewhale_config::quote_os_path(&activation.config_path)
+        ghosty_config::quote_os_path(&activation.auth_path),
+        ghosty_config::quote_os_path(&activation.config_path)
     );
     Ok(())
 }
@@ -8044,7 +8035,7 @@ fn resolve_session_id(session_id: Option<String>, last: bool, workspace: &Path) 
     if last {
         return latest_session_id_for_workspace(workspace)?.ok_or_else(|| {
             anyhow!(
-                "No saved sessions found for workspace {}. Use `codewhale sessions` to list all sessions, or `codewhale resume <SESSION_ID>` to resume one explicitly.",
+                "No saved sessions found for workspace {}. Use `ghosty sessions` to list all sessions, or `ghosty resume <SESSION_ID>` to resume one explicitly.",
                 workspace.display()
             )
         });
@@ -8308,7 +8299,7 @@ fn run_review_receipt_check(diff: &str, args: &ReviewArgs) -> Result<()> {
     } else {
         crate::tools::review::latest_review_receipt_for_diff(diff)?.ok_or_else(|| {
             anyhow!(
-                "No review receipt found for the current diff. Run `codewhale review --write-receipt` first, or pass --receipt-path."
+                "No review receipt found for the current diff. Run `ghosty review --write-receipt` first, or pass --receipt-path."
             )
         })?
     };
@@ -8377,7 +8368,7 @@ fn review_receipt_validation_status(
     }
 }
 
-/// `codewhale pr <N>` (#451) — fetch a GitHub PR via `gh`, format
+/// `ghosty pr <N>` (#451) — fetch a GitHub PR via `gh`, format
 /// title + body + diff as the composer's first message, and launch
 /// the interactive TUI. Falls back gracefully if `gh` is missing.
 async fn run_pr(
@@ -8393,7 +8384,7 @@ async fn run_pr(
         bail!(
             "`gh` CLI not found on PATH. Install GitHub CLI \
              (https://cli.github.com) and authenticate (`gh auth login`) \
-             so `codewhale pr <N>` can fetch PR metadata and the diff."
+             so `ghosty pr <N>` can fetch PR metadata and the diff."
         );
     }
 
@@ -8711,7 +8702,7 @@ async fn run_mcp_command(
                     );
                 }
             }
-            println!("Edit the file, then run `codewhale mcp list` or `codewhale mcp tools`.");
+            println!("Edit the file, then run `ghosty mcp list` or `ghosty mcp tools`.");
             Ok(())
         }
         McpCommand::List => {
@@ -8911,7 +8902,7 @@ async fn run_mcp_command(
                     .is_ok_and(|support| support.is_some())
             {
                 println!(
-                    "OAuth is available for '{name}'. Run `codewhale mcp login {name}` to authenticate."
+                    "OAuth is available for '{name}'. Run `ghosty mcp login {name}` to authenticate."
                 );
             }
             Ok(())
@@ -9021,7 +9012,7 @@ async fn run_mcp_command(
             let mut cfg = load_mcp_config(&config_path)?;
             if cfg.servers.contains_key(&name) {
                 bail!(
-                    "MCP server '{name}' already exists in {}. Use `codewhale mcp remove {name}` first, or choose a different --name.",
+                    "MCP server '{name}' already exists in {}. Use `ghosty mcp remove {name}` first, or choose a different --name.",
                     config_path.display()
                 );
             }
@@ -9053,7 +9044,7 @@ async fn run_mcp_command(
             );
             save_mcp_config(&config_path, &cfg)?;
             println!(
-                "Registered Codewhale as MCP server '{name}' in {}",
+                "Registered Ghosty as MCP server '{name}' in {}",
                 config_path.display()
             );
             println!("  command: {exe_str}");
@@ -9062,8 +9053,8 @@ async fn run_mcp_command(
                 workspace.map_or(String::new(), |ws| format!("--workspace {ws} "))
             );
             println!();
-            println!("Tip: Use `codewhale mcp validate` to test the connection.");
-            println!("     Use `codewhale serve --http` for the HTTP/SSE runtime API instead.");
+            println!("Tip: Use `ghosty mcp validate` to test the connection.");
+            println!("     Use `ghosty serve --http` for the HTTP/SSE runtime API instead.");
             Ok(())
         }
     }
@@ -9078,7 +9069,7 @@ fn load_mcp_config(path: &Path) -> Result<McpConfig> {
     let cfg: McpConfig = serde_json::from_str(&contents).map_err(|_| {
         anyhow::anyhow!(
             "Failed to parse MCP config {}; file contents were omitted",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         )
     })?;
     Ok(cfg)
@@ -9452,7 +9443,7 @@ fn should_use_mouse_capture_with(
 /// Off elsewhere only for JetBrains' JediTerm, which advertises mouse
 /// support but forwards the same SGR escape sequences as raw input. The
 /// user can still opt back in with `[tui] mouse_capture = true` in
-/// `~/.codewhale/config.toml` or `--mouse-capture`.
+/// `~/.ghosty/config.toml` or `--mouse-capture`.
 fn default_mouse_capture_enabled(
     terminal_emulator: Option<&str>,
     wt_session: Option<&str>,
@@ -9537,7 +9528,7 @@ fn checkpoint_age_label(age: std::time::Duration) -> String {
 /// single-slot `checkpoints/latest.json`; each must be younger than 24 hours
 /// **and its workspace must match the resolved launch workspace after
 /// canonicalisation** — the newest matching candidate wins. If no candidate
-/// matches, a one-line notice points at `codewhale sessions`, and nothing is
+/// matches, a one-line notice points at `ghosty sessions`, and nothing is
 /// auto-loaded: another workspace's checkpoint file is never touched (it may
 /// belong to a live session there).
 fn recover_interrupted_checkpoint_for_resume(launch_workspace: &Path) -> Option<String> {
@@ -9562,7 +9553,7 @@ fn recover_interrupted_checkpoint_for_resume(launch_workspace: &Path) -> Option<
         if let Some(newest) = mismatched.first() {
             eprintln!(
                 "Note: an interrupted session from another workspace ({}) is \
-                 available. Run `codewhale sessions` to list saved sessions. Starting \
+                 available. Run `ghosty sessions` to list saved sessions. Starting \
                  fresh in {}.",
                 newest.session.metadata.workspace.display(),
                 launch_workspace.display(),
@@ -9617,7 +9608,7 @@ fn saved_session_is_newer(
 }
 
 /// Preserve an interrupted checkpoint on a normal fresh launch without
-/// attaching it to the new TUI instance. This keeps "open another codewhale in
+/// attaching it to the new TUI instance. This keeps "open another ghosty in
 /// the same folder" from re-entering the previous in-flight session while still
 /// leaving an explicit resume path.
 ///
@@ -9647,12 +9638,12 @@ fn preserve_interrupted_checkpoint_for_explicit_resume(launch_workspace: &Path) 
     if session_manager::workspace_scope_matches(&session_workspace, launch_workspace) {
         eprintln!(
             "Found an in-flight session snapshot ({age_str}). Starting a new \
-             session. Run `codewhale --continue` to resume it."
+             session. Run `ghosty --continue` to resume it."
         );
     } else {
         eprintln!(
             "Note: an interrupted session from another workspace ({}) is \
-             available. Run `codewhale sessions` to list saved sessions. Starting \
+             available. Run `ghosty sessions` to list saved sessions. Starting \
              fresh in {}.",
             session_workspace.display(),
             launch_workspace.display(),
@@ -9660,7 +9651,7 @@ fn preserve_interrupted_checkpoint_for_explicit_resume(launch_workspace: &Path) 
     }
 }
 
-/// Load project-level config from `$WORKSPACE/.codewhale/config.toml`, with
+/// Load project-level config from `$WORKSPACE/.ghosty/config.toml`, with
 /// legacy `$WORKSPACE/.deepseek/config.toml` fallback, then apply its fields as
 /// overrides on top of the global config (#485).
 /// Only explicitly set fields in the project file are applied; everything
@@ -9693,15 +9684,15 @@ fn merge_project_config_with_approval_baseline(
         return;
     }
 
-    // v0.8.44: prefer .codewhale/config.toml, fall back to .deepseek/
+    // v0.8.44: prefer .ghosty/config.toml, fall back to .deepseek/
     let path = workspace
-        .join(codewhale_config::CODEWHALE_APP_DIR)
+        .join(ghosty_config::GHOSTY_APP_DIR)
         .join("config.toml");
     let raw = match read_project_config_file(&path) {
         Ok(Some(r)) => r,
         Ok(None) => {
             let legacy = workspace
-                .join(codewhale_config::LEGACY_APP_DIR)
+                .join(ghosty_config::LEGACY_APP_DIR)
                 .join("config.toml");
             match read_project_config_file(&legacy) {
                 Ok(Some(r)) => r,
@@ -9759,7 +9750,7 @@ fn merge_project_config_with_approval_baseline(
         if table.contains_key(*key) {
             eprintln!(
                 "warning: project-scope config key `{key}` is ignored — \
-                 set it in `~/.codewhale/config.toml` instead. \
+                 set it in `~/.ghosty/config.toml` instead. \
                  (See #417 for the deny-list rationale.)"
             );
         }
@@ -9790,7 +9781,7 @@ fn merge_project_config_with_approval_baseline(
             .approval_policy
             .as_deref()
             .or(saved_approval_baseline);
-        if codewhale_config::project_approval_policy_is_allowed(approval_baseline, v) {
+        if ghosty_config::project_approval_policy_is_allowed(approval_baseline, v) {
             config.approval_policy = Some(v.to_string());
         } else {
             eprintln!(
@@ -9804,7 +9795,7 @@ fn merge_project_config_with_approval_baseline(
     if let Some(v) = table.get("sandbox_mode").and_then(toml::Value::as_str)
         && !v.is_empty()
     {
-        if codewhale_config::project_sandbox_mode_is_allowed(config.sandbox_mode.as_deref(), v) {
+        if ghosty_config::project_sandbox_mode_is_allowed(config.sandbox_mode.as_deref(), v) {
             config.sandbox_mode = Some(v.to_string());
         } else {
             eprintln!(
@@ -9889,7 +9880,7 @@ fn merge_user_workspace_config(
         return;
     }
     let allow_shell_before = config.allow_shell;
-    let allow_shell_from_env = std::env::var_os("CODEWHALE_ALLOW_SHELL").is_some()
+    let allow_shell_from_env = std::env::var_os("GHOSTY_ALLOW_SHELL").is_some()
         || std::env::var_os("DEEPSEEK_ALLOW_SHELL").is_some();
     let path = match crate::config::resolve_load_config_path(config_path) {
         Ok(Some(path)) => path,
@@ -10050,7 +10041,7 @@ async fn run_interactive_with_notice(
         .clone()
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-    // Merge project-level config from $WORKSPACE/.codewhale/config.toml
+    // Merge project-level config from $WORKSPACE/.ghosty/config.toml
     // or legacy $WORKSPACE/.deepseek/config.toml
     // unless --no-project-config was passed (#485).
     let mut merged_config = config.clone();
@@ -10088,9 +10079,9 @@ async fn run_interactive_with_notice(
         }
     }
 
-    // v0.8.44: migrate config from ~/.deepseek/ to ~/.codewhale/ on first
+    // v0.8.44: migrate config from ~/.deepseek/ to ~/.ghosty/ on first
     // launch. Non-fatal — existing installs keep working either way.
-    match codewhale_config::migrate_config_if_needed() {
+    match ghosty_config::migrate_config_if_needed() {
         Ok(Some(migration)) => {
             eprintln!("{}", migration.user_notice());
         }
@@ -10132,7 +10123,7 @@ async fn run_interactive_with_notice(
 
     // Boot janitors — snapshot prune (7-day default), spillover prune
     // (#422), and managed-session cleanup (v0.8.44) — are best-effort disk
-    // hygiene. On a large ~/.codewhale they were the dominant startup cost
+    // hygiene. On a large ~/.ghosty they were the dominant startup cost
     // (a git object walk plus thousands of stat/read calls), so they run on
     // a blocking worker while the TUI brings up its first frame (#3757).
     // All three were already documented as non-fatal.
@@ -10577,11 +10568,11 @@ struct ExecStreamMeta {
     reasoning_tokens: Option<u32>,
     /// Resolved output ceiling the route actually requested (post-catalogue).
     #[serde(skip_serializing_if = "Option::is_none")]
-    codewhale_max_output_tokens: Option<u32>,
+    ghosty_max_output_tokens: Option<u32>,
     /// Provenance of that ceiling: `documented`, `uncatalogued`, or
     /// `route-declared`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    codewhale_max_output_tokens_source: Option<&'static str>,
+    ghosty_max_output_tokens_source: Option<&'static str>,
     duration_ms: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     retry_count: Option<u32>,
@@ -10750,7 +10741,7 @@ fn emit_exec_stream_event(event: &ExecStreamEvent) -> Result<()> {
     Ok(())
 }
 
-/// Process exit code `codewhale exec` uses when a turn ends on a retryable
+/// Process exit code `ghosty exec` uses when a turn ends on a retryable
 /// infrastructure failure (provider/transport) rather than a genuine task
 /// failure. 75 is `EX_TEMPFAIL` from sysexits.h — "temporary failure; the
 /// invocation is expected to succeed on retry" — so bench harnesses and
@@ -10788,7 +10779,7 @@ fn exec_stream_value(event: &ExecStreamEvent) -> Result<serde_json::Value> {
         object.insert("schema_version".to_string(), serde_json::json!(1));
         object.insert(
             "schema".to_string(),
-            serde_json::json!("codewhale.exec-stream"),
+            serde_json::json!("ghosty.exec-stream"),
         );
     }
     Ok(value)
@@ -10877,7 +10868,7 @@ async fn run_workflow_tool_command_inner(
     let mut config = load_config_from_cli(cli)?;
     merge_user_workspace_config(&mut config, cli.config.clone(), &workspace);
     if let Ok(env_url) =
-        std::env::var("CODEWHALE_BASE_URL").or_else(|_| std::env::var("DEEPSEEK_BASE_URL"))
+        std::env::var("GHOSTY_BASE_URL").or_else(|_| std::env::var("DEEPSEEK_BASE_URL"))
     {
         let trimmed = env_url.trim();
         if !trimmed.is_empty() {
@@ -10992,8 +10983,8 @@ async fn run_workflow_tool_command_inner(
             prompt_cache_miss_tokens: None,
             prompt_cache_write_tokens: None,
             reasoning_tokens: None,
-            codewhale_max_output_tokens: None,
-            codewhale_max_output_tokens_source: None,
+            ghosty_max_output_tokens: None,
+            ghosty_max_output_tokens_source: None,
             duration_ms: u64::try_from(tool_started.elapsed().as_millis()).unwrap_or(u64::MAX),
             retry_count: None,
             approval_posture: "explicit_workflow_command".to_string(),
@@ -11134,7 +11125,7 @@ async fn build_direct_workflow_tool(
     .with_features(config.features())
     .with_skills_config(
         config.skills_dir(),
-        config.skills_config().scan_codewhale_only(),
+        config.skills_config().scan_ghosty_only(),
     )
     .with_plugin_registry(std::sync::Arc::clone(&plugin_registry))
     .with_shell_policy(shell_policy)
@@ -11427,7 +11418,7 @@ fn exec_stream_resume_hint(session_id: &str) -> String {
     if session_id.trim().is_empty() {
         String::new()
     } else {
-        "codewhale exec --resume <redacted-session-id>".to_string()
+        "ghosty exec --resume <redacted-session-id>".to_string()
     }
 }
 
@@ -11732,7 +11723,7 @@ mod doctor_legacy_state_tests {
     }
 
     fn roots(tmp: &TempDir) -> (PathBuf, PathBuf) {
-        (tmp.path().join(".codewhale"), tmp.path().join(".deepseek"))
+        (tmp.path().join(".ghosty"), tmp.path().join(".deepseek"))
     }
 
     fn entry<'a>(report: &'a [DoctorLegacyStateEntry], name: &str) -> &'a DoctorLegacyStateEntry {
@@ -11901,7 +11892,7 @@ mod doctor_legacy_state_tests {
         assert_eq!(json["chat_contents_read"], false);
         assert_eq!(json["checkpoint_internals_scanned"], false);
         assert_eq!(json["recoverable_file_count"], 1);
-        assert_eq!(json["recovery_command"], "codewhale sessions");
+        assert_eq!(json["recovery_command"], "ghosty sessions");
         assert_eq!(json["recoverable_files"][0]["name"], "recover-me.json");
         let serialized = json.to_string();
         assert!(
@@ -12117,7 +12108,7 @@ mod doctor_legacy_state_tests {
     }
 
     #[test]
-    fn explicit_codewhale_home_skips_session_recovery_scan() {
+    fn explicit_ghosty_home_skips_session_recovery_scan() {
         let tmp = TempDir::new().expect("tempdir");
         let (primary_root, legacy_root) = roots(&tmp);
         fs::create_dir_all(legacy_root.join("sessions")).expect("legacy sessions");
@@ -12127,7 +12118,7 @@ mod doctor_legacy_state_tests {
         let report = doctor_session_recovery_report(&primary_root, &legacy_root, true);
 
         assert_eq!(report.status, DoctorSessionRecoveryStatus::Isolated);
-        assert!(report.codewhale_home_is_explicit);
+        assert!(report.ghosty_home_is_explicit);
         assert_eq!(report.legacy_session_file_count, 0);
         assert_eq!(report.recoverable_file_count, 0);
         assert!(report.recoverable.is_empty());
@@ -12135,10 +12126,10 @@ mod doctor_legacy_state_tests {
     }
 
     #[test]
-    fn doctor_state_roots_ignore_ambient_legacy_home_when_codewhale_home_is_explicit() {
+    fn doctor_state_roots_ignore_ambient_legacy_home_when_ghosty_home_is_explicit() {
         let _env_lock = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let explicit_home = tmp.path().join("isolated-codewhale");
+        let explicit_home = tmp.path().join("isolated-ghosty");
         let ambient_legacy = tmp.path().join(".deepseek");
         fs::create_dir_all(&ambient_legacy).expect("ambient legacy root");
         fs::write(
@@ -12147,26 +12138,26 @@ mod doctor_legacy_state_tests {
         )
         .expect("ambient legacy config");
         let _home = EnvVarRestore::set("HOME", tmp.path());
-        let _codewhale_home = EnvVarRestore::set("CODEWHALE_HOME", &explicit_home);
+        let _ghosty_home = EnvVarRestore::set("GHOSTY_HOME", &explicit_home);
 
         let (primary_root, legacy_root) = doctor_state_roots();
         let report = doctor_legacy_state_report(&primary_root, &legacy_root);
         let session_recovery = doctor_session_recovery_report(
             &primary_root,
             &legacy_root,
-            codewhale_config::codewhale_home_is_explicit(),
+            ghosty_config::ghosty_home_is_explicit(),
         );
 
         assert_eq!(primary_root, explicit_home);
         assert_eq!(
             legacy_root,
-            primary_root.join(codewhale_config::LEGACY_APP_DIR)
+            primary_root.join(ghosty_config::LEGACY_APP_DIR)
         );
         assert!(
             report
                 .iter()
                 .all(|entry| entry.status == DoctorLegacyStateStatus::Absent),
-            "doctor must not report ambient legacy state when CODEWHALE_HOME is explicit"
+            "doctor must not report ambient legacy state when GHOSTY_HOME is explicit"
         );
         assert!(!report.iter().any(legacy_state_needs_attention));
         assert_eq!(
@@ -12184,11 +12175,11 @@ mod doctor_setup_state_tests {
     use tempfile::TempDir;
 
     fn prepare_env(tmp: &TempDir) -> (crate::test_support::EnvVarGuard, PathBuf) {
-        let codewhale_home = tmp.path().join(".codewhale");
-        fs::create_dir_all(&codewhale_home).expect("codewhale home");
+        let ghosty_home = tmp.path().join(".ghosty");
+        fs::create_dir_all(&ghosty_home).expect("ghosty home");
         (
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", codewhale_home.as_os_str()),
-            codewhale_home,
+            crate::test_support::EnvVarGuard::set("GHOSTY_HOME", ghosty_home.as_os_str()),
+            ghosty_home,
         )
     }
 
@@ -12205,14 +12196,14 @@ mod doctor_setup_state_tests {
     fn doctor_setup_consistency_flags_missing_user_constitution() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let (_home_guard, _codewhale_home) = prepare_env(&tmp);
+        let (_home_guard, _ghosty_home) = prepare_env(&tmp);
         let _key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
         let workspace = tmp.path().join("workspace");
         fs::create_dir_all(&workspace).expect("workspace");
 
-        let state = codewhale_config::SetupState {
-            constitution_source: codewhale_config::ConstitutionSource::UserGlobal,
+        let state = ghosty_config::SetupState {
+            constitution_source: ghosty_config::ConstitutionSource::UserGlobal,
             ..Default::default()
         };
         state.save().expect("persist setup state");
@@ -12232,12 +12223,12 @@ mod doctor_setup_state_tests {
     fn doctor_setup_consistency_flags_stale_temp_files() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let (_home_guard, codewhale_home) = prepare_env(&tmp);
+        let (_home_guard, ghosty_home) = prepare_env(&tmp);
         let _key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
         let workspace = tmp.path().join("workspace");
         fs::create_dir_all(&workspace).expect("workspace");
-        fs::write(codewhale_home.join(".tmpAbC123"), b"orphaned atomic write")
+        fs::write(ghosty_home.join(".tmpAbC123"), b"orphaned atomic write")
             .expect("stale temp file");
 
         let report = doctor_setup_report_json(&Config::default(), &workspace);
@@ -12245,7 +12236,7 @@ mod doctor_setup_state_tests {
         assert_eq!(report["consistency"]["status"], "inconsistent");
         let issues = report["consistency"]["issues"].to_string();
         assert!(
-            issues.contains("stale_setup_temp_files_in_codewhale_home"),
+            issues.contains("stale_setup_temp_files_in_ghosty_home"),
             "{issues}"
         );
     }
@@ -12254,7 +12245,7 @@ mod doctor_setup_state_tests {
     fn doctor_setup_consistency_reports_consistent_for_clean_home() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let (_home_guard, _codewhale_home) = prepare_env(&tmp);
+        let (_home_guard, _ghosty_home) = prepare_env(&tmp);
         let _key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
         let workspace = tmp.path().join("workspace");
@@ -12276,7 +12267,7 @@ mod doctor_setup_state_tests {
     fn doctor_setup_report_json_derives_state_without_sidecar() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let (_home_guard, _codewhale_home) = prepare_env(&tmp);
+        let (_home_guard, _ghosty_home) = prepare_env(&tmp);
         let _key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
         let workspace = tmp.path().join("workspace");
@@ -12366,7 +12357,7 @@ mod doctor_setup_state_tests {
     fn doctor_setup_provider_model_json_covers_cn_codex_and_local_matrix() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let (_home_guard, _codewhale_home) = prepare_env(&tmp);
+        let (_home_guard, _ghosty_home) = prepare_env(&tmp);
         let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path());
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", tmp.path());
         let _deepseek_key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
@@ -12439,9 +12430,9 @@ mod doctor_setup_state_tests {
             "doctor must not stat or read external credentials without consent"
         );
 
-        let mut consent = codewhale_config::ExternalCredentialConsentToml::read_only(
-            codewhale_config::ProviderKind::OpenaiCodex,
-            codewhale_config::ExternalCredentialSource::CodexCli,
+        let mut consent = ghosty_config::ExternalCredentialConsentToml::read_only(
+            ghosty_config::ProviderKind::OpenaiCodex,
+            ghosty_config::ExternalCredentialSource::CodexCli,
             codex_auth_path.clone(),
         );
         let codex_read_only = Config {
@@ -12486,7 +12477,7 @@ mod doctor_setup_state_tests {
         );
         assert_eq!(
             codex_status["revoke_command"],
-            "codewhale auth external-revoke --provider openai-codex"
+            "ghosty auth external-revoke --provider openai-codex"
         );
         let human = doctor_external_credential_consent_lines(&codex_read_only).join("\n");
         assert!(human.contains("path="), "{human}");
@@ -12495,7 +12486,7 @@ mod doctor_setup_state_tests {
         assert!(human.contains("normal requests to the explicitly selected provider"));
         assert!(human.contains("consent remains pinned"), "{human}");
         assert!(
-            human.contains(&codewhale_config::quote_os_path(&codex_auth_path)),
+            human.contains(&ghosty_config::quote_os_path(&codex_auth_path)),
             "{human}"
         );
         assert!(!human.contains(&changed_ambient_path.display().to_string()));
@@ -12509,7 +12500,7 @@ mod doctor_setup_state_tests {
             codex_auth_raw
         );
 
-        consent.access = codewhale_config::ExternalCredentialAccess::Managed;
+        consent.access = ghosty_config::ExternalCredentialAccess::Managed;
         let codex_managed = Config {
             provider: Some("openai-codex".to_string()),
             providers: Some(crate::config::ProvidersConfig {
@@ -12587,31 +12578,31 @@ mod doctor_setup_state_tests {
     fn doctor_setup_report_json_uses_persisted_state() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let (_home_guard, _codewhale_home) = prepare_env(&tmp);
+        let (_home_guard, _ghosty_home) = prepare_env(&tmp);
         let workspace = tmp.path().join("workspace");
         fs::create_dir_all(&workspace).expect("workspace");
-        let mut state = codewhale_config::SetupState::default();
+        let mut state = ghosty_config::SetupState::default();
         state.set_step(
-            codewhale_config::SetupStep::Language,
-            codewhale_config::StepEntry::new(
-                codewhale_config::StepStatus::Verified,
+            ghosty_config::SetupStep::Language,
+            ghosty_config::StepEntry::new(
+                ghosty_config::StepStatus::Verified,
                 true,
                 crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
             ),
         );
         state.set_step(
-            codewhale_config::SetupStep::ProviderModel,
-            codewhale_config::StepEntry::new(
-                codewhale_config::StepStatus::Verified,
+            ghosty_config::SetupStep::ProviderModel,
+            ghosty_config::StepEntry::new(
+                ghosty_config::StepStatus::Verified,
                 true,
                 crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
             )
             .with_result("deepseek/deepseek-chat"),
         );
         state.set_step(
-            codewhale_config::SetupStep::TrustSandbox,
-            codewhale_config::StepEntry::new(
-                codewhale_config::StepStatus::Verified,
+            ghosty_config::SetupStep::TrustSandbox,
+            ghosty_config::StepEntry::new(
+                ghosty_config::StepStatus::Verified,
                 true,
                 crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
             ),
@@ -12619,20 +12610,20 @@ mod doctor_setup_state_tests {
         state
             .complete_constitution_checkpoint(
                 crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
-                codewhale_config::ConstitutionChoice::Bundled,
+                ghosty_config::ConstitutionChoice::Bundled,
             )
             .set_step(
-                codewhale_config::SetupStep::Constitution,
-                codewhale_config::StepEntry::new(
-                    codewhale_config::StepStatus::Verified,
+                ghosty_config::SetupStep::Constitution,
+                ghosty_config::StepEntry::new(
+                    ghosty_config::StepStatus::Verified,
                     true,
                     crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
                 ),
             );
-        state.runtime_posture_source = codewhale_config::RuntimePostureSource::Confirmed;
+        state.runtime_posture_source = ghosty_config::RuntimePostureSource::Confirmed;
         state.save().expect("persist setup state");
-        codewhale_config::UserConstitution {
-            autonomy_preference: codewhale_config::AutonomyPreference::Balanced,
+        ghosty_config::UserConstitution {
+            autonomy_preference: ghosty_config::AutonomyPreference::Balanced,
             ..Default::default()
         }
         .save()
@@ -12706,11 +12697,11 @@ mod doctor_setup_state_tests {
     fn doctor_reports_settings_permission_posture_when_approval_policy_unset() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let (_home_guard, codewhale_home) = prepare_env(&tmp);
+        let (_home_guard, ghosty_home) = prepare_env(&tmp);
         let workspace = tmp.path().join("workspace");
         fs::create_dir_all(&workspace).expect("workspace");
         fs::write(
-            codewhale_home.join("settings.toml"),
+            ghosty_home.join("settings.toml"),
             "permission_posture = \"full-access\"\n",
         )
         .expect("write settings.toml");
@@ -12754,11 +12745,10 @@ mod doctor_setup_state_tests {
     fn doctor_reports_resolved_telemetry_with_its_source() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let (_home_guard, _codewhale_home) = prepare_env(&tmp);
-        let _telemetry_env = crate::test_support::EnvVarGuard::remove("CODEWHALE_TELEMETRY");
+        let (_home_guard, _ghosty_home) = prepare_env(&tmp);
+        let _telemetry_env = crate::test_support::EnvVarGuard::remove("GHOSTY_TELEMETRY");
         let _telemetry_alias_env = crate::test_support::EnvVarGuard::remove("DEEPSEEK_TELEMETRY");
-        let _telemetry_floor =
-            crate::test_support::EnvVarGuard::remove("CODEWHALE_TELEMETRY_FLOOR");
+        let _telemetry_floor = crate::test_support::EnvVarGuard::remove("GHOSTY_TELEMETRY_FLOOR");
         let workspace = tmp.path().join("workspace");
         fs::create_dir_all(&workspace).expect("workspace");
 
@@ -12794,35 +12784,35 @@ mod doctor_setup_state_tests {
     fn doctor_setup_report_json_fails_closed_without_operate_receipts() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let (_home_guard, _codewhale_home) = prepare_env(&tmp);
+        let (_home_guard, _ghosty_home) = prepare_env(&tmp);
         let workspace = tmp.path().join("workspace");
         fs::create_dir_all(&workspace).expect("workspace");
-        let mut state = codewhale_config::SetupState::default();
+        let mut state = ghosty_config::SetupState::default();
         state.set_step(
-            codewhale_config::SetupStep::Language,
-            codewhale_config::StepEntry::new(
-                codewhale_config::StepStatus::Verified,
+            ghosty_config::SetupStep::Language,
+            ghosty_config::StepEntry::new(
+                ghosty_config::StepStatus::Verified,
                 true,
                 crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
             ),
         );
         state.set_step(
-            codewhale_config::SetupStep::ProviderModel,
-            codewhale_config::StepEntry::new(
-                codewhale_config::StepStatus::Verified,
+            ghosty_config::SetupStep::ProviderModel,
+            ghosty_config::StepEntry::new(
+                ghosty_config::StepStatus::Verified,
                 true,
                 crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
             ),
         );
-        state.runtime_posture_source = codewhale_config::RuntimePostureSource::Confirmed;
+        state.runtime_posture_source = ghosty_config::RuntimePostureSource::Confirmed;
         state.complete_constitution_checkpoint(
             crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
-            codewhale_config::ConstitutionChoice::Bundled,
+            ghosty_config::ConstitutionChoice::Bundled,
         );
         state.set_step(
-            codewhale_config::SetupStep::OperateFleet,
-            codewhale_config::StepEntry::new(
-                codewhale_config::StepStatus::Verified,
+            ghosty_config::SetupStep::OperateFleet,
+            ghosty_config::StepEntry::new(
+                ghosty_config::StepStatus::Verified,
                 false,
                 crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
             )
@@ -13356,7 +13346,7 @@ mod doctor_endpoint_tests {
         assert!(text.contains("api.deepseek.com"));
         assert!(text.contains("custom DeepSeek-compatible endpoint"));
         assert!(!text.contains("provider = \"deepseek-cn\""));
-        assert!(text.contains("codewhale doctor --json"));
+        assert!(text.contains("ghosty doctor --json"));
     }
 
     #[test]
@@ -13435,7 +13425,7 @@ mod terminal_mode_tests {
     }
     #[test]
     fn hidden_remote_control_flag_starts_the_interactive_handoff() {
-        let cli = parse_cli(&["codewhale-tui", "--remote-control"]);
+        let cli = parse_cli(&["ghosty-tui", "--remote-control"]);
         assert!(cli.remote_control);
     }
 
@@ -13444,9 +13434,9 @@ mod terminal_mode_tests {
         let _env_lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("workspace");
-        let codewhale_home = temp.path().join("home");
+        let ghosty_home = temp.path().join("home");
         std::fs::create_dir_all(&workspace).unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
         let workspace_arg = workspace.to_string_lossy().into_owned();
 
         for route in [
@@ -13457,7 +13447,7 @@ mod terminal_mode_tests {
             vec!["serve", "--mcp"],
         ] {
             let mut args = vec![
-                "codewhale-tui".to_string(),
+                "ghosty-tui".to_string(),
                 "--workspace".to_string(),
                 workspace_arg.clone(),
             ];
@@ -13468,7 +13458,7 @@ mod terminal_mode_tests {
                 .registry_for_workspace(cli.workspace.as_deref().unwrap_or(workspace.as_path()));
             assert_eq!(registry.workspace(), workspace.as_path());
             assert!(
-                !codewhale_home.join("plugins/state.json").exists(),
+                !ghosty_home.join("plugins/state.json").exists(),
                 "startup discovery must remain read-only"
             );
         }
@@ -13539,7 +13529,7 @@ mod terminal_mode_tests {
         let home = tmp.path().join("home");
         let workspace = tmp.path().join("workspace");
         let personal = home.join("agents");
-        let project = workspace.join(".codewhale").join("agents");
+        let project = workspace.join(".ghosty").join("agents");
         std::fs::create_dir_all(&personal).expect("personal agents");
         std::fs::create_dir_all(&project).expect("project agents");
         std::fs::write(
@@ -13552,7 +13542,7 @@ mod terminal_mode_tests {
             "id = \"builder\"\nrole_hint = \"builder\"\nmodel = \"deepseek-v4-pro\"\n",
         )
         .expect("project builder");
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
 
         let operate = doctor_operate_fleet_report_json(&Config::default(), &workspace);
         let layers = operate["roster"]["multi_layer"]
@@ -13612,14 +13602,14 @@ mod terminal_mode_tests {
 
     #[test]
     fn prompt_flag_accepts_split_prompt_words_for_windows_cmd_shims() {
-        let cli = parse_cli(&["codewhale", "-p", "hello", "world"]);
+        let cli = parse_cli(&["ghosty", "-p", "hello", "world"]);
 
         assert_eq!(cli.prompt, vec!["hello", "world"]);
     }
 
     #[test]
     fn prompt_flag_starts_interactive_submit_input() {
-        let cli = parse_cli(&["codewhale", "-p", "read", "the", "project"]);
+        let cli = parse_cli(&["ghosty", "-p", "read", "the", "project"]);
 
         assert_eq!(
             top_level_prompt_initial_input(&cli.prompt),
@@ -13629,12 +13619,12 @@ mod terminal_mode_tests {
 
     #[test]
     fn companion_binary_reports_its_own_name() {
-        assert_eq!(Cli::command().get_name(), "codewhale-tui");
+        assert_eq!(Cli::command().get_name(), "ghosty-tui");
     }
 
     #[test]
     fn xai_device_auth_subcommand_parses() {
-        let cli = parse_cli(&["codewhale-tui", "auth", "xai-device"]);
+        let cli = parse_cli(&["ghosty-tui", "auth", "xai-device"]);
         assert!(matches!(
             cli.command,
             Some(Commands::Auth(TuiAuthArgs {
@@ -13646,7 +13636,7 @@ mod terminal_mode_tests {
     #[test]
     fn workflow_tool_internal_subcommand_parses_exact_json() {
         let cli = parse_cli(&[
-            "codewhale-tui",
+            "ghosty-tui",
             "workflow-tool",
             "--approval-source",
             "explicit-workflow-command",
@@ -13782,7 +13772,7 @@ mod terminal_mode_tests {
     #[test]
     fn exec_model_resolution_uses_provider_scoped_default() {
         let _env_lock = crate::test_support::lock_test_env();
-        let _codewhale_model = crate::test_support::EnvVarGuard::remove("CODEWHALE_MODEL");
+        let _ghosty_model = crate::test_support::EnvVarGuard::remove("GHOSTY_MODEL");
         let _deepseek_model = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MODEL");
         let config = Config {
             provider: Some("openrouter".to_string()),
@@ -13808,9 +13798,9 @@ mod terminal_mode_tests {
     }
 
     #[test]
-    fn exec_model_resolution_prefers_codewhale_model_env_override() {
+    fn exec_model_resolution_prefers_ghosty_model_env_override() {
         let _env_lock = crate::test_support::lock_test_env();
-        let _codewhale_model = crate::test_support::EnvVarGuard::set("CODEWHALE_MODEL", " auto ");
+        let _ghosty_model = crate::test_support::EnvVarGuard::set("GHOSTY_MODEL", " auto ");
         let _deepseek_model =
             crate::test_support::EnvVarGuard::set("DEEPSEEK_MODEL", "stale-deepseek-model");
         let config = Config {
@@ -13824,7 +13814,7 @@ mod terminal_mode_tests {
     #[test]
     fn exec_model_resolution_uses_legacy_deepseek_model_env_override() {
         let _env_lock = crate::test_support::lock_test_env();
-        let _codewhale_model = crate::test_support::EnvVarGuard::remove("CODEWHALE_MODEL");
+        let _ghosty_model = crate::test_support::EnvVarGuard::remove("GHOSTY_MODEL");
         let _deepseek_model = crate::test_support::EnvVarGuard::set("DEEPSEEK_MODEL", " auto ");
         let config = Config {
             default_text_model: Some("deepseek/deepseek-v4-pro".to_string()),
@@ -13837,7 +13827,7 @@ mod terminal_mode_tests {
     #[test]
     fn exec_model_resolution_uses_provider_safe_default_for_zai() {
         let _env_lock = crate::test_support::lock_test_env();
-        let _codewhale_model = crate::test_support::EnvVarGuard::remove("CODEWHALE_MODEL");
+        let _ghosty_model = crate::test_support::EnvVarGuard::remove("GHOSTY_MODEL");
         let _deepseek_model = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MODEL");
         let config = Config {
             provider: Some("zai".to_string()),
@@ -13854,7 +13844,7 @@ mod terminal_mode_tests {
     #[test]
     fn fresh_launch_uses_selected_fleet_operator_unless_route_is_explicit() {
         let workspace = tempfile::tempdir().expect("workspace");
-        let fleets = workspace.path().join(".codewhale").join("fleets");
+        let fleets = workspace.path().join(".ghosty").join("fleets");
         std::fs::create_dir_all(&fleets).expect("fleet directory");
         std::fs::write(fleets.join("selected"), "Launch\n").expect("selection");
         std::fs::write(
@@ -13935,7 +13925,7 @@ reasoning = "high"
     #[test]
     fn selected_fleet_operator_load_error_redacts_paths_excerpts_and_opaque_name() {
         let workspace = tempfile::tempdir().expect("workspace");
-        let fleets = workspace.path().join(".codewhale").join("fleets");
+        let fleets = workspace.path().join(".ghosty").join("fleets");
         std::fs::create_dir_all(&fleets).expect("fleet directory");
         let secret_marker = "sk-live-abcdef0123456789abcdef";
         std::fs::write(fleets.join("selected"), format!("{secret_marker}\n")).expect("selection");
@@ -14068,7 +14058,7 @@ reasoning = "high"
     fn cli_route_execution_config_preserves_legacy_literal_custom_root_route() {
         let _lock = crate::test_support::lock_test_env();
         let _source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
         let config = Config {
             provider: Some("custom".to_string()),
             api_key: Some("legacy-root-key".to_string()),
@@ -14110,7 +14100,7 @@ reasoning = "high"
 
     #[test]
     fn exec_accepts_split_prompt_words_for_windows_cmd_shims() {
-        let cli = parse_cli(&["codewhale", "exec", "hello", "world"]);
+        let cli = parse_cli(&["ghosty", "exec", "hello", "world"]);
         let Some(Commands::Exec(args)) = cli.command else {
             panic!("expected exec command");
         };
@@ -14120,7 +14110,7 @@ reasoning = "high"
 
     #[test]
     fn exec_keeps_model_flag_before_split_prompt_words() {
-        let cli = parse_cli(&["codewhale", "exec", "--model", "auto", "hello", "world"]);
+        let cli = parse_cli(&["ghosty", "exec", "--model", "auto", "hello", "world"]);
         let Some(Commands::Exec(args)) = cli.command else {
             panic!("expected exec command");
         };
@@ -14131,7 +14121,7 @@ reasoning = "high"
 
     #[test]
     fn exec_keeps_flags_before_split_prompt_words() {
-        let cli = parse_cli(&["codewhale", "exec", "--json", "hello", "world"]);
+        let cli = parse_cli(&["ghosty", "exec", "--json", "hello", "world"]);
         let Some(Commands::Exec(args)) = cli.command else {
             panic!("expected exec command");
         };
@@ -14145,7 +14135,7 @@ reasoning = "high"
         // #4093: Fleet threads `--provider <id>` so a worker launches on its
         // profile-pinned provider even when the parent session is elsewhere.
         let cli = parse_cli(&[
-            "codewhale",
+            "ghosty",
             "exec",
             "--provider",
             "openrouter",
@@ -14300,7 +14290,7 @@ reasoning = "high"
             let lock = crate::test_support::lock_test_env();
             let expected_after_restore = exec_model_env_override();
             let temporary =
-                crate::test_support::EnvVarGuard::set("CODEWHALE_MODEL", "temporary-model");
+                crate::test_support::EnvVarGuard::set("GHOSTY_MODEL", "temporary-model");
             let reader = std::thread::spawn(move || {
                 started_tx.send(()).expect("signal model read start");
                 tx.send(exec_model_env_override())
@@ -14603,7 +14593,7 @@ reasoning = "high"
     #[test]
     fn exec_parses_reasoning_effort_flag_alongside_provider() {
         let cli = parse_cli(&[
-            "codewhale",
+            "ghosty",
             "exec",
             "--provider",
             "openrouter",
@@ -14760,7 +14750,7 @@ reasoning = "high"
     #[test]
     fn exec_accepts_resume_session_flags_for_harnesses() {
         let cli = parse_cli(&[
-            "codewhale",
+            "ghosty",
             "exec",
             "--resume",
             "abc123",
@@ -14779,7 +14769,7 @@ reasoning = "high"
 
     #[test]
     fn exec_accepts_session_id_alias() {
-        let cli = parse_cli(&["codewhale", "exec", "--session-id", "abc123", "follow up"]);
+        let cli = parse_cli(&["ghosty", "exec", "--session-id", "abc123", "follow up"]);
         let Some(Commands::Exec(args)) = cli.command else {
             panic!("expected exec command");
         };
@@ -14792,7 +14782,7 @@ reasoning = "high"
     fn exec_parses_tool_gate_and_hardening_flags() {
         let envelope = r#"{"schema_version":1,"owner":"fleet-worker-1","authority":"read_only"}"#;
         let cli = parse_cli(&[
-            "codewhale",
+            "ghosty",
             "exec",
             "--allowed-tools",
             "File,Git",
@@ -14829,9 +14819,8 @@ reasoning = "high"
 
     #[test]
     fn exec_rejects_zero_max_tool_calls() {
-        let err =
-            Cli::try_parse_from(["codewhale", "exec", "--max-tool-calls", "0", "do the thing"])
-                .expect_err("max-tool-calls must be >= 1");
+        let err = Cli::try_parse_from(["ghosty", "exec", "--max-tool-calls", "0", "do the thing"])
+            .expect_err("max-tool-calls must be >= 1");
         assert_eq!(err.kind(), clap::error::ErrorKind::ValueValidation);
     }
 
@@ -14847,7 +14836,7 @@ reasoning = "high"
 
     #[test]
     fn exec_auto_does_not_authorize_sandbox_elevation() {
-        let cli = parse_cli(&["codewhale", "exec", "--auto", "run it"]);
+        let cli = parse_cli(&["ghosty", "exec", "--auto", "run it"]);
         let Some(Commands::Exec(args)) = cli.command else {
             panic!("expected exec command");
         };
@@ -14861,7 +14850,7 @@ reasoning = "high"
     #[test]
     fn exec_explicit_sandbox_elevation_opt_ins_authorize_retry() {
         let danger = parse_cli(&[
-            "codewhale",
+            "ghosty",
             "exec",
             "--auto",
             "--sandbox",
@@ -14877,7 +14866,7 @@ reasoning = "high"
         ));
 
         let flag = parse_cli(&[
-            "codewhale",
+            "ghosty",
             "exec",
             "--auto",
             "--allow-sandbox-elevation",
@@ -14926,7 +14915,7 @@ reasoning = "high"
     fn exec_shell_only_tool_surface_env_sets_shell_allowlist() {
         let _env_lock = crate::test_support::lock_test_env();
         let _surface =
-            crate::test_support::EnvVarGuard::set(CODEWHALE_TOOL_SURFACE_ENV, " shell-only ");
+            crate::test_support::EnvVarGuard::set(GHOSTY_TOOL_SURFACE_ENV, " shell-only ");
 
         let allowed_tools = resolve_exec_allowed_tools(None, exec_tool_surface_from_env())
             .expect("shell-only surface should set an allowlist");
@@ -14937,8 +14926,7 @@ reasoning = "high"
     #[test]
     fn exec_explicit_allowed_tools_override_shell_only_env() {
         let _env_lock = crate::test_support::lock_test_env();
-        let _surface =
-            crate::test_support::EnvVarGuard::set(CODEWHALE_TOOL_SURFACE_ENV, "shell-only");
+        let _surface = crate::test_support::EnvVarGuard::set(GHOSTY_TOOL_SURFACE_ENV, "shell-only");
         let explicit = vec![" File ".to_string(), "GIT".to_string()];
 
         let allowed_tools =
@@ -14951,7 +14939,7 @@ reasoning = "high"
     #[test]
     fn exec_full_tool_surface_env_leaves_allowlist_unset() {
         let _env_lock = crate::test_support::lock_test_env();
-        let _surface = crate::test_support::EnvVarGuard::set(CODEWHALE_TOOL_SURFACE_ENV, "full");
+        let _surface = crate::test_support::EnvVarGuard::set(GHOSTY_TOOL_SURFACE_ENV, "full");
 
         assert_eq!(
             resolve_exec_allowed_tools(None, exec_tool_surface_from_env()),
@@ -14971,14 +14959,14 @@ reasoning = "high"
 
     #[test]
     fn exec_rejects_zero_max_turns() {
-        let err = Cli::try_parse_from(["codewhale", "exec", "--max-turns", "0", "hello"])
+        let err = Cli::try_parse_from(["ghosty", "exec", "--max-turns", "0", "hello"])
             .expect_err("max-turns must be >= 1");
         assert_eq!(err.kind(), clap::error::ErrorKind::ValueValidation);
     }
 
     #[test]
     fn exec_omits_the_headless_turn_cap_by_default() {
-        let cli = parse_cli(&["codewhale", "exec", "--auto", "benchmark this"]);
+        let cli = parse_cli(&["ghosty", "exec", "--auto", "benchmark this"]);
         let Some(Commands::Exec(args)) = cli.command else {
             panic!("expected exec command");
         };
@@ -14990,7 +14978,7 @@ reasoning = "high"
 
     #[test]
     fn exec_accepts_continue_for_latest_workspace_session() {
-        let cli = parse_cli(&["codewhale", "exec", "--continue", "follow up"]);
+        let cli = parse_cli(&["ghosty", "exec", "--continue", "follow up"]);
         let Some(Commands::Exec(args)) = cli.command else {
             panic!("expected exec command");
         };
@@ -15000,14 +14988,14 @@ reasoning = "high"
 
     #[test]
     fn sessions_footer_points_to_resume_subcommand() {
-        let cli = parse_cli(&["codewhale", "resume", "abc123"]);
+        let cli = parse_cli(&["ghosty", "resume", "abc123"]);
         let Some(Commands::Resume { session_id, last }) = cli.command else {
             panic!("expected resume command");
         };
 
         assert_eq!(session_id.as_deref(), Some("abc123"));
         assert!(!last);
-        assert_eq!(sessions_resume_command(), "codewhale resume");
+        assert_eq!(sessions_resume_command(), "ghosty resume");
         assert!(!sessions_resume_command().contains("--resume"));
     }
 
@@ -15025,11 +15013,11 @@ reasoning = "high"
         }
 
         let cases: &[(&[&str], Expected)] = &[
-            (&["codewhale"], Expected::Plain),
-            (&["codewhale", "resume", "--last"], Expected::Resume),
-            (&["codewhale", "fork", "--last"], Expected::Fork),
-            (&["codewhale", "exec", "probe"], Expected::Exec),
-            (&["codewhale", "serve", "--mcp"], Expected::Serve),
+            (&["ghosty"], Expected::Plain),
+            (&["ghosty", "resume", "--last"], Expected::Resume),
+            (&["ghosty", "fork", "--last"], Expected::Fork),
+            (&["ghosty", "exec", "probe"], Expected::Exec),
+            (&["ghosty", "serve", "--mcp"], Expected::Serve),
         ];
 
         for (args, expected) in cases {
@@ -15064,8 +15052,8 @@ reasoning = "high"
         let _lock = crate::test_support::lock_test_env();
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _nvidia = crate::test_support::EnvVarGuard::set("NVIDIA_API_KEY", "shell-key");
-        let _home = crate::test_support::EnvVarGuard::remove("CODEWHALE_HOME");
-        let _config = crate::test_support::EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _home = crate::test_support::EnvVarGuard::remove("GHOSTY_HOME");
+        let _config = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _shell = crate::test_support::EnvVarGuard::remove("DEEPSEEK_ALLOW_SHELL");
         let tmp = tempfile::TempDir::new().expect("temp workspace");
         let dotenv = tmp.path().join(".env");
@@ -15073,8 +15061,8 @@ reasoning = "high"
             &dotenv,
             "DEEPSEEK_API_KEY=workspace-key\n\
              NVIDIA_API_KEY=repo-must-not-override-shell\n\
-             CODEWHALE_HOME=./attacker-home\n\
-             CODEWHALE_CONFIG_PATH=./attacker.toml\n\
+             GHOSTY_HOME=./attacker-home\n\
+             GHOSTY_CONFIG_PATH=./attacker.toml\n\
              DEEPSEEK_ALLOW_SHELL=true\n",
         )
         .expect("write dotenv");
@@ -15086,8 +15074,8 @@ reasoning = "high"
             Ok("workspace-key")
         );
         assert_eq!(std::env::var("NVIDIA_API_KEY").as_deref(), Ok("shell-key"));
-        assert!(std::env::var_os("CODEWHALE_HOME").is_none());
-        assert!(std::env::var_os("CODEWHALE_CONFIG_PATH").is_none());
+        assert!(std::env::var_os("GHOSTY_HOME").is_none());
+        assert!(std::env::var_os("GHOSTY_CONFIG_PATH").is_none());
         assert!(std::env::var_os("DEEPSEEK_ALLOW_SHELL").is_none());
         assert_eq!(
             report.loaded,
@@ -15096,8 +15084,8 @@ reasoning = "high"
         assert_eq!(
             report.ignored,
             BTreeSet::from([
-                "CODEWHALE_CONFIG_PATH".to_string(),
-                "CODEWHALE_HOME".to_string(),
+                "GHOSTY_CONFIG_PATH".to_string(),
+                "GHOSTY_HOME".to_string(),
                 "DEEPSEEK_ALLOW_SHELL".to_string(),
             ])
         );
@@ -15108,16 +15096,13 @@ reasoning = "high"
         let _lock = crate::test_support::lock_test_env();
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _ambient = crate::test_support::EnvVarGuard::set(
-            "CODEWHALE_JS_SECRET_LEAK_TEST",
+            "GHOSTY_JS_SECRET_LEAK_TEST",
             "ambient-secret-must-not-expand",
         );
         let tmp = tempfile::TempDir::new().expect("temp workspace");
         let dotenv = tmp.path().join(".env");
-        std::fs::write(
-            &dotenv,
-            "DEEPSEEK_API_KEY=${CODEWHALE_JS_SECRET_LEAK_TEST}\n",
-        )
-        .expect("write dotenv");
+        std::fs::write(&dotenv, "DEEPSEEK_API_KEY=${GHOSTY_JS_SECRET_LEAK_TEST}\n")
+            .expect("write dotenv");
 
         let error = load_workspace_dotenv_credentials_from_path(&dotenv)
             .expect_err("expansion must fail closed")
@@ -15133,14 +15118,14 @@ reasoning = "high"
         let _lock = crate::test_support::lock_test_env();
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _ambient = crate::test_support::EnvVarGuard::set(
-            "CODEWHALE_JS_SECRET_LEAK_TEST",
+            "GHOSTY_JS_SECRET_LEAK_TEST",
             "ambient-secret-must-not-expand",
         );
         let tmp = tempfile::TempDir::new().expect("temp workspace");
         let dotenv = tmp.path().join(".env");
         std::fs::write(
             &dotenv,
-            "DEEPSEEK_API_KEY=\"prefix\n$CODEWHALE_JS_SECRET_LEAK_TEST=bar\nsuffix\"\n",
+            "DEEPSEEK_API_KEY=\"prefix\n$GHOSTY_JS_SECRET_LEAK_TEST=bar\nsuffix\"\n",
         )
         .expect("write dotenv");
 
@@ -15158,7 +15143,7 @@ reasoning = "high"
         let _lock = crate::test_support::lock_test_env();
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _ambient = crate::test_support::EnvVarGuard::set(
-            "CODEWHALE_JS_SECRET_LEAK_TEST",
+            "GHOSTY_JS_SECRET_LEAK_TEST",
             "ambient-secret-must-not-expand",
         );
         let tmp = tempfile::TempDir::new().expect("temp workspace");
@@ -15166,7 +15151,7 @@ reasoning = "high"
         std::fs::write(
             &dotenv,
             "# unmatched quote in ignored comment: '\n\
-             DEEPSEEK_API_KEY=$CODEWHALE_JS_SECRET_LEAK_TEST\n",
+             DEEPSEEK_API_KEY=$GHOSTY_JS_SECRET_LEAK_TEST\n",
         )
         .expect("write dotenv");
 
@@ -15218,7 +15203,7 @@ reasoning = "high"
 
     #[test]
     fn workspace_dotenv_credential_allowlist_excludes_control_plane_names() {
-        for provider in codewhale_config::provider::providers_sorted_for_display() {
+        for provider in ghosty_config::provider::providers_sorted_for_display() {
             for key in provider.env_vars() {
                 assert!(
                     is_workspace_dotenv_credential_key(key),
@@ -15227,8 +15212,8 @@ reasoning = "high"
             }
         }
         for key in [
-            "CODEWHALE_HOME",
-            "CODEWHALE_CONFIG_PATH",
+            "GHOSTY_HOME",
+            "GHOSTY_CONFIG_PATH",
             "DEEPSEEK_CONFIG_PATH",
             "DEEPSEEK_PROFILE",
             "DEEPSEEK_MANAGED_CONFIG_PATH",
@@ -15241,7 +15226,7 @@ reasoning = "high"
             "DEEPSEEK_ALLOW_SHELL",
             "DEEPSEEK_YOLO",
             "DEEPSEEK_MCP_CONFIG",
-            "CODEWHALE_RUNTIME_TOKEN",
+            "GHOSTY_RUNTIME_TOKEN",
             "PATH",
             "NODE_OPTIONS",
             "PYTHONPATH",
@@ -15340,7 +15325,7 @@ reasoning = "high"
     #[test]
     fn exec_json_conflicts_with_stream_json_output() {
         let err = Cli::try_parse_from([
-            "codewhale",
+            "ghosty",
             "exec",
             "--json",
             "--output-format",
@@ -15371,7 +15356,7 @@ reasoning = "high"
         assert!(!json.contains('\n'));
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
         assert_eq!(parsed["type"], "turn_usage");
-        assert_eq!(parsed["schema"], "codewhale.exec-stream");
+        assert_eq!(parsed["schema"], "ghosty.exec-stream");
         assert_eq!(parsed["schema_version"], 1);
         assert_eq!(parsed["turn"], 2);
         assert_eq!(parsed["input_tokens"], 1200);
@@ -15490,7 +15475,7 @@ reasoning = "high"
         for (event, expected_type) in cases {
             let value = exec_stream_value(&event).expect("serializes");
             assert_eq!(value["type"], expected_type, "event tag drifted");
-            assert_eq!(value["schema"], "codewhale.exec-stream");
+            assert_eq!(value["schema"], "ghosty.exec-stream");
             assert_eq!(value["schema_version"], 1);
         }
     }
@@ -15517,7 +15502,7 @@ reasoning = "high"
         assert!(!json.contains('\n'));
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
         assert_eq!(parsed["type"], "tool_result");
-        assert_eq!(parsed["schema"], "codewhale.exec-stream");
+        assert_eq!(parsed["schema"], "ghosty.exec-stream");
         assert_eq!(parsed["schema_version"], 1);
         assert_eq!(parsed["duration_ms"], 1000);
         assert_eq!(parsed["side_effect_status"], "not_started");
@@ -15543,7 +15528,7 @@ reasoning = "high"
         assert!(!json.contains('\n'));
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid json");
         assert_eq!(parsed["type"], "workflow_event");
-        assert_eq!(parsed["schema"], "codewhale.exec-stream");
+        assert_eq!(parsed["schema"], "ghosty.exec-stream");
         assert_eq!(parsed["schema_version"], 1);
         assert_eq!(parsed["run_id"], "workflow_1234");
         assert_eq!(parsed["event"]["type"], "handoff_promoted");
@@ -15571,7 +15556,7 @@ reasoning = "high"
         };
         let consumed = exec_stream_value(&consumed).expect("serializes consumed receipt");
         assert_eq!(consumed["type"], "workflow_event");
-        assert_eq!(consumed["schema"], "codewhale.exec-stream");
+        assert_eq!(consumed["schema"], "ghosty.exec-stream");
         assert_eq!(consumed["schema_version"], 1);
         assert_eq!(consumed["event"]["type"], "handoff_consumed");
         assert_eq!(
@@ -15598,8 +15583,8 @@ reasoning = "high"
                 prompt_cache_miss_tokens: None,
                 prompt_cache_write_tokens: None,
                 reasoning_tokens: Some(3),
-                codewhale_max_output_tokens: Some(384_000),
-                codewhale_max_output_tokens_source: Some("documented"),
+                ghosty_max_output_tokens: Some(384_000),
+                ghosty_max_output_tokens_source: Some("documented"),
                 duration_ms: 2500,
                 retry_count: None,
                 approval_posture: "ask".to_string(),
@@ -15635,7 +15620,7 @@ reasoning = "high"
         );
         assert_eq!(
             parsed["meta"]["resume_command"],
-            "codewhale exec --resume <redacted-session-id>"
+            "ghosty exec --resume <redacted-session-id>"
         );
         assert_eq!(parsed["meta"]["workspace"], "/tmp/work");
         assert_eq!(parsed["meta"]["message_count"], 4);
@@ -15755,7 +15740,7 @@ reasoning = "high"
 
     #[test]
     fn alternate_screen_defaults_on_in_auto_mode() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config::default();
 
         assert!(should_use_alt_screen(&cli, &config));
@@ -15765,7 +15750,7 @@ reasoning = "high"
     fn removed_no_alt_screen_flag_is_rejected() {
         // Negative test: the retired compatibility flag must not be silently
         // accepted and must not reach the alternate-screen decision at all.
-        let error = Cli::try_parse_from(["codewhale", "--no-alt-screen"])
+        let error = Cli::try_parse_from(["ghosty", "--no-alt-screen"])
             .expect_err("--no-alt-screen must no longer parse");
         assert_eq!(
             error.kind(),
@@ -15776,7 +15761,7 @@ reasoning = "high"
 
     #[test]
     fn config_never_is_accepted_but_keeps_alternate_screen() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config {
             tui: Some(crate::config::TuiConfig {
                 alternate_screen: Some("never".to_string()),
@@ -15798,7 +15783,7 @@ reasoning = "high"
     #[test]
     #[cfg(not(windows))]
     fn mouse_capture_defaults_on_when_alternate_screen_is_active() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config::default();
 
         assert!(should_use_mouse_capture_with(
@@ -15812,7 +15797,7 @@ reasoning = "high"
         // Legacy conhost (no `WT_SESSION` and no `ConEmuPID`) keeps the
         // v0.8.x default-off behavior: mouse-mode reporting on legacy console
         // can leak SGR escapes into the composer.
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config::default();
 
         assert!(!should_use_mouse_capture_with(
@@ -15828,7 +15813,7 @@ reasoning = "high"
     #[test]
     #[cfg(windows)]
     fn mouse_capture_defaults_on_in_windows_terminal() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config::default();
 
         assert!(should_use_mouse_capture_with(
@@ -15846,7 +15831,7 @@ reasoning = "high"
     #[test]
     #[cfg(windows)]
     fn mouse_capture_defaults_on_in_conemu() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config::default();
 
         assert!(should_use_mouse_capture_with(
@@ -15861,7 +15846,7 @@ reasoning = "high"
 
     #[test]
     fn no_mouse_capture_flag_disables_mouse_capture() {
-        let cli = parse_cli(&["codewhale", "--no-mouse-capture"]);
+        let cli = parse_cli(&["ghosty", "--no-mouse-capture"]);
         let config = Config::default();
 
         assert!(!should_use_mouse_capture_with(
@@ -15871,7 +15856,7 @@ reasoning = "high"
 
     #[test]
     fn config_can_disable_default_mouse_capture() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config {
             tui: Some(crate::config::TuiConfig {
                 alternate_screen: None,
@@ -15894,7 +15879,7 @@ reasoning = "high"
 
     #[test]
     fn mouse_capture_flag_enables_mouse_capture() {
-        let cli = parse_cli(&["codewhale", "--mouse-capture"]);
+        let cli = parse_cli(&["ghosty", "--mouse-capture"]);
         let config = Config::default();
 
         assert!(should_use_mouse_capture_with(
@@ -15904,7 +15889,7 @@ reasoning = "high"
 
     #[test]
     fn config_can_enable_mouse_capture() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config {
             tui: Some(crate::config::TuiConfig {
                 alternate_screen: None,
@@ -15927,7 +15912,7 @@ reasoning = "high"
 
     #[test]
     fn mouse_capture_is_off_without_alternate_screen() {
-        let cli = parse_cli(&["codewhale", "--mouse-capture"]);
+        let cli = parse_cli(&["ghosty", "--mouse-capture"]);
         let config = Config::default();
 
         assert!(!should_use_mouse_capture_with(
@@ -15944,7 +15929,7 @@ reasoning = "high"
 
     #[test]
     fn mouse_capture_defaults_off_in_jetbrains_jediterm() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config::default();
 
         assert!(!should_use_mouse_capture_with(
@@ -15959,7 +15944,7 @@ reasoning = "high"
 
     #[test]
     fn jetbrains_default_off_is_case_insensitive() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config::default();
 
         // JetBrains has occasionally varied the casing across releases;
@@ -15976,7 +15961,7 @@ reasoning = "high"
 
     #[test]
     fn mouse_capture_flag_overrides_jetbrains_default() {
-        let cli = parse_cli(&["codewhale", "--mouse-capture"]);
+        let cli = parse_cli(&["ghosty", "--mouse-capture"]);
         let config = Config::default();
 
         assert!(should_use_mouse_capture_with(
@@ -15991,7 +15976,7 @@ reasoning = "high"
 
     #[test]
     fn config_mouse_capture_true_overrides_jetbrains_default() {
-        let cli = parse_cli(&["codewhale"]);
+        let cli = parse_cli(&["ghosty"]);
         let config = Config {
             tui: Some(crate::config::TuiConfig {
                 alternate_screen: None,
@@ -16067,8 +16052,8 @@ mod project_config_tests {
     fn project_overlay_rejects_symlinked_primary_config() {
         let workspace = tempdir().expect("workspace tempdir");
         let outside = tempdir().expect("outside tempdir");
-        let primary_dir = workspace.path().join(codewhale_config::CODEWHALE_APP_DIR);
-        let legacy_dir = workspace.path().join(codewhale_config::LEGACY_APP_DIR);
+        let primary_dir = workspace.path().join(ghosty_config::GHOSTY_APP_DIR);
+        let legacy_dir = workspace.path().join(ghosty_config::LEGACY_APP_DIR);
         fs::create_dir_all(&primary_dir).expect("mkdir primary");
         fs::create_dir_all(&legacy_dir).expect("mkdir legacy");
         let outside_config = outside.path().join("config.toml");
@@ -16116,8 +16101,8 @@ mod project_config_tests {
     fn project_overlay_skips_when_workspace_is_home_directory() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
-        let project_dir = tmp.path().join(codewhale_config::CODEWHALE_APP_DIR);
-        fs::create_dir_all(&project_dir).expect("mkdir .codewhale");
+        let project_dir = tmp.path().join(ghosty_config::GHOSTY_APP_DIR);
+        fs::create_dir_all(&project_dir).expect("mkdir .ghosty");
         fs::write(
             project_dir.join("config.toml"),
             r#"model = "project-override-model""#,
@@ -16432,7 +16417,7 @@ allow_shell = true
 
     #[test]
     fn exec_no_project_config_skips_user_workspace_overlay() {
-        // #4641: `codewhale --no-project-config exec` must skip the
+        // #4641: `ghosty --no-project-config exec` must skip the
         // workspace-specific `[workspace]`/`[projects]` overlay so a headless
         // launch sees a reproducible config surface. This documents the overlay
         // the `Commands::Exec` gate skips; the end-to-end wiring is proven by
@@ -16604,24 +16589,24 @@ max_subagents = -3
     fn project_overlay_skips_missing_config_file() {
         let tmp = tempdir().expect("tempdir");
         let mut config = Config {
-            provider: Some("codewhale".to_string()),
+            provider: Some("ghosty".to_string()),
             ..Config::default()
         };
         merge_project_config(&mut config, tmp.path());
         // Untouched.
-        assert_eq!(config.provider.as_deref(), Some("codewhale"));
+        assert_eq!(config.provider.as_deref(), Some("ghosty"));
     }
 
     #[test]
     fn project_overlay_skips_malformed_toml() {
         let tmp = workspace_with_project_config("this is not valid TOML !!");
         let mut config = Config {
-            provider: Some("codewhale".to_string()),
+            provider: Some("ghosty".to_string()),
             ..Config::default()
         };
         merge_project_config(&mut config, tmp.path());
         // Untouched on parse error — better to fall back to global than crash.
-        assert_eq!(config.provider.as_deref(), Some("codewhale"));
+        assert_eq!(config.provider.as_deref(), Some("ghosty"));
     }
 
     #[test]
@@ -16633,13 +16618,13 @@ model = ""
 "#,
         );
         let mut config = Config {
-            provider: Some("codewhale".to_string()),
+            provider: Some("ghosty".to_string()),
             default_text_model: Some("deepseek-v4-pro".to_string()),
             ..Config::default()
         };
         merge_project_config(&mut config, tmp.path());
         // Empty strings are ignored — they're rarely a deliberate override.
-        assert_eq!(config.provider.as_deref(), Some("codewhale"));
+        assert_eq!(config.provider.as_deref(), Some("ghosty"));
         assert_eq!(
             config.default_text_model.as_deref(),
             Some("deepseek-v4-pro")
@@ -16844,7 +16829,7 @@ mod doctor_mcp_tests {
         let executable = std::env::current_exe().expect("current test executable");
         let executable = executable.to_string_lossy();
         let mut server = make_server(Some(&executable), &["server/mcp_server.py"], None);
-        server.cwd = Some(PathBuf::from("/tmp/codewhale-project"));
+        server.cwd = Some(PathBuf::from("/tmp/ghosty-project"));
         match doctor_check_mcp_server(&server) {
             McpServerDoctorStatus::Ok(detail) => assert!(detail.contains("stdio")),
             other => panic!("Expected Ok when cwd anchors relative path, got {other:?}"),
@@ -16872,7 +16857,7 @@ mod doctor_mcp_tests {
             let hint = crate::mcp::oauth::auth_required_login_hint("nordic-mcp");
             assert_eq!(
                 hint,
-                "MCP server 'nordic-mcp' requires OAuth authentication. Run `codewhale mcp login nordic-mcp` to authenticate."
+                "MCP server 'nordic-mcp' requires OAuth authentication. Run `ghosty mcp login nordic-mcp` to authenticate."
             );
         }
     }
@@ -16961,7 +16946,7 @@ mod doctor_live_probe_tests {
 
     #[test]
     fn ollama_cloud_probe_uses_hosted_opt_in_not_local_opt_in() {
-        let cloud = codewhale_config::provider::OLLAMA_CLOUD_BASE_URL;
+        let cloud = ghosty_config::provider::OLLAMA_CLOUD_BASE_URL;
         assert!(!doctor_should_probe_api(
             crate::config::ApiProvider::OllamaCloud,
             cloud,
@@ -17537,16 +17522,15 @@ mod setup_helper_tests {
     fn custom_provider_env_source_precedes_saved_secret_store() {
         let _lock = crate::test_support::lock_test_env();
         let temp = TempDir::new().expect("temp home");
-        let codewhale_home = temp.path().join("codewhale-home");
-        std::fs::create_dir_all(&codewhale_home).expect("create codewhale home");
-        let _home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", codewhale_home.as_os_str());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let ghosty_home = temp.path().join("ghosty-home");
+        std::fs::create_dir_all(&ghosty_home).expect("create ghosty home");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", ghosty_home.as_os_str());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _declared_env =
             crate::test_support::EnvVarGuard::set("QA_CUSTOM_API_KEY", "declared-env-key");
         let _deepseek_key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _deepseek_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        codewhale_secrets::Secrets::auto_detect()
+        ghosty_secrets::Secrets::auto_detect()
             .set("custom", "saved-custom-secret")
             .expect("save secret");
 
@@ -17581,14 +17565,13 @@ mod setup_helper_tests {
     fn named_custom_provider_does_not_report_generic_secret_store() {
         let _lock = crate::test_support::lock_test_env();
         let temp = TempDir::new().expect("temp home");
-        let codewhale_home = temp.path().join("codewhale-home");
-        std::fs::create_dir_all(&codewhale_home).expect("create codewhale home");
-        let _home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", codewhale_home.as_os_str());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let ghosty_home = temp.path().join("ghosty-home");
+        std::fs::create_dir_all(&ghosty_home).expect("create ghosty home");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", ghosty_home.as_os_str());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _deepseek_key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _deepseek_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        codewhale_secrets::Secrets::auto_detect()
+        ghosty_secrets::Secrets::auto_detect()
             .set("custom", "unrelated-custom-secret")
             .expect("save secret");
 
@@ -17658,7 +17641,7 @@ mod setup_helper_tests {
             }),
             ..Config::default()
         };
-        let cloud = ollama_config(codewhale_config::provider::OLLAMA_CLOUD_BASE_URL);
+        let cloud = ollama_config(ghosty_config::provider::OLLAMA_CLOUD_BASE_URL);
         assert_eq!(
             cloud.api_provider(),
             crate::config::ApiProvider::OllamaCloud
@@ -17756,8 +17739,8 @@ mod setup_helper_tests {
         let _deepseek_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
         let _openai_key = crate::test_support::EnvVarGuard::remove("OPENAI_API_KEY");
         let mut providers = crate::config::ProvidersConfig::default();
-        providers.openai.auth = Some(codewhale_config::ProviderAuthSourceToml {
-            source: codewhale_config::AuthSourceKind::Command,
+        providers.openai.auth = Some(ghosty_config::ProviderAuthSourceToml {
+            source: ghosty_config::AuthSourceKind::Command,
             command: vec!["secret-tool".to_string(), "lookup".to_string()],
             timeout_ms: Some(2000),
             secret_id: None,
@@ -17781,11 +17764,11 @@ mod setup_helper_tests {
         let _deepseek_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
         let _openai_key = crate::test_support::EnvVarGuard::remove("OPENAI_API_KEY");
         let mut providers = crate::config::ProvidersConfig::default();
-        providers.openai.auth = Some(codewhale_config::ProviderAuthSourceToml {
-            source: codewhale_config::AuthSourceKind::Secret,
+        providers.openai.auth = Some(ghosty_config::ProviderAuthSourceToml {
+            source: ghosty_config::AuthSourceKind::Secret,
             command: Vec::new(),
             timeout_ms: None,
-            secret_id: Some("codewhale/openai".to_string()),
+            secret_id: Some("ghosty/openai".to_string()),
         });
         let cfg = Config {
             provider: Some("openai".to_string()),

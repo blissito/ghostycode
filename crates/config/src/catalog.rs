@@ -62,7 +62,7 @@ pub enum CatalogSource {
 /// One catalog-layer offering row.
 ///
 /// This carries the routing identity (provider + wire id + optional canonical
-/// model + endpoint) plus the offering-owned Models.dev facts CodeWhale wants to
+/// model + endpoint) plus the offering-owned Models.dev facts GhostyCode wants to
 /// preserve (family, limits, cost, reasoning support/options). It is a superset
 /// of [`ProviderModelOffering`]; use [`CatalogOffering::to_offering`] to project
 /// the minimal routing identity the resolver consumes.
@@ -232,7 +232,7 @@ pub fn bundled_catalog_offerings() -> Vec<CatalogOffering> {
 /// canonical link is set only from an explicit `base_model`.
 ///
 /// Provider ids are kept verbatim from the Models.dev payload (the committed
-/// bundled asset already uses CodeWhale ids). Live refresh normalizes aliases
+/// bundled asset already uses GhostyCode ids). Live refresh normalizes aliases
 /// via [`live_offerings_from_models_dev`].
 #[must_use]
 pub fn bundled_offerings_from_models_dev(catalog: &ModelsDevCatalog) -> Vec<CatalogOffering> {
@@ -243,7 +243,7 @@ pub fn bundled_offerings_from_models_dev(catalog: &ModelsDevCatalog) -> Vec<Cata
 ///
 /// Same text-chat filter as [`bundled_offerings_from_models_dev`], but each row is
 /// tagged [`CatalogSource::Live`] with the Models.dev URL fingerprint and fetch
-/// timestamp. Provider keys are normalized onto CodeWhale [`crate::ProviderKind`]
+/// timestamp. Provider keys are normalized onto GhostyCode [`crate::ProviderKind`]
 /// ids when an alias match exists (`moonshotai` → `moonshot`, `togetherai` →
 /// `together`, `zhipuai` → `zai`, …); unknown Models.dev providers keep their
 /// upstream id so they stay discoverable without becoming executable routes.
@@ -279,7 +279,7 @@ fn offerings_from_models_dev(
             continue;
         }
         let provider_id = if normalize_provider_ids {
-            // Normalize Models.dev provider ids onto CodeWhale kinds when known
+            // Normalize Models.dev provider ids onto GhostyCode kinds when known
             // (#4186). Unknown upstream ids are kept verbatim for catalog browsing.
             crate::ProviderKind::parse(raw_id)
                 .map(|kind| kind.as_str().to_string())

@@ -40,7 +40,7 @@
       packages = forEachSystem (
         { pkgs, system }:
         let
-          codewhale = pkgs.callPackage ./nix/package.nix {
+          ghosty = pkgs.callPackage ./nix/package.nix {
             inherit rev;
             rustPlatform = pkgs.makeRustPlatform {
               cargo = pkgs.rustToolchain;
@@ -49,10 +49,10 @@
           };
         in
         {
-          default = codewhale;
-          codewhale = codewhale;
+          default = ghosty;
+          ghosty = ghosty;
           # Compatibility alias for existing Nix users during the rename.
-          deepseek-tui = codewhale;
+          deepseek-tui = ghosty;
         }
       );
 

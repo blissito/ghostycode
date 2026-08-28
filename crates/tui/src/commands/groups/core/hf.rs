@@ -43,7 +43,7 @@ const HF_MCP_CONFIG_SKELETON: &str = r#"{
 
 /// Explainer shown by `/hf concepts`.
 const HF_CONCEPTS: &str = "\
-Codewhale has three distinct Hugging Face surfaces:
+Ghosty has three distinct Hugging Face surfaces:
 
 1. Hugging Face provider route - chat inference
    Switch the active LLM backend to Hugging Face Inference Providers.
@@ -52,13 +52,13 @@ Codewhale has three distinct Hugging Face surfaces:
    Auth: HF_TOKEN or HUGGINGFACE_API_KEY
 
 2. Hugging Face MCP - Hub, docs, datasets, Spaces, and community tools
-   Connect Codewhale to Hugging Face's MCP server through mcp.json.
+   Connect Ghosty to Hugging Face's MCP server through mcp.json.
    Use: /hf mcp status or /hf mcp setup
-   Then: /mcp validate or restart Codewhale so model-visible tools reload.
+   Then: /mcp validate or restart Ghosty so model-visible tools reload.
 
 3. Hugging Face Hub workflows - publish, upload, or manage repositories
    Use explicit Hub tooling such as huggingface_hub or git-based flows.
-   Codewhale does not upload to the Hub through /hf.";
+   Ghosty does not upload to the Hub through /hf.";
 
 pub fn hf(app: &mut App, args: Option<&str>) -> CommandResult {
     let raw = args.unwrap_or("").trim();
@@ -126,7 +126,7 @@ fn hf_mcp_setup_message(app: &App) -> String {
          2. Choose your MCP client and copy the generated configuration snippet.\n\
          3. Paste the Hugging Face server entry into {}.\n\
          4. Run /mcp reload to rebuild the live model-visible tool pool.\n\n\
-         Codewhale-compatible placeholder shape:\n\n\
+         Ghosty-compatible placeholder shape:\n\n\
          ```json\n{HF_MCP_CONFIG_SKELETON}\n```\n\n\
          The placeholder is intentionally not runnable until your private MCP config has a real token value. \
          Do not commit real Hugging Face tokens.\n\n\

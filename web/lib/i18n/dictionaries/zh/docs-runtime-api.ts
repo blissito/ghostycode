@@ -2,12 +2,12 @@ import type { DocsRuntimeApiDict } from "../types";
 
 /** 中文对照见 `en/docs-runtime-api.ts`,文案自页面的 `isZh` 三元逐字迁入。 */
 export const docsRuntimeApi: DocsRuntimeApiDict = {
-  metaTitle: "运行时 API · Codewhale 文档",
+  metaTitle: "运行时 API · Ghosty 文档",
   metaDescription: "面向集成、桥接和自动化的本地 HTTP/SSE、JSON-RPC stdio 与 ACP 入口。",
   bodyClassName: "text-ink-soft leading-[1.9] tracking-wide",
   overviewTitle: "运行时 API",
   overviewLead:
-    "codewhale app-server 是 canonical 的本地运行时 API 与控制平面。本地 SDK、移动/远控客户端和编辑器集成直接与它对话，而不是抓终端输出。引擎只作为本地进程运行：所有 API 默认绑定 localhost——没有托管中继，不托管 provider 令牌，不泄露秘密。codewhale serve --http / --mobile 保留为 app-server --http / --mobile 的兼容别名，启动的是同一个服务器；新集成应面向 app-server。",
+    "ghosty app-server 是 canonical 的本地运行时 API 与控制平面。本地 SDK、移动/远控客户端和编辑器集成直接与它对话，而不是抓终端输出。引擎只作为本地进程运行：所有 API 默认绑定 localhost——没有托管中继，不托管 provider 令牌，不泄露秘密。ghosty serve --http / --mobile 保留为 app-server --http / --mobile 的兼容别名，启动的是同一个服务器；新集成应面向 app-server。",
   entries: [
     ["http", "完整 /v1/* HTTP/SSE 运行时 API（canonical 入口），默认 127.0.0.1:7878。"],
     ["mobile", "运行时 API 加 /mobile 手机控制页。"],

@@ -231,7 +231,7 @@ pub(super) fn should_resume_interactive_after_network_drop(
 
 /// Convert low-level reqwest/hyper stream read errors into an operator-facing
 /// message. The raw provider error remains attached, but the lead sentence
-/// explains why Codewhale may retry before any output and why it must surface
+/// explains why Ghosty may retry before any output and why it must surface
 /// the warning once partial output has already streamed.
 pub(super) fn stream_read_error_user_message(message: &str, any_content_received: bool) -> String {
     let lower = message.to_ascii_lowercase();
@@ -244,9 +244,9 @@ pub(super) fn stream_read_error_user_message(message: &str, any_content_received
     }
 
     let retry_note = if any_content_received {
-        "Some output had already streamed, so Codewhale is surfacing the warning instead of replaying the request and risking duplicated output."
+        "Some output had already streamed, so Ghosty is surfacing the warning instead of replaying the request and risking duplicated output."
     } else {
-        "No output had streamed yet, so Codewhale will retry automatically while retry budget remains."
+        "No output had streamed yet, so Ghosty will retry automatically while retry budget remains."
     };
     format!(
         "Provider stream connection dropped while reading the response body. {retry_note} Details: {message}"
@@ -273,7 +273,7 @@ pub(super) fn stream_read_error_user_message(message: &str, any_content_received
 /// `marker_tables_are_consistent` enforces that they agree.
 pub(crate) const TOOL_CALL_MARKER_PAIRS: [(&str, &str); 28] = [
     ("[TOOL_CALL]", "[/TOOL_CALL]"),
-    ("<codewhale:tool_call", "</codewhale:tool_call>"),
+    ("<ghosty:tool_call", "</ghosty:tool_call>"),
     ("<tool_call", "</tool_call>"),
     ("<invoke ", "</invoke>"),
     ("<function_calls>", "</function_calls>"),
@@ -307,7 +307,7 @@ pub(crate) const TOOL_CALL_MARKER_PAIRS: [(&str, &str); 28] = [
 
 pub(crate) const TOOL_CALL_START_MARKERS: [&str; 28] = [
     "[TOOL_CALL]",
-    "<codewhale:tool_call",
+    "<ghosty:tool_call",
     "<tool_call",
     "<invoke ",
     "<function_calls>",
@@ -338,7 +338,7 @@ pub(crate) const TOOL_CALL_START_MARKERS: [&str; 28] = [
 
 pub(crate) const TOOL_CALL_END_MARKERS: [&str; 28] = [
     "[/TOOL_CALL]",
-    "</codewhale:tool_call>",
+    "</ghosty:tool_call>",
     "</tool_call>",
     "</invoke>",
     "</function_calls>",

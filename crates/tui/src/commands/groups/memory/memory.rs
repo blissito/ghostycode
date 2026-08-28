@@ -226,7 +226,7 @@ fn native_command(app: &App, input: &str) -> CommandResult {
 fn memory(app: &mut App, arg: Option<&str>) -> CommandResult {
     if !app.use_memory {
         return CommandResult::error(
-            "user memory is disabled. Enable with `[memory] enabled = true` in `~/.codewhale/config.toml` or `DEEPSEEK_MEMORY=on` in your environment, then restart the TUI.",
+            "user memory is disabled. Enable with `[memory] enabled = true` in `~/.ghosty/config.toml` or `DEEPSEEK_MEMORY=on` in your environment, then restart the TUI.",
         );
     }
 

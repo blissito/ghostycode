@@ -170,8 +170,8 @@ fn risk_writes_shell_mcp_action_unknown_route_destructive() {
 fn risk_read_only_shell_commands_route_benign() {
     let cat = ToolCategory::Shell;
     for command in [
-        "codewhale --version",
-        "codewhale --help",
+        "ghosty --version",
+        "ghosty --help",
         "git status --porcelain",
     ] {
         assert_eq!(
@@ -1153,7 +1153,7 @@ fn repo_law_request_does_not_build_a_persistent_allow_candidate() {
     let request = ApprovalRequest::new(
         "test-id",
         "edit_file",
-        "Repo law holds this write: protected path (matched Cargo.toml, .codewhale/constitution.json)",
+        "Repo law holds this write: protected path (matched Cargo.toml, .ghosty/constitution.json)",
         &json!({"path": "Cargo.toml", "old": "a", "new": "b"}),
         "tool:edit_file",
     );

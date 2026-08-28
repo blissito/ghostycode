@@ -404,7 +404,7 @@ fn codex_not_available_downgrades_install_plan() {
 }
 
 #[test]
-fn codewhale_native_catalog_maps_install_specs() {
+fn ghosty_native_catalog_maps_install_specs() {
     let body = r#"{
         "name": "team", "description": "Team plugins", "version": "1",
         "plugins": [
@@ -414,7 +414,7 @@ fn codewhale_native_catalog_maps_install_specs() {
         ]
       }"#;
     let catalog = parse_auto("native", body);
-    assert_eq!(catalog.format, MarketplaceFormat::Codewhale);
+    assert_eq!(catalog.format, MarketplaceFormat::Ghosty);
     assert_eq!(catalog.total_candidates(), 3);
 
     assert!(
@@ -465,7 +465,7 @@ fn missing_plugins_array_is_a_catalog_error() {
             r#"{"name": "x", "owner": {"name": "o"}}"#,
         ),
         (MarketplaceFormat::Codex, r#"{"name": "x"}"#),
-        (MarketplaceFormat::Codewhale, r#"{"name": "x"}"#),
+        (MarketplaceFormat::Ghosty, r#"{"name": "x"}"#),
     ] {
         let catalog = parse("t", format, body);
         assert_eq!(catalog.total_candidates(), 0);

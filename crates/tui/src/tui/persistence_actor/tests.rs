@@ -6,11 +6,11 @@ use std::time::{Duration, Instant};
 use crate::models::Role;
 use crate::models::{ContentBlock, Message};
 
-const BACKLOG_RECEIPT_PATH_ENV: &str = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_RECEIPT_PATH";
-const BACKLOG_SOURCE_SHA_ENV: &str = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_SOURCE_SHA";
-const BACKLOG_SOURCE_DIRTY_ENV: &str = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_SOURCE_DIRTY";
-const BACKLOG_RUSTC_VERSION_ENV: &str = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_RUSTC_VERSION";
-const BACKLOG_CARGO_VERSION_ENV: &str = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_CARGO_VERSION";
+const BACKLOG_RECEIPT_PATH_ENV: &str = "GHOSTY_TEST_PERSISTENCE_BACKLOG_RECEIPT_PATH";
+const BACKLOG_SOURCE_SHA_ENV: &str = "GHOSTY_TEST_PERSISTENCE_BACKLOG_SOURCE_SHA";
+const BACKLOG_SOURCE_DIRTY_ENV: &str = "GHOSTY_TEST_PERSISTENCE_BACKLOG_SOURCE_DIRTY";
+const BACKLOG_RUSTC_VERSION_ENV: &str = "GHOSTY_TEST_PERSISTENCE_BACKLOG_RUSTC_VERSION";
+const BACKLOG_CARGO_VERSION_ENV: &str = "GHOSTY_TEST_PERSISTENCE_BACKLOG_CARGO_VERSION";
 const BACKLOG_FIXTURE_ID: &str = "paused-production-channel-session-snapshot-v1";
 const BACKLOG_REQUESTS_ATTEMPTED: usize = 128;
 const BACKLOG_CONTENT_BYTES_PER_REQUEST: usize = 64 * 1024;
@@ -47,7 +47,7 @@ fn persistence_backlog_receipt(
         && observation.rss_during_bytes.is_some()
         && observation.rss_after_bytes.is_some();
     serde_json::json!({
-        "document_kind": "codewhale.persistence_backlog_receipt",
+        "document_kind": "ghosty.persistence_backlog_receipt",
         "schema_version": 2,
         "source_sha": provenance.source_sha,
         "source_dirty": provenance.source_dirty,
@@ -171,8 +171,8 @@ fn measure_paused_persistence_backlog() -> PersistenceBacklogObservation {
     let _env_lock = crate::test_support::lock_test_env();
     let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path());
     let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", tmp.path());
-    let _codewhale_home =
-        crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path().join(".codewhale"));
+    let _ghosty_home =
+        crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path().join(".ghosty"));
 
     let (tx, mut receiver) = persistence_request_channel();
     let handle = PersistActorHandle { tx };

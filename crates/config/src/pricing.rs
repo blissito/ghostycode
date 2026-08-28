@@ -32,7 +32,7 @@ pub enum Currency {
     #[default]
     Usd,
     Cny,
-    /// An ISO-4217-style code CodeWhale does not special-case.
+    /// An ISO-4217-style code GhostyCode does not special-case.
     Other(String),
 }
 
@@ -87,7 +87,7 @@ impl PricingProvenance {
 /// Default freshness window for a `ProviderLive` pricing row, in seconds.
 ///
 /// A provider `/models` refresh is a snapshot of a mutable price list. Past
-/// this age CodeWhale stops calling the row authoritative rather than billing
+/// this age GhostyCode stops calling the row authoritative rather than billing
 /// against a rate the provider may have already changed.
 pub const LIVE_PRICING_MAX_AGE_SECS: u64 = 24 * 60 * 60;
 
@@ -466,7 +466,7 @@ pub(crate) fn route_pricing_sku_from_cost(cost: Option<&ModelsDevCost>) -> Prici
     }
 }
 
-/// Upper bound, per million tokens, on a price CodeWhale will treat as real.
+/// Upper bound, per million tokens, on a price GhostyCode will treat as real.
 ///
 /// Published frontier rates are in the single-to-triple digits per million.
 /// A value four orders of magnitude above that is not an expensive model, it is

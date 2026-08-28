@@ -32,7 +32,7 @@ async function checkAuth(req: Request, env: CommunityAgentEnv): Promise<{ ok: bo
 }
 
 const ALLOWED_ACTIONS = new Set(["post", "discard"]);
-const ALLOWED_ORIGINS = new Set(["https://codewhale.net", "https://www.codewhale.net"]);
+const ALLOWED_ORIGINS = new Set(["https://ghosty.net", "https://www.ghosty.net"]);
 const MAX_BODY_BYTES = 65_536;
 
 export async function POST(req: Request) {
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
       const firstLine = digestBody.split("\n")[0].replace(/^#+\s*/, "").trim();
       const title = firstLine || `Weekly Digest ${draft.id}`;
 
-      const digestRepo = env.GITHUB_REPO ?? "Hmbown/CodeWhale";
+      const digestRepo = env.GITHUB_REPO ?? "blissito/ghostycode";
       const issuesUrl = `https://api.github.com/repos/${digestRepo}/issues`;
 
       const digestRes = await fetch(issuesUrl, {
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "no target number" }, { status: 400 });
     }
 
-    const repo = env.GITHUB_REPO ?? "Hmbown/CodeWhale";
+    const repo = env.GITHUB_REPO ?? "blissito/ghostycode";
     const commentUrl = `https://api.github.com/repos/${repo}/issues/${draft.targetNumber}/comments`;
 
     const ghRes = await fetch(commentUrl, {

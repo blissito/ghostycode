@@ -19,9 +19,9 @@ SPEC.loader.exec_module(mod)
 
 def valid_graph() -> dict[str, set[str]]:
     return {
-        "codewhale-command-contract": {"codewhale-core"},
-        "codewhale-core": set(),
-        "codewhale-tui": set(),
+        "ghosty-command-contract": {"ghosty-core"},
+        "ghosty-core": set(),
+        "ghosty-tui": set(),
     }
 
 
@@ -31,32 +31,32 @@ class DependencyTests(unittest.TestCase):
 
     def test_direct_tui_edge_fails(self) -> None:
         graph = valid_graph()
-        graph["codewhale-command-contract"].add("codewhale-tui")
+        graph["ghosty-command-contract"].add("ghosty-tui")
         self.assertEqual(len(mod.check_dependency_graph(graph)), 1)
 
     def test_transitive_tui_edge_fails(self) -> None:
         graph = valid_graph()
-        graph["codewhale-core"].add("codewhale-tui")
+        graph["ghosty-core"].add("ghosty-tui")
         self.assertEqual(len(mod.check_dependency_graph(graph)), 1)
 
     def test_missing_contract_fails(self) -> None:
         graph = valid_graph()
-        del graph["codewhale-command-contract"]
+        del graph["ghosty-command-contract"]
         violations = mod.check_dependency_graph(graph)
         self.assertEqual(len(violations), 1)
         self.assertIn("missing", str(violations[0]))
 
     def test_dev_dependency_is_not_a_normal_edge(self) -> None:
         metadata = {"packages": [
-            {"name": "codewhale-command-contract", "dependencies": [
-                {"name": "codewhale-tui", "kind": "dev"},
-                {"name": "codewhale-core", "kind": None},
+            {"name": "ghosty-command-contract", "dependencies": [
+                {"name": "ghosty-tui", "kind": "dev"},
+                {"name": "ghosty-core", "kind": None},
             ]},
-            {"name": "codewhale-core", "dependencies": []},
-            {"name": "codewhale-tui", "dependencies": []},
+            {"name": "ghosty-core", "dependencies": []},
+            {"name": "ghosty-tui", "dependencies": []},
         ]}
         graph = mod.dependency_graph(metadata)
-        self.assertEqual(graph["codewhale-command-contract"], {"codewhale-core"})
+        self.assertEqual(graph["ghosty-command-contract"], {"ghosty-core"})
         self.assertEqual(mod.check_dependency_graph(graph), [])
 
 
@@ -67,7 +67,7 @@ class SourceTests(unittest.TestCase):
 
     def test_forbidden_edges_fail(self) -> None:
         cases = [
-            "use codewhale_tui::tui::app::App;",
+            "use ghosty_tui::tui::app::App;",
             "use ratatui::widgets::Paragraph;",
             "use crate::tui::App;",
             "pub struct CommandContext {}",
@@ -79,7 +79,7 @@ class SourceTests(unittest.TestCase):
 
     def test_comments_and_plural_envelope_pass(self) -> None:
         source = (
-            "// Never import codewhale_tui or define CommandContext here.\n"
+            "// Never import ghosty_tui or define CommandContext here.\n"
             "pub struct CommandContexts<'a> { marker: &'a str }\n"
         )
         self.assertEqual(mod.check_contract_source_text(source, "safe.rs"), [])

@@ -1,7 +1,7 @@
 //! Numbered, confirmation-gated editor for the active `permissions.toml`.
 
-use codewhale_config::{PermissionsFileState, PermissionsSnapshot, ToolAskRule};
-use codewhale_execpolicy::PermissionAction;
+use ghosty_config::{PermissionsFileState, PermissionsSnapshot, ToolAskRule};
+use ghosty_execpolicy::PermissionAction;
 
 use crate::commands::CommandResult;
 use crate::localization::{MessageId, tr};
@@ -66,7 +66,7 @@ fn remove_permission(app: &App, parts: &[&str]) -> CommandResult {
         return usage_error(app);
     }
     let removed =
-        match codewhale_config::remove_permission_rule(app.config_path.clone(), index, parts[3]) {
+        match ghosty_config::remove_permission_rule(app.config_path.clone(), index, parts[3]) {
             Ok(rule) => rule,
             Err(error) => return operation_error(app, &error),
         };
@@ -78,7 +78,7 @@ fn remove_permission(app: &App, parts: &[&str]) -> CommandResult {
 }
 
 fn load_snapshot(app: &App) -> anyhow::Result<PermissionsSnapshot> {
-    codewhale_config::load_permissions_snapshot(app.config_path.clone())
+    ghosty_config::load_permissions_snapshot(app.config_path.clone())
 }
 
 fn format_snapshot(app: &App, snapshot: &PermissionsSnapshot) -> String {
@@ -87,7 +87,7 @@ fn format_snapshot(app: &App, snapshot: &PermissionsSnapshot) -> String {
         PermissionsFileState::Empty => MessageId::PermissionsFileEmpty,
         PermissionsFileState::Present => MessageId::PermissionsFilePresent,
     };
-    let path = codewhale_config::quote_os_path(snapshot.path());
+    let path = ghosty_config::quote_os_path(snapshot.path());
     let mut output = tr(app.ui_locale, MessageId::PermissionsListHeader)
         .replace("{count}", &snapshot.rules().len().to_string())
         .replace("{file_state}", &tr(app.ui_locale, file_state))
@@ -126,8 +126,8 @@ fn format_posture_explainer(app: &App) -> String {
     ));
     text.push('\n');
     let audit_path = crate::audit::audit_log_path()
-        .map(|path| codewhale_config::quote_os_path(&path))
-        .unwrap_or_else(|| "$CODEWHALE_HOME/audit.log".to_string());
+        .map(|path| ghosty_config::quote_os_path(&path))
+        .unwrap_or_else(|| "$GHOSTY_HOME/audit.log".to_string());
     text.push_str(
         &tr(app.ui_locale, MessageId::PermissionsReceiptsNote).replace("{audit_path}", &audit_path),
     );
@@ -184,11 +184,10 @@ fn rule_applies_in_workspace(rule: &ToolAskRule, workspace: &std::path::Path) ->
         return true;
     };
     let workspace = workspace.to_string_lossy();
-    let Some(rule_workspace) = codewhale_execpolicy::normalize_workspace_scope(rule_workspace)
-    else {
+    let Some(rule_workspace) = ghosty_execpolicy::normalize_workspace_scope(rule_workspace) else {
         return false;
     };
-    let Some(workspace) = codewhale_execpolicy::normalize_workspace_scope(&workspace) else {
+    let Some(workspace) = ghosty_execpolicy::normalize_workspace_scope(&workspace) else {
         return false;
     };
     rule_workspace == workspace
@@ -300,7 +299,7 @@ workspace = {other:?}
         )
         .expect("write permissions");
         let displayed_permissions_path =
-            codewhale_config::resolve_permissions_path(Some(config_path.clone()))
+            ghosty_config::resolve_permissions_path(Some(config_path.clone()))
                 .expect("resolve permissions path");
         let app = test_app(config_path, dir.path().to_path_buf());
 
@@ -308,9 +307,7 @@ workspace = {other:?}
         let message = result.message.expect("list message");
 
         assert!(!result.is_error);
-        assert!(message.contains(&codewhale_config::quote_os_path(
-            &displayed_permissions_path
-        )));
+        assert!(message.contains(&ghosty_config::quote_os_path(&displayed_permissions_path)));
         assert!(message.contains("#1 | allow | exec_shell"));
         assert!(message.contains("exact command `cargo test`"));
         assert!(message.contains("active in this workspace"));
@@ -325,7 +322,7 @@ workspace = {other:?}
         let config_path = dir.path().join("config.toml");
         let permissions_path = dir.path().join("permissions.toml");
         let displayed_permissions_path =
-            codewhale_config::resolve_permissions_path(Some(config_path.clone()))
+            ghosty_config::resolve_permissions_path(Some(config_path.clone()))
                 .expect("resolve permissions path");
         let app = test_app(config_path, dir.path().to_path_buf());
 
@@ -350,9 +347,9 @@ workspace = {other:?}
         let malformed_message = malformed.message.expect("malformed message");
         assert!(malformed.is_error);
         assert!(malformed_message.contains("Permission rule operation failed"));
-        assert!(malformed_message.contains(&codewhale_config::quote_os_path(
-            &displayed_permissions_path
-        )));
+        assert!(
+            malformed_message.contains(&ghosty_config::quote_os_path(&displayed_permissions_path))
+        );
         assert!(malformed_message.contains("file contents were omitted"));
         assert!(!malformed_message.contains("do-not-echo-this"));
     }
@@ -386,7 +383,7 @@ workspace = {other:?}
         assert!(!confirmed.is_error);
         assert_eq!(confirmed.action, Some(AppAction::PermissionRulesChanged));
         let persisted = fs::read_to_string(&permissions_path).expect("read edited permissions");
-        let parsed: codewhale_config::PermissionsToml =
+        let parsed: ghosty_config::PermissionsToml =
             toml::from_str(&persisted).expect("parse edited permissions");
         assert!(parsed.rules.is_empty());
     }

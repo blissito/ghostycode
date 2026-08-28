@@ -1,6 +1,6 @@
 import type { FeedItem, RepoStats } from "./types";
 
-const REPO = process.env.GITHUB_REPO ?? "Hmbown/CodeWhale";
+const REPO = process.env.GITHUB_REPO ?? "blissito/ghostycode";
 const GH = "https://api.github.com";
 const MIN_KNOWN_CONTRIBUTORS = 141;
 
@@ -12,7 +12,7 @@ function headers(token?: string): HeadersInit {
   const h: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "codewhale-web",
+    "User-Agent": "ghosty-web",
   };
   if (token) h.Authorization = `Bearer ${token}`;
   return h;

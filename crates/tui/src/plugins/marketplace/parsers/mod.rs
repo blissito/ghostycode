@@ -6,8 +6,8 @@
 //! plausible equivalent. There is no network access at this layer.
 
 pub mod claude;
-pub mod codewhale;
 pub mod codex;
+pub mod ghosty;
 pub mod kimi;
 
 use serde_json::Value;
@@ -81,7 +81,7 @@ pub fn parse_catalog(document: MarketplaceDocument) -> MarketplaceCatalog {
         MarketplaceFormat::Kimi => kimi::parse_kimi_catalog(document),
         MarketplaceFormat::Claude => claude::parse_claude_catalog(document),
         MarketplaceFormat::Codex => codex::parse_codex_catalog(document),
-        MarketplaceFormat::Codewhale => codewhale::parse_codewhale_catalog(document),
+        MarketplaceFormat::Ghosty => ghosty::parse_ghosty_catalog(document),
         MarketplaceFormat::Auto => unreachable!("resolved above"),
     }
 }
@@ -96,8 +96,8 @@ pub fn parse_catalog(document: MarketplaceDocument) -> MarketplaceCatalog {
 /// - **Codex**: a `plugins[]` entry with a `policy` object, a `source`
 ///   object with the `local` discriminator, or a top-level `interface`
 ///   object.
-/// - **Codewhale**: `plugins[]` entries with `name` + a string `source`
-///   that is a Codewhale install spec (`github:`, `path:`, URL).
+/// - **Ghosty**: `plugins[]` entries with `name` + a string `source`
+///   that is a Ghosty install spec (`github:`, `path:`, URL).
 ///
 /// Documents matching no documented marker are ambiguous, not guessed.
 fn detect_format(root: &Value) -> Result<MarketplaceFormat, MarketplaceDiagnostic> {
@@ -113,7 +113,7 @@ fn detect_format(root: &Value) -> Result<MarketplaceFormat, MarketplaceDiagnosti
         return Err(MarketplaceDiagnostic::error(
             "UNKNOWN_FORMAT",
             "catalog has no documented marker: expected Kimi `plugins` with `id` entries, \
-             Claude `owner`/`plugins`, Codex `policy`/`interface`, or Codewhale `plugins` \
+             Claude `owner`/`plugins`, Codex `policy`/`interface`, or Ghosty `plugins` \
              with install-spec sources",
             None,
             None,
@@ -176,12 +176,12 @@ fn detect_format(root: &Value) -> Result<MarketplaceFormat, MarketplaceDiagnosti
         return Ok(MarketplaceFormat::Kimi);
     }
 
-    // Codewhale: `name` entries with install-spec string sources.
+    // Ghosty: `name` entries with install-spec string sources.
     if entry_markers
         .iter()
         .any(|m| m.has_name && matches!(m.source_kind, Some(SourceMarker::InstallSpec)))
     {
-        return Ok(MarketplaceFormat::Codewhale);
+        return Ok(MarketplaceFormat::Ghosty);
     }
 
     Err(MarketplaceDiagnostic::error(

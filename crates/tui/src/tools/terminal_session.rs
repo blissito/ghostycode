@@ -176,9 +176,9 @@ fn durable_path(name: &str, workspace: &Path) -> Result<PathBuf, String> {
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     #[cfg(test)]
-    let state_dir = workspace.join(".codewhale-test-terminal-sessions");
+    let state_dir = workspace.join(".ghosty-test-terminal-sessions");
     #[cfg(not(test))]
-    let state_dir = codewhale_config::ensure_state_dir("terminal-sessions")
+    let state_dir = ghosty_config::ensure_state_dir("terminal-sessions")
         .map_err(|error| format!("failed to resolve terminal session state directory: {error}"))?;
     std::fs::create_dir_all(&state_dir)
         .map_err(|error| format!("failed to create terminal session state directory: {error}"))?;
@@ -483,7 +483,7 @@ fn start_command(session: &mut TerminalSession, command: &str) -> Result<(), Str
     if session.command.is_some() && completion(session).is_none() {
         return Err("terminal session already has a running foreground command".to_string());
     }
-    let marker = format!("__CODEWHALE_TERM_{}__", Uuid::new_v4().simple());
+    let marker = format!("__GHOSTY_TERM_{}__", Uuid::new_v4().simple());
     // The command must run in the CURRENT shell — a subshell would discard
     // exactly the state (cd, exports, functions, activated envs) this tool
     // exists to preserve (EXEC-001). The sentinel line is typed after the

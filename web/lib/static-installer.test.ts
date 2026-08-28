@@ -17,13 +17,13 @@ describe("static installer route", () => {
 
   it("serves /install.sh from the static asset binding before OpenNext fallback", async () => {
     const assetFetch = vi.fn(async () =>
-      new Response("#!/bin/sh\necho codewhale\n", {
+      new Response("#!/bin/sh\necho ghosty\n", {
         headers: { "content-type": "application/octet-stream" },
       }),
     );
 
     const response = await fetchWithStaticInstaller(
-      new Request("https://codewhale.net/install.sh"),
+      new Request("https://ghosty.net/install.sh"),
       { ASSETS: { fetch: assetFetch } },
       ctx(),
       fallbackFetch,
@@ -33,14 +33,14 @@ describe("static installer route", () => {
     expect(fallbackFetch).not.toHaveBeenCalled();
     expect(response.headers.get("content-type")).toBe("text/x-shellscript; charset=utf-8");
     expect(response.headers.get("cache-control")).toBe("public, max-age=300");
-    expect(await response.text()).toContain("echo codewhale");
+    expect(await response.text()).toContain("echo ghosty");
   });
 
   it("delegates non-installer paths to the OpenNext handler", async () => {
     const assetFetch = vi.fn();
 
     const response = await fetchWithStaticInstaller(
-      new Request("https://codewhale.net/install"),
+      new Request("https://ghosty.net/install"),
       { ASSETS: { fetch: assetFetch } },
       ctx(),
       fallbackFetch,

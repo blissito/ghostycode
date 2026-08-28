@@ -160,8 +160,7 @@ fn workspace_prompt_omits_disabled_skills_without_configured_directory() {
     );
     let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
     let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &home);
-    let _codewhale_home =
-        crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty"));
 
     let mut state = crate::skill_state::SkillStateStore::load_default().unwrap();
     state.set_enabled("disabled-skill", false).unwrap();
@@ -930,11 +929,11 @@ fn render_available_skills_context_for_workspace_picks_up_cross_tool_dirs() {
 }
 
 #[test]
-fn codewhale_only_mode_ignores_cross_tool_skill_dirs() {
+fn ghosty_only_mode_ignores_cross_tool_skill_dirs() {
     let tmpdir = TempDir::new().unwrap();
     let workspace = tmpdir.path().join("workspace");
     let home = tmpdir.path().join("home");
-    let configured_dir = home.join(".codewhale").join("skills");
+    let configured_dir = home.join(".ghosty").join("skills");
     std::fs::create_dir_all(&workspace).unwrap();
     write_skill(
         &workspace.join(".claude").join("skills"),
@@ -943,9 +942,9 @@ fn codewhale_only_mode_ignores_cross_tool_skill_dirs() {
         "body",
     );
     write_skill(
-        &workspace.join(".codewhale").join("skills"),
-        "from-codewhale",
-        "codewhale skill",
+        &workspace.join(".ghosty").join("skills"),
+        "from-ghosty",
+        "ghosty skill",
         "body",
     );
     write_skill(
@@ -956,7 +955,7 @@ fn codewhale_only_mode_ignores_cross_tool_skill_dirs() {
     );
     write_skill(
         &configured_dir,
-        "configured-codewhale",
+        "configured-ghosty",
         "configured skill",
         "body",
     );
@@ -965,20 +964,20 @@ fn codewhale_only_mode_ignores_cross_tool_skill_dirs() {
         &workspace,
         &configured_dir,
         Some(&home),
-        super::SkillDiscoveryMode::CodeWhaleOnly,
+        super::SkillDiscoveryMode::GhostyCodeOnly,
     );
     let names: Vec<&str> = registry.list().iter().map(|s| s.name.as_str()).collect();
 
-    assert!(names.contains(&"from-codewhale"));
-    assert!(names.contains(&"configured-codewhale"));
+    assert!(names.contains(&"from-ghosty"));
+    assert!(names.contains(&"configured-ghosty"));
     assert!(
         !names.contains(&"from-claude") && !names.contains(&"from-agents"),
-        "CodeWhale-only mode must not import cross-tool skills: {names:?}"
+        "GhostyCode-only mode must not import cross-tool skills: {names:?}"
     );
 }
 
 #[test]
-fn codewhale_only_mode_still_honors_explicit_configured_dir() {
+fn ghosty_only_mode_still_honors_explicit_configured_dir() {
     let tmpdir = TempDir::new().unwrap();
     let workspace = tmpdir.path().join("workspace");
     let home = tmpdir.path().join("home");
@@ -995,7 +994,7 @@ fn codewhale_only_mode_still_honors_explicit_configured_dir() {
         &workspace,
         &configured_dir,
         Some(&home),
-        super::SkillDiscoveryMode::CodeWhaleOnly,
+        super::SkillDiscoveryMode::GhostyCodeOnly,
     );
     let names: Vec<&str> = registry.list().iter().map(|s| s.name.as_str()).collect();
 
@@ -1003,15 +1002,15 @@ fn codewhale_only_mode_still_honors_explicit_configured_dir() {
 }
 
 #[test]
-fn codewhale_only_mode_rejects_workspace_codewhale_symlink_escape() {
+fn ghosty_only_mode_rejects_workspace_ghosty_symlink_escape() {
     let tmpdir = TempDir::new().unwrap();
     let workspace = tmpdir.path().join("workspace");
     let home = tmpdir.path().join("home");
     let escape_target = tmpdir.path().join("escape-target");
-    std::fs::create_dir_all(workspace.join(".codewhale")).unwrap();
+    std::fs::create_dir_all(workspace.join(".ghosty")).unwrap();
     write_skill(&escape_target, "escaped-skill", "escaped skill", "body");
 
-    let link_path = workspace.join(".codewhale").join("skills");
+    let link_path = workspace.join(".ghosty").join("skills");
     if let Err(err) = create_dir_symlink(&escape_target, &link_path) {
         eprintln!("skipping symlink escape assertion: {err}");
         return;
@@ -1021,12 +1020,12 @@ fn codewhale_only_mode_rejects_workspace_codewhale_symlink_escape() {
         &workspace,
         &tmpdir.path().join("missing-configured-skills"),
         Some(&home),
-        super::SkillDiscoveryMode::CodeWhaleOnly,
+        super::SkillDiscoveryMode::GhostyCodeOnly,
     );
 
     assert!(
         registry.get("escaped-skill").is_none(),
-        "CodeWhale-only mode must not follow workspace .codewhale/skills outside the workspace"
+        "GhostyCode-only mode must not follow workspace .ghosty/skills outside the workspace"
     );
 }
 
@@ -1276,7 +1275,7 @@ fn discover_honors_a_hidden_root_directory() {
 
 /// Exercises the local/global skill inventory independent of terminal layout.
 /// scenario without the PTY harness: a workspace-level skill in
-/// `.agents/skills/` and a global skill in `~/.codewhale/skills/`
+/// `.agents/skills/` and a global skill in `~/.ghosty/skills/`
 /// must both be discoverable.
 #[test]
 fn discover_finds_both_workspace_and_global_skills() {
@@ -1292,7 +1291,7 @@ fn discover_finds_both_workspace_and_global_skills() {
         "body",
     );
     write_skill(
-        &home.join(".codewhale").join("skills"),
+        &home.join(".ghosty").join("skills"),
         "global-alpha",
         "Global alpha skill",
         "body",
@@ -1309,7 +1308,7 @@ fn discover_finds_both_workspace_and_global_skills() {
     );
     assert!(
         names.contains(&"global-alpha"),
-        "global-alpha from ~/.codewhale/skills must be discovered: {names:?}",
+        "global-alpha from ~/.ghosty/skills must be discovered: {names:?}",
     );
 }
 
@@ -1742,8 +1741,7 @@ fn workspace_and_dir_entry_point_shares_the_same_cache() {
     );
     let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
     let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &home);
-    let _codewhale_home =
-        crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty"));
 
     super::reset_discovery_metrics();
     let first = super::discover_for_workspace_and_dir_with_mode_and_plugins(
@@ -1795,8 +1793,7 @@ fn configured_skill_prompt_uses_a_stable_root_in_entries_and_warnings() {
     .unwrap();
     let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
     let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &home);
-    let _codewhale_home =
-        crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty"));
 
     let rendered =
         super::render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
@@ -1837,8 +1834,7 @@ fn default_workspace_skill_prompt_preserves_its_discoverable_path() {
     );
     let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
     let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &home);
-    let _codewhale_home =
-        crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty"));
 
     let rendered =
         super::render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
@@ -1858,19 +1854,19 @@ fn default_workspace_skill_prompt_preserves_its_discoverable_path() {
 #[test]
 fn global_skill_roots_come_from_the_os_home_only() {
     // §2.5: global skill roots resolve under the OS user's home (or an
-    // explicit `$CODEWHALE_HOME`), never an account/GitHub handle. A wrong
-    // home once produced `Failed to read /Users/<handle>/.codewhale/skills/
+    // explicit `$GHOSTY_HOME`), never an account/GitHub handle. A wrong
+    // home once produced `Failed to read /Users/<handle>/.ghosty/skills/
     // delegate/SKILL.md`; pin the source so every global root is provably
     // under the faked OS home.
     let _env_lock = crate::test_support::lock_test_env();
     let tmpdir = TempDir::new().unwrap();
     let home = tmpdir.path().join("os-home");
     let workspace = tmpdir.path().join("workspace");
-    std::fs::create_dir_all(home.join(".codewhale").join("skills")).unwrap();
+    std::fs::create_dir_all(home.join(".ghosty").join("skills")).unwrap();
     std::fs::create_dir_all(&workspace).unwrap();
     let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
     let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &home);
-    let _codewhale_home = crate::test_support::EnvVarGuard::remove("CODEWHALE_HOME");
+    let _ghosty_home = crate::test_support::EnvVarGuard::remove("GHOSTY_HOME");
 
     let dirs =
         super::skills_directories_for_mode(&workspace, super::SkillDiscoveryMode::Compatible);

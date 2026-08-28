@@ -1,4 +1,4 @@
-//! Canonical user-scoped runtime path resolution for Codewhale.
+//! Canonical user-scoped runtime path resolution for Ghosty.
 //!
 //! This leaf crate owns only the environment and platform-home decision. File
 //! migration and per-subsystem fallback remain with the crate that owns those
@@ -9,8 +9,8 @@ use std::ffi::OsString;
 use std::fmt;
 use std::path::PathBuf;
 
-/// Canonical Codewhale app directory name under the user home.
-pub const CODEWHALE_APP_DIR: &str = ".codewhale";
+/// Canonical Ghosty app directory name under the user home.
+pub const GHOSTY_APP_DIR: &str = ".ghosty";
 
 /// Legacy DeepSeek-branded directory retained for compatibility reads.
 pub const LEGACY_APP_DIR: &str = ".deepseek";
@@ -50,26 +50,26 @@ impl fmt::Display for PathOverrideError {
 
 impl std::error::Error for PathOverrideError {}
 
-/// Return the explicit Codewhale home override, if one is configured.
+/// Return the explicit Ghosty home override, if one is configured.
 ///
 /// Unicode values are trimmed so whitespace-only values are treated as unset,
 /// matching the existing config and secret-store contract. Non-Unicode path
 /// values are preserved on platforms that support them instead of silently
 /// dropping an otherwise valid filesystem path. A leading `~` is expanded;
 /// every other relative value is rejected.
-pub fn codewhale_home_override() -> Result<Option<PathBuf>, PathOverrideError> {
-    absolute_path_env("CODEWHALE_HOME")
+pub fn ghosty_home_override() -> Result<Option<PathBuf>, PathOverrideError> {
+    absolute_path_env("GHOSTY_HOME")
 }
 
-/// Whether `CODEWHALE_HOME` establishes an explicit isolation boundary.
+/// Whether `GHOSTY_HOME` establishes an explicit isolation boundary.
 #[must_use]
-pub fn codewhale_home_is_explicit() -> bool {
-    path_env("CODEWHALE_HOME").is_some()
+pub fn ghosty_home_is_explicit() -> bool {
+    path_env("GHOSTY_HOME").is_some()
 }
 
 /// Return the legacy `DEEPSEEK_HOME` compatibility override, if configured.
 ///
-/// New state must use [`codewhale_home`]. This resolver exists only for readers
+/// New state must use [`ghosty_home`]. This resolver exists only for readers
 /// whose persisted format still explicitly supports the legacy environment
 /// alias.
 #[must_use]
@@ -103,21 +103,21 @@ fn windows_home_from_environment() -> Option<PathBuf> {
     None
 }
 
-/// Resolve the canonical Codewhale runtime home.
+/// Resolve the canonical Ghosty runtime home.
 ///
-/// A valid explicit `CODEWHALE_HOME` is returned after `~` expansion. Otherwise
-/// this is `<user home>/.codewhale`.
-pub fn codewhale_home() -> Result<Option<PathBuf>, PathOverrideError> {
-    Ok(codewhale_home_override()?.or_else(|| user_home().map(|home| home.join(CODEWHALE_APP_DIR))))
+/// A valid explicit `GHOSTY_HOME` is returned after `~` expansion. Otherwise
+/// this is `<user home>/.ghosty`.
+pub fn ghosty_home() -> Result<Option<PathBuf>, PathOverrideError> {
+    Ok(ghosty_home_override()?.or_else(|| user_home().map(|home| home.join(GHOSTY_APP_DIR))))
 }
 
-/// Return the explicit config-file override, preferring the Codewhale name.
+/// Return the explicit config-file override, preferring the Ghosty name.
 ///
 /// `~` is expanded through the canonical user-home resolver before the path is
 /// validated. All other relative paths are rejected so a process working in a
 /// repository can never turn a global config override into a repo-local file.
 pub fn config_path_override() -> Result<Option<PathBuf>, PathOverrideError> {
-    if let Some(path) = absolute_path_env("CODEWHALE_CONFIG_PATH")? {
+    if let Some(path) = absolute_path_env("GHOSTY_CONFIG_PATH")? {
         return Ok(Some(path));
     }
     absolute_path_env("DEEPSEEK_CONFIG_PATH")
@@ -177,8 +177,8 @@ pub fn validate_absolute_path(
 
 /// Resolve the ambient legacy DeepSeek home used for compatibility reads.
 ///
-/// This never follows `CODEWHALE_HOME`: callers must suppress legacy fallback
-/// whenever [`codewhale_home_is_explicit`] is true.
+/// This never follows `GHOSTY_HOME`: callers must suppress legacy fallback
+/// whenever [`ghosty_home_is_explicit`] is true.
 #[must_use]
 pub fn legacy_deepseek_home() -> Option<PathBuf> {
     user_home().map(|home| home.join(LEGACY_APP_DIR))
@@ -208,8 +208,8 @@ mod tests {
     #[test]
     fn unicode_path_values_are_trimmed_and_whitespace_is_unset() {
         assert_eq!(
-            normalize_path_value(OsString::from("  /tmp/codewhale  ")),
-            Some(PathBuf::from("/tmp/codewhale"))
+            normalize_path_value(OsString::from("  /tmp/ghosty  ")),
+            Some(PathBuf::from("/tmp/ghosty"))
         );
         assert_eq!(normalize_path_value(OsString::from(" \t\n ")), None);
         assert_eq!(normalize_path_value(OsString::new()), None);
@@ -217,26 +217,24 @@ mod tests {
 
     #[test]
     fn relative_global_overrides_are_rejected_with_the_variable_name() {
-        let error = validate_absolute_path(
-            "CODEWHALE_CONFIG_PATH",
-            PathBuf::from(".codewhale/config.toml"),
-        )
-        .expect_err("relative global config path must fail closed");
+        let error =
+            validate_absolute_path("GHOSTY_CONFIG_PATH", PathBuf::from(".ghosty/config.toml"))
+                .expect_err("relative global config path must fail closed");
         let message = error.to_string();
-        assert!(message.contains("CODEWHALE_CONFIG_PATH"), "{message}");
-        assert!(message.contains(".codewhale/config.toml"), "{message}");
+        assert!(message.contains("GHOSTY_CONFIG_PATH"), "{message}");
+        assert!(message.contains(".ghosty/config.toml"), "{message}");
         assert!(message.contains("absolute"), "{message}");
     }
 
     #[test]
     fn absolute_global_overrides_are_preserved() {
         let path = if cfg!(windows) {
-            PathBuf::from(r"C:\codewhale\config.toml")
+            PathBuf::from(r"C:\ghosty\config.toml")
         } else {
-            PathBuf::from("/tmp/codewhale/config.toml")
+            PathBuf::from("/tmp/ghosty/config.toml")
         };
         assert_eq!(
-            validate_absolute_path("CODEWHALE_CONFIG_PATH", path.clone()),
+            validate_absolute_path("GHOSTY_CONFIG_PATH", path.clone()),
             Ok(path)
         );
     }
@@ -246,7 +244,7 @@ mod tests {
     fn unix_non_unicode_path_values_are_preserved() {
         use std::os::unix::ffi::OsStringExt;
 
-        let value = OsString::from_vec(b"codewhale-\xff-home".to_vec());
+        let value = OsString::from_vec(b"ghosty-\xff-home".to_vec());
         assert_eq!(
             normalize_path_value(value.clone()),
             Some(PathBuf::from(value))

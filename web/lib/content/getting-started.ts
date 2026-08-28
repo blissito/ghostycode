@@ -1,5 +1,5 @@
 /**
- * getting-started.ts — the canonical new-user path for codewhale.net.
+ * getting-started.ts — the canonical new-user path for ghosty.net.
  *
  * Four steps, in order: install → first offline session → provider connection
  * → fleet setup. Both the homepage band and the /docs/guide page
@@ -32,12 +32,12 @@ export interface GuideStep {
 export const GETTING_STARTED_STEPS: GuideStep[] = [
   {
     id: "install",
-    title: { en: "Install Codewhale", zh: "安装 Codewhale" },
+    title: { en: "Install Ghosty", zh: "安装 Ghosty" },
     body: {
       en: "One npm command installs the terminal runtime. Cargo, prebuilt archives, Docker, Nix, and China mirrors also work. All of them install published releases.",
       zh: "一条 npm 命令即可安装终端运行时。Cargo、预编译包、Docker、Nix 和中国镜像也可以。它们安装的都是已发布版本。",
     },
-    commands: ["npm install -g codewhale", "codewhale doctor"],
+    commands: ["npm install -g ghosty", "ghosty doctor"],
     link: {
       href: "/install",
       label: { en: "Full install guide", zh: "完整安装指南" },
@@ -50,7 +50,7 @@ export const GETTING_STARTED_STEPS: GuideStep[] = [
       en: "Starts without any API key. A short setup, then the full interface. Look around in Plan mode, which is read-only. Model replies need a provider — that's the next step.",
       zh: "无需任何 API 密钥即可启动。简短设置后进入完整界面。先在只读的 Plan 模式里看看。模型回复需要提供商——那是下一步。",
     },
-    commands: ["codewhale"],
+    commands: ["ghosty"],
     link: {
       href: "/docs/vocabulary",
       label: { en: "Learn the product nouns first", zh: "先了解产品名词" },
@@ -63,7 +63,7 @@ export const GETTING_STARTED_STEPS: GuideStep[] = [
       en: "Use a hosted API key, a gateway, or a local runtime with no key (Ollama, vLLM, SGLang). You pick the provider and the model. A model name never switches the provider for you.",
       zh: "用托管 API 密钥、网关，或不需要密钥的本地运行时（Ollama、vLLM、SGLang）。提供商和模型都由你来选。模型名不会替你切换提供商。",
     },
-    commands: ["codewhale auth set --provider deepseek"],
+    commands: ["ghosty auth set --provider deepseek"],
     link: {
       href: "/models",
       label: { en: "Providers and models", zh: "提供商与模型" },
@@ -76,7 +76,7 @@ export const GETTING_STARTED_STEPS: GuideStep[] = [
       en: "Add each provider you use with one auth set (local runtimes need none). Then run /fleet setup. It goes one member at a time — a semantic role, a model from any configured provider, a thinking tier, then an exact identity/route review — and saves the roster profile for this repo or for every repo on this machine. Runtime permissions stay separate. A single task needs none of this.",
       zh: "每个要用的提供商执行一次 auth set（本地运行时不需要）。然后运行 /fleet setup。它一次配置一个成员——语义角色、任意已配置提供商的模型、思考档位，再核对准确的身份与路由——并保存为花名册档案，可只用于本仓库或本机所有仓库。Runtime 权限始终独立。单个任务不需要这些。",
     },
-    commands: ["/fleet setup", "codewhale fleet status"],
+    commands: ["/fleet setup", "ghosty fleet status"],
     link: {
       href: "/docs/fleet",
       label: { en: "Fleet and Workflow docs", zh: "Fleet 与 Workflow 文档" },

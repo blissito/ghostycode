@@ -338,7 +338,7 @@ fn generate_write_policy(policy: &SandboxPolicy, cwd: &Path) -> String {
         policies.push(root_policy);
 
         // File Provider paths can require an inherited macOS extension even
-        // when their logical path is already an approved root. Keep Codewhale's
+        // when their logical path is already an approved root. Keep Ghosty's
         // root and protected-subpath restrictions authoritative by requiring
         // the extension and every root predicate in the same conjunction.
         let mut extension_parts =

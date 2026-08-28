@@ -7,7 +7,7 @@
  *   - <repo>/Cargo.toml                         → version, workspace crates
  *   - <repo>/crates/tui/src/sandbox/mod.rs      → enforced sandbox markers
  *   - <repo>/crates/tui/src/config.rs           → provider list (ApiProvider enum), DEFAULT_TEXT_MODEL
- *   - <repo>/npm/codewhale/package.json         → node engines
+ *   - <repo>/npm/ghosty/package.json         → node engines
  *   - <repo>/crates/tui/src/tools/*.rs          → tool count (ToolSpec impls)
  *   - <repo>/LICENSE                            → license
  *   - <repo>/web/data/latest-published-release.json → latest published release
@@ -94,6 +94,7 @@ const PROVIDER_LABEL_MAP = {
   OpencodeZen: { id: "opencode-zen", label: "OpenCode Zen", env: "OPENCODE_ZEN_API_KEY / OPENCODE_API_KEY" },
   Anthropic: { id: "anthropic", label: "Anthropic", env: "ANTHROPIC_API_KEY" },
   Zai: { id: "zai", label: "Z.ai", env: "ZAI_API_KEY / Z_AI_API_KEY" },
+  Easybits: { id: "easybits", label: "EasyBits", env: "EASYBITS_API_KEY" },
   Stepfun: { id: "stepfun", label: "StepFun", env: "STEPFUN_API_KEY / STEP_API_KEY" },
   Minimax: { id: "minimax", label: "MiniMax", env: "MINIMAX_API_KEY" },
   MinimaxAnthropic: { id: "minimax-anthropic", label: "MiniMax (Anthropic-compatible)", env: "MINIMAX_API_KEY" },
@@ -168,7 +169,7 @@ export function deriveDefaultModel() {
 }
 
 export function deriveNodeEngines() {
-  const pkg = read("npm/codewhale/package.json");
+  const pkg = read("npm/ghosty/package.json");
   if (!pkg) return null;
   try {
     return JSON.parse(pkg).engines?.node ?? null;
@@ -211,7 +212,7 @@ export function deriveLatestPublishedRelease() {
       typeof release.publishedAt !== "string" ||
       !Number.isFinite(Date.parse(release.publishedAt)) ||
       typeof release.url !== "string" ||
-      release.url !== `https://github.com/Hmbown/CodeWhale/releases/tag/${release.tag}`
+      release.url !== `https://github.com/blissito/ghostycode/releases/tag/${release.tag}`
     ) {
       return null;
     }

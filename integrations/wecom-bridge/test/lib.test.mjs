@@ -9,7 +9,7 @@ import { ThreadStore, validateBridgeConfig, isApprovalResponse, isDenyResponse }
 // ─── ThreadStore ─────────────────────────────────────────────────
 
 test("ThreadStore writes private state files", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "codewhale-wecom-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "ghosty-wecom-"));
   try {
     const statePath = path.join(dir, "nested", "thread-map.json");
     const store = await ThreadStore.open(statePath);
@@ -38,8 +38,8 @@ test("validateBridgeConfig rejects placeholder secrets", () => {
   const result = validateBridgeConfig({
     WECOM_BOT_ID: "your-bot-id",
     WECOM_BOT_SECRET: "your-bot-secret",
-    CODEWHALE_RUNTIME_TOKEN: "replace-with-long-random-token",
-    CODEWHALE_RUNTIME_URL: "http://127.0.0.1:7878"
+    GHOSTY_RUNTIME_TOKEN: "replace-with-long-random-token",
+    GHOSTY_RUNTIME_URL: "http://127.0.0.1:7878"
   });
 
   assert.equal(result.ok, false);

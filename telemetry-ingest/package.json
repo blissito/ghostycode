@@ -1,8 +1,8 @@
 {
-  "name": "codewhale-telemetry-ingest",
+  "name": "ghosty-telemetry-ingest",
   "version": "0.1.0",
   "private": true,
-  "description": "Write-only first-party telemetry ingest for Codewhale — a Cloudflare Worker that stores nothing outside docs/TELEMETRY.md and never sees a client IP",
+  "description": "Write-only first-party telemetry ingest for Ghosty — a Cloudflare Worker that stores nothing outside docs/TELEMETRY.md and never sees a client IP",
   "type": "module",
   "scripts": {
     "test": "vitest run",

@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "codewhale-web",
+  "name": "ghosty-web",
   "main": "worker.ts",
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -10,8 +10,8 @@
   },
   "observability": { "enabled": true },
   "routes": [
-    { "pattern": "codewhale.net", "custom_domain": true },
-    { "pattern": "www.codewhale.net", "custom_domain": true }
+    { "pattern": "ghosty.net", "custom_domain": true },
+    { "pattern": "www.ghosty.net", "custom_domain": true }
   ],
   "kv_namespaces": [
     {
@@ -24,9 +24,9 @@
     }
   ],
   "vars": {
-    "GITHUB_REPO": "Hmbown/CodeWhale",
+    "GITHUB_REPO": "blissito/ghostycode",
     "DEEPSEEK_MODEL": "deepseek-v4-flash",
-    "DEEPSEEK_BASE_URL": "https://gateway.ai.cloudflare.com/v1/cf50f793171d7cb3b2ce23368b69cdcb/codewhale-web/deepseek"
+    "DEEPSEEK_BASE_URL": "https://gateway.ai.cloudflare.com/v1/cf50f793171d7cb3b2ce23368b69cdcb/ghosty-web/deepseek"
   },
   "triggers": {
     "crons": [

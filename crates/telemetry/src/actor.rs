@@ -77,7 +77,7 @@ impl Handle {
         // A detached thread: nothing joins it, and the process exiting while it
         // is mid-write is exactly the case the torn-line tolerance covers.
         let _ = std::thread::Builder::new()
-            .name("codewhale-telemetry".to_string())
+            .name("ghosty-telemetry".to_string())
             .spawn(move || run(&context, &rx));
         Self { tx }
     }

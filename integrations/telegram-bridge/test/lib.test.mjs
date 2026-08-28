@@ -53,11 +53,11 @@ test("parseEnvText handles comments, export, and quoted values", () => {
     parseEnvText(`
       # ignored
       export TELEGRAM_GROUP_PREFIX="/cw"
-      CODEWHALE_WORKSPACE='/opt/whalebro'
+      GHOSTY_WORKSPACE='/opt/whalebro'
     `),
     {
       TELEGRAM_GROUP_PREFIX: "/cw",
-      CODEWHALE_WORKSPACE: "/opt/whalebro"
+      GHOSTY_WORKSPACE: "/opt/whalebro"
     }
   );
 });
@@ -128,7 +128,7 @@ test("stripGroupPrefix accepts Telegram channel text without group prefix", () =
 
 test("parseCommand handles Telegram bot mentions", () => {
   assert.deepEqual(parseCommand("hello"), { name: "prompt", args: "hello" });
-  assert.deepEqual(parseCommand("/allow@CodeWhaleBot abc remember"), {
+  assert.deepEqual(parseCommand("/allow@GhostyCodeBot abc remember"), {
     name: "allow",
     args: "abc remember"
   });
@@ -256,7 +256,7 @@ test("telegramMarkdownV2 escapes text while preserving useful markdown", () => {
     telegramMarkdownV2("**Build** passed for [CI](https://example.com/a_(b))."),
     "*Build* passed for [CI](https://example.com/a_(b\\))\\."
   );
-  assert.equal(telegramMarkdownV2("Use `cargo test -p codewhale`."), "Use `cargo test -p codewhale`\\.");
+  assert.equal(telegramMarkdownV2("Use `cargo test -p ghosty`."), "Use `cargo test -p ghosty`\\.");
   assert.equal(telegramMarkdownV2("Path C:\\tmp\\file"), "Path C:\\\\tmp\\\\file");
   assert.equal(
     telegramMarkdownV2("```rust\nfn main() { println!(\"hi\"); }\n```"),
@@ -330,21 +330,21 @@ test("validateBridgeConfig accepts locked-down whalebro DM config", () => {
   const result = validateBridgeConfig(
     {
       TELEGRAM_BOT_TOKEN: "123456:token",
-      CODEWHALE_RUNTIME_URL: "http://127.0.0.1:7878",
-      CODEWHALE_RUNTIME_TOKEN: "token-a",
-      CODEWHALE_WORKSPACE: "/opt/whalebro",
+      GHOSTY_RUNTIME_URL: "http://127.0.0.1:7878",
+      GHOSTY_RUNTIME_TOKEN: "token-a",
+      GHOSTY_WORKSPACE: "/opt/whalebro",
       TELEGRAM_CHAT_ALLOWLIST: "42",
       TELEGRAM_ALLOW_UNLISTED: "false",
-      TELEGRAM_THREAD_MAP_PATH: "/var/lib/codewhale-telegram-bridge/thread-map.json",
+      TELEGRAM_THREAD_MAP_PATH: "/var/lib/ghosty-telegram-bridge/thread-map.json",
       TELEGRAM_ALLOW_GROUPS: "false",
       TELEGRAM_REQUIRE_PREFIX_IN_GROUP: "true"
     },
     {
       workspaceRoot: "/opt/whalebro",
       runtimeEnv: {
-        CODEWHALE_RUNTIME_TOKEN: "token-a",
-        CODEWHALE_PROVIDER: "arcee",
-        CODEWHALE_RUNTIME_PORT: "7878"
+        GHOSTY_RUNTIME_TOKEN: "token-a",
+        GHOSTY_PROVIDER: "arcee",
+        GHOSTY_RUNTIME_PORT: "7878"
       }
     }
   );
@@ -356,19 +356,19 @@ test("validateBridgeConfig rejects unsafe group pairing and token mismatch", () 
   const result = validateBridgeConfig(
     {
       TELEGRAM_BOT_TOKEN: "123456:token",
-      CODEWHALE_RUNTIME_URL: "http://127.0.0.1:7878",
-      CODEWHALE_RUNTIME_TOKEN: "bridge-token",
-      CODEWHALE_WORKSPACE: "/opt/whalebro",
+      GHOSTY_RUNTIME_URL: "http://127.0.0.1:7878",
+      GHOSTY_RUNTIME_TOKEN: "bridge-token",
+      GHOSTY_WORKSPACE: "/opt/whalebro",
       TELEGRAM_ALLOW_UNLISTED: "true",
-      TELEGRAM_THREAD_MAP_PATH: "/var/lib/codewhale-telegram-bridge/thread-map.json",
+      TELEGRAM_THREAD_MAP_PATH: "/var/lib/ghosty-telegram-bridge/thread-map.json",
       TELEGRAM_ALLOW_GROUPS: "true",
       TELEGRAM_REQUIRE_PREFIX_IN_GROUP: "false"
     },
     {
       workspaceRoot: "/opt/whalebro",
       runtimeEnv: {
-        CODEWHALE_RUNTIME_TOKEN: "runtime-token",
-        CODEWHALE_PROVIDER: "arcee"
+        GHOSTY_RUNTIME_TOKEN: "runtime-token",
+        GHOSTY_PROVIDER: "arcee"
       }
     }
   );

@@ -6,7 +6,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return buildPageMetadata({
     path: "/docs/work",
     locale,
-    title: isZh ? "工作面板 · Codewhale 文档" : "Work Surface · Codewhale Docs",
+    title: isZh ? "工作面板 · Ghosty 文档" : "Work Surface · Ghosty Docs",
     description: isZh
       ? "唯一的 To-do 列表、模型如何看到它，以及同一份工作状态的延续路径。"
       : "The single To-do list, how the model sees it, and how one work state stays continuous.",
@@ -26,8 +26,8 @@ export default async function WorkSurfacePage({ params }: { params: Promise<{ lo
         <h1 className="font-display text-3xl mb-1">{isZh ? "工作面板" : "The Work surface"}</h1>
         <p className={`${bodyClass} mt-3`}>
           {isZh
-            ? "Codewhale 的 TUI 侧栏有一块 Work 区域，显示当前工作的实时状态。它不只是视觉上的待办清单：同一份工作状态同时由模型可见的工具、会话接力（relay）和子 Agent 交接共同维护。Codewhale 只有一个 Work 面板——带计数的 To-do 执行台账。update_plan 是对话式的推理笔记，不是第二个进度面板。"
-            : "The TUI sidebar has a Work area that shows live state for the current job. It is more than a visual to-do list: the same work state is maintained by model-visible tools, session relay, and sub-agent handoff. Codewhale has exactly one Work surface — the counted To-do execution ledger. update_plan is conversational reasoning, not a second progress surface."}
+            ? "Ghosty 的 TUI 侧栏有一块 Work 区域，显示当前工作的实时状态。它不只是视觉上的待办清单：同一份工作状态同时由模型可见的工具、会话接力（relay）和子 Agent 交接共同维护。Ghosty 只有一个 Work 面板——带计数的 To-do 执行台账。update_plan 是对话式的推理笔记，不是第二个进度面板。"
+            : "The TUI sidebar has a Work area that shows live state for the current job. It is more than a visual to-do list: the same work state is maintained by model-visible tools, session relay, and sub-agent handoff. Ghosty has exactly one Work surface — the counted To-do execution ledger. update_plan is conversational reasoning, not a second progress surface."}
         </p>
       </section>
 
@@ -126,8 +126,8 @@ elapsed: 18m
         </h2>
         <p className={`${bodyClass} mt-3`}>
           {isZh
-            ? "已被实现和测试证实的模型可见路径有三条：todo_write 工具本身是模型目录里的活跃工具，它返回的工具结果就是模型看到清单的方式；分叉子 Agent 的结构化状态块（<codewhale:fork_state> 中的 To-do 小节，在真正 fork 的那一刻解析）；以及 /relay 输出。没有任何一步请求会重复注入 To-do——一条结构化测试直接断言真实出站请求体里不含该清单。侧栏渲染是视觉呈现——它给人看，不注入模型上下文。"
-            : "Three model-facing paths are implemented and covered by tests: the todo_write tool itself, which is active in the model catalog and whose tool result is how the model sees the list; the forked sub-agent's structured state block (the To-do section inside <codewhale:fork_state>, resolved at the moment of the fork); and /relay output. No request re-states the To-do on any step — a structural test asserts the real outbound request body does not contain the list. The sidebar rendering is a visual presentation — it informs the operator and is not injected into model context."}
+            ? "已被实现和测试证实的模型可见路径有三条：todo_write 工具本身是模型目录里的活跃工具，它返回的工具结果就是模型看到清单的方式；分叉子 Agent 的结构化状态块（<ghosty:fork_state> 中的 To-do 小节，在真正 fork 的那一刻解析）；以及 /relay 输出。没有任何一步请求会重复注入 To-do——一条结构化测试直接断言真实出站请求体里不含该清单。侧栏渲染是视觉呈现——它给人看，不注入模型上下文。"
+            : "Three model-facing paths are implemented and covered by tests: the todo_write tool itself, which is active in the model catalog and whose tool result is how the model sees the list; the forked sub-agent's structured state block (the To-do section inside <ghosty:fork_state>, resolved at the moment of the fork); and /relay output. No request re-states the To-do on any step — a structural test asserts the real outbound request body does not contain the list. The sidebar rendering is a visual presentation — it informs the operator and is not injected into model context."}
         </p>
         <p className={`${bodyClass} mt-3`}>
           {isZh

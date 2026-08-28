@@ -21,7 +21,7 @@ fn workspace_shadow_of_personal_file_is_recorded_and_reported() {
         "id = \"builder\"\nrole_hint = \"builder\"\nmodel = \"deepseek-v4-flash\"\n",
     );
     write_profile(
-        &workspace.join(".codewhale").join("agents"),
+        &workspace.join(".ghosty").join("agents"),
         "builder.toml",
         "id = \"builder\"\nrole_hint = \"builder\"\nmodel = \"deepseek-v4-pro\"\n",
     );
@@ -107,13 +107,13 @@ fn workspace_shadow_of_personal_file_is_recorded_and_reported() {
 #[test]
 fn project_scope_profiles_are_skipped_when_the_layer_is_not_trusted() {
     // #5098: `load_workspace_agent_profiles_tolerant` applied no trust
-    // check — a cloned repo's .codewhale/agents/*.toml silently joined
+    // check — a cloned repo's .ghosty/agents/*.toml silently joined
     // the dispatch roster. With project config disabled
     // (`--no-project-config`), the whole layer stays out.
     let tmp = TempDir::new().unwrap();
     let workspace = tmp.path().join("workspace");
     write_profile(
-        &workspace.join(".codewhale").join("agents"),
+        &workspace.join(".ghosty").join("agents"),
         "builder.toml",
         "id = \"builder\"\nrole_hint = \"builder\"\nmodel = \"gpt-5.6-luna\"\n",
     );

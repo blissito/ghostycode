@@ -27,7 +27,7 @@ async fn lock_mcp_loopback_tests() -> tokio::sync::MutexGuard<'static, ()> {
 
 struct WorkspaceTrustConfigGuard {
     config_path: PathBuf,
-    _codewhale_config_path: crate::test_support::EnvVarGuard,
+    _ghosty_config_path: crate::test_support::EnvVarGuard,
     _deepseek_config_path: crate::test_support::EnvVarGuard,
     _env_lock: crate::test_support::TestEnvLock,
 }
@@ -42,13 +42,13 @@ fn workspace_trust_config_guard(workspace: &Path) -> WorkspaceTrustConfigGuard {
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).unwrap();
     }
-    let codewhale_config_path =
-        crate::test_support::EnvVarGuard::set("CODEWHALE_CONFIG_PATH", config_path.as_os_str());
+    let ghosty_config_path =
+        crate::test_support::EnvVarGuard::set("GHOSTY_CONFIG_PATH", config_path.as_os_str());
     let deepseek_config_path = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
 
     WorkspaceTrustConfigGuard {
         config_path,
-        _codewhale_config_path: codewhale_config_path,
+        _ghosty_config_path: ghosty_config_path,
         _deepseek_config_path: deepseek_config_path,
         _env_lock: env_lock,
     }
@@ -425,7 +425,7 @@ fn reviewed_plugin_environment_uses_only_the_pre_dotenv_snapshot() {
 }
 
 fn write_path_only_test_command(dir: &Path) -> String {
-    let command = "codewhale-mcp-path-only-test";
+    let command = "ghosty-mcp-path-only-test";
     #[cfg(windows)]
     let file_name = format!("{command}.exe");
     #[cfg(not(windows))]
@@ -450,19 +450,17 @@ fn static_mcp_command_uses_expanded_sanitized_stdio_path() {
     let _lock = crate::test_support::lock_test_env();
     let temp = tempfile::tempdir().expect("tempdir");
     let command = write_path_only_test_command(temp.path());
-    let _path = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_MCP_PATH_ONLY_DIR",
-        temp.path().as_os_str(),
-    );
+    let _path =
+        crate::test_support::EnvVarGuard::set("GHOSTY_MCP_PATH_ONLY_DIR", temp.path().as_os_str());
     let _secret = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_MCP_STATIC_TEST_SECRET",
+        "GHOSTY_MCP_STATIC_TEST_SECRET",
         "must-not-reach-child",
     );
     let mut server = test_server_config();
     server.command = Some(command);
     server.env.insert(
         "PATH".to_string(),
-        "${CODEWHALE_MCP_PATH_ONLY_DIR}".to_string(),
+        "${GHOSTY_MCP_PATH_ONLY_DIR}".to_string(),
     );
 
     assert_eq!(
@@ -479,7 +477,7 @@ fn static_mcp_command_uses_expanded_sanitized_stdio_path() {
     assert!(
         child_env
             .iter()
-            .all(|(key, _)| key != "CODEWHALE_MCP_STATIC_TEST_SECRET"),
+            .all(|(key, _)| key != "GHOSTY_MCP_STATIC_TEST_SECRET"),
         "static lookup must use the same sanitized parent environment as spawn"
     );
 
@@ -511,7 +509,7 @@ fn static_mcp_command_uses_expanded_sanitized_stdio_path() {
 fn static_mcp_command_reports_missing_with_server_path_override() {
     let temp = tempfile::tempdir().expect("tempdir");
     let mut server = test_server_config();
-    server.command = Some("codewhale-mcp-command-that-does-not-exist".to_string());
+    server.command = Some("ghosty-mcp-command-that-does-not-exist".to_string());
     server.env.insert(
         "PATH".to_string(),
         temp.path().to_string_lossy().into_owned(),
@@ -526,19 +524,19 @@ fn static_mcp_command_reports_missing_with_server_path_override() {
 #[test]
 fn static_mcp_command_reports_invalid_path_expansion() {
     let _lock = crate::test_support::lock_test_env();
-    let _missing = crate::test_support::EnvVarGuard::remove("CODEWHALE_MCP_MISSING_PATH_DIR");
+    let _missing = crate::test_support::EnvVarGuard::remove("GHOSTY_MCP_MISSING_PATH_DIR");
     let mut server = test_server_config();
-    server.command = Some("codewhale-mcp-command".to_string());
+    server.command = Some("ghosty-mcp-command".to_string());
     server.env.insert(
         "PATH".to_string(),
-        "do-not-leak-${CODEWHALE_MCP_MISSING_PATH_DIR}-also-secret".to_string(),
+        "do-not-leak-${GHOSTY_MCP_MISSING_PATH_DIR}-also-secret".to_string(),
     );
 
     let error = static_mcp_command_availability(&server)
         .expect_err("missing PATH placeholder must fail static validation");
     let error = format!("{error:#}");
-    assert!(error.contains("CODEWHALE_MCP_MISSING_PATH_DIR"));
-    assert!(!error.contains("codewhale-mcp-command"));
+    assert!(error.contains("GHOSTY_MCP_MISSING_PATH_DIR"));
+    assert!(!error.contains("ghosty-mcp-command"));
     assert!(!error.contains("do-not-leak"));
     assert!(!error.contains("also-secret"));
 }
@@ -562,7 +560,7 @@ fn static_mcp_command_anchors_relative_and_empty_path_to_server_cwd() {
     let cwd = temp.path().join("server-cwd");
     let bin = cwd.join("relative-bin");
     fs::create_dir_all(&bin).expect("relative bin dir");
-    let relative_command = "codewhale-mcp-relative-path-test";
+    let relative_command = "ghosty-mcp-relative-path-test";
     write_unix_test_command(&bin.join(relative_command), 0o755);
 
     let mut server = test_server_config();
@@ -576,7 +574,7 @@ fn static_mcp_command_anchors_relative_and_empty_path_to_server_cwd() {
         McpCommandAvailability::Available
     );
 
-    let empty_path_command = "codewhale-mcp-empty-path-test";
+    let empty_path_command = "ghosty-mcp-empty-path-test";
     write_unix_test_command(&cwd.join(empty_path_command), 0o755);
     server.command = Some(empty_path_command.to_string());
     server.env.insert("PATH".to_string(), String::new());
@@ -591,7 +589,7 @@ fn static_mcp_command_anchors_relative_and_empty_path_to_server_cwd() {
 #[test]
 fn static_mcp_command_preserves_literal_name_and_requires_execute_bits() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let literal_command = " codewhale-mcp-literal-command-test ";
+    let literal_command = " ghosty-mcp-literal-command-test ";
     write_unix_test_command(&temp.path().join(literal_command), 0o755);
 
     let mut server = test_server_config();
@@ -606,9 +604,9 @@ fn static_mcp_command_preserves_literal_name_and_requires_execute_bits() {
         "static validation must not trim the command passed to Command::new"
     );
 
-    let non_executable = temp.path().join("codewhale-mcp-non-executable-test");
+    let non_executable = temp.path().join("ghosty-mcp-non-executable-test");
     write_unix_test_command(&non_executable, 0o644);
-    server.command = Some("codewhale-mcp-non-executable-test".to_string());
+    server.command = Some("ghosty-mcp-non-executable-test".to_string());
     assert_eq!(
         static_mcp_command_availability(&server).expect("PATH execute-bit check"),
         McpCommandAvailability::Missing
@@ -639,7 +637,7 @@ fn static_mcp_command_matches_windows_path_and_extension_rules() {
 
     server.command = Some(
         temp.path()
-            .join("codewhale-mcp-path-only-test")
+            .join("ghosty-mcp-path-only-test")
             .to_string_lossy()
             .into_owned(),
     );
@@ -648,7 +646,7 @@ fn static_mcp_command_matches_windows_path_and_extension_rules() {
         McpCommandAvailability::Available
     );
 
-    let pathext_command = "codewhale-mcp-pathext-only-test";
+    let pathext_command = "ghosty-mcp-pathext-only-test";
     fs::write(
         temp.path().join(format!("{pathext_command}.cmd")),
         b"@exit /b 0\r\n",
@@ -802,7 +800,7 @@ fn mcp_auth_required_error_item_is_model_visible() {
         item["message"]
             .as_str()
             .expect("message")
-            .contains("codewhale mcp login nordic-mcp")
+            .contains("ghosty mcp login nordic-mcp")
     );
 }
 
@@ -865,7 +863,7 @@ fn workspace_mcp_config_merges_with_project_overrides() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     let _trust = mark_workspace_trusted(&workspace);
     fs::write(
@@ -906,7 +904,7 @@ fn workspace_manager_snapshot_counts_global_and_project_servers() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     let _trust = mark_workspace_trusted(&workspace);
     fs::write(
@@ -1313,7 +1311,7 @@ args = ["server.js"]
     let discovery = crate::plugins::discovery::DiscoveryConfig {
         workspace: workspace.to_path_buf(),
         user_plugins_dir: plugins_root,
-        workspace_plugins_dir: workspace.join(".codewhale/plugins-unused"),
+        workspace_plugins_dir: workspace.join(".ghosty/plugins-unused"),
         builtin_plugin_dirs: Vec::new(),
         state_path: workspace
             .join("plugin-state")
@@ -1442,7 +1440,7 @@ async fn plugin_mcp_inflight_call_is_cancelled_after_cross_process_revocation() 
     let dir = tempfile::tempdir().unwrap();
     let call_marker = dir.path().join("call.marker");
     let _call_marker_env = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_TEST_PLUGIN_CALL_MARKER",
+        "GHOSTY_TEST_PLUGIN_CALL_MARKER",
         call_marker.as_os_str(),
     );
     let plugins_root = dir.path().join("plugins");
@@ -1488,7 +1486,7 @@ execute_timeout = 30
 read_timeout = 30
 
 [mcp_servers.local.env]
-CALL_MARKER = "${CODEWHALE_TEST_PLUGIN_CALL_MARKER}"
+CALL_MARKER = "${GHOSTY_TEST_PLUGIN_CALL_MARKER}"
 "#,
     )
     .unwrap();
@@ -1966,7 +1964,7 @@ fn workspace_mcp_config_ignores_project_file_until_workspace_trusted() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     let plugin_base = dir.path().join("plugins").join("fixture");
     fs::create_dir_all(&project_dir).unwrap();
     fs::create_dir_all(&plugin_base).unwrap();
@@ -1998,7 +1996,7 @@ fn workspace_mcp_config_ignores_project_local_legacy_trust_marker() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     fs::create_dir_all(workspace.join(".deepseek")).unwrap();
     fs::write(workspace.join(".deepseek").join("trusted"), "").unwrap();
@@ -2024,7 +2022,7 @@ fn workspace_mcp_config_ignores_invalid_untrusted_project_file() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     fs::write(&global_path, r#"{"servers": {}}"#).unwrap();
     fs::write(project_dir.join("mcp.json"), "{ not json").unwrap();
@@ -2039,7 +2037,7 @@ fn workspace_mcp_config_rejects_parent_components() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     let _trust = mark_workspace_trusted(&workspace);
     fs::write(&global_path, r#"{"servers": {}}"#).unwrap();
@@ -2064,7 +2062,7 @@ fn workspace_mcp_config_resolves_relative_cwd_from_workspace() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     let _trust = mark_workspace_trusted(&workspace);
     fs::write(&global_path, r#"{"servers": {}}"#).unwrap();
@@ -2089,7 +2087,7 @@ fn workspace_mcp_config_rejects_project_cwd_escape() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     let _trust = mark_workspace_trusted(&workspace);
     fs::write(&global_path, r#"{"servers": {}}"#).unwrap();
@@ -2115,7 +2113,7 @@ fn workspace_mcp_config_rejects_symlinked_project_cwd_escape() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     let outside = dir.path().join("outside");
     fs::create_dir_all(&project_dir).unwrap();
     fs::create_dir_all(&outside).unwrap();
@@ -2160,7 +2158,7 @@ async fn workspace_mcp_pool_reload_picks_up_project_config_creation() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&workspace).unwrap();
     let _trust = mark_workspace_trusted(&workspace);
     fs::write(
@@ -2193,7 +2191,7 @@ async fn workspace_mcp_pool_reload_picks_up_project_config_after_workspace_trust
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     let trust_env = workspace_trust_config_guard(&workspace);
     fs::write(
@@ -2226,7 +2224,7 @@ async fn workspace_mcp_pool_reload_drops_project_config_after_workspace_trust_re
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     let trust = mark_workspace_trusted(&workspace);
     fs::write(
@@ -2259,7 +2257,7 @@ async fn workspace_mcp_pool_reload_drops_project_config_after_deletion() {
     let dir = tempfile::tempdir().unwrap();
     let global_path = dir.path().join("global-mcp.json");
     let workspace = dir.path().join("workspace");
-    let project_dir = workspace.join(".codewhale");
+    let project_dir = workspace.join(".ghosty");
     fs::create_dir_all(&project_dir).unwrap();
     let _trust = mark_workspace_trusted(&workspace);
     fs::write(
@@ -2803,7 +2801,7 @@ async fn pool_stops_advertising_a_server_whose_write_side_died() {
         r#"{
             "mcpServers": {
                 "mock": {
-                    "command": "codewhale-tui-test-this-binary-does-not-exist-9f8e7d6c5b4a",
+                    "command": "ghosty-tui-test-this-binary-does-not-exist-9f8e7d6c5b4a",
                     "args": []
                 }
             }
@@ -2959,7 +2957,7 @@ async fn connect_all_reloads_before_snapshotting_new_server_names() {
 
     std::fs::write(
         &path,
-        r#"{"servers":{"late":{"command":"codewhale-test-command-that-does-not-exist"}}}"#,
+        r#"{"servers":{"late":{"command":"ghosty-test-command-that-does-not-exist"}}}"#,
     )
     .unwrap();
     // Make the test independent of filesystem mtime granularity.
@@ -3915,7 +3913,7 @@ async fn discover_snapshot_includes_underlying_spawn_error_in_chain() {
         r#"{
             "mcpServers": {
                 "broken": {
-                    "command": "codewhale-tui-test-this-binary-does-not-exist-9f8e7d6c5b4a",
+                    "command": "ghosty-tui-test-this-binary-does-not-exist-9f8e7d6c5b4a",
                     "args": []
                 }
             }
@@ -3957,7 +3955,7 @@ async fn required_server_snapshot_keeps_the_real_spawn_error() {
         r#"{
             "mcpServers": {
                 "broken": {
-                    "command": "codewhale-tui-test-this-binary-does-not-exist-9f8e7d6c5b4a",
+                    "command": "ghosty-tui-test-this-binary-does-not-exist-9f8e7d6c5b4a",
                     "args": [],
                     "required": true
                 }
@@ -3997,7 +3995,7 @@ async fn connect_all_reports_one_error_per_failed_required_server() {
         r#"{
             "mcpServers": {
                 "broken": {
-                    "command": "codewhale-tui-test-this-binary-does-not-exist-9f8e7d6c5b4a",
+                    "command": "ghosty-tui-test-this-binary-does-not-exist-9f8e7d6c5b4a",
                     "args": [],
                     "required": true
                 }

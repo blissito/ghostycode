@@ -137,7 +137,7 @@ fn inherited_interactive_terminal_fails_closed_before_spawn() {
     let workspace = tempdir().expect("workspace");
     let mut manager = ShellManager::new(workspace.path().to_path_buf());
     let err = manager
-        .execute_interactive_with_policy_env("codew", None, 10_000, None, HashMap::new())
+        .execute_interactive_with_policy_env("ghosty-tui", None, 10_000, None, HashMap::new())
         .expect_err("Unix inherited-terminal takeover must not spawn");
     let message = err.to_string();
     assert!(message.contains("foreground TTY ownership"), "{message}");
@@ -154,7 +154,7 @@ fn inherited_interactive_terminal_offers_only_ohos_recovery_paths() {
     let workspace = tempdir().expect("workspace");
     let mut manager = ShellManager::new(workspace.path().to_path_buf());
     let err = manager
-        .execute_interactive_with_policy_env("codew", None, 10_000, None, HashMap::new())
+        .execute_interactive_with_policy_env("ghosty-tui", None, 10_000, None, HashMap::new())
         .expect_err("OHOS inherited-terminal takeover must not spawn");
     let message = err.to_string();
     assert!(message.contains("foreground TTY ownership"), "{message}");
@@ -574,9 +574,9 @@ fn failed_network_shell_result(stdout: &str, stderr: &str) -> ShellResult {
 }
 
 #[cfg(unix)]
-const SHELL_DESCENDANT_HELPER_ENV: &str = "CODEWHALE_SHELL_DESCENDANT_HELPER";
+const SHELL_DESCENDANT_HELPER_ENV: &str = "GHOSTY_SHELL_DESCENDANT_HELPER";
 #[cfg(unix)]
-const SHELL_DESCENDANT_PID_FILE_ENV: &str = "CODEWHALE_SHELL_DESCENDANT_PID_FILE";
+const SHELL_DESCENDANT_PID_FILE_ENV: &str = "GHOSTY_SHELL_DESCENDANT_PID_FILE";
 
 #[cfg(unix)]
 #[test]
@@ -785,7 +785,7 @@ fn exec_shell_parallel_flags_are_input_aware() {
         "background": true
     })));
     assert!(tool.starts_detached_for(&json!({
-        "command": "cargo test -p codewhale-tui --bins",
+        "command": "cargo test -p ghosty-tui --bins",
         "tty": true
     })));
     assert!(!tool.starts_detached_for(&json!({
@@ -3500,11 +3500,11 @@ async fn default_cwd_uses_context_workspace_not_shell_manager_default() {
 // timeout in the wild).
 
 #[cfg(unix)]
-const SHELL_SIGTERM_HELPER_ENV: &str = "CODEWHALE_SHELL_SIGTERM_HELPER";
+const SHELL_SIGTERM_HELPER_ENV: &str = "GHOSTY_SHELL_SIGTERM_HELPER";
 #[cfg(unix)]
-const SHELL_ESCAPE_HELPER_ENV: &str = "CODEWHALE_SHELL_ESCAPE_HELPER";
+const SHELL_ESCAPE_HELPER_ENV: &str = "GHOSTY_SHELL_ESCAPE_HELPER";
 #[cfg(unix)]
-const SHELL_ESCAPED_GRANDCHILD_ENV: &str = "CODEWHALE_SHELL_ESCAPED_GRANDCHILD";
+const SHELL_ESCAPED_GRANDCHILD_ENV: &str = "GHOSTY_SHELL_ESCAPED_GRANDCHILD";
 
 /// Helper role: ignore SIGTERM and idle. Runs as the shell's direct child
 /// (same process group), so only the SIGKILL escalation can stop it.
@@ -3991,7 +3991,7 @@ async fn persistent_service_requires_explicit_headless_exec_authority() {
         .await
         .expect_err("ordinary tool contexts must reject ownership transfer");
 
-    assert!(error.to_string().contains("real headless `codewhale exec`"));
+    assert!(error.to_string().contains("real headless `ghosty exec`"));
 }
 
 #[cfg(unix)]
@@ -4045,7 +4045,7 @@ async fn committed_persistent_service_survives_manager_drop_and_reports_identity
     }
     assert!(
         marker.exists(),
-        "released service must survive Codewhale manager teardown"
+        "released service must survive Ghosty manager teardown"
     );
 }
 

@@ -25,7 +25,7 @@ function installGitHubFixture(toolCountSource: string | null): void {
           JSON.stringify({
             tag_name: "v0.9.0",
             published_at: "2026-07-16T20:05:39Z",
-            html_url: "https://github.com/Hmbown/CodeWhale/releases/tag/v0.9.0",
+            html_url: "https://github.com/blissito/ghostycode/releases/tag/v0.9.0",
           }),
         );
       }
@@ -41,7 +41,7 @@ function installGitHubFixture(toolCountSource: string | null): void {
             "bubblewrap (Linux, opt-in when installed)",
           ];
         `,
-        "npm/codewhale/package.json": JSON.stringify({ engines: { node: ">=18" } }),
+        "npm/ghosty/package.json": JSON.stringify({ engines: { node: ">=18" } }),
         LICENSE: "MIT License\n",
       };
       if (rawPath === "web/lib/facts.generated.ts") {

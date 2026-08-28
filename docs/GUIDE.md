@@ -1,20 +1,20 @@
-# Codewhale User Guide
+# Ghosty User Guide
 
-This guide is for your first hour with Codewhale. It explains the main
+This guide is for your first hour with Ghosty. It explains the main
 workflow, the important safety controls, and where to go next when you need a
 complete reference.
 
-Codewhale has deeper reference documents for installation, configuration,
+Ghosty has deeper reference documents for installation, configuration,
 providers, modes, keybindings, tools, and operations. Use this page as a guided
 walkthrough, then follow the "Next" links when you need every option.
 
-## 1. Welcome to Codewhale
+## 1. Welcome to Ghosty
 
-Codewhale is a terminal coding agent. You run it from a workspace, give it a
+Ghosty is a terminal coding agent. You run it from a workspace, give it a
 task, and it can use structured tools to inspect files, run commands, edit
 code, and report back with evidence.
 
-The important difference from a normal chat model is that Codewhale is built
+The important difference from a normal chat model is that Ghosty is built
 around a harness:
 
 - It keeps the active workspace and session visible.
@@ -23,7 +23,7 @@ around a harness:
 - It can preserve sessions, fork conversations, and continue later.
 - It can run sub-agents for focused background work.
 
-You can use Codewhale for small questions:
+You can use Ghosty for small questions:
 
 ```text
 Explain the authentication flow in this repository.
@@ -36,7 +36,7 @@ Find the failing validation path, propose a fix, and wait for my approval
 before editing files.
 ```
 
-For a new repository, start conservatively. Ask Codewhale to explore and plan
+For a new repository, start conservatively. Ask Ghosty to explore and plan
 before asking it to change files. That gives you a reviewable path and makes it
 easier to catch wrong assumptions early.
 
@@ -45,44 +45,43 @@ runtime model.
 
 ## 2. First Launch
 
-Install Codewhale with the path that fits your machine. Release installers
-provide the same runtime under the `codewhale` and `codew` command names, and
-every supported install path ships the `codewhale` dispatcher with the
-`codewhale-tui` runtime built in.
+Install Ghosty with the path that fits your machine. Every install path ships
+one `ghosty` binary: CLI and TUI live in the same executable.
 
 ```bash
+# Recommended — prebuilt binary, no Node or Rust required
+curl -fsSL https://formmy.app/ghosty/install.sh | sh
+
 # npm
-npm install -g codewhale
+npm install -g ghostycode
 
 # Cargo
-cargo install codewhale-cli --locked
-# Optional short name after Cargo install:
-ln -s "$(command -v codewhale)" "$(dirname "$(command -v codewhale)")/codew"
+cargo install --git https://github.com/blissito/ghostycode ghosty-cli --locked
 
 # Homebrew
-brew tap Hmbown/deepseek-tui
-brew install codewhale
+brew tap blissito/homebrew-ghosty
+brew install ghosty
 ```
 
 Docker is also available when you want an isolated runtime:
 
 ```bash
-docker volume create codewhale-home
+docker volume create ghosty-home
 docker run --rm -it \
   -e DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
-  -v codewhale-home:/home/codewhale/.codewhale \
+  -v ghosty-home:/home/ghosty/.ghosty \
   -v "$PWD:/workspace" \
   -w /workspace \
-  ghcr.io/hmbown/codewhale:latest
+  ghcr.io/blissito/ghostycode:latest
 ```
 
-Launch Codewhale from the repository or directory you want it to work in:
+Launch Ghosty from the repository or directory you want it to work in:
 
 ```bash
-codewhale
+ghosty
 ```
 
-On first launch, Codewhale asks only for decisions this installation still
+On first launch, Ghosty asks only for decisions this installation still
 needs: language when it cannot infer one, a provider when no usable route is
 configured, and workspace trust when the folder requires a decision. The
 provider step includes an explicit offline route. The ready screen then opens
@@ -99,17 +98,17 @@ DeepSeek is the default provider. If you want to configure its key before or
 after the first launch, the most direct setup path is:
 
 ```bash
-codewhale auth set --provider deepseek
+ghosty auth set --provider deepseek
 ```
 
 You can also provide a key through the environment:
 
 ```bash
 export DEEPSEEK_API_KEY="your-key"
-codewhale
+ghosty
 ```
 
-New Codewhale config is stored under `~/.codewhale/config.toml`. Legacy
+New Ghosty config is stored under `~/.ghosty/config.toml`. Legacy
 `~/.deepseek/config.toml` files are still supported for users migrating from
 the old name.
 
@@ -117,13 +116,13 @@ Use `/constitution` to review or change standing guidance. After setup, run a
 doctor check:
 
 ```bash
-codewhale doctor
+ghosty doctor
 ```
 
 Use the JSON form when you need a machine-readable report for an issue:
 
 ```bash
-codewhale doctor --json
+ghosty doctor --json
 ```
 
 Both forms are offline by default. They report structural configuration and
@@ -146,8 +145,8 @@ that compares legacy session filenames against the current store and reports
 one of `isolated`, `no_legacy_sessions`, `migration_pending`,
 `migration_incomplete`, `migration_complete`, or `scan_failed`; it never reads
 session contents. Use `migration_pending` or `migration_incomplete` as your
-cue to finish moving sessions from `~/.deepseek` to `~/.codewhale`, the same
-legacy-path migration described above. Setting an explicit `CODEWHALE_HOME`
+cue to finish moving sessions from `~/.deepseek` to `~/.ghosty`, the same
+legacy-path migration described above. Setting an explicit `GHOSTY_HOME`
 suppresses this ambient inspection.
 
 Next: [INSTALL.md](INSTALL.md) covers platform-specific install paths,
@@ -193,11 +192,11 @@ provider registry. Add a regression test and run only the config crate tests.
 If you are not sure where the bug is, say that:
 
 ```text
-Investigate why `codewhale doctor` reports the wrong provider. Do not edit
+Investigate why `ghosty doctor` reports the wrong provider. Do not edit
 files yet. Return the likely cause, evidence, and a proposed patch plan.
 ```
 
-Codewhale works best when you let investigation and implementation happen in
+Ghosty works best when you let investigation and implementation happen in
 separate steps for unfamiliar code. For small, well-understood changes, a
 single implementation request is fine.
 
@@ -239,7 +238,7 @@ omitted rather than estimated, and on narrow rows the strip drops its
 lowest-value groups (steps and tool time first, then latency, turns, LLM
 time) instead of truncating a number. `/status` prints the untrimmed line.
 
-The transcript is the audit trail. When Codewhale reads files, runs commands,
+The transcript is the audit trail. When Ghosty reads files, runs commands,
 or edits code, the action appears there. If a command fails, use the visible
 failure output as part of your next instruction instead of starting over.
 
@@ -258,7 +257,7 @@ Next: [KEYBINDINGS.md](KEYBINDINGS.md) is the complete shortcut reference.
 
 ## 5. Modes
 
-Codewhale has three visible TUI modes:
+Ghosty has three visible TUI modes:
 
 | Mode | Use it for | Default posture |
 | --- | --- | --- |
@@ -288,12 +287,12 @@ approach, verification plan, risks, and handoff notes. Empty sections are
 visible when the agent uses the rich artifact shape, so you can ask for a
 revision instead of accepting an under-specified plan.
 
-Act mode is the default for most contribution work. It lets Codewhale read,
+Act mode is the default for most contribution work. It lets Ghosty read,
 run checks, and edit files while keeping risky actions behind approval gates.
 
 Operate keeps that direct tool surface and its approval, sandbox, shell,
 ask-rule, and repository protections. Its difference is orchestration emphasis:
-Codewhale prefers Fleet workers for independent, parallel, background, or
+Ghosty prefers Fleet workers for independent, parallel, background, or
 long-running work, while small or tightly coupled work can remain in the parent.
 
 For trusted workspaces where you intentionally want actions to proceed without
@@ -313,7 +312,7 @@ reference.
 ## 6. Slash Commands
 
 Slash commands are typed into the composer. They are useful when you want to
-change Codewhale state directly instead of asking the model in natural
+change Ghosty state directly instead of asking the model in natural
 language.
 
 Common commands for first-time users:
@@ -334,7 +333,7 @@ Common commands for first-time users:
 | `/memory` | Inspect or manage memory when enabled |
 | `/mcp` | Configure or inspect MCP server integration |
 | `/plugin` | Review and manage disabled-by-default local plugin bundles |
-| `/rc` | Hand this exact session to the signed-in Codewhale web app |
+| `/rc` | Hand this exact session to the signed-in Ghosty web app |
 
 Toolbox commands stay searchable when you type them directly: `/models`
 fetches live endpoint IDs, `/modeldb` opens the bundled model reference, and
@@ -350,7 +349,7 @@ Soft-auto multi-agent work: [AUTOMATIC_WORKFLOWS.md](AUTOMATIC_WORKFLOWS.md).
 Next for durable multi-worker work: [FLEET_WORKFLOW_TUTORIAL.md](FLEET_WORKFLOW_TUTORIAL.md)
 walks through Fleet task specs, monitoring, and Workflow authoring.
 
-Use `/model auto` when you want Codewhale to choose the model and thinking
+Use `/model auto` when you want Ghosty to choose the model and thinking
 level per turn. When the DeepSeek routing model is available, Auto may select
 any runnable provider/model pair in the redacted inventory. That classification
 sends the latest request (capped at 4,000 characters) plus a bounded summary of
@@ -384,7 +383,7 @@ inventory, capability review, and namespaced Skill/MCP activation boundary.
 
 ## 7. Working with Tools
 
-Codewhale tools are structured actions. Instead of only producing prose, the
+Ghosty tools are structured actions. Instead of only producing prose, the
 model can call tools to inspect and change the workspace.
 
 Examples of tool-backed work include:
@@ -400,7 +399,7 @@ depends on the current mode and config, but the basic rule is simple: start in
 Plan for read-only exploration, use Act for normal changes, and reserve Full
 Access for trusted automation.
 
-The workspace boundary matters. Codewhale is expected to work in the directory
+The workspace boundary matters. Ghosty is expected to work in the directory
 you launched it from or the workspace you configured. Be explicit when a task
 should stay inside a repo:
 
@@ -478,8 +477,8 @@ workflow to learn:
 of text. The historic action-shaped `rlm` tool remains registered only so older
 sessions replay, and is deliberately not taught to new model turns.
 
-Codewhale can also keep a small project-local ledger at
-`.codewhale/harness/state.json`: evidence-backed prompt notes, reusable child
+Ghosty can also keep a small project-local ledger at
+`.ghosty/harness/state.json`: evidence-backed prompt notes, reusable child
 briefs, and skill-routing hints. Later turns receive it as untrusted
 supplemental guidance, never as authority or executable instructions. Reading it
 is automatic; adding or removing an entry goes through the normal approval
@@ -492,7 +491,7 @@ output contracts.
 ## 9. Skills
 
 Skills are reusable instruction packs. A skill is usually a `SKILL.md` file
-that teaches Codewhale how to perform a recurring workflow, use a tool family,
+that teaches Ghosty how to perform a recurring workflow, use a tool family,
 or follow a project convention.
 
 Use skills when a task has a repeatable process:
@@ -527,19 +526,19 @@ paths and project authority.
 Start with doctor output:
 
 ```bash
-codewhale doctor
+ghosty doctor
 ```
 
 Use JSON when filing a detailed issue:
 
 ```bash
-codewhale doctor --json
+ghosty doctor --json
 ```
 
 For authentication problems, use the structural source state to identify what
 is declared. Doctor deliberately does not inspect environment, secret-store,
 keyring, or OAuth token values. When a live check is appropriate, opt in with
-`codewhale doctor --probe-api` (or `--probe-local` for a local endpoint).
+`ghosty doctor --probe-api` (or `--probe-local` for a local endpoint).
 
 For provider problems, confirm the active provider and model:
 
@@ -553,7 +552,7 @@ start a fresh session in the same workspace and summarize what you need.
 
 When reporting an issue, include:
 
-- Codewhale version.
+- Ghosty version.
 - Install method.
 - Operating system and terminal.
 - Provider and model.
@@ -568,11 +567,11 @@ recovery steps.
 
 ## FAQ
 
-### Is Codewhale only for DeepSeek?
+### Is Ghosty only for DeepSeek?
 
-DeepSeek is the default and first-class route, but Codewhale also supports
+DeepSeek is the default and first-class route, but Ghosty also supports
 other hosted and local OpenAI-compatible providers. Use `/provider` or
-`codewhale --provider <id>` to choose a provider. Keep the provider registry
+`ghosty --provider <id>` to choose a provider. Keep the provider registry
 open when configuring a non-default route.
 
 ### Which mode should I use first?
@@ -580,7 +579,7 @@ open when configuring a non-default route.
 Use Plan for unfamiliar code, Act for normal implementation, and Full Access
 only for trusted repositories where automatic execution is acceptable.
 
-### Why does Codewhale ask before running commands?
+### Why does Ghosty ask before running commands?
 
 Approvals are part of the safety model. Shell commands, paid tools, writes, and
 actions outside the expected workspace can have side effects. Approval prompts
@@ -601,7 +600,7 @@ If macOS says `python3` is missing, install Python from
 brew install python
 ```
 
-Inside Codewhale, ask the agent to inspect the file and run it with
+Inside Ghosty, ask the agent to inspect the file and run it with
 `python3 your_file.py`. If the script needs packages, install them in a virtual
 environment first:
 
@@ -614,32 +613,32 @@ python3 your_file.py
 
 ### Where is my config stored?
 
-New Codewhale config uses `~/.codewhale/config.toml`. Legacy
+New Ghosty config uses `~/.ghosty/config.toml`. Legacy
 `~/.deepseek/config.toml` remains supported for compatibility. Project overlays
 can also affect behavior when a workspace config exists.
 
 ### How do I keep costs predictable?
 
 Use `/model auto` for routing, choose a fixed model when you need a strict
-profile, and compact long sessions. For larger tasks, ask Codewhale to plan
+profile, and compact long sessions. For larger tasks, ask Ghosty to plan
 before implementing so you do not spend tokens on the wrong path.
 
 ### How do I continue previous work?
 
-Codewhale saves sessions. Use the session picker or resume/continue CLI paths
+Ghosty saves sessions. Use the session picker or resume/continue CLI paths
 documented in the README and modes guide. For a risky experiment, fork the
 session before changing direction.
 
 The `/sessions` picker starts scoped to the current workspace so resumes stay
 attached to the project you opened. Press `a` in the picker to show sessions
-from every workspace, or run `codewhale sessions` to list all saved sessions
+from every workspace, or run `ghosty sessions` to list all saved sessions
 with last-updated timestamps before resuming a specific id.
 
 To continue the exact running session from the web app, type `/rc` or launch
-with `codewhale rc`. Approve the one-time code in the system browser. While the
+with `ghosty rc`. Approve the one-time code in the system browser. While the
 lease is active, the browser owns new prompts and approvals and the terminal is
 a readable safety surface. Once connected, the banner and a transcript note
-show the live session link (`https://app.codewhale.net/session?run=…`);
+show the live session link (`https://app.ghosty.net/session?run=…`);
 `/rc open` opens it in your browser and `/rc link` prints it. `/rc status`
 shows ownership, `/rc stop` returns it to the terminal, and interrupt remains
 available. A dropped connection keeps local input locked until the last web
@@ -651,7 +650,7 @@ per machine rather than one per session.
 
 Stop and restate the goal, constraints, and current evidence. If the transcript
 is long, use `/compact` or start a fresh session with a short handoff. If the
-problem is operational, run `codewhale doctor` and inspect the reported config
+problem is operational, run `ghosty doctor` and inspect the reported config
 and provider state.
 
 ### Should I put project rules in prompts or files?
@@ -660,7 +659,7 @@ Use repository files for durable project rules and prompts for turn-specific
 intent. If a workflow repeats across projects, consider turning it into a
 skill.
 
-### Can Codewhale edit files outside the current repository?
+### Can Ghosty edit files outside the current repository?
 
 That depends on workspace boundaries, sandbox settings, trust mode, and
 approval policy. For contribution work, keep instructions scoped to the current

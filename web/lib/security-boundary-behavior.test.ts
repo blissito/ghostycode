@@ -94,12 +94,12 @@ describe("public security boundaries", () => {
       MAINTAINER_TOKEN: "configured",
     });
 
-    const response = await adminPost(new Request("https://codewhale.net/api/admin/post", {
+    const response = await adminPost(new Request("https://ghosty.net/api/admin/post", {
       method: "POST",
       headers: {
         "content-type": "application/json",
         cookie: "mt_sid=test-session",
-        origin: "https://codewhale.net",
+        origin: "https://ghosty.net",
       },
       body: JSON.stringify({ action: "discard", draftKey: "dispatch:latest" }),
     }));
@@ -138,7 +138,7 @@ describe("public security boundaries", () => {
         title: "Unchanged issue",
         body: "same body",
         updated_at: "2020-01-01T00:00:00.000Z",
-        html_url: "https://github.com/Hmbown/CodeWhale/issues/42",
+        html_url: "https://github.com/blissito/ghostycode/issues/42",
         labels: [],
       }]);
     });
@@ -161,7 +161,7 @@ describe("public security boundaries", () => {
         title: "Unchanged PR",
         body: "same body",
         updated_at: "2020-01-01T00:00:00.000Z",
-        html_url: "https://github.com/Hmbown/CodeWhale/pull/84",
+        html_url: "https://github.com/blissito/ghostycode/pull/84",
         changed_files: 3,
         additions: 10,
         deletions: 2,
@@ -208,15 +208,15 @@ describe("public security boundaries", () => {
       CURATED_KV: kv,
       MAINTAINER_TOKEN: "configured",
       MAINTAINER_GITHUB_PAT: "ghp_test",
-      GITHUB_REPO: "Hmbown/CodeWhale",
+      GITHUB_REPO: "blissito/ghostycode",
     });
 
-    const response = await adminPost(new Request("https://codewhale.net/api/admin/post", {
+    const response = await adminPost(new Request("https://ghosty.net/api/admin/post", {
       method: "POST",
       headers: {
         "content-type": "application/json",
         cookie: "mt_sid=test-session",
-        origin: "https://codewhale.net",
+        origin: "https://ghosty.net",
       },
       body: JSON.stringify({ action: "post", draftKey: "draft:triage:42", lang: "zh" }),
     }));

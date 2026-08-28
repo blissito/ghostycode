@@ -38,7 +38,7 @@ impl RegisterCommand for WorkflowCmd {
     }
 }
 
-const WORKFLOW_CONFIRM_INSTRUCTION_PREFIX: &str = "[codewhale.workflow-confirm.v1]";
+const WORKFLOW_CONFIRM_INSTRUCTION_PREFIX: &str = "[ghosty.workflow-confirm.v1]";
 const WORKFLOW_OBJECTIVE_MAX_CHARS: usize = 1_000;
 const WORKFLOW_DISPLAY_MAX_CHARS: usize = 160;
 
@@ -366,7 +366,7 @@ fn workflow_status(app: &App, run_id: &str) -> CommandResult {
     }
     if runs.len() > 20 {
         lines.push(format!(
-            "… {} older runs in .codewhale/workflow-runs.jsonl",
+            "… {} older runs in .ghosty/workflow-runs.jsonl",
             runs.len() - 20
         ));
     }
@@ -780,7 +780,7 @@ mod tests {
                 .unwrap()
                 .contains("No workflow runs")
         );
-        assert!(!dir.path().join(".codewhale/workflow-runs.jsonl").exists());
+        assert!(!dir.path().join(".ghosty/workflow-runs.jsonl").exists());
 
         let result = workflow(&mut app, Some("status wf_missing"));
         assert!(result.is_error);

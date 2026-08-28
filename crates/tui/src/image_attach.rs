@@ -1,6 +1,6 @@
 //! Turning a local image file into a wire-ready image content block.
 //!
-//! CodeWhale's message model has been multimodal for a long time —
+//! GhostyCode's message model has been multimodal for a long time —
 //! [`ContentBlock::ImageUrl`] round-trips
 //! through session persistence, compaction and all three wire builders. What it
 //! never had was a *faucet*: nothing outside `#[cfg(test)]` ever constructed
@@ -53,7 +53,7 @@ use crate::models::{ContentBlock, ImageUrlContent};
 ///
 /// Base64 inflates by 4/3, so this admits roughly 6.7 MB of request body per
 /// image. The number is Anthropic's documented per-image ceiling; keeping the
-/// tightest provider limit as the shared limit is what makes a "CodeWhale
+/// tightest provider limit as the shared limit is what makes a "GhostyCode
 /// accepted it" verdict portable across routes.
 pub const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 
@@ -131,11 +131,11 @@ pub struct AttachedImage {
 
 /// Validated image content returned by lowercase `read`.
 pub struct PreparedToolImage {
-    pub block: Option<codewhale_tools::ToolResultContentBlock>,
+    pub block: Option<ghosty_tools::ToolResultContentBlock>,
     pub note: String,
 }
 
-/// Prepare one provider-neutral tool-result image using Codewhale's existing
+/// Prepare one provider-neutral tool-result image using Ghosty's existing
 /// cross-provider format and size policy. Failure is a visible text receipt,
 /// not a failed file read.
 #[must_use]
@@ -151,7 +151,7 @@ pub fn prepare_tool_image_bytes(bytes: &[u8], mime_type: &str) -> PreparedToolIm
         };
     }
     PreparedToolImage {
-        block: Some(codewhale_tools::ToolResultContentBlock::Image {
+        block: Some(ghosty_tools::ToolResultContentBlock::Image {
             mime_type: mime_type.to_string(),
             data: STANDARD.encode(bytes),
         }),
@@ -176,7 +176,7 @@ pub(crate) fn bound_rich_tool_result(
     let mut kept = Vec::with_capacity(1);
     let mut omitted = 0usize;
     for block in rich.content_blocks.drain(..) {
-        let codewhale_tools::ToolResultContentBlock::Image { mime_type, data } = &block;
+        let ghosty_tools::ToolResultContentBlock::Image { mime_type, data } = &block;
         if kept.is_empty() && valid_tool_image(mime_type, data) {
             kept.push(block);
         } else {
@@ -284,7 +284,7 @@ impl AttachedImage {
 /// Extension sniffing is not enough here: the extension is attacker- and
 /// typo-controlled, while what the provider validates is the payload. A
 /// `.png` holding JPEG bytes must be declared `image/jpeg` or the request is
-/// rejected with a media-type mismatch that reads like a CodeWhale bug.
+/// rejected with a media-type mismatch that reads like a GhostyCode bug.
 ///
 /// Returns `None` for anything that is not one of the four accepted formats;
 /// [`detect_rejected_format`] names the near-misses so the error can be

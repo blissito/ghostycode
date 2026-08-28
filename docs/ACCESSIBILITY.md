@@ -1,6 +1,6 @@
 # Accessibility
 
-Codewhale runs in a terminal, so the platform's own accessibility
+Ghosty runs in a terminal, so the platform's own accessibility
 stack (screen readers, magnifiers, terminal-level themes) does most
 of the work. The TUI provides a small set of toggles that reduce
 visual motion and density for screen-reader and low-motion users.
@@ -10,7 +10,7 @@ visual motion and density for screen-reader and low-motion users.
 | Toggle | Default | Effect |
 | --- | --- | --- |
 | `NO_ANIMATIONS=1` env var | unset | At startup, forces `low_motion = true` and `fancy_animations = false`. Overrides whatever's saved in `settings.toml`. |
-| `CODEWHALE_ASCII_SAFE=1` env var | unset | Replaces decorative Unicode and box-drawing marks with narrow ASCII at the terminal backend. Labels, focus, state, and controls remain available. |
+| `GHOSTY_ASCII_SAFE=1` env var | unset | Replaces decorative Unicode and box-drawing marks with narrow ASCII at the terminal backend. Labels, focus, state, and controls remain available. |
 | `low_motion` setting | `false` | Freezes decorative and state animation without changing model text delivery. The footer water strip is controlled separately by `fancy_animations`. |
 | `fancy_animations` setting | `true` | Enables expressive live-state chrome. Set to `false` to keep live-turn chrome still. |
 | `ocean_treatment` setting | `ombre` | Chooses the background appearance: `ombre` paints the state-reactive water column; `flat` uses the plain theme surface. Both keep the same state marks and idle ambient life; appearance is independent of motion settings. |
@@ -46,7 +46,7 @@ the code actually guarantees — no more:
   (`theme_uses_terminal_owned_surfaces` makes the exemption explicit).
 * The **Grayscale** theme's "Color-minimal high contrast" tagline is
   enforced: its body text hierarchy clears 4.5:1 on every surface.
-* The ASCII tier (`CODEWHALE_ASCII_SAFE=1`) keeps labels, focus, and state
+* The ASCII tier (`GHOSTY_ASCII_SAFE=1`) keeps labels, focus, and state
   available without decorative glyphs, so the non-color redundancy above
   survives in the plainest rendering mode.
 
@@ -59,7 +59,7 @@ Set these in your shell profile so they apply to every session:
 export NO_ANIMATIONS=1
 
 # Force the terminal-safe ASCII rendering tier.
-export CODEWHALE_ASCII_SAFE=1
+export GHOSTY_ASCII_SAFE=1
 
 # Optional: respect the wider terminal-color convention.
 export NO_COLOR=1            # honored by the underlying ratatui backend
@@ -82,7 +82,7 @@ The same toggles are reachable from the command palette:
 * `/config calm_mode on --save`
 * `/config status_indicator off --save`
 
-Settings written this way persist to `~/.codewhale/settings.toml` on new
+Settings written this way persist to `~/.ghosty/settings.toml` on new
 installs, with legacy `~/.deepseek/settings.toml` and platform config-dir
 settings kept as compatibility fallbacks.
 The `NO_ANIMATIONS` env var still wins at startup if it's set, so
@@ -106,14 +106,14 @@ version renders cleanly.
   Terminal) will pass the rendered content straight through.
 * If you find a UI surface that still produces motion when
   `low_motion = true`, please file an issue against
-  [`PRIOR: Screen-reader / accessibility flag`](https://github.com/Hmbown/CodeWhale/issues/450)
+  [`PRIOR: Screen-reader / accessibility flag`](https://github.com/blissito/ghostycode/issues/450)
   with a screenshot or terminal recording.
 
 ## Related issues / history
 
-* [#450](https://github.com/Hmbown/CodeWhale/issues/450) —
+* [#450](https://github.com/blissito/ghostycode/issues/450) —
   documenting the existing flag, adding the `NO_ANIMATIONS`
   startup overlay, and writing this page.
-* [#449](https://github.com/Hmbown/CodeWhale/issues/449) —
+* [#449](https://github.com/blissito/ghostycode/issues/449) —
   footer statusline now uses the active theme's contrast pair
   instead of a bespoke palette.

@@ -59,7 +59,7 @@ impl PluginCatalogStamp {
 
 #[must_use]
 pub fn default_user_plugins_dir() -> PathBuf {
-    codewhale_config::codewhale_home()
+    ghosty_config::ghosty_home()
         .map(|path| path.join("plugins"))
         .unwrap_or_else(|error| {
             // Never fall back to a shared, predictable temporary directory:
@@ -69,11 +69,11 @@ pub fn default_user_plugins_dir() -> PathBuf {
             tracing::warn!(
                 target: "plugins",
                 %error,
-                "Codewhale home could not be resolved; user plugin discovery is disabled"
+                "Ghosty home could not be resolved; user plugin discovery is disabled"
             );
             std::env::temp_dir()
                 .join(format!(
-                    ".codewhale-home-unavailable-{}",
+                    ".ghosty-home-unavailable-{}",
                     uuid::Uuid::new_v4().simple()
                 ))
                 .join("plugins")
@@ -82,7 +82,7 @@ pub fn default_user_plugins_dir() -> PathBuf {
 
 #[must_use]
 pub fn default_workspace_plugins_dir(workspace: &Path) -> PathBuf {
-    workspace.join(".codewhale").join("plugins")
+    workspace.join(".ghosty").join("plugins")
 }
 
 #[cfg(test)]
@@ -115,7 +115,7 @@ pub(crate) fn discover_with_context(
     scan_root(
         &config.user_plugins_dir,
         PluginScope::User,
-        PluginOrigin::CodeWhaleHome,
+        PluginOrigin::GhostyCodeHome,
         &mut candidates,
         &mut diagnostics,
     );
@@ -287,7 +287,7 @@ fn load_plugin(
     let validated = PluginManifest::validate_from_path(manifest_path)?;
     if validated.canonical_root.parent() != Some(canonical_discovery_root) {
         return Err(format!(
-            "plugin bundle resolved outside its Codewhale-owned discovery root: {}",
+            "plugin bundle resolved outside its Ghosty-owned discovery root: {}",
             validated.canonical_root.display()
         ));
     }
@@ -327,7 +327,7 @@ fn load_plugin(
     // Skill parsing happens after hashing. Revalidate once so a concurrent
     // bundle edit cannot pair a reviewed hash with different in-memory Skill
     // instructions or MCP configuration. Active Skill bodies are replaced by
-    // snapshots parsed from the Codewhale-owned staged tree in `apply_state`.
+    // snapshots parsed from the Ghosty-owned staged tree in `apply_state`.
     let refreshed = PluginManifest::validate_from_path(manifest_path)?;
     if refreshed.content_hash != validated.content_hash
         || refreshed.capability_hash != validated.capability_hash
@@ -456,7 +456,7 @@ fn read_skill_bytes(path: &Path) -> Result<Vec<u8>, String> {
 
 fn hash_skill_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale-plugin-file-bytes-v1\0");
+    hasher.update(b"ghosty-plugin-file-bytes-v1\0");
     hasher.update(bytes);
     hasher
         .finalize()
@@ -511,7 +511,7 @@ pub(crate) fn load_plugin_for_test(manifest_path: &Path) -> Result<LoadedPlugin,
         manifest_path,
         &discovery_root,
         PluginScope::User,
-        PluginOrigin::CodeWhaleHome,
+        PluginOrigin::GhostyCodeHome,
     )
 }
 
@@ -519,7 +519,7 @@ fn plugin_id(scope: PluginScope, name: &str, canonical_root: &Path) -> PluginId 
     let mut hasher = Sha256::new();
     // v2 intentionally invalidates receipts produced by the former lossy
     // Unicode path identity.
-    hasher.update(b"codewhale-plugin-id-v2\0");
+    hasher.update(b"ghosty-plugin-id-v2\0");
     hasher.update(scope.as_str().as_bytes());
     hasher.update(b"\0");
     super::path_identity::hash_os_path(&mut hasher, b"canonical-plugin-root", canonical_root);
@@ -712,7 +712,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let home = tmp.path().join("home");
         let workspace = tmp.path().join("workspace");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
         write_plugin(
             &workspace.join(".claude/plugins"),
             "ambient",

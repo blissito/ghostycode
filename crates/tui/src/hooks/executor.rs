@@ -195,7 +195,7 @@ impl HookContext {
             env.insert("DEEPSEEK_TOOL_NAME".to_string(), name.clone());
         }
         if let Some(ref id) = self.tool_call_id {
-            env.insert("CODEWHALE_TOOL_CALL_ID".to_string(), id.clone());
+            env.insert("GHOSTY_TOOL_CALL_ID".to_string(), id.clone());
             env.insert("DEEPSEEK_TOOL_CALL_ID".to_string(), id.clone());
         }
         if let Some(ref args) = self.tool_args {
@@ -228,7 +228,7 @@ impl HookContext {
             env.insert("DEEPSEEK_PREVIOUS_MODE".to_string(), prev.clone());
         }
         if let Some(ref session_id) = self.session_id {
-            env.insert("CODEWHALE_SESSION_ID".to_string(), session_id.clone());
+            env.insert("GHOSTY_SESSION_ID".to_string(), session_id.clone());
             env.insert("DEEPSEEK_SESSION_ID".to_string(), session_id.clone());
         }
         if let Some(ref message) = self.message {
@@ -1559,7 +1559,7 @@ impl HookExecutor {
     /// **once per launch**; every later reload (workspace switch, trust
     /// onboarding) must go through [`Self::rebind`] so the id every hook has
     /// already seen stays valid. Regenerating it mid-session would break
-    /// correlation for anything that grouped records by `CODEWHALE_SESSION_ID`
+    /// correlation for anything that grouped records by `GHOSTY_SESSION_ID`
     /// or its `DEEPSEEK_SESSION_ID` compatibility alias.
     pub fn new(config: HooksConfig, default_working_dir: PathBuf) -> Self {
         // Generate a session ID
@@ -2935,7 +2935,7 @@ const SHELL_ENV_TOTAL_MAX_BYTES: usize = 256 * 1024;
 /// rather than carried into `exec_shell`'s environment. A `shell_env` hook is
 /// a normal process whose stdout can contain anything — including a NUL
 /// straight out of a binary — and "the hook printed something odd" must never
-/// become "Codewhale aborted the tool call".
+/// become "Ghosty aborted the tool call".
 fn is_valid_env_key(key: &str) -> bool {
     !key.is_empty()
         && !key.contains('=')
@@ -3024,7 +3024,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     fn trust_workspace_for_project_hooks(workspace: &Path, config_path: &Path) -> EnvVarGuard {
-        let guard = EnvVarGuard::set("CODEWHALE_CONFIG_PATH", config_path);
+        let guard = EnvVarGuard::set("GHOSTY_CONFIG_PATH", config_path);
         crate::config::save_workspace_trust(workspace).expect("save workspace trust");
         guard
     }
@@ -3325,7 +3325,7 @@ NOEQUAL line dropped
     fn turn_end_payload_contains_post_turn_observer_fields() {
         let context = HookContext::new()
             .with_session_id("sess_test")
-            .with_workspace(PathBuf::from("/tmp/codewhale"))
+            .with_workspace(PathBuf::from("/tmp/ghosty"))
             .with_mode("agent")
             .with_model("deepseek-v4")
             .with_tokens(125);
@@ -3364,7 +3364,7 @@ NOEQUAL line dropped
 
         assert_eq!(payload["event"], "turn_end");
         assert_eq!(payload["session_id"], "sess_test");
-        assert_eq!(payload["workspace"], "/tmp/codewhale");
+        assert_eq!(payload["workspace"], "/tmp/ghosty");
         assert_eq!(payload["mode"], "agent");
         assert_eq!(payload["created_at"], "2026-07-12T10:30:00+00:00");
         assert_eq!(payload["model_backed"], true);
@@ -3523,7 +3523,7 @@ NOEQUAL line dropped
 
     #[test]
     fn observer_hook_receives_eof_instead_of_inheriting_terminal_stdin() {
-        const INNER_ENV: &str = "CODEWHALE_TEST_HOOK_EOF_INNER";
+        const INNER_ENV: &str = "GHOSTY_TEST_HOOK_EOF_INNER";
         const TEST_NAME: &str =
             "hooks::tests::observer_hook_receives_eof_instead_of_inheriting_terminal_stdin";
 
@@ -4383,8 +4383,8 @@ exit 7
         let config_path = dir.path().join("user-config.toml");
         let _config = trust_workspace_for_project_hooks(dir.path(), &config_path);
         let _legacy_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-        let project_dir = dir.path().join(".codewhale");
-        std::fs::create_dir_all(&project_dir).expect("mkdir .codewhale");
+        let project_dir = dir.path().join(".ghosty");
+        std::fs::create_dir_all(&project_dir).expect("mkdir .ghosty");
         std::fs::write(
             project_dir.join("hooks.toml"),
             r#"
@@ -4417,10 +4417,10 @@ command = "echo project"
     fn load_with_project_ignores_project_hooks_until_workspace_trusted() {
         let _lock = lock_test_env();
         let dir = tempfile::tempdir().expect("tempdir");
-        let _config = EnvVarGuard::set("CODEWHALE_CONFIG_PATH", dir.path().join("config.toml"));
+        let _config = EnvVarGuard::set("GHOSTY_CONFIG_PATH", dir.path().join("config.toml"));
         let _legacy_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-        let project_dir = dir.path().join(".codewhale");
-        std::fs::create_dir_all(&project_dir).expect("mkdir .codewhale");
+        let project_dir = dir.path().join(".ghosty");
+        std::fs::create_dir_all(&project_dir).expect("mkdir .ghosty");
         std::fs::write(
             project_dir.join("hooks.toml"),
             r#"
@@ -4446,11 +4446,11 @@ command = "echo project"
     fn load_with_project_ignores_project_local_legacy_trust_marker() {
         let _lock = lock_test_env();
         let dir = tempfile::tempdir().expect("tempdir");
-        let _config = EnvVarGuard::set("CODEWHALE_CONFIG_PATH", dir.path().join("config.toml"));
+        let _config = EnvVarGuard::set("GHOSTY_CONFIG_PATH", dir.path().join("config.toml"));
         let _legacy_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-        let project_dir = dir.path().join(".codewhale");
+        let project_dir = dir.path().join(".ghosty");
         let legacy_trust_dir = dir.path().join(".deepseek");
-        std::fs::create_dir_all(&project_dir).expect("mkdir .codewhale");
+        std::fs::create_dir_all(&project_dir).expect("mkdir .ghosty");
         std::fs::create_dir_all(&legacy_trust_dir).expect("mkdir .deepseek");
         std::fs::write(legacy_trust_dir.join("trusted"), "").expect("write legacy trust marker");
         std::fs::write(
@@ -4481,8 +4481,8 @@ command = "echo project"
         let config_path = dir.path().join("user-config.toml");
         let _config = trust_workspace_for_project_hooks(dir.path(), &config_path);
         let _legacy_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-        let project_dir = dir.path().join(".codewhale");
-        std::fs::create_dir_all(&project_dir).expect("mkdir .codewhale");
+        let project_dir = dir.path().join(".ghosty");
+        std::fs::create_dir_all(&project_dir).expect("mkdir .ghosty");
         std::fs::write(project_dir.join("hooks.toml"), "this is [ not toml")
             .expect("write hooks.toml");
 
@@ -4698,7 +4698,7 @@ command = "echo project"
 
     #[test]
     fn session_id_is_stable_across_every_event_and_survives_a_rebind() {
-        // One TUI session, one `CODEWHALE_SESSION_ID`. The legacy
+        // One TUI session, one `GHOSTY_SESSION_ID`. The legacy
         // `DEEPSEEK_SESSION_ID` alias carries the same value so existing hook
         // records stay correlatable; assert both names over every event.
         let executor = HookExecutor::new(HooksConfig::default(), PathBuf::from("."));
@@ -4714,9 +4714,9 @@ command = "echo project"
                 .with_tool_name(event.as_str());
             let env = context.to_env_vars();
             assert_eq!(
-                env.get("CODEWHALE_SESSION_ID"),
+                env.get("GHOSTY_SESSION_ID"),
                 Some(&session_id),
-                "event `{}` reported a different Codewhale session id",
+                "event `{}` reported a different Ghosty session id",
                 event.as_str()
             );
             assert_eq!(
@@ -4788,7 +4788,7 @@ command = "echo project"
             .with_tool_call_id("call_abc123")
             .to_env_vars();
         assert_eq!(
-            env.get("CODEWHALE_TOOL_CALL_ID"),
+            env.get("GHOSTY_TOOL_CALL_ID"),
             Some(&"call_abc123".to_string())
         );
         assert_eq!(
@@ -4800,7 +4800,7 @@ command = "echo project"
         let without = HookContext::new()
             .with_tool_name("exec_shell")
             .to_env_vars();
-        assert!(!without.contains_key("CODEWHALE_TOOL_CALL_ID"));
+        assert!(!without.contains_key("GHOSTY_TOOL_CALL_ID"));
         assert!(!without.contains_key("DEEPSEEK_TOOL_CALL_ID"));
     }
 

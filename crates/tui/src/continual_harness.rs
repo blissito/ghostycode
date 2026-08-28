@@ -183,7 +183,7 @@ pub fn prompt_block(workspace: &Path) -> Option<String> {
 }
 
 fn state_path_for_read(workspace: &Path) -> Result<PathBuf> {
-    let (_, dir) = codewhale_config::resolve_project_state_dir(workspace, "harness")?;
+    let (_, dir) = ghosty_config::resolve_project_state_dir(workspace, "harness")?;
     Ok(dir.join("state.json"))
 }
 
@@ -233,7 +233,7 @@ fn state_path_for_write(workspace: &Path) -> Result<PathBuf> {
     if existing.is_file() {
         return Ok(existing);
     }
-    Ok(codewhale_config::ensure_project_state_dir(workspace, "harness")?.join("state.json"))
+    Ok(ghosty_config::ensure_project_state_dir(workspace, "harness")?.join("state.json"))
 }
 
 fn load_state(path: &Path) -> Result<HarnessState> {
@@ -257,7 +257,7 @@ fn load_state(path: &Path) -> Result<HarnessState> {
     }
     if state.schema_version > SCHEMA_VERSION {
         bail!(
-            "continual harness state {} uses newer schema {}; this Codewhale supports schema {}",
+            "continual harness state {} uses newer schema {}; this Ghosty supports schema {}",
             path.display(),
             state.schema_version,
             SCHEMA_VERSION

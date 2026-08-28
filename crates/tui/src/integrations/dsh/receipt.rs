@@ -1,6 +1,6 @@
 //! Durable, append-only receipts for the DSH integration.
 //!
-//! One JSON document at `$CODEWHALE_HOME/integrations/dsh/receipt.json`
+//! One JSON document at `$GHOSTY_HOME/integrations/dsh/receipt.json`
 //! holds the current connection record (or `null`) and an append-only history
 //! of every install/update/disable/enable/remove event. Receipts follow
 //! `docs/RECEIPTS.md`: read-only summaries that never carry credentials.
@@ -82,7 +82,7 @@ pub(crate) struct DshConnectionRecord {
 pub(crate) struct DshReceiptEntry {
     pub(crate) event: DshReceiptEvent,
     pub(crate) at: String,
-    pub(crate) codewhale_version: String,
+    pub(crate) ghosty_version: String,
     pub(crate) dsh_version: Option<String>,
     pub(crate) dsh_home: PathBuf,
     pub(crate) overlay_sha256: Option<String>,

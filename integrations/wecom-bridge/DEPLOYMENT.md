@@ -2,14 +2,14 @@
 
 ## Overview
 
-The WeCom Bridge integrates CodeWhale with WeCom (企业微信) Smart Bot
+The WeCom Bridge integrates GhostyCode with WeCom (企业微信) Smart Bot
 WebSocket long-connection mode, enabling remote terminal agent interaction
 without a public IP.
 
 ## Prerequisites
 
 1. **WeCom admin access** to create a Smart Bot (智能机器人)
-2. **CodeWhale runtime API** running at `http://127.0.0.1:7878`
+2. **GhostyCode runtime API** running at `http://127.0.0.1:7878`
 3. **Node.js 18+** for the bridge runtime
 
 ### Create a WeCom Smart Bot
@@ -24,8 +24,8 @@ without a public IP.
 Use two terminals. In the first terminal, start the local runtime API:
 
 ```bash
-export CODEWHALE_RUNTIME_TOKEN="$(openssl rand -hex 32)"
-codewhale serve --http --host 127.0.0.1 --port 7878 --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+export GHOSTY_RUNTIME_TOKEN="$(openssl rand -hex 32)"
+ghosty serve --http --host 127.0.0.1 --port 7878 --auth-token "$GHOSTY_RUNTIME_TOKEN"
 ```
 
 In the second terminal, start the bridge:
@@ -33,7 +33,7 @@ In the second terminal, start the bridge:
 ```bash
 cd integrations/wecom-bridge
 cp .env.example .env
-# Edit .env with your WeCom credentials and the same CODEWHALE_RUNTIME_TOKEN.
+# Edit .env with your WeCom credentials and the same GHOSTY_RUNTIME_TOKEN.
 npm install
 npm run start
 ```
@@ -53,20 +53,20 @@ cp .env.example .env
 |----------|---------|-------------|
 | `WECOM_BOT_ID` | `wb-xxxxxxxxxxxxxxxx` | Smart Bot BotID from WeCom Admin |
 | `WECOM_BOT_SECRET` | `your-secret` | Smart Bot Secret from WeCom Admin |
-| `CODEWHALE_RUNTIME_TOKEN` | `rand-xxxxxxxx` | Bearer token for Runtime API (generate a random string) |
+| `GHOSTY_RUNTIME_TOKEN` | `rand-xxxxxxxx` | Bearer token for Runtime API (generate a random string) |
 
 ### Optional variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CODEWHALE_RUNTIME_URL` | `http://127.0.0.1:7878` | Runtime API address |
-| `CODEWHALE_WORKSPACE` | `(cwd)` | Workspace directory |
-| `CODEWHALE_MODEL` | `auto` | Default model name |
+| `GHOSTY_RUNTIME_URL` | `http://127.0.0.1:7878` | Runtime API address |
+| `GHOSTY_WORKSPACE` | `(cwd)` | Workspace directory |
+| `GHOSTY_MODEL` | `auto` | Default model name |
 | `WECOM_CHAT_ALLOWLIST` | `""` | Comma-separated allowed UserIDs |
 | `WECOM_ALLOW_UNLISTED` | `false` | Enable first-pairing mode |
 | `WECOM_MAX_REPLY_CHARS` | `3500` | Max characters per reply message |
-| `CODEWHALE_TURN_TIMEOUT_MS` | `900000` | Turn timeout in ms (15 min) |
-| `CODEWHALE_APPROVAL_TIMEOUT_MS` | `300000` | Approval timeout in ms (5 min) |
+| `GHOSTY_TURN_TIMEOUT_MS` | `900000` | Turn timeout in ms (15 min) |
+| `GHOSTY_APPROVAL_TIMEOUT_MS` | `300000` | Approval timeout in ms (5 min) |
 
 ## First Pairing
 
@@ -92,7 +92,7 @@ Expected output: `ℹ tests 16  ℹ pass 16  ℹ fail 0`
 ## Architecture
 
 ```
-WeCom Client → Smart Bot WebSocket → WeCom Bridge ──HTTP──→ codewhale serve --http
+WeCom Client → Smart Bot WebSocket → WeCom Bridge ──HTTP──→ ghosty serve --http
                 ◀── aibot_respond_msg ◀──                   (127.0.0.1:7878)
 ```
 
@@ -104,8 +104,8 @@ The bridge:
 
 ## Security Boundaries
 
-- **No public port exposure**: `codewhale serve --http` binds to `127.0.0.1` only
-- **Token authentication**: all `/v1/*` runtime calls require `CODEWHALE_RUNTIME_TOKEN`
+- **No public port exposure**: `ghosty serve --http` binds to `127.0.0.1` only
+- **Token authentication**: all `/v1/*` runtime calls require `GHOSTY_RUNTIME_TOKEN`
 - **Chat allowlist**: only chats/users in `WECOM_CHAT_ALLOWLIST` are served
 - **Approval gate**: tool calls from WeCom require explicit approval (`/allow` or natural-language keywords)
 - **WeCom only sees**: prompts, status summaries, thread listings, and approval requests — workspace contents, shell output, and runtime internals stay on your local machine
@@ -115,7 +115,7 @@ The bridge:
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | "not paired" warning | `WECOM_CHAT_ALLOWLIST` is empty | Add your user_id or enable `WECOM_ALLOW_UNLISTED=true` |
-| 404 on `/allow` | Approval ID expired (5 min) | Respond faster, or increase `CODEWHALE_APPROVAL_TIMEOUT_MS` |
+| 404 on `/allow` | Approval ID expired (5 min) | Respond faster, or increase `GHOSTY_APPROVAL_TIMEOUT_MS` |
 | Bridge exits immediately | Missing env vars | Run `node src/index.mjs` directly to see validation errors |
 | Messages not received | Secret or BotID wrong | Verify credentials in WeCom Admin Console |
 | WebSocket disconnect | Network flakiness | Bridge auto-reconnects; check the bridge stdout/stderr logs for details |
@@ -129,7 +129,7 @@ Run the runtime API and bridge under the process manager you already use
 commands to supervise are:
 
 ```bash
-codewhale serve --http --host 127.0.0.1 --port 7878 --auth-token "$CODEWHALE_RUNTIME_TOKEN"
+ghosty serve --http --host 127.0.0.1 --port 7878 --auth-token "$GHOSTY_RUNTIME_TOKEN"
 npm run start --prefix integrations/wecom-bridge
 ```
 
@@ -148,5 +148,5 @@ the process after crashes or host reboots.
 ## Related Documentation
 
 - [WeCom Bridge README](README.md)
-- [CodeWhale Security Policy](../../SECURITY.md)
-- [CodeWhale Contributing Guide](../../CONTRIBUTING.md)
+- [GhostyCode Security Policy](../../SECURITY.md)
+- [GhostyCode Contributing Guide](../../CONTRIBUTING.md)

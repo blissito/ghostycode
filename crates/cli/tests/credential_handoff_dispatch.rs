@@ -7,7 +7,7 @@ use std::os::fd::FromRawFd;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use codewhale_secrets::{FileKeyringStore, KeyringStore};
+use ghosty_secrets::{FileKeyringStore, KeyringStore};
 use tempfile::TempDir;
 
 const SENTINEL: &str = "cw-handoff-child-sentinel-7b30";
@@ -18,13 +18,13 @@ const TERMINAL_ERROR: &str =
 fn terminal_refusal_precedes_config_reads_and_secret_migration() {
     let malformed = TempDir::new().expect("malformed fixture root");
     let malformed_home = malformed.path().join("home");
-    let malformed_codewhale_home = malformed.path().join("codewhale-home");
-    fs::create_dir_all(&malformed_codewhale_home).expect("create explicit Codewhale home");
-    let malformed_config = malformed_codewhale_home.join("config.toml");
+    let malformed_ghosty_home = malformed.path().join("ghosty-home");
+    fs::create_dir_all(&malformed_ghosty_home).expect("create explicit Ghosty home");
+    let malformed_config = malformed_ghosty_home.join("config.toml");
     let malformed_bytes = format!("provider = \"openrouter\"\ninvalid = [{SENTINEL}\n");
     fs::write(&malformed_config, &malformed_bytes).expect("write malformed config trap");
 
-    let mut command = isolated_command(&malformed_home, Some(&malformed_codewhale_home));
+    let mut command = isolated_command(&malformed_home, Some(&malformed_ghosty_home));
     command.args(["auth", "print-api-key", "--provider", "openrouter"]);
     let output = output_with_terminal_stdout(command);
     assert!(!output.status.success(), "terminal handoff must refuse");
@@ -34,13 +34,13 @@ fn terminal_refusal_precedes_config_reads_and_secret_migration() {
         malformed_bytes,
     );
     assert!(
-        !malformed_codewhale_home.join("secrets").exists(),
+        !malformed_ghosty_home.join("secrets").exists(),
         "terminal preflight must not construct durable credential state"
     );
 
     let migration = TempDir::new().expect("migration fixture root");
     let sealed_home = migration.path().join("home");
-    let primary_home = sealed_home.join(".codewhale");
+    let primary_home = sealed_home.join(".ghosty");
     fs::create_dir_all(&primary_home).expect("create primary home");
     fs::write(
         primary_home.join("config.toml"),
@@ -77,15 +77,15 @@ fn terminal_refusal_precedes_config_reads_and_secret_migration() {
 fn initialization_failures_are_source_free() {
     let fixture = TempDir::new().expect("fixture root");
     let sealed_home = fixture.path().join("home");
-    let codewhale_home = fixture.path().join(format!("codewhale-home-{SENTINEL}"));
-    fs::create_dir_all(&codewhale_home).expect("create Codewhale home");
+    let ghosty_home = fixture.path().join(format!("ghosty-home-{SENTINEL}"));
+    fs::create_dir_all(&ghosty_home).expect("create Ghosty home");
     fs::write(
-        codewhale_home.join("config.toml"),
+        ghosty_home.join("config.toml"),
         format!("invalid = [{SENTINEL}\n"),
     )
     .expect("write malformed config trap");
 
-    let mut command = isolated_command(&sealed_home, Some(&codewhale_home));
+    let mut command = isolated_command(&sealed_home, Some(&ghosty_home));
     let output = command
         .args([
             "--api-key",
@@ -114,8 +114,8 @@ fn initialization_failures_are_source_free() {
 fn installed_unix_dispatcher_settles_a_closed_pipe_cleanly() {
     let fixture = TempDir::new().expect("fixture root");
     let sealed_home = fixture.path().join("home");
-    let codewhale_home = fixture.path().join("codewhale-home");
-    let mut command = isolated_command(&sealed_home, Some(&codewhale_home));
+    let ghosty_home = fixture.path().join("ghosty-home");
+    let mut command = isolated_command(&sealed_home, Some(&ghosty_home));
     let output = command
         .args([
             "--api-key",
@@ -138,17 +138,17 @@ fn installed_unix_dispatcher_settles_a_closed_pipe_cleanly() {
     assert!(output.stderr.is_empty());
 }
 
-fn isolated_command(home: &Path, codewhale_home: Option<&Path>) -> Command {
-    let mut command = Command::new(codewhale_binary());
+fn isolated_command(home: &Path, ghosty_home: Option<&Path>) -> Command {
+    let mut command = Command::new(ghosty_binary());
     command
         .env_clear()
         .env("HOME", home)
         .env("USERPROFILE", home)
-        .env("CODEWHALE_SECRET_BACKEND", "file")
+        .env("GHOSTY_SECRET_BACKEND", "file")
         .stdin(Stdio::null())
         .stderr(Stdio::piped());
-    if let Some(codewhale_home) = codewhale_home {
-        command.env("CODEWHALE_HOME", codewhale_home);
+    if let Some(ghosty_home) = ghosty_home {
+        command.env("GHOSTY_HOME", ghosty_home);
     }
     command
 }
@@ -194,11 +194,11 @@ fn closed_pipe_writer() -> Stdio {
     Stdio::from(writer)
 }
 
-fn codewhale_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale") {
+fn ghosty_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty") {
         return PathBuf::from(path);
     }
 
@@ -207,6 +207,6 @@ fn codewhale_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty{}", std::env::consts::EXE_SUFFIX));
     path
 }

@@ -12,9 +12,9 @@ export type { PublishedReleaseFact, RepoFacts, ProviderFact };
 export const BUILD_FACTS: RepoFacts = {
   ...BUILD_TIME_FACTS,
   sourceRevision:
-    process.env.NEXT_PUBLIC_CODEWHALE_SOURCE_REVISION || BUILD_TIME_FACTS.sourceRevision,
+    process.env.NEXT_PUBLIC_GHOSTY_SOURCE_REVISION || BUILD_TIME_FACTS.sourceRevision,
   sourceCommittedAt:
-    process.env.NEXT_PUBLIC_CODEWHALE_SOURCE_COMMITTED_AT ||
+    process.env.NEXT_PUBLIC_GHOSTY_SOURCE_COMMITTED_AT ||
     BUILD_TIME_FACTS.sourceCommittedAt,
 };
 
@@ -52,7 +52,7 @@ function isPublishedRelease(value: unknown): value is PublishedReleaseFact {
     value.tag === `v${value.version}` &&
     typeof value.publishedAt === "string" &&
     Number.isFinite(Date.parse(value.publishedAt)) &&
-    value.url === `https://github.com/Hmbown/CodeWhale/releases/tag/${value.tag}`
+    value.url === `https://github.com/blissito/ghostycode/releases/tag/${value.tag}`
   );
 }
 

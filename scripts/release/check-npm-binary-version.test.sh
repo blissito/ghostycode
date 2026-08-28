@@ -11,7 +11,7 @@ if "${check}" 0.9.11 0.9.10 >/dev/null 2>&1; then
   exit 1
 fi
 
-CODEWHALE_ALLOW_NPM_BINARY_MISMATCH=1 \
+GHOSTY_ALLOW_NPM_BINARY_MISMATCH=1 \
   "${check}" 0.9.11 0.9.10 >/dev/null
 
 echo "npm binary-version mismatch gate tests passed"

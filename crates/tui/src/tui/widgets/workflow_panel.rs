@@ -1,6 +1,6 @@
 //! WorkflowPanel — unified activity surface for workflow / sub-agent progress.
 //!
-//! Issue #4121 (CODEWHALE_0_8_68 §2.4). Progress lives here instead of flooding
+//! Issue #4121 (GHOSTY_0_8_68 §2.4). Progress lives here instead of flooding
 //! the chat transcript: a collapsible header above the composer plus an
 //! expanded phase/row body. Events are applied through [`WorkflowPanelEvent`].
 //!

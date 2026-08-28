@@ -255,7 +255,7 @@ pub const PROJECT_INSTRUCTION_CANDIDATES: &[&str] = &[
     ".agents/AGENTS.md",
     "CLAUDE.md",
     ".claude/instructions.md",
-    ".codewhale/instructions.md",
+    ".ghosty/instructions.md",
     ".deepseek/instructions.md",
     ".cursorrules",
     ".cursor/rules",
@@ -266,7 +266,7 @@ pub const PROJECT_INSTRUCTION_CANDIDATES: &[&str] = &[
     ".github/muse-instructions.md",
 ];
 
-/// Workspace instruction formats not already owned by Codewhale's canonical
+/// Workspace instruction formats not already owned by Ghosty's canonical
 /// project-context loader. The TUI uses this subset to avoid injecting
 /// `AGENTS.md` / `CLAUDE.md` / `instructions.md` twice while still importing
 /// additional agent rule formats through the typed fragment boundary.

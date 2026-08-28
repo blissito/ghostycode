@@ -1,7 +1,7 @@
 //! Filesystem path resolution helpers for config/cache/workspace locations.
 //!
 //! Pure path-building helpers extracted verbatim from `config.rs`. They depend
-//! only on `std`, `codewhale-paths`, and `shellexpand` plus one another, so they
+//! only on `std`, `ghosty-paths`, and `shellexpand` plus one another, so they
 //! form a clean leaf. `config.rs` pulls them back in (`use paths::{...}`) for the
 //! workspace-trust and config-loading logic that stays there, and re-exports
 //! the two `pub(crate)` entry points (`effective_home_dir`, `expand_path`) so
@@ -27,7 +27,7 @@ pub(crate) fn try_default_config_path() -> anyhow::Result<PathBuf> {
     {
         with_test_state_path(try_default_config_path_from_environment, || {
             Ok(crate::test_support::unsealed_test_state_root()
-                .join(codewhale_config::CONFIG_FILE_NAME))
+                .join(ghosty_config::CONFIG_FILE_NAME))
         })
     }
 
@@ -36,12 +36,12 @@ pub(crate) fn try_default_config_path() -> anyhow::Result<PathBuf> {
 }
 
 fn try_default_config_path_from_environment() -> anyhow::Result<PathBuf> {
-    codewhale_config::resolve_config_path(None)
+    ghosty_config::resolve_config_path(None)
 }
 
 /// Holding [`lock_test_env`] is not enough to read the process environment:
 /// many tests take that lock only to serialize unrelated variables, and
-/// trusting it routed them at a populated `~/.codewhale/config.toml` (#5355,
+/// trusting it routed them at a populated `~/.ghosty/config.toml` (#5355,
 /// #5359). Settings already requires a sealed `EnvVarGuard`; config paths
 /// must use the same gate.
 #[cfg(test)]
@@ -59,12 +59,12 @@ fn with_test_state_path<T>(
     })
 }
 
-pub(crate) fn codewhale_home_dir() -> Result<Option<PathBuf>, codewhale_paths::PathOverrideError> {
-    codewhale_paths::codewhale_home_override()
+pub(crate) fn ghosty_home_dir() -> Result<Option<PathBuf>, ghosty_paths::PathOverrideError> {
+    ghosty_paths::ghosty_home_override()
 }
 
-/// The user-global config document: `$CODEWHALE_HOME/config.toml` when an
-/// explicit home is set, otherwise `~/.codewhale/config.toml` (falling back to
+/// The user-global config document: `$GHOSTY_HOME/config.toml` when an
+/// explicit home is set, otherwise `~/.ghosty/config.toml` (falling back to
 /// the legacy `~/.deepseek/config.toml` only when that file already exists).
 ///
 /// Credential writes are rerouted here when the ambient config path resolves
@@ -76,7 +76,7 @@ pub(crate) fn home_config_path() -> Option<PathBuf> {
         with_test_state_path(home_config_path_from_environment, || {
             Some(
                 crate::test_support::unsealed_test_state_root()
-                    .join(codewhale_config::CONFIG_FILE_NAME),
+                    .join(ghosty_config::CONFIG_FILE_NAME),
             )
         })
     }
@@ -86,20 +86,20 @@ pub(crate) fn home_config_path() -> Option<PathBuf> {
 }
 
 fn home_config_path_from_environment() -> Option<PathBuf> {
-    match codewhale_home_dir() {
-        Ok(Some(home)) => return Some(home.join(codewhale_config::CONFIG_FILE_NAME)),
+    match ghosty_home_dir() {
+        Ok(Some(home)) => return Some(home.join(ghosty_config::CONFIG_FILE_NAME)),
         Ok(None) => {}
         Err(error) => {
             tracing::error!(
                 error = %error,
-                "invalid Codewhale home override; refusing to substitute a different config path"
+                "invalid Ghosty home override; refusing to substitute a different config path"
             );
             return None;
         }
     }
 
     effective_home_dir().map(|home| {
-        let primary = home.join(".codewhale").join("config.toml");
+        let primary = home.join(".ghosty").join("config.toml");
         if primary.exists() {
             return primary;
         }
@@ -121,7 +121,7 @@ pub(crate) fn canonicalize_or_keep(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
-pub(crate) fn env_config_path() -> Result<Option<PathBuf>, codewhale_paths::PathOverrideError> {
+pub(crate) fn env_config_path() -> Result<Option<PathBuf>, ghosty_paths::PathOverrideError> {
     #[cfg(test)]
     {
         with_test_state_path(env_config_path_unlocked, || Ok(None))
@@ -132,8 +132,8 @@ pub(crate) fn env_config_path() -> Result<Option<PathBuf>, codewhale_paths::Path
     }
 }
 
-fn env_config_path_unlocked() -> Result<Option<PathBuf>, codewhale_paths::PathOverrideError> {
-    codewhale_paths::config_path_override()
+fn env_config_path_unlocked() -> Result<Option<PathBuf>, ghosty_paths::PathOverrideError> {
+    ghosty_paths::config_path_override()
 }
 
 pub(crate) fn expand_pathbuf(path: PathBuf) -> PathBuf {
@@ -151,7 +151,7 @@ pub(crate) fn default_managed_config_path() -> Option<PathBuf> {
     #[cfg(not(unix))]
     {
         effective_home_dir().map(|home| {
-            let primary = home.join(".codewhale").join("managed_config.toml");
+            let primary = home.join(".ghosty").join("managed_config.toml");
             if primary.exists() {
                 return primary;
             }
@@ -168,7 +168,7 @@ pub(crate) fn default_requirements_path() -> Option<PathBuf> {
     #[cfg(not(unix))]
     {
         effective_home_dir().map(|home| {
-            let primary = home.join(".codewhale").join("requirements.toml");
+            let primary = home.join(".ghosty").join("requirements.toml");
             if primary.exists() {
                 return primary;
             }
@@ -223,19 +223,19 @@ fn default_user_state_path(name: &str) -> Option<PathBuf> {
 }
 
 fn default_user_state_path_from_environment(name: &str) -> Option<PathBuf> {
-    match codewhale_home_dir() {
+    match ghosty_home_dir() {
         Ok(Some(home)) => return Some(home.join(name)),
         Ok(None) => {}
         Err(error) => {
             tracing::error!(
                 error = %error,
-                "invalid Codewhale home override; refusing to substitute a different state root"
+                "invalid Ghosty home override; refusing to substitute a different state root"
             );
             return None;
         }
     }
     effective_home_dir().map(|home| {
-        let primary = home.join(".codewhale").join(name);
+        let primary = home.join(".ghosty").join(name);
         if primary.exists() {
             return primary;
         }

@@ -1399,7 +1399,7 @@ mod tests {
 
     #[test]
     fn fleet_identity_prefers_the_nickname_and_falls_back_to_the_role() {
-        // Nicknames are CodeWhale identity, so they lead. An agent that has
+        // Nicknames are GhostyCode identity, so they lead. An agent that has
         // none falls back to its fleet role rather than showing a blank or a
         // fabricated name.
         let mut app = app();

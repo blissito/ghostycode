@@ -19,15 +19,15 @@ use tokio::sync::{
     Semaphore,
 };
 
-use codewhale_config::catalog::{
+use ghosty_config::catalog::{
     CatalogOffering, CatalogRefreshError, CatalogSnapshot, CatalogSource, CatalogStatus,
     ProviderCatalogCache, ProviderCatalogDelta, base_url_fingerprint, now_unix,
 };
-use codewhale_config::provider::WireFormat;
-use codewhale_config::route::{
+use ghosty_config::provider::WireFormat;
+use ghosty_config::route::{
     LogicalModelRef, ReadyRouteCandidate, RouteLimits, RouteRequest, RouteResolver,
 };
-use codewhale_config::{auth_mode_disables_api_key, is_upstream_auth_header};
+use ghosty_config::{auth_mode_disables_api_key, is_upstream_auth_header};
 
 use crate::config::{
     ApiProvider, Config, RetryPolicy, validate_route, wire_model_for_provider_route,
@@ -310,25 +310,25 @@ const RECOVERY_PROBE_COOLDOWN: Duration = Duration::from_secs(15);
 
 const DEFAULT_CLIENT_RATE_LIMIT_RPS: f64 = 8.0;
 const DEFAULT_CLIENT_RATE_LIMIT_BURST: f64 = 16.0;
-const ALLOW_INSECURE_HTTP_ENV: &str = "CODEWHALE_ALLOW_INSECURE_HTTP";
+const ALLOW_INSECURE_HTTP_ENV: &str = "GHOSTY_ALLOW_INSECURE_HTTP";
 /// Legacy alias for [`ALLOW_INSECURE_HTTP_ENV`].
 const LEGACY_ALLOW_INSECURE_HTTP_ENV: &str = "DEEPSEEK_ALLOW_INSECURE_HTTP";
 
 fn client_user_agent(api_provider: ApiProvider) -> &'static str {
     // The ChatGPT Codex backend is the sole route with a documented
     // compatibility exception. Kimi Code, including K3, must keep the normal
-    // Codewhale identity rather than impersonating a Kimi CLI.
+    // Ghosty identity rather than impersonating a Kimi CLI.
     if api_provider == ApiProvider::OpenaiCodex {
         concat!(
-            "codex_cli_rs/0.137.0 (CodeWhale ",
+            "codex_cli_rs/0.137.0 (GhostyCode ",
             env!("CARGO_PKG_VERSION"),
             ")"
         )
     } else {
         concat!(
-            "Mozilla/5.0 (compatible; codewhale/",
+            "Mozilla/5.0 (compatible; ghosty/",
             env!("CARGO_PKG_VERSION"),
-            "; +https://github.com/Hmbown/CodeWhale)"
+            "; +https://github.com/blissito/ghostycode)"
         )
     }
 }
@@ -427,13 +427,13 @@ impl Drop for ProviderRequestPermit {
 
 impl TokenBucket {
     fn from_env() -> Self {
-        let rps = std::env::var("CODEWHALE_RATE_LIMIT_RPS")
+        let rps = std::env::var("GHOSTY_RATE_LIMIT_RPS")
             .or_else(|_| std::env::var("DEEPSEEK_RATE_LIMIT_RPS"))
             .ok()
             .and_then(|v| v.parse::<f64>().ok())
             .unwrap_or(DEFAULT_CLIENT_RATE_LIMIT_RPS)
             .max(0.0);
-        let burst = std::env::var("CODEWHALE_RATE_LIMIT_BURST")
+        let burst = std::env::var("GHOSTY_RATE_LIMIT_BURST")
             .or_else(|_| std::env::var("DEEPSEEK_RATE_LIMIT_BURST"))
             .ok()
             .and_then(|v| v.parse::<f64>().ok())
@@ -598,11 +598,11 @@ fn model_bound_secret_store_slot(provider: ApiProvider) -> Option<&'static str> 
 
 fn push_file_backed_model_bound_secrets(values: &mut Vec<String>) {
     // Unit tests must never inspect the developer's real credential store.
-    // The isolated regression below opts in with a temporary CODEWHALE_HOME,
+    // The isolated regression below opts in with a temporary GHOSTY_HOME,
     // matching Config's existing secret-store test discipline.
     #[cfg(test)]
-    if !codewhale_paths::codewhale_home_is_explicit()
-        || std::env::var_os("CODEWHALE_SECRET_BACKEND").is_none()
+    if !ghosty_paths::ghosty_home_is_explicit()
+        || std::env::var_os("GHOSTY_SECRET_BACKEND").is_none()
     {
         return;
     }
@@ -613,7 +613,7 @@ fn push_file_backed_model_bound_secrets(values: &mut Vec<String>) {
     // this file-only to avoid a burst of OS-keychain prompts for inactive
     // providers; the active credential is already supplied by the route
     // resolver.
-    let secrets = codewhale_secrets::Secrets::file_backed_read_only();
+    let secrets = ghosty_secrets::Secrets::file_backed_read_only();
     let mut slots = Vec::new();
     for provider in ApiProvider::all()
         .iter()
@@ -722,12 +722,12 @@ fn configured_model_bound_secret_values(config: &Config, active_api_key: &str) -
 fn redact_model_bound_text(text: &str, exact_secret_values: &[String]) -> String {
     let mut redacted = text.to_string();
     for secret in exact_secret_values {
-        redacted = redacted.replace(secret, codewhale_config::persistence::REDACTED);
+        redacted = redacted.replace(secret, ghosty_config::persistence::REDACTED);
     }
     // Tool results feed exact-match edits, so only credential-shaped values
     // are masked here; key-only hits (`password: credentials?.password`) stay
     // byte-exact. Logs and previews keep the broad key-based scrubber.
-    codewhale_config::persistence::redact_model_bound_secrets(&redacted)
+    ghosty_config::persistence::redact_model_bound_secrets(&redacted)
 }
 
 // === Helpers ===
@@ -787,9 +787,9 @@ fn validate_base_url_security(base_url: &str) -> Result<()> {
              \n\
              Loopback hosts (localhost, 127.0.0.1, [::1]) are auto-allowed.\n\
              For other trusted local hosts (LAN, llama.cpp on a private IP, etc.)\n\
-             set the env var `{ALLOW_INSECURE_HTTP_ENV}=1` in the shell that runs codewhale and re-run.\n\
+             set the env var `{ALLOW_INSECURE_HTTP_ENV}=1` in the shell that runs ghosty and re-run.\n\
              \n\
-             Example: `{ALLOW_INSECURE_HTTP_ENV}=1 codewhale` (note the underscores).",
+             Example: `{ALLOW_INSECURE_HTTP_ENV}=1 ghosty` (note the underscores).",
         );
     }
 
@@ -890,16 +890,18 @@ pub(crate) fn api_url(base_url: &str, path: &str) -> String {
 
 fn responses_api_url(base_url: &str, provider: ApiProvider) -> String {
     let normalized = base_url.trim_end_matches('/').to_ascii_lowercase();
-    let official_deepseek = matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN)
-        && matches!(
-            normalized.as_str(),
-            "https://api.deepseek.com"
-                | "https://api.deepseek.com/v1"
-                | "https://api.deepseek.com/beta"
-                | "https://api.deepseeki.com"
-                | "https://api.deepseeki.com/v1"
-                | "https://api.deepseeki.com/beta"
-        );
+    let official_deepseek = matches!(
+        provider,
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits
+    ) && matches!(
+        normalized.as_str(),
+        "https://api.deepseek.com"
+            | "https://api.deepseek.com/v1"
+            | "https://api.deepseek.com/beta"
+            | "https://api.deepseeki.com"
+            | "https://api.deepseeki.com/v1"
+            | "https://api.deepseeki.com/beta"
+    );
     if official_deepseek {
         format!("{}/responses", unversioned_base_url(base_url))
     } else {
@@ -947,8 +949,10 @@ fn chat_completions_url(
     path_suffix: Option<&str>,
     body: &Value,
 ) -> String {
-    let uses_deepseek_beta = matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN)
-        && is_official_deepseek_beta_base_url(route_base_url)
+    let uses_deepseek_beta = matches!(
+        provider,
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits
+    ) && is_official_deepseek_beta_base_url(route_base_url)
         && body_uses_strict_tools(body)
         && path_suffix.is_none();
     let path = if uses_deepseek_beta {
@@ -1046,13 +1050,13 @@ fn build_speech_synthesis_body(
 
 // === DeepSeekClient ===
 
-/// Returns true when CODEWHALE_FORCE_HTTP1 (legacy alias: DEEPSEEK_FORCE_HTTP1)
+/// Returns true when GHOSTY_FORCE_HTTP1 (legacy alias: DEEPSEEK_FORCE_HTTP1)
 /// is set to a truthy value (`1`, `true`, `yes`, `on`, case-insensitive). Used
 /// by `build_http_client` to opt out of HTTP/2 entirely when a provider's edge
 /// mishandles long-lived H2 streams (#103). Anything else (unset, `0`,
 /// `false`, ...) leaves HTTP/2 on.
 pub(crate) fn force_http1_from_env() -> bool {
-    std::env::var("CODEWHALE_FORCE_HTTP1")
+    std::env::var("GHOSTY_FORCE_HTTP1")
         .or_else(|_| std::env::var("DEEPSEEK_FORCE_HTTP1"))
         .ok()
         .map(|v| v.trim().to_ascii_lowercase())
@@ -1129,7 +1133,7 @@ impl DeepSeekClient {
     pub fn new(config: &Config) -> Result<Self> {
         let api_provider = config.api_provider();
         let model_aware = api_provider.metadata().is_some_and(|provider| {
-            provider.wire_policy() == codewhale_config::provider::WirePolicy::ModelAware
+            provider.wire_policy() == ghosty_config::provider::WirePolicy::ModelAware
         });
         if model_aware {
             let route = crate::route_runtime::resolve_runtime_route(config, api_provider, None)
@@ -1263,7 +1267,7 @@ impl DeepSeekClient {
             false,
         )?;
         // Always keep an HTTP/1.1 twin for automatic stream-header fallback
-        // when H2 stalls. When CODEWHALE_FORCE_HTTP1 is set, both clients are
+        // when H2 stalls. When GHOSTY_FORCE_HTTP1 is set, both clients are
         // HTTP/1.1 and the fallback is a no-op retry path.
         let http1_client = Self::build_http_client_with_auth_mode(
             &api_key,
@@ -1437,7 +1441,7 @@ impl DeepSeekClient {
         mut request: MessageRequest,
     ) -> Result<(MessageRequest, Option<RouteLimits>)> {
         let model_aware = self.api_provider.metadata().is_some_and(|provider| {
-            provider.wire_policy() == codewhale_config::provider::WirePolicy::ModelAware
+            provider.wire_policy() == ghosty_config::provider::WirePolicy::ModelAware
         });
         if !model_aware && request.model.trim() == self.default_model {
             return Ok((request, self.route_limits));
@@ -1523,7 +1527,7 @@ impl DeepSeekClient {
         let pin_http1 = force_http1 || force_http1_from_env();
         if pin_http1 {
             if force_http1_from_env() && !force_http1 {
-                logging::info("CODEWHALE_FORCE_HTTP1=1 — pinning HTTP client to HTTP/1.1");
+                logging::info("GHOSTY_FORCE_HTTP1=1 — pinning HTTP client to HTTP/1.1");
             }
             builder = builder.http1_only();
         }
@@ -1646,11 +1650,11 @@ fn build_default_headers(
     if api_provider == ApiProvider::Openrouter {
         headers.insert(
             HeaderName::from_static("http-referer"),
-            HeaderValue::from_static("https://codewhale.net"),
+            HeaderValue::from_static("https://ghosty.net"),
         );
         headers.insert(
             HeaderName::from_static("x-title"),
-            HeaderValue::from_static("Codewhale"),
+            HeaderValue::from_static("Ghosty"),
         );
     }
     for (name, value) in extra_headers {
@@ -1725,7 +1729,7 @@ fn provider_wire_format_for_config(
     api_provider
         .kind()
         .and_then(|kind| {
-            codewhale_config::provider::provider_for_kind(kind)
+            ghosty_config::provider::provider_for_kind(kind)
                 .wire_policy()
                 .fixed()
         })
@@ -1792,9 +1796,9 @@ pub async fn verify_provider_api_key(
     let client = crate::tls::reqwest_client_builder()
         .default_headers(headers)
         .user_agent(concat!(
-            "Mozilla/5.0 (compatible; codewhale/",
+            "Mozilla/5.0 (compatible; ghosty/",
             env!("CARGO_PKG_VERSION"),
-            "; +https://github.com/Hmbown/CodeWhale)"
+            "; +https://github.com/blissito/ghostycode)"
         ))
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(15))
@@ -2468,7 +2472,7 @@ impl DeepSeekClient {
         } else if provider == "telecomjs" {
             named_gateway_catalog_offerings_from_body(
                 &body,
-                codewhale_config::ProviderKind::Telecomjs,
+                ghosty_config::ProviderKind::Telecomjs,
                 &provider,
                 &fingerprint,
                 fetched_at,
@@ -2476,7 +2480,7 @@ impl DeepSeekClient {
         } else if provider == "edenai" {
             named_gateway_catalog_offerings_from_body(
                 &body,
-                codewhale_config::ProviderKind::Edenai,
+                ghosty_config::ProviderKind::Edenai,
                 &provider,
                 &fingerprint,
                 fetched_at,
@@ -2930,11 +2934,11 @@ impl DeepSeekClient {
 /// `ProviderKind::Custom` yields the literal `"custom"` and nothing else, and
 /// no model id is sent for any provider.
 pub(crate) fn record_provider_response(provider: crate::config::ApiProvider, status: u16) {
-    let counters = codewhale_telemetry::session_counters();
+    let counters = ghosty_telemetry::session_counters();
     if let Some(kind) = provider.kind() {
         counters.record_provider(kind);
     }
-    if let Some(counter) = codewhale_telemetry::counters::http_status_counter(status) {
+    if let Some(counter) = ghosty_telemetry::counters::http_status_counter(status) {
         counters.bump_error(counter);
     }
 }
@@ -2948,8 +2952,8 @@ fn retry_reason_label_and_human(err: &LlmError) -> (&'static str, String) {
     // provider HTTP body verbatim, and a 400 from a content filter routinely
     // echoes the prompt.
     if matches!(err, LlmError::NetworkError(_) | LlmError::Timeout(_)) {
-        codewhale_telemetry::session_counters()
-            .bump_error(codewhale_telemetry::ErrorCounter::NetworkError);
+        ghosty_telemetry::session_counters()
+            .bump_error(ghosty_telemetry::ErrorCounter::NetworkError);
     }
     match err {
         LlmError::RateLimited { retry_after, .. } => {
@@ -3230,7 +3234,7 @@ pub(super) fn parse_models_response(payload: &str) -> Result<Vec<AvailableModel>
 /// Apply provider-owned protocol cutlines to a live `/models` response.
 ///
 /// OpenCode Go mixes OpenAI Chat Completions and Anthropic Messages models in
-/// one roster. Codewhale's `OpencodeGo` route is intentionally Chat-only, so
+/// one roster. Ghosty's `OpencodeGo` route is intentionally Chat-only, so
 /// both `/models` consumers must share this filter before publishing choices.
 fn apply_provider_model_cutline(
     provider: ApiProvider,
@@ -3259,7 +3263,7 @@ fn apply_provider_model_cutline(
 /// live offering.
 fn named_gateway_catalog_offerings_from_body(
     body: &str,
-    kind: codewhale_config::ProviderKind,
+    kind: ghosty_config::ProviderKind,
     provider: &str,
     fingerprint: &str,
     fetched_at: u64,
@@ -3269,7 +3273,7 @@ fn named_gateway_catalog_offerings_from_body(
         return Err(CatalogRefreshError::EmptyList);
     }
 
-    let bundled = codewhale_config::catalog::bundled_catalog_offerings();
+    let bundled = ghosty_config::catalog::bundled_catalog_offerings();
     let default_model_id = kind.provider().default_model();
     Ok(models
         .into_iter()
@@ -3364,7 +3368,7 @@ fn openrouter_to_catalog_offering(
     base_url_fingerprint: &str,
     fetched_at: u64,
 ) -> CatalogOffering {
-    use codewhale_config::models_dev::{ModelsDevCost, ModelsDevLimit, ModelsDevModalities};
+    use ghosty_config::models_dev::{ModelsDevCost, ModelsDevLimit, ModelsDevModalities};
 
     let context_length = item
         .top_provider
@@ -3514,14 +3518,17 @@ pub(super) fn apply_reasoning_effort(
     // annotated table (`client::deepseek_effort`), shared with the Responses
     // wire, so a documented mapping change is a single edit. Every other
     // provider keeps its own dialect below.
-    if matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN) {
+    if matches!(
+        provider,
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits
+    ) {
         apply_deepseek_chat_reasoning_effort(body, &normalized);
         return;
     }
     match normalized.as_str() {
         "off" | "disabled" | "none" | "false" => match provider {
             // Handled by the shared DeepSeek table above, before this match.
-            ApiProvider::Deepseek | ApiProvider::DeepseekCN => {}
+            ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits => {}
             ApiProvider::Openrouter
             | ApiProvider::Orcarouter
             | ApiProvider::XiaomiMimo
@@ -3541,7 +3548,7 @@ pub(super) fn apply_reasoning_effort(
             // or `thinking` as supported parameters. The `thinking` field is
             // only available on the Anthropic Messages API (POST /v1/messages)
             // with a different shape ({"type":"enabled","budget_tokens":N}).
-            // Since CodeWhale routes TelecomJS through the Chat Completions
+            // Since GhostyCode routes TelecomJS through the Chat Completions
             // path, we must NOT inject these fields — the gateway may silently
             // ignore them or reject the request, and not every gateway model
             // (qwen-max, deepseek-chat, gpt-4o, claude, etc.) accepts the same
@@ -3625,7 +3632,7 @@ pub(super) fn apply_reasoning_effort(
         },
         "low" | "minimal" | "medium" | "mid" | "high" | "" => match provider {
             // Handled by the shared DeepSeek table above, before this match.
-            ApiProvider::Deepseek | ApiProvider::DeepseekCN => {}
+            ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits => {}
             // DeepSeek-compatible hosted routes: low/medium both map to high.
             // Their own wire contracts are not verified here, so the historic
             // collapse stays rather than inventing unsupported wire values.
@@ -3745,7 +3752,7 @@ pub(super) fn apply_reasoning_effort(
         },
         "xhigh" | "max" | "highest" | "ultra" | "ultracode" => match provider {
             // Handled by the shared DeepSeek table above, before this match.
-            ApiProvider::Deepseek | ApiProvider::DeepseekCN => {}
+            ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits => {}
             ApiProvider::Siliconflow
             | ApiProvider::SiliconflowCn
             | ApiProvider::Sglang
@@ -4162,7 +4169,7 @@ mod tests {
     use crate::tools::apply_patch::ApplyPatchTool;
     use crate::tools::spec::ToolSpec;
     use crate::tools::{ToolContext, ToolRegistryBuilder};
-    use codewhale_protocol::runtime::DynamicToolSpec;
+    use ghosty_protocol::runtime::DynamicToolSpec;
     use serde_json::json;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -4183,11 +4190,11 @@ mod tests {
         .expect("headers");
         assert_eq!(
             headers.get("http-referer").and_then(|v| v.to_str().ok()),
-            Some("https://codewhale.net")
+            Some("https://ghosty.net")
         );
         assert_eq!(
             headers.get("x-title").and_then(|v| v.to_str().ok()),
-            Some("Codewhale")
+            Some("Ghosty")
         );
 
         // Attribution identifies this app to OpenRouter's rankings and has
@@ -4254,9 +4261,9 @@ mod tests {
 
         // A cache-write premium must actually reach the estimator: the same
         // tokens cost more when they are cache-creation rather than cache-read.
-        let pricing = codewhale_config::pricing::OfferingPricing::from_catalog_offering(&priced)
+        let pricing = ghosty_config::pricing::OfferingPricing::from_catalog_offering(&priced)
             .expect("priced offering");
-        let write = codewhale_config::pricing::TokenUsage {
+        let write = ghosty_config::pricing::TokenUsage {
             cache_write: 1_000_000,
             ..Default::default()
         };
@@ -4270,13 +4277,12 @@ mod tests {
             unwritten.cost.as_ref().and_then(|cost| cost.cache_write),
             None
         );
-        let unwritten =
-            codewhale_config::pricing::OfferingPricing::from_catalog_offering(&unwritten)
-                .expect("priced offering");
+        let unwritten = ghosty_config::pricing::OfferingPricing::from_catalog_offering(&unwritten)
+            .expect("priced offering");
         assert_eq!(unwritten.estimate_cost(&write), None);
         assert_eq!(
             unwritten.unpriced_used_classes(&write),
-            vec![codewhale_config::pricing::TokenClass::CacheWrite]
+            vec![ghosty_config::pricing::TokenClass::CacheWrite]
         );
     }
 
@@ -4334,7 +4340,7 @@ mod tests {
                 defer_loading: true,
             }])
             .build(ToolContext::new(
-                std::env::temp_dir().join("codewhale-k3-deferred-capture"),
+                std::env::temp_dir().join("ghosty-k3-deferred-capture"),
             ));
         registry
             .to_api_tools()
@@ -4767,8 +4773,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let request = codewhale_core::request::prepare_primary_turn_request(
-            codewhale_core::request::PrimaryTurnRequest {
+        let request = ghosty_core::request::prepare_primary_turn_request(
+            ghosty_core::request::PrimaryTurnRequest {
                 model: "deepseek-v4-pro".to_string(),
                 messages: vec![Message {
                     role: Role::User,
@@ -5326,7 +5332,7 @@ mod tests {
             // The default model, qwen3.8-max, is thinking-only: the bundled
             // catalog records it as `thinking: always_on`, and
             // qwen3.8-max-preview has effort/budget options with no toggle.
-            // Neither accepts an enable/disable switch, so CodeWhale must not
+            // Neither accepts an enable/disable switch, so GhostyCode must not
             // send one — not even `false` for an explicit `off`. This assertion
             // used to pin the opposite; PR #5233 caught it.
             for effort in [None, Some("off"), Some("high"), Some("max")] {
@@ -6489,9 +6495,9 @@ mod tests {
                 openai_codex: ProviderConfig {
                     auth_mode: Some("oauth".to_string()),
                     external_credentials: Some(
-                        codewhale_config::ExternalCredentialConsentToml::read_only(
-                            codewhale_config::ProviderKind::OpenaiCodex,
-                            codewhale_config::ExternalCredentialSource::CodexCli,
+                        ghosty_config::ExternalCredentialConsentToml::read_only(
+                            ghosty_config::ProviderKind::OpenaiCodex,
+                            ghosty_config::ExternalCredentialSource::CodexCli,
                             path.clone(),
                         ),
                     ),
@@ -6678,7 +6684,7 @@ mod tests {
         assert!(!content.contains("abcdef1234567890abcdef"));
         assert_eq!(
             content
-                .matches(codewhale_config::persistence::REDACTED)
+                .matches(ghosty_config::persistence::REDACTED)
                 .count(),
             2
         );
@@ -6701,7 +6707,7 @@ mod tests {
         for secret in CONFIG_SECRET_SENTINELS {
             assert!(!content.contains(secret), "secret survived redaction");
         }
-        assert!(content.contains(codewhale_config::persistence::REDACTED));
+        assert!(content.contains(ghosty_config::persistence::REDACTED));
         assert!(content.contains("ordinary_setting"));
         assert!(content.contains("keep-me"));
     }
@@ -6715,13 +6721,12 @@ mod tests {
 
         let _env_lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let codewhale_home = tmp.path().join("codewhale-home");
+        let ghosty_home = tmp.path().join("ghosty-home");
         let home = tmp.path().join("home");
         std::fs::create_dir_all(&home).expect("create isolated home");
-        let _codewhale_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
         let _secret_backend =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+            crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &home);
         let builtin_env_name = ApiProvider::Arcee
@@ -6733,7 +6738,7 @@ mod tests {
             crate::test_support::EnvVarGuard::set(builtin_env_name, BUILTIN_ENV_SECRET);
         let _custom_env = crate::test_support::EnvVarGuard::set(CUSTOM_ENV_NAME, CUSTOM_ENV_SECRET);
 
-        codewhale_secrets::Secrets::file_backed()
+        ghosty_secrets::Secrets::file_backed()
             .set("arcee", FILE_STORED_INACTIVE)
             .expect("write isolated inactive provider credential");
 
@@ -6769,25 +6774,25 @@ mod tests {
                 "inactive secret survived: {secret}"
             );
         }
-        assert!(content.contains(codewhale_config::persistence::REDACTED));
+        assert!(content.contains(ghosty_config::persistence::REDACTED));
         assert!(content.contains("ordinary output survives"));
     }
 
     #[test]
-    fn whitespace_codewhale_home_does_not_load_ambient_redaction_secrets() {
+    fn whitespace_ghosty_home_does_not_load_ambient_redaction_secrets() {
         let _env_lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
         let ambient_home = tmp.path().join("ambient-home");
         std::fs::create_dir_all(&ambient_home).expect("create ambient home");
         let _home = crate::test_support::EnvVarGuard::set("HOME", &ambient_home);
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &ambient_home);
-        let _codewhale_home_unset = crate::test_support::EnvVarGuard::remove("CODEWHALE_HOME");
+        let _ghosty_home_unset = crate::test_support::EnvVarGuard::remove("GHOSTY_HOME");
         let _secret_backend =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
-        codewhale_secrets::Secrets::file_backed()
+            crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
+        ghosty_secrets::Secrets::file_backed()
             .set("arcee", "ambient-redaction-secret-sentinel")
             .expect("seed ambient file secret store");
-        let _whitespace_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", " \t ");
+        let _whitespace_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", " \t ");
         let mut values = Vec::new();
 
         push_file_backed_model_bound_secrets(&mut values);
@@ -6820,7 +6825,7 @@ mod tests {
         let serialized = serde_json::to_string(&wire).expect("serialize chat wire messages");
 
         assert!(!serialized.contains(CONFIG_SECRET_SENTINELS[6]));
-        assert!(serialized.contains(codewhale_config::persistence::REDACTED));
+        assert!(serialized.contains(ghosty_config::persistence::REDACTED));
     }
 
     #[test]
@@ -6846,7 +6851,7 @@ mod tests {
                 "{route} body retained the configured credential"
             );
             assert!(
-                body.contains(codewhale_config::persistence::REDACTED),
+                body.contains(ghosty_config::persistence::REDACTED),
                 "{route} body lost the redaction marker"
             );
         }
@@ -6861,7 +6866,7 @@ mod tests {
             .lock()
             .unwrap_or_else(|err| err.into_inner());
         let tmp = tempfile::tempdir().expect("tempdir");
-        let spillover_root = tmp.path().join(".codewhale").join("tool_outputs");
+        let spillover_root = tmp.path().join(".ghosty").join("tool_outputs");
         let prior = crate::tools::truncate::set_test_spillover_root(Some(spillover_root.clone()));
         struct Restore(Option<std::path::PathBuf>);
         impl Drop for Restore {
@@ -6924,7 +6929,7 @@ mod tests {
         let wire = serde_json::to_string(&build_chat_messages_for_request(&prepared))
             .expect("serialize sanitized retrieval result");
         assert!(!wire.contains(CONFIG_SECRET_SENTINELS[6]));
-        assert!(wire.contains(codewhale_config::persistence::REDACTED));
+        assert!(wire.contains(ghosty_config::persistence::REDACTED));
     }
 
     #[test]
@@ -6934,7 +6939,7 @@ mod tests {
             .unwrap_or_else(|err| err.into_inner());
         let tmp = tempfile::tempdir().expect("tempdir");
         let prior = crate::tools::truncate::set_test_spillover_root(Some(
-            tmp.path().join(".codewhale").join("tool_outputs"),
+            tmp.path().join(".ghosty").join("tool_outputs"),
         ));
         struct Restore(Option<std::path::PathBuf>);
         impl Drop for Restore {
@@ -8913,10 +8918,10 @@ mod tests {
     }
 
     #[test]
-    fn moonshot_uses_codewhale_user_agent_not_kimi_cli_identity() {
+    fn moonshot_uses_ghosty_user_agent_not_kimi_cli_identity() {
         let user_agent = client_user_agent(ApiProvider::Moonshot);
 
-        assert!(user_agent.contains("codewhale/"));
+        assert!(user_agent.contains("ghosty/"));
         assert!(!user_agent.to_ascii_lowercase().contains("kimi_cli"));
         assert!(!user_agent.to_ascii_lowercase().contains("kimi-code-cli"));
     }
@@ -9985,7 +9990,7 @@ mod tests {
     #[tokio::test]
     async fn telecomjs_live_catalog_keeps_cross_provider_metadata_unknown() {
         let server = MockServer::start().await;
-        let ambiguous_id = codewhale_config::catalog::bundled_catalog_offerings()
+        let ambiguous_id = ghosty_config::catalog::bundled_catalog_offerings()
             .into_iter()
             .find(|offering| {
                 !offering.provider.eq_ignore_ascii_case("telecomjs")
@@ -10275,7 +10280,7 @@ mod tests {
             .filter(|entry| entry.is_fresh(now_unix()))
             .map(|entry| entry.offerings.clone())
             .unwrap_or_default();
-        let snapshot = codewhale_config::catalog::CatalogCompiler::new()
+        let snapshot = ghosty_config::catalog::CatalogCompiler::new()
             .with_bundled(vec![static_row])
             .with_live(fresh_live)
             .compile();
@@ -10859,7 +10864,7 @@ mod tests {
                 prior_legacy: std::env::var_os(LEGACY_ALLOW_INSECURE_HTTP_ENV),
             };
             // Clear the legacy alias so ambient shell state cannot satisfy
-            // the CODEWHALE-first fallback chain behind a test's back.
+            // the GHOSTY-first fallback chain behind a test's back.
             unsafe { std::env::remove_var(LEGACY_ALLOW_INSECURE_HTTP_ENV) };
             guard
         }
@@ -11286,7 +11291,7 @@ mod tests {
     fn outbound_seam_clamps_every_dialect_to_the_exact_route_envelope() {
         let _lock = crate::test_support::lock_test_env();
         let _canonical =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", "384000");
+            crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", "384000");
         let _legacy = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
 
         for (limits, expected) in [
@@ -11358,7 +11363,7 @@ mod tests {
     fn same_protocol_model_switch_rebinds_exact_candidate_identity_and_limits() {
         let _lock = crate::test_support::lock_test_env();
         let _canonical =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", "384000");
+            crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", "384000");
         let config = Config {
             provider: Some("openrouter".to_string()),
             providers: Some(ProvidersConfig {
@@ -11428,7 +11433,7 @@ mod tests {
     async fn fim_non_message_request_is_clamped_to_bound_route() {
         let _lock = crate::test_support::lock_test_env();
         let _canonical =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", "384000");
+            crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", "384000");
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/beta/completions"))

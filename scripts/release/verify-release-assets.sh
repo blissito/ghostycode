@@ -16,12 +16,12 @@ Checks:
   - remote tag vVERSION resolves to the same commit SHA
   - GitHub Release vVERSION exists
   - a successful asset-publishing job in a Release workflow run used that SHA
-  - npm/codewhale release:check sees the fresh binary/archive/installer matrix
+  - npm/ghosty release:check sees the fresh binary/archive/installer matrix
     and both required checksum manifests
 
 Set GH_BIN=/path/to/gh to choose a GitHub CLI binary. Set
-CODEWHALE_GITHUB_REPO=owner/repo or CODEWHALE_RELEASE_REMOTE=remote to override
-the default Hmbown/CodeWhale origin check.
+GHOSTY_GITHUB_REPO=owner/repo or GHOSTY_RELEASE_REMOTE=remote to override
+the default blissito/ghostycode origin check.
 EOF
 }
 
@@ -61,8 +61,8 @@ if [[ -z "${version}" ]]; then
   exit 1
 fi
 
-repo="${CODEWHALE_GITHUB_REPO:-Hmbown/CodeWhale}"
-remote="${CODEWHALE_RELEASE_REMOTE:-origin}"
+repo="${GHOSTY_GITHUB_REPO:-blissito/ghostycode}"
+remote="${GHOSTY_RELEASE_REMOTE:-origin}"
 gh_bin="${GH_BIN:-gh}"
 
 if ! command -v "${gh_bin}" >/dev/null 2>&1; then
@@ -124,7 +124,7 @@ while IFS=$'\t' read -r run_id head_branch run_event run_url; do
   )"
   # Freshness vs the release job's own started_at (not the run-level
   # run_started_at, which job-level reruns bump past the uploads) is enforced
-  # in npm/codewhale/scripts/verify-release-assets.js — see #5429. This check
+  # in npm/ghosty/scripts/verify-release-assets.js — see #5429. This check
   # only proves a successful release job exists for the tag SHA.
   if [[ -n "${release_job_id}" ]]; then
     run_summary="${run_id}\t${head_branch}\t${run_event}\t${run_url}\trelease job ${release_job_id}"
@@ -139,31 +139,31 @@ if [[ -z "${run_summary}" ]]; then
 fi
 printf 'Release asset job OK: %b\n' "${run_summary}"
 
-npm_package_version="$(node -p "require('./npm/codewhale/package.json').version")"
+npm_package_version="$(node -p "require('./npm/ghosty/package.json').version")"
 npm_binary_version="$(
-  node -p "const p=require('./npm/codewhale/package.json'); p.codewhaleBinaryVersion || p.deepseekBinaryVersion || p.version"
+  node -p "const p=require('./npm/ghosty/package.json'); p.ghostyBinaryVersion || p.deepseekBinaryVersion || p.version"
 )"
 if [[ "${npm_package_version}" != "${version}" ]]; then
-  echo "npm/codewhale package version ${npm_package_version} does not match ${version}." >&2
+  echo "npm/ghosty package version ${npm_package_version} does not match ${version}." >&2
   exit 1
 fi
 if [[ "${npm_binary_version}" != "${version}" && "${allow_npm_binary_mismatch}" != "1" ]]; then
-  echo "npm/codewhale codewhaleBinaryVersion ${npm_binary_version} does not match ${version}." >&2
+  echo "npm/ghosty ghostyBinaryVersion ${npm_binary_version} does not match ${version}." >&2
   echo "Use --allow-npm-binary-mismatch only for an intentional packaging-only npm release." >&2
   exit 1
 fi
 
 (
-  cd npm/codewhale
+  cd npm/ghosty
   env \
-    -u CODEWHALE_RELEASE_BASE_URL \
+    -u GHOSTY_RELEASE_BASE_URL \
     -u DEEPSEEK_TUI_RELEASE_BASE_URL \
     -u DEEPSEEK_RELEASE_BASE_URL \
-    -u CODEWHALE_USE_CNB_MIRROR \
+    -u GHOSTY_USE_CNB_MIRROR \
     DEEPSEEK_TUI_VERSION="${version}" \
     DEEPSEEK_TUI_GITHUB_REPO="${repo}" \
-    CODEWHALE_ALLOW_NPM_BINARY_MISMATCH="${allow_npm_binary_mismatch}" \
+    GHOSTY_ALLOW_NPM_BINARY_MISMATCH="${allow_npm_binary_mismatch}" \
     npm run release:check
 )
 
-echo "Release asset gate OK: ${tag} assets match ${local_sha} and npm/codewhale is ready for publish."
+echo "Release asset gate OK: ${tag} assets match ${local_sha} and npm/ghosty is ready for publish."

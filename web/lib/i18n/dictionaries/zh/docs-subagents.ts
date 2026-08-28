@@ -2,7 +2,7 @@ import type { DocsSubagentsDict } from "../types";
 
 /** 中文对照见 `en/docs-subagents.ts`,文案自页面的 `isZh` 三元逐字迁入。 */
 export const docsSubagents: DocsSubagentsDict = {
-  metaTitle: "子 Agent · Codewhale 文档",
+  metaTitle: "子 Agent · Ghosty 文档",
   metaDescription: "agent 工具、Fleet 角色、上下文分叉、worktree 隔离和并发上限。",
   bodyClassName: "text-ink-soft leading-[1.9] tracking-wide",
   overviewTitle: "子 Agent",
@@ -28,7 +28,7 @@ export const docsSubagents: DocsSubagentsDict = {
   // `coordination_contracts` span, and JSX drops leading whitespace that
   // carries a newline. Reproduced so this stays a move, not a copy edit.
   worktreeLead:
-    "并行编辑通道用 {worktreeFlag} 启动：Codewhale 为子 Agent 创建新的 git worktree 和分支（默认 {branchPattern}，检出在父仓库旁的 {worktreeDir} 下），父检出保持干净。隔离不等于写权限：只带 prompt 的 worker 从只读开始；要写代码的子 Agent 还需声明 {writeAuthority} 和至少一个规范化的 {writeRoots}、{exactFiles} 或 {coordinationContracts}值；重叠的共享写声明会在任何改动之前失败。",
+    "并行编辑通道用 {worktreeFlag} 启动：Ghosty 为子 Agent 创建新的 git worktree 和分支（默认 {branchPattern}，检出在父仓库旁的 {worktreeDir} 下），父检出保持干净。隔离不等于写权限：只带 prompt 的 worker 从只读开始；要写代码的子 Agent 还需声明 {writeAuthority} 和至少一个规范化的 {writeRoots}、{exactFiles} 或 {coordinationContracts}值；重叠的共享写声明会在任何改动之前失败。",
   capacityTitle: "并发上限",
   capacityLead:
     "子 Agent 容量的权威来源是 crates/tui/src/config/subagent_limits.rs：默认配置并发 64，最大配置并发 128，运行加排队的最大准入 1024。这些是容量上限，不是建议把每个槽位都派出去——管理者应使用最小的有效扇出，保持单一汇总负责人，并在汇报整体完成前验证 worker 收据。",

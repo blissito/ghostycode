@@ -1,4 +1,4 @@
-/* codewhale-ocean: ambient ocean scene behind the DSH web UI.
+/* ghosty-ocean: ambient ocean scene behind the DSH web UI.
  *
  * Plain script (no module syntax) so it can be spliced verbatim into the
  * bundle's lib/client.js — dsh-client-modules serves exactly one file per
@@ -9,14 +9,14 @@
  * pointer-events none) painted below the app root and above the body
  * background. ~30 fps, paused while the document is hidden, one static
  * frame under prefers-reduced-motion, no per-frame allocations, DPR-aware.
- * Off switch: body class `codewhale-ocean-off` or
- * localStorage["codewhale.ocean"] === "off". `palette` carries
+ * Off switch: body class `ghosty-ocean-off` or
+ * localStorage["ghosty.ocean"] === "off". `palette` carries
  * { light: {base, accent, ink, dim}, dark: {...} } CSS hex colors taken from
  * the skin token table.
  */
 function createOcean(palette) {
-	var STORAGE_KEY = "codewhale.ocean";
-	var OFF_CLASS = "codewhale-ocean-off";
+	var STORAGE_KEY = "ghosty.ocean";
+	var OFF_CLASS = "ghosty-ocean-off";
 	var FRAME_MS = 1000 / 30;
 	var FISH_COUNT = 16;
 	var BUBBLE_COUNT = 26;
@@ -419,7 +419,7 @@ function createOcean(palette) {
 		if (isOff()) return false;
 		canvas = document.createElement("canvas");
 		canvas.setAttribute("aria-hidden", "true");
-		canvas.setAttribute("data-codewhale-ocean", "");
+		canvas.setAttribute("data-ghosty-ocean", "");
 		canvas.style.cssText = "position:fixed;inset:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;display:block;";
 		g = canvas.getContext("2d", { alpha: false });
 		if (!g) return false;
@@ -470,6 +470,6 @@ function createOcean(palette) {
 	}
 
 	var api = { start: start, stop: stop, setIntensity: setIntensity, setScheme: setScheme, isOff: isOff, get running() { return running; } };
-	window.__codewhaleOcean = api;
+	window.__ghostyOcean = api;
 	return api;
 }

@@ -11,7 +11,7 @@ PR). Feature-complete against the v0.9.9 baseline (`6f3850c3d`).
   - `webhook_url` — optional webhook endpoint; POSTs fire only when set.
   - `webhook_token` — optional bearer token for `webhook_url`.
   Documented in `docs/CONFIGURATION.md` and `config.example.toml`. The
-  documented example default is `~/.codewhale/notifications/outbox.jsonl`;
+  documented example default is `~/.ghosty/notifications/outbox.jsonl`;
   the config key drives the real path.
 - **Writer** (`crates/hooks/src/lifecycle_outbox.rs`): appends one JSONL line
   per event to the configured path — lazy parent dirs, append+flush, single
@@ -42,7 +42,7 @@ PR). Feature-complete against the v0.9.9 baseline (`6f3850c3d`).
 | `session_start` | `session.started` | TUI session-start hook fire site |
 | `session_end` | `session.ended` | TUI session-end hook fire site |
 
-Headless `codewhale exec` coverage: `turn_start` at message dispatch and
+Headless `ghosty exec` coverage: `turn_start` at message dispatch and
 `turn_end` at the terminal `TurnComplete` — **and** at the "engine channel
 closed before a terminal receipt" path, so every emitted `turn_start` has a
 matching `turn_end` and a supervisor never sees an orphaned in-progress

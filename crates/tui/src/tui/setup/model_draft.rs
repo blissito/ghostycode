@@ -19,7 +19,7 @@
 //! - **Drafting is not ratifying.** The caller shows the rendered preview and
 //!   still requires the explicit ratify keypress before anything persists.
 
-use codewhale_config::{UntrustedDraftParse, UserConstitution, user_constitution::MAX_NOTES_LEN};
+use ghosty_config::{UntrustedDraftParse, UserConstitution, user_constitution::MAX_NOTES_LEN};
 
 use crate::llm_client::LlmClient;
 use crate::localization::Locale;
@@ -38,7 +38,7 @@ pub(crate) const DRAFT_MAX_TOKENS: u32 = 1600;
 /// tests can pin the guardrails.
 fn drafting_system_prompt() -> String {
     concat!(
-        "You are helping a new Codewhale user draft their user constitution: durable, ",
+        "You are helping a new Ghosty user draft their user constitution: durable, ",
         "advisory standing preferences for how an AI coding agent should work with them ",
         "across all their projects.\n\n",
         "Return ONLY one JSON object — no markdown fences, no commentary — with exactly ",
@@ -199,8 +199,8 @@ mod tests {
     use super::*;
     use crate::llm_client::mock::MockLlmClient;
     use crate::models::{MessageResponse, Usage};
-    use codewhale_config::AutonomyPreference;
-    use codewhale_config::user_constitution::MAX_NOTES_LEN;
+    use ghosty_config::AutonomyPreference;
+    use ghosty_config::user_constitution::MAX_NOTES_LEN;
 
     fn text_response(text: &str) -> MessageResponse {
         MessageResponse {

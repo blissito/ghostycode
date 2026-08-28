@@ -1,4 +1,4 @@
-//! Canonical protocol contract for durable communication between Codewhale tasks.
+//! Canonical protocol contract for durable communication between Ghosty tasks.
 //!
 //! Agent Mail is distinct from same-session subagent control messages. An envelope
 //! is persisted by the runtime, scoped to an owner and workspace, and projected

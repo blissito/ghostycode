@@ -416,7 +416,7 @@ impl PluginRegistry {
         }
         if plugin.staged_root.is_none() {
             return Err(format!(
-                "Plugin bundle `{}` has no verified Codewhale runtime snapshot; review and trust it again before enablement",
+                "Plugin bundle `{}` has no verified Ghosty runtime snapshot; review and trust it again before enablement",
                 plugin.name()
             ));
         }
@@ -547,7 +547,7 @@ fn save_state(path: &Path, state: &PluginStateFile) -> Result<(), String> {
 }
 
 /// Publish a hardened JSON document atomically. Generic over the schema so
-/// sibling Codewhale-owned stores (e.g. the marketplace catalog store) share
+/// sibling Ghosty-owned stores (e.g. the marketplace catalog store) share
 /// the exact durability and no-follow path this registry was audited for.
 pub(crate) fn save_state_with_hardener<T: serde::Serialize>(
     path: &Path,
@@ -1006,7 +1006,7 @@ pub(crate) fn harden_plugin_state_file(_path: &Path) -> Result<(), String> {
 
 fn runtime_stage_path(state_path: &Path, id: &PluginId, content_hash: &str) -> PathBuf {
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale-plugin-stage-v2\0");
+    hasher.update(b"ghosty-plugin-stage-v2\0");
     hasher.update(id.as_str().as_bytes());
     let key = hasher
         .finalize()
@@ -1053,7 +1053,7 @@ fn stage_bundle(state_path: &Path, plugin: &LoadedPlugin) -> Result<PathBuf, Str
     if destination.exists() {
         if !staged_bundle_matches(&destination, &plugin.content_hash, &plugin.capability_hash) {
             return Err(
-                "Existing Codewhale plugin runtime snapshot failed content validation; remove the exact .runtime entry and review again"
+                "Existing Ghosty plugin runtime snapshot failed content validation; remove the exact .runtime entry and review again"
                     .to_string(),
             );
         }
@@ -1076,7 +1076,7 @@ fn stage_bundle(state_path: &Path, plugin: &LoadedPlugin) -> Result<PathBuf, Str
         copy_bundle_tree(&plugin.canonical_root, &temporary)?;
         if !staged_bundle_matches(&temporary, &plugin.content_hash, &plugin.capability_hash) {
             return Err(
-                "Plugin bundle changed while Codewhale was staging it; no runtime authority was granted"
+                "Plugin bundle changed while Ghosty was staging it; no runtime authority was granted"
                     .to_string(),
             );
         }
@@ -1944,7 +1944,7 @@ fn preserve_owner_only_file_mode(path: &Path, _source: &fs::Metadata) -> Result<
 }
 
 /// Recheck a persisted plugin receipt, the mutable reviewed source, and the
-/// Codewhale-owned immutable runtime copy, then require the named adapter to
+/// Ghosty-owned immutable runtime copy, then require the named adapter to
 /// be in this build's activation policy. Every adapter must call this with its
 /// specific capability rather than treating bundle-wide activity as authority
 /// to run every inventoried surface.
@@ -1955,7 +1955,7 @@ pub fn verify_plugin_component_authority(
     verify_plugin_authority(authority)?;
     if !PluginActivationPolicy::current().is_supported(capability) {
         return Err(format!(
-            "Plugin bundle `{}` capability `{}` is inactive in this Codewhale build",
+            "Plugin bundle `{}` capability `{}` is inactive in this Ghosty build",
             authority.plugin_name,
             capability.as_str()
         ));
@@ -1964,12 +1964,12 @@ pub fn verify_plugin_component_authority(
 }
 
 /// Recheck a persisted plugin receipt, the mutable reviewed source, and the
-/// Codewhale-owned immutable runtime copy. This function performs no writes.
+/// Ghosty-owned immutable runtime copy. This function performs no writes.
 pub fn verify_plugin_authority(authority: &PluginAuthority) -> Result<(), String> {
     verify_plugin_state_authority(authority)?;
     for (label, manifest_path) in [
         ("reviewed source", &authority.source_manifest),
-        ("Codewhale runtime snapshot", &authority.staged_manifest),
+        ("Ghosty runtime snapshot", &authority.staged_manifest),
     ] {
         let current =
             super::manifest::PluginManifest::validate_from_path(manifest_path).map_err(|_| {
@@ -2251,7 +2251,7 @@ mod windows_acl_tests {
         std::fs::create_dir(&target).unwrap();
         set_windows_owner_only_acl(&target).unwrap();
 
-        // Simulate an already-private Codewhale object whose owner is still
+        // Simulate an already-private Ghosty object whose owner is still
         // the current user, but whose DACL intentionally does not grant
         // WRITE_OWNER. Rehardening must restore the full owner-only ACL
         // rather than assuming it may take ownership again.

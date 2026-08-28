@@ -15,10 +15,10 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use codewhale_execpolicy::{AskForApproval, ExecPolicyContext};
-use codewhale_protocol::runtime::DynamicToolSpec;
 use futures_util::StreamExt;
 use futures_util::stream::FuturesUnordered;
+use ghosty_execpolicy::{AskForApproval, ExecPolicyContext};
+use ghosty_protocol::runtime::DynamicToolSpec;
 use serde_json::{Value, json};
 use tokio::sync::{Mutex as AsyncMutex, RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
@@ -125,7 +125,7 @@ fn agent_list_event(manager: &SubAgentManager, active_session_id: &str) -> Event
 
 const MCP_REGISTRY_FIRST_INSTRUCTION_SOURCE: &str = "runtime:mcp-registry-first";
 const MCP_REGISTRY_FIRST_INSTRUCTION: &str = "## MCP Registry-first policy\n\nFor any task centered on a specialized capability, including media or document conversion, data transformation, browser automation, database or service access, or a developer utility, you must call `registry_sync` with a `query` describing that capability before `exec_shell`, `fetch_url`, code execution, local programs, custom code, or a manual implementation. It scores the local Registry snapshot host-side and returns at most eight matches; the full catalog never enters the conversation. Treat a returned server as a match when it plausibly covers the core capability; wording need not be exact. If any plausible match exists, you must call `start_registry_mcp_server` with its exact name and inspect its tools before considering a local alternative. If nothing matches, refine the query once; a still-empty refined result means every Registry entry is clearly irrelevant. An installed or familiar shell command is not a reason to skip Registry discovery. Use local tools directly only for ordinary repo-native work and simple file operations, or after the matching server fails to start.";
-const ISOLATED_CHAT_ENGINE_PROMPT: &str = "You are Codewhale Chat. Answer the user's request directly and conversationally. This isolated chat-only session has no local workspace, project, memory, skill, account, credential, path, runtime context, or tools.";
+const ISOLATED_CHAT_ENGINE_PROMPT: &str = "You are Ghosty Chat. Answer the user's request directly and conversationally. This isolated chat-only session has no local workspace, project, memory, skill, account, credential, path, runtime context, or tools.";
 
 fn sanitize_isolated_chat_attachments(mut text: String) -> String {
     let references = crate::tui::file_mention::media_attachment_references(&text);
@@ -257,14 +257,14 @@ pub struct EngineConfig {
     pub model: String,
     /// Route/offering limits for the active provider+model, when the runtime
     /// route resolver had concrete catalog facts.
-    pub active_route_limits: Option<codewhale_config::route::RouteLimits>,
+    pub active_route_limits: Option<ghosty_config::route::RouteLimits>,
     /// Workspace root for tool execution and file operations.
     pub workspace: PathBuf,
     /// Optional host-owned root for delegated-agent runtime state.
     ///
     /// When unset, the worker ledger, complete transcript artifacts and
     /// coordination lock retain their historical location under
-    /// `workspace/.codewhale/state`. Embedders may set a session-scoped root
+    /// `workspace/.ghosty/state`. Embedders may set a session-scoped root
     /// to separate that control-plane state from the execution workspace.
     /// Child cwd and file authority still derive from `workspace`; hosts using
     /// distinct state roots for the same workspace must coordinate conflicting
@@ -280,9 +280,9 @@ pub struct EngineConfig {
     pub mcp_config_path: PathBuf,
     /// Directory containing discoverable skills.
     pub skills_dir: PathBuf,
-    /// Restrict skill discovery to CodeWhale-owned roots plus explicit
+    /// Restrict skill discovery to GhostyCode-owned roots plus explicit
     /// `skills_dir` configuration.
-    pub skills_scan_codewhale_only: bool,
+    pub skills_scan_ghosty_only: bool,
     /// Immutable plugin authority snapshot scoped to `workspace`. Normal App
     /// hosts provide this explicitly; headless/embed callers that leave it
     /// unset receive a fresh workspace-specific snapshot in [`Engine::new`].
@@ -330,7 +330,7 @@ pub struct EngineConfig {
     pub goal_state: SharedGoalState,
     /// Maximum sub-agent recursion depth (default 3). See
     /// `SubAgentRuntime::max_spawn_depth`. Override via
-    /// `[subagents] max_depth = N` in `~/.codewhale/config.toml`.
+    /// `[subagents] max_depth = N` in `~/.ghosty/config.toml`.
     pub max_spawn_depth: u32,
     /// Optional aggregate token budget for each root sub-agent run.
     /// Descendant agents inherit the root pool unless a child starts a new
@@ -450,7 +450,7 @@ pub struct EngineConfig {
     /// `workspace_follow_symlinks` setting.
     pub workspace_follow_symlinks: bool,
     /// Ask-only permission rules loaded from sibling `permissions.toml`.
-    pub exec_policy_engine: codewhale_execpolicy::ExecPolicyEngine,
+    pub exec_policy_engine: ghosty_execpolicy::ExecPolicyEngine,
     /// Whether turn startup may write terminal title/taskbar OSC sequences.
     /// Interactive TUI sessions enable this; headless and machine-readable
     /// hosts disable it so stdout remains protocol-clean.
@@ -476,7 +476,7 @@ impl Default for EngineConfig {
             notes_path: PathBuf::from("notes.txt"),
             mcp_config_path: PathBuf::from("mcp.json"),
             skills_dir: crate::skills::default_skills_dir(),
-            skills_scan_codewhale_only: false,
+            skills_scan_ghosty_only: false,
             plugin_registry: None,
             instructions: Vec::new(),
             project_context_pack_enabled: false,
@@ -540,7 +540,7 @@ impl Default for EngineConfig {
             verbosity: None,
             tools: None,
             workspace_follow_symlinks: false,
-            exec_policy_engine: codewhale_execpolicy::ExecPolicyEngine::new(Vec::new(), Vec::new()),
+            exec_policy_engine: ghosty_execpolicy::ExecPolicyEngine::new(Vec::new(), Vec::new()),
             terminal_chrome_enabled: true,
             advisor_config: crate::tools::subagent::AdvisorConfig::disabled(),
         }
@@ -768,8 +768,8 @@ pub struct Engine {
     /// Additive exact provider id. `None` preserves the legacy root-literal
     /// custom route across snapshots and config reloads.
     api_provider_id: Option<String>,
-    active_route_limits: Option<codewhale_config::route::RouteLimits>,
-    active_route_capabilities: codewhale_config::route::RouteCapabilities,
+    active_route_limits: Option<ghosty_config::route::RouteLimits>,
+    active_route_capabilities: ghosty_config::route::RouteCapabilities,
     rx_op: mpsc::Receiver<Op>,
     live_runtime_authority: Arc<StdMutex<LiveRuntimeAuthorityState>>,
     compaction_cancellation: Arc<StdMutex<CompactionCancellationState>>,
@@ -794,7 +794,7 @@ pub struct Engine {
     /// can fan completion events back into the engine.
     tx_subagent_completion: mpsc::UnboundedSender<SubAgentCompletion>,
     /// Receiver paired with `tx_subagent_completion`. Drained at the
-    /// turn-loop's empty-tool_uses branch to surface `<codewhale:subagent.done>`
+    /// turn-loop's empty-tool_uses branch to surface `<ghosty:subagent.done>`
     /// sentinels into the parent's transcript before deciding to end the turn.
     pub(super) rx_subagent_completion: mpsc::UnboundedReceiver<SubAgentCompletion>,
     /// Sub-agent completions already injected into the parent transcript.
@@ -1216,8 +1216,8 @@ impl Engine {
 
         Some(format!(
             "The rejected key came from {env_var}; no saved config key is present.\n\
-             Run `codewhale auth status` to inspect credential sources, then \
-             `codewhale auth set --provider {provider}` to save a valid key in ~/.codewhale/config.toml, \
+             Run `ghosty auth status` to inspect credential sources, then \
+             `ghosty auth set --provider {provider}` to save a valid key in ~/.ghosty/config.toml, \
              or remove the stale export and open a fresh shell.",
             provider = provider.as_str()
         ))
@@ -1455,7 +1455,7 @@ impl Engine {
                         ),
                     ),
                     verbosity: config.verbosity.as_deref(),
-                    skills_scan_codewhale_only: config.skills_scan_codewhale_only,
+                    skills_scan_ghosty_only: config.skills_scan_ghosty_only,
                     plugin_registry: Some(plugin_registry.as_ref()),
                     // Matches `current_mode`'s initial value below; a later
                     // `/mode` switch re-runs `refresh_system_prompt`.
@@ -1560,7 +1560,7 @@ impl Engine {
             ApprovalReceiptStore::default_location().map_err(|err| err.to_string());
         #[cfg(test)]
         let approval_receipt_store = Ok(ApprovalReceiptStore::new(
-            std::env::temp_dir().join(format!("codewhale-approval-tests-{}", uuid::Uuid::new_v4())),
+            std::env::temp_dir().join(format!("ghosty-approval-tests-{}", uuid::Uuid::new_v4())),
         ));
         let engine = Engine {
             config,
@@ -1589,7 +1589,7 @@ impl Engine {
             api_provider_identity,
             api_provider_id,
             active_route_limits,
-            active_route_capabilities: codewhale_config::route::RouteCapabilities::default(),
+            active_route_capabilities: ghosty_config::route::RouteCapabilities::default(),
             rx_op,
             live_runtime_authority: Arc::clone(&live_runtime_authority),
             compaction_cancellation: Arc::clone(&compaction_cancellation),
@@ -2092,7 +2092,7 @@ impl Engine {
         // exact configured-secret redactor when available; that helper also
         // applies the config persistence redactor as a universal backstop.
         let detail = self.deepseek_client.as_ref().map_or_else(
-            || codewhale_config::persistence::redact_secrets(detail),
+            || ghosty_config::persistence::redact_secrets(detail),
             |client| client.redact_model_bound_text(detail),
         );
         Some(crate::utils::truncate_with_ellipsis(
@@ -2751,7 +2751,7 @@ impl Engine {
                         // route candidate, so old provider/model capability
                         // facts must not bleed into the new model.
                         self.active_route_capabilities =
-                            codewhale_config::route::RouteCapabilities::default();
+                            ghosty_config::route::RouteCapabilities::default();
                         self.refresh_system_prompt_with_reason("model");
                         self.emit_session_updated().await;
                         let _ = self
@@ -2799,7 +2799,7 @@ impl Engine {
                         self.config.launch_concurrency =
                             launch_concurrency.clamp(1, self.config.max_subagents);
                         self.config.max_spawn_depth =
-                            max_spawn_depth.min(codewhale_config::MAX_SPAWN_DEPTH_CEILING);
+                            max_spawn_depth.min(ghosty_config::MAX_SPAWN_DEPTH_CEILING);
                         self.config.subagent_api_timeout = Duration::from_secs(api_timeout_secs);
                         self.config.subagent_heartbeat_timeout =
                             Duration::from_secs(heartbeat_timeout_secs);
@@ -3018,7 +3018,7 @@ impl Engine {
                     }
                     Op::BootstrapMcp { tx } => {
                         let result = self.bootstrap_mcp_pool().await.map_err(|error| {
-                            codewhale_config::persistence::redact_secrets(&format!("{error:#}"))
+                            ghosty_config::persistence::redact_secrets(&format!("{error:#}"))
                         });
                         if let Some(tx) = tx.lock().ok().and_then(|mut guard| guard.take()) {
                             let _ = tx.send(result);
@@ -3026,7 +3026,7 @@ impl Engine {
                     }
                     Op::RetryMcpServer { name, tx } => {
                         let result = self.retry_mcp_server(&name).await.map_err(|error| {
-                            codewhale_config::persistence::redact_secrets(&format!("{error:#}"))
+                            ghosty_config::persistence::redact_secrets(&format!("{error:#}"))
                         });
                         if let Some(tx) = tx.lock().ok().and_then(|mut guard| guard.take()) {
                             let _ = tx.send(result);
@@ -3034,7 +3034,7 @@ impl Engine {
                     }
                     Op::ReloadMcp { config_path, tx } => {
                         let result = self.reload_mcp_pool(config_path).await.map_err(|error| {
-                            codewhale_config::persistence::redact_secrets(&format!("{error:#}"))
+                            ghosty_config::persistence::redact_secrets(&format!("{error:#}"))
                         });
                         if let Some(tx) = tx.lock().ok().and_then(|mut guard| guard.take()) {
                             let _ = tx.send(result);
@@ -4996,7 +4996,7 @@ impl Engine {
                     Some(format!(
                         "The engine hit an internal error and stopped this turn: {detail}. \
                          Your session is intact — send your message again to retry. \
-                         A crash report was saved to ~/.codewhale/crashes/."
+                         A crash report was saved to ~/.ghosty/crashes/."
                     )),
                 )
             }
@@ -5837,7 +5837,7 @@ impl Engine {
         .with_runtime_services(self.config.runtime_services.clone())
         .with_skills_config(
             self.config.skills_dir.clone(),
-            self.config.skills_scan_codewhale_only,
+            self.config.skills_scan_ghosty_only,
         )
         .with_plugin_registry(Arc::clone(&self.plugin_registry))
         .with_session_objects(crate::rlm::session::SessionObjectSnapshot::new(
@@ -6606,7 +6606,7 @@ impl Engine {
                         ),
                     ),
                     verbosity: context.verbosity.as_deref(),
-                    skills_scan_codewhale_only: self.config.skills_scan_codewhale_only,
+                    skills_scan_ghosty_only: self.config.skills_scan_ghosty_only,
                     plugin_registry: Some(self.plugin_registry.as_ref()),
                     mode: context.mode,
                 },
@@ -6643,7 +6643,7 @@ impl Engine {
     }
 
     /// Capture the current session-owned Agent topology at the replacement
-    /// history boundary. This is the Codewhale equivalent of Codex clearing
+    /// history boundary. This is the Ghosty equivalent of Codex clearing
     /// its world-state reference after standalone compaction so the next turn
     /// receives fresh environment/subagent context instead of trusting the
     /// narrative summary as live process state.
@@ -6657,10 +6657,10 @@ impl Engine {
 }
 
 fn default_plugin_tools_dir() -> PathBuf {
-    codewhale_config::codewhale_home()
+    ghosty_config::ghosty_home()
         .unwrap_or_else(|_| {
             crate::config::effective_home_dir()
-                .map_or_else(|| PathBuf::from(".codewhale"), |h| h.join(".codewhale"))
+                .map_or_else(|| PathBuf::from(".ghosty"), |h| h.join(".ghosty"))
         })
         .join("tools")
 }
@@ -6876,7 +6876,7 @@ pub(super) fn exec_shell_ask_rule_decision(
 /// [`EngineConfig`]. Headless protocol adapters use this seam so they enforce
 /// the same sibling `permissions.toml` policy as the interactive engine.
 pub(crate) fn exec_shell_ask_rule_decision_for_policy(
-    exec_policy_engine: &codewhale_execpolicy::ExecPolicyEngine,
+    exec_policy_engine: &ghosty_execpolicy::ExecPolicyEngine,
     tool_name: &str,
     tool_input: &Value,
     workspace: &Path,
@@ -6918,7 +6918,7 @@ pub(super) fn file_tool_ask_rule_decision(
 /// [`EngineConfig`]. This keeps protocol adapters on the canonical path and
 /// preserves the all-targets-must-match rule for multi-file patches.
 pub(crate) fn file_tool_ask_rule_decision_for_policy(
-    exec_policy_engine: &codewhale_execpolicy::ExecPolicyEngine,
+    exec_policy_engine: &ghosty_execpolicy::ExecPolicyEngine,
     tool_name: &str,
     tool_input: &Value,
     workspace: &Path,
@@ -6970,7 +6970,7 @@ pub(crate) fn file_tool_ask_rule_decision_for_policy(
 }
 
 fn tool_ask_rule_decision_for_context(
-    exec_policy_engine: &codewhale_execpolicy::ExecPolicyEngine,
+    exec_policy_engine: &ghosty_execpolicy::ExecPolicyEngine,
     tool_name: &str,
     command: &str,
     path: Option<&str>,
@@ -6998,12 +6998,11 @@ fn tool_ask_rule_decision_for_context(
         Some(ToolAskRuleDecision::Block(decision.reason().to_string()))
     } else if decision.requires_approval {
         Some(ToolAskRuleDecision::Prompt(decision.reason().to_string()))
-    } else if decision.matched_action == Some(codewhale_execpolicy::PermissionAction::Allow) {
+    } else if decision.matched_action == Some(ghosty_execpolicy::PermissionAction::Allow) {
         // Count only. Never `matched_rule`, never `reason()`, never the
         // command or its argv: `auto_allow` patterns are user-authored command
         // strings.
-        codewhale_telemetry::session_counters()
-            .bump(codewhale_telemetry::Counter::ApprovalAutoAllowed);
+        ghosty_telemetry::session_counters().bump(ghosty_telemetry::Counter::ApprovalAutoAllowed);
         Some(ToolAskRuleDecision::Allow)
     } else {
         None
@@ -7219,7 +7218,7 @@ pub(crate) struct TurnMetadataSnapshot<'a> {
 pub(crate) struct NextTurnPromptContext {
     pub(crate) provider: ApiProvider,
     pub(crate) model: String,
-    pub(crate) route_limits: Option<codewhale_config::route::RouteLimits>,
+    pub(crate) route_limits: Option<ghosty_config::route::RouteLimits>,
     pub(crate) mode: AppMode,
     pub(crate) goal_objective: Option<String>,
     pub(crate) goal_token_budget: Option<u32>,
@@ -7269,7 +7268,7 @@ impl NextTurnPromptContext {
     pub(crate) fn for_planned_turn(
         provider: ApiProvider,
         model: String,
-        route_limits: Option<codewhale_config::route::RouteLimits>,
+        route_limits: Option<ghosty_config::route::RouteLimits>,
         mode: AppMode,
         goal_objective: Option<String>,
         goal_status: GoalStatus,
@@ -7371,8 +7370,8 @@ struct TurnToolBuild {
 pub(crate) struct TurnRouteContext {
     pub(crate) provider: ApiProvider,
     pub(crate) model: String,
-    pub(crate) capabilities: codewhale_config::route::RouteCapabilities,
-    pub(crate) limits: Option<codewhale_config::route::RouteLimits>,
+    pub(crate) capabilities: ghosty_config::route::RouteCapabilities,
+    pub(crate) limits: Option<ghosty_config::route::RouteLimits>,
     /// Client for this exact route. Tool contexts use it only for
     /// provider-native helper capabilities; previews pass their throw-away
     /// planned client instead of inheriting the installed session client.

@@ -39,7 +39,7 @@ function printReceipt(credentialState) {
       event: process.env.GITHUB_EVENT_NAME || null,
       ref: process.env.GITHUB_REF || null,
       sourceRevision:
-        process.env.CODEWHALE_SOURCE_REVISION || process.env.GITHUB_SHA || null,
+        process.env.GHOSTY_SOURCE_REVISION || process.env.GITHUB_SHA || null,
       credentialState,
       deploymentStarted: false,
     })}`,

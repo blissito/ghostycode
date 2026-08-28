@@ -89,8 +89,8 @@ pub struct HotbarSetupView {
     selected_source_idx: usize,
     selected_action_idx_by_source: BTreeMap<HotbarActionCategory, usize>,
     selected_slot: u8,
-    original_bindings: BTreeMap<u8, codewhale_config::HotbarBindingToml>,
-    draft_bindings: BTreeMap<u8, codewhale_config::HotbarBindingToml>,
+    original_bindings: BTreeMap<u8, ghosty_config::HotbarBindingToml>,
+    draft_bindings: BTreeMap<u8, ghosty_config::HotbarBindingToml>,
     recommended_action_ids: BTreeSet<String>,
     validation_errors: Vec<String>,
     query: String,
@@ -150,7 +150,7 @@ impl HotbarSetupView {
             .map(|binding| {
                 (
                     binding.slot,
-                    codewhale_config::HotbarBindingToml {
+                    ghosty_config::HotbarBindingToml {
                         slot: binding.slot,
                         action: binding.action,
                         label: binding.label,
@@ -203,7 +203,7 @@ impl HotbarSetupView {
 
     #[must_use]
     #[cfg(test)]
-    pub fn binding_for_slot(&self, slot: u8) -> Option<&codewhale_config::HotbarBindingToml> {
+    pub fn binding_for_slot(&self, slot: u8) -> Option<&ghosty_config::HotbarBindingToml> {
         self.draft_bindings.get(&slot)
     }
 
@@ -298,13 +298,13 @@ impl HotbarSetupView {
     }
 
     pub fn select_slot(&mut self, slot: u8) -> bool {
-        if !(1..=codewhale_config::HOTBAR_SLOT_COUNT).contains(&slot) {
+        if !(1..=ghosty_config::HOTBAR_SLOT_COUNT).contains(&slot) {
             self.validation_errors = vec![tr_hotbar_setup(
                 self.locale,
                 MessageId::HotbarSetupSlotOutOfRange,
                 &[
                     ("{slot}", slot.to_string()),
-                    ("{max}", codewhale_config::HOTBAR_SLOT_COUNT.to_string()),
+                    ("{max}", ghosty_config::HOTBAR_SLOT_COUNT.to_string()),
                 ],
             )];
             return false;
@@ -333,7 +333,7 @@ impl HotbarSetupView {
         }
         self.draft_bindings.insert(
             self.selected_slot,
-            codewhale_config::HotbarBindingToml {
+            ghosty_config::HotbarBindingToml {
                 slot: self.selected_slot,
                 action: row.metadata.id,
                 label: None,
@@ -366,7 +366,7 @@ impl HotbarSetupView {
     }
 
     #[must_use]
-    pub fn save_bindings(&self) -> Vec<codewhale_config::HotbarBindingToml> {
+    pub fn save_bindings(&self) -> Vec<ghosty_config::HotbarBindingToml> {
         self.draft_bindings.values().cloned().collect()
     }
 
@@ -435,7 +435,7 @@ impl HotbarSetupView {
     }
 
     fn move_slot(&mut self, delta: isize) {
-        let len = usize::from(codewhale_config::HOTBAR_SLOT_COUNT);
+        let len = usize::from(ghosty_config::HOTBAR_SLOT_COUNT);
         let next = wrap_index(usize::from(self.selected_slot - 1), len, delta) + 1;
         self.selected_slot = u8::try_from(next).expect("hotbar slot fits in u8");
         self.validation_errors.clear();
@@ -543,7 +543,7 @@ impl HotbarSetupView {
     }
 
     fn slots_line(&self) -> Line<'static> {
-        let slots = (1..=codewhale_config::HOTBAR_SLOT_COUNT)
+        let slots = (1..=ghosty_config::HOTBAR_SLOT_COUNT)
             .map(|slot| {
                 let label = self
                     .draft_bindings

@@ -31,7 +31,7 @@ notes="$(printf '%s\n' "${section}" | awk '
 ')"
 
 cat <<EOF
-> **Codewhale** is the public product from Shannon Labs. The \`codewhale\`
+> **Ghosty** is the public product from Shannon Labs. The \`ghosty\`
 > command, npm package, and release-asset names remain lowercase technical
 > identifiers. The legacy npm package \`deepseek-tui\` is deprecated and
 > receives no further releases. Users coming from v0.8.x legacy \`deepseek\` /
@@ -42,10 +42,10 @@ cat <<EOF
 ### Recommended — npm (one command, both entrypoints)
 
 \`\`\`bash
-npm install -g codewhale
+npm install -g ghosty
 \`\`\`
 
-The wrapper downloads the matched \`codewhale\` and \`codew\` command assets
+The wrapper downloads the matched \`ghosty\` and \`ghosty-tui\` command assets
 from this Release. Both contain the same compiled runtime.
 
 ### Docker / GHCR
@@ -53,65 +53,65 @@ from this Release. Both contain the same compiled runtime.
 \`\`\`bash
 docker run --rm -it \\
   -e DEEPSEEK_API_KEY="\$DEEPSEEK_API_KEY" \\
-  -v codewhale-home:/home/codewhale/.codewhale \\
-  ghcr.io/hmbown/codewhale:${tag}
+  -v ghosty-home:/home/ghosty/.ghosty \\
+  ghcr.io/blissito/ghostycode:${tag}
 \`\`\`
 
-The image exposes the same runtime as both \`codewhale\` and \`codew\`. The
+The image exposes the same runtime as both \`ghosty\` and \`ghosty-tui\`. The
 \`latest\` tag is also updated on release.
 
 ### Cargo (Linux / macOS)
 
 \`\`\`bash
-cargo install codewhale-cli --locked
+cargo install ghosty-cli --locked
 \`\`\`
 
-The Cargo package installs \`codewhale\`. Cargo cannot create a second command
+The Cargo package installs \`ghosty\`. Cargo cannot create a second command
 alias from one binary target; users who want the shorter spelling can add a
-\`codew\` symlink to that installed executable. The npm, Homebrew, archive,
+\`ghosty-tui\` symlink to that installed executable. The npm, Homebrew, archive,
 shell-installer, and container channels install both command names directly.
 
 ### Manual download — platform archives (recommended)
 
-Each archive below contains the same runtime under the \`codewhale\` and
-\`codew\` command names, plus an install script:
+Each archive below contains the same runtime under the \`ghosty\` and
+\`ghosty-tui\` command names, plus an install script:
 
 | Platform | Archive | Install script |
 |---|---|---|
-| Linux x64 | \`codewhale-linux-x64.tar.gz\` | \`install.sh\` |
-| Linux ARM64 | \`codewhale-linux-arm64.tar.gz\` | \`install.sh\` |
-| Android ARM64 (Termux) | \`codewhale-android-arm64.tar.gz\` | \`install.sh\` |
-| macOS x64 | \`codewhale-macos-x64.tar.gz\` | \`install.sh\` |
-| macOS ARM | \`codewhale-macos-arm64.tar.gz\` | \`install.sh\` |
-| Windows x64 (installer) | \`CodeWhaleSetup.exe\` | NSIS setup |
-| Windows x64 | \`codewhale-windows-x64.zip\` | \`install.bat\` |
-| Windows x64 (portable) | \`codewhale-windows-x64-portable.zip\` | — |
-| Windows ARM64 | \`codewhale-windows-arm64.zip\` | \`install.bat\` |
-| Windows ARM64 (portable) | \`codewhale-windows-arm64-portable.zip\` | — |
+| Linux x64 | \`ghosty-linux-x64.tar.gz\` | \`install.sh\` |
+| Linux ARM64 | \`ghosty-linux-arm64.tar.gz\` | \`install.sh\` |
+| Android ARM64 (Termux) | \`ghosty-android-arm64.tar.gz\` | \`install.sh\` |
+| macOS x64 | \`ghosty-macos-x64.tar.gz\` | \`install.sh\` |
+| macOS ARM | \`ghosty-macos-arm64.tar.gz\` | \`install.sh\` |
+| Windows x64 (installer) | \`GhostyCodeSetup.exe\` | NSIS setup |
+| Windows x64 | \`ghosty-windows-x64.zip\` | \`install.bat\` |
+| Windows x64 (portable) | \`ghosty-windows-x64-portable.zip\` | — |
+| Windows ARM64 | \`ghosty-windows-arm64.zip\` | \`install.bat\` |
+| Windows ARM64 (portable) | \`ghosty-windows-arm64-portable.zip\` | — |
 
 **Unix (Linux / macOS):**
 \`\`\`bash
-tar xzf codewhale-<platform>.tar.gz
-cd codewhale-<platform>
+tar xzf ghosty-<platform>.tar.gz
+cd ghosty-<platform>
 ./install.sh
 \`\`\`
 
 **Windows:**
-- For the installer path, run \`CodeWhaleSetup.exe\`; it installs
-  \`codewhale.exe\`, \`codew.exe\`, and \`codewhale.bat\` under
-  \`%LOCALAPPDATA%\\Programs\\CodeWhale\\bin\`, adds that directory to the
+- For the installer path, run \`GhostyCodeSetup.exe\`; it installs
+  \`ghosty.exe\`, \`ghosty-tui.exe\`, and \`ghosty.bat\` under
+  \`%LOCALAPPDATA%\\Programs\\GhostyCode\\bin\`, adds that directory to the
   current-user PATH, and creates a Start Menu shortcut that prefers
   Windows Terminal (\`wt.exe\`) when it is installed.
-- Extract the archive for your machine: \`codewhale-windows-x64.zip\` or
-  \`codewhale-windows-arm64.zip\`
-- Double-click \`codewhale.bat\` (not the raw \`.exe\`) to launch
+- Extract the archive for your machine: \`ghosty-windows-x64.zip\` or
+  \`ghosty-windows-arm64.zip\`
+- Double-click \`ghosty.bat\` (not the raw \`.exe\`) to launch
 - Run \`install.bat\` to copy the binaries and launcher to \`%USERPROFILE%\\bin\`
 - Add \`%USERPROFILE%\\bin\` to your PATH
 
-The **portable** Windows archive skips the install script — extract and run \`codewhale.bat\` from any directory. The NSIS installer is currently unsigned and may trigger Windows SmartScreen until a signing certificate is wired into the release pipeline.
+The **portable** Windows archive skips the install script — extract and run \`ghosty.bat\` from any directory. The NSIS installer is currently unsigned and may trigger Windows SmartScreen until a signing certificate is wired into the release pipeline.
 
-Each platform also has **bare, unarchived** \`codewhale-<platform>\` and
-\`codew-<platform>\` assets. The seven \`codewhale-tui-<platform>\` filenames
+Each platform also has **bare, unarchived** \`ghosty-<platform>\` and
+\`ghosty-tui-<platform>\` assets. The seven \`ghosty-tui-<platform>\` filenames
 attached to v0.9.5 are byte-identical compatibility copies used only to let
 already-installed v0.9.4 clients discover and cross this single-binary
 transition; current installers do not expose a third runtime. The legacy npm
@@ -124,14 +124,14 @@ Download the checksum manifests from this Release and verify:
 
 \`\`\`bash
 # Linux — archive bundles
-sha256sum -c codewhale-bundles-sha256.txt --ignore-missing
+sha256sum -c ghosty-bundles-sha256.txt --ignore-missing
 
 # Linux — individual binaries
-sha256sum -c codewhale-artifacts-sha256.txt --ignore-missing
+sha256sum -c ghosty-artifacts-sha256.txt --ignore-missing
 
 # macOS
-shasum -a 256 -c codewhale-bundles-sha256.txt --ignore-missing
-shasum -a 256 -c codewhale-artifacts-sha256.txt --ignore-missing
+shasum -a 256 -c ghosty-bundles-sha256.txt --ignore-missing
+shasum -a 256 -c ghosty-artifacts-sha256.txt --ignore-missing
 \`\`\`
 
 ## What's in ${tag}
@@ -156,5 +156,5 @@ fi
 
 cat <<EOF
 
-See [CHANGELOG.md](https://github.com/Hmbown/CodeWhale/blob/main/CHANGELOG.md) for full notes and [docs/CHANGELOG_ARCHIVE.md](https://github.com/Hmbown/CodeWhale/blob/main/docs/CHANGELOG_ARCHIVE.md) for older releases.
+See [CHANGELOG.md](https://github.com/blissito/ghostycode/blob/main/CHANGELOG.md) for full notes and [docs/CHANGELOG_ARCHIVE.md](https://github.com/blissito/ghostycode/blob/main/docs/CHANGELOG_ARCHIVE.md) for older releases.
 EOF

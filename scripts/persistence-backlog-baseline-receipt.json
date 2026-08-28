@@ -4,7 +4,7 @@
   "build_profile": "test",
   "cargo_version": "cargo 1.97.0 (c980f4866 2026-06-30)",
   "content_bytes_per_request": 65536,
-  "document_kind": "codewhale.persistence_backlog_receipt",
+  "document_kind": "ghosty.persistence_backlog_receipt",
   "enqueue_elapsed_ns": 456170,
   "estimated_retained_payload_bytes": 8527994,
   "expected_applied_version": 127,

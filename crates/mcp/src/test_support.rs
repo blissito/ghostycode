@@ -1,5 +1,5 @@
 //! Test-only helpers. Compiled under `#[cfg(all(test, unix))]` only, so
-//! nothing here can be reached by a real `codewhale mcp-server` run, and
+//! nothing here can be reached by a real `ghosty mcp-server` run, and
 //! Windows — where the POSIX-sh fixture cannot run and its consumers are
 //! `#[cfg(unix)]` — does not compile it as dead code.
 
@@ -67,7 +67,7 @@ impl Drop for FakeServerScript {
 /// Write the fake server to a unique temp directory and return a guard.
 pub fn write_fake_mcp_server(label: &str) -> FakeServerScript {
     let dir = std::env::temp_dir().join(format!(
-        "codewhale-mcp-{label}-{}-{:?}",
+        "ghosty-mcp-{label}-{}-{:?}",
         std::process::id(),
         std::thread::current().id()
     ));

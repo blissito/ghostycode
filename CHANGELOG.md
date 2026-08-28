@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.15] - 2026-08-28
+
+Ghosty se rebasa sobre CodeWhale 0.9.11 (commit `c8f38f0`), el proyecto del que
+nace. El delta propio de Ghosty se reaplica encima: proveedor `easybits`, tope de
+128 tools de DeepSeek, instalador `scripts/install.sh`, paquete npm `ghostycode`,
+la mascota. Todo lo que sigue en este archivo por debajo de esta entrada es el
+historial de upstream, conservado tal cual.
+
+### Changed
+
+- **Un solo binario.** El runtime está consolidado en `ghosty`; `ghosty-tui`
+  deja de publicarse como comando. El instalador del tarball refresca un
+  `ghosty-tui` previo al binario nuevo si lo encuentra, para que nadie quede
+  ejecutando código viejo. `scripts/install.sh` y npm bajan un solo archivo.
+- **`easybits` es `ProviderKind` propio**, no un alias a `deepseek`. Se cierra el
+  bug por el que persistir el proveedor escribía `"deepseek"` y perdía el modo
+  al siguiente arranque. En la capa de rutas se clasifica como revendedor
+  (pass-through), no como proveedor directo: comparte catálogo y escalera de
+  esfuerzo con DeepSeek.
+- **La marca de la cabecera dice `ghosty`.** El valor `status_indicator = "cw"`
+  sigue siendo válido por compatibilidad; cambia lo que pinta.
+- Versión del workspace y de npm: `0.0.15`. La política de numeración sigue en
+  `0.0.x`.
+
+### Added
+
+- **Mascota.** El fantasma en bloques vuelve a la pantalla vacía y a la
+  bienvenida, con halo y una línea de tiempo de ojos más rica (parpadeo simple
+  y doble, miradas, sonrisa, sorpresa, de reojo, corazones, sueño, brillo).
+  Reloj y despertador propios, fuera de `low_motion` a propósito: a ~5.5 fps
+  no hay parpadeo posible, y congelarlo dejaba al fantasma muerto en Ghostty,
+  VS Code y SSH.
+- **`ghosty auth set` en una instalación nueva deja ese proveedor activo.**
+  Antes guardaba la key y dejaba `provider = "deepseek"`, así que el usuario de
+  cero arrancaba con un proveedor distinto al que acababa de configurar. Sobre
+  un config existente no cambia nada.
+- **Tope de 128 tools de DeepSeek** reaplicado en `core/engine/tool_catalog.rs`:
+  aviso antes de enviar la petición. Sigue haciendo falta porque
+  `apply_tool_surface_budget` de upstream marca tools como diferidas pero no las
+  saca del array, y DeepSeek las cuenta todas.
+- `docs/TALLER.md`: guía de taller con instalación pineada, EasyBits en modo
+  híbrido (cajas por MCP, S3/DB por REST) y tabla de fallas.
+
+### Fixed
+
+- `scripts/install.sh` resolvía la versión contra `api.github.com`, que limita a
+  60 peticiones/hora **por IP**: en un taller con WiFi compartida, el asistente
+  61 no instalaba. Ahora resuelve por el redirect de `/releases/latest`, con la
+  API como respaldo. Además: preflight de `curl`/sha, verificación de que el
+  checksum cubrió la línea esperada, borrado de `com.apple.quarantine` en macOS
+  y aviso de instalación previa.
+- El wrapper npm ignoraba `ghostyBinaryVersion` y habría bajado la versión
+  equivocada en cuanto divergiera de `version`; `check-versions.sh` lo vigila.
+
+### Removed
+
+- Módulos que upstream retiró y Ghosty aún arrastraba: `slop_ledger` (y el
+  comando `/slop`), `seam_manager`, `session_failure_classifier`,
+  `theme_qa_audit`. `error_taxonomy/` y los tests de paleta de upstream cubren
+  lo que hacían.
+- `vision/attach.rs` y `onboarding/glm_key.rs`: superados por `image_attach.rs`
+  y por `zai` como proveedor de primera clase en upstream.
+
+
 ### Added
 
 - Add provider-native web search for documented Xiaomi MiMo 2.5 Pro and 2.5
@@ -39,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `~/.claude/settings.json` read-only and renders an explicit, reviewable
   migration plan plus a written report. MCP servers route through the
   existing `/mcp import <name> --approve` consent flow, allowlisted env keys
-  become an unapplied portable bundle for `codewhale config import`, and
+  become an unapplied portable bundle for `ghosty config import`, and
   permissions/hooks map to manual follow-ups; secret-shaped values are named
   but never echoed or imported.
 - Added the managed Chat relay: account-owned Chat commands now execute on the
@@ -58,8 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added a verified Omarchy/AUR packaging path: `packaging/aur` now carries a
   `PKGBUILD` template, `.SRCINFO` renderer and tests, release-candidate
-  render step, and docs; the live AUR compatibility alias `codewhale-tui ->
-  codewhale` is preserved, AUR dependencies match the live package, and the
+  render step, and docs; the live AUR compatibility alias `ghosty-tui ->
+  ghosty` is preserved, AUR dependencies match the live package, and the
   self-updater refuses to fight an Omarchy/package-manager installation.
 - Added a Fleet run-wide cost/token usage ceiling (R6, #5567): an accumulator
   plus admission gate and alert bound a whole run's spend across workers.
@@ -85,7 +149,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   branch.
 - Added plugin load-failure startup hints (#5579) and OpenRouter app
   attribution headers on outbound requests.
-- Added `codewhale doctor --fix` (with `--yes` for non-interactive consent):
+- Added `ghosty doctor --fix` (with `--yes` for non-interactive consent):
   the doctor now computes a concrete repair plan — delete stale `.tmp*`
   leftovers from interrupted atomic writes, tighten secret-store file
   permissions to `0600`, disable structurally broken (Error-status) MCP
@@ -119,9 +183,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status until compaction or explicit dismissal, instead of disappearing into
   scrolling turn metadata (#5620).
 - The Runtime thread store defaults to a per-session root
-  (`$CODEWHALE_HOME/sessions/<id>/runtime`) so multiple Codewhale processes on
+  (`$GHOSTY_HOME/sessions/<id>/runtime`) so multiple Ghosty processes on
   one machine no longer share one owner lock (#5630). The exclusive lock is
-  unchanged; `CODEWHALE_RUNTIME_DIR` still selects a shared root when that is
+  unchanged; `GHOSTY_RUNTIME_DIR` still selects a shared root when that is
   intended.
 - Session token totals now include display-only per-model-call deltas while a
   turn is running, including input/output and cache-class counters; the
@@ -145,16 +209,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Step budgets now end honestly: an ~80% soft landing nudges the model to
   write its final report, and exhaustion grants exactly one bounded
   report-on-exhaustion turn instead of dying silently (A1/A2).
-- Contributor credit: recognized agent contributors (e.g. `Codewhale Agent`)
+- Contributor credit: recognized agent contributors (e.g. `Ghosty Agent`)
   may now carry `Co-authored-by` trailers; unknown bot/tool trailers are
   still rejected by the credit gate.
 
 ### Fixed
 
 - Account sessions no longer read the macOS Keychain. Unsigned or rebuilt
-  `codewhale` binaries were a new Keychain ACL principal every time, so
-  `codewhale web` and the TUI popped a password dialog on start. Sessions
-  now use `~/.codewhale/secrets/secrets.json` (mode 0600), the same store
+  `ghosty` binaries were a new Keychain ACL principal every time, so
+  `ghosty web` and the TUI popped a password dialog on start. Sessions
+  now use `~/.ghosty/secrets/secrets.json` (mode 0600), the same store
   as provider keys. Extracted from the Keychain-retirement half of #5632.
 - Hardened the dispatcher-side config parse the same way: `ConfigStore`
   loads and project-config parsing now deserialize `ConfigToml` on a
@@ -229,12 +293,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sibling tests mutate concurrently.
   `route_budget::tests::v4_trigger_uses_window_percent_when_it_fits_spendable_input`
   asserted no-override output-budget values while reading
-  `CODEWHALE_MAX_OUTPUT_TOKENS` / `DEEPSEEK_MAX_OUTPUT_TOKENS` without
+  `GHOSTY_MAX_OUTPUT_TOKENS` / `DEEPSEEK_MAX_OUTPUT_TOKENS` without
   holding `lock_test_env()`, so a concurrent writer could flip the value
   mid-assertion (the order-dependent full-suite flake).
   `prompts::tests::system_prompt_prefix_never_leaks_private_content` read the
   real home via `HOME`/`USERPROFILE`, so a machine with
-  `~/.codewhale/instructions.md` leaked its absolute path into the prompt and
+  `~/.ghosty/instructions.md` leaked its absolute path into the prompt and
   failed the no-private-paths assertion unless a sibling's temporary `HOME`
   guard happened to be live. Both tests now hold the env barrier and pin the
   variables (the route-budget test removes the overrides; the prompts test
@@ -246,9 +310,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.11] - 2026-08-22
 
-Codewhale v0.9.11 tightens the long-running agent loop, makes workflow
+Ghosty v0.9.11 tightens the long-running agent loop, makes workflow
 failures visible instead of successful-looking, adds an experimental
-vision-capable DeepSeek route, and prepares reproducible Codewhale-versus-Pi
+vision-capable DeepSeek route, and prepares reproducible Ghosty-versus-Pi
 evaluation without publishing a result before a real run. The complete
 item-level change record is retained below the categorized release highlights.
 
@@ -259,7 +323,7 @@ item-level change record is retained below the categorized release highlights.
   registry and picker entries, and image-input capability on the chat route.
   Context and output limits inherit from V4 Flash until DeepSeek publishes
   distinct values; pricing remains unknown rather than guessed.
-- Added a provider-controlled Codewhale-versus-Pi parity harness with three
+- Added a provider-controlled Ghosty-versus-Pi parity harness with three
   hermetic coding tasks, route and reasoning-effort receipts, doctor/dry-run
   modes, and bounded result artifacts. The repository ships the harness, not a
   benchmark verdict; comparable real runs remain an acceptance gate.
@@ -329,15 +393,15 @@ item-level change record is retained below the categorized release highlights.
   credential keys. Project and global bundle operations now load and validate
   the document for their actual scope in both directions, including a
   workspace whose document still lives under the legacy app directory.
-- `codewhale login` now means Codewhale account sign-in (the same browser
-  device flow as `codewhale account login`, with `--no-open` and
+- `ghosty login` now means Ghosty account sign-in (the same browser
+  device flow as `ghosty account login`, with `--no-open` and
   `--timeout-seconds`); provider API keys are configured exclusively through
-  `codewhale auth set --provider <provider>`, and the hidden legacy
+  `ghosty auth set --provider <provider>`, and the hidden legacy
   `--api-key`/`--provider` flags redirect loudly instead of silently writing
   a key.
 - Account sessions prefer the OS credential manager and now fall back
-  automatically to the private `0600` Codewhale secrets file on headless
-  hosts, SSH boxes, and containers; the `CODEWHALE_CLOUD_ALLOW_FILE_SESSION_STORE`
+  automatically to the private `0600` Ghosty secrets file on headless
+  hosts, SSH boxes, and containers; the `GHOSTY_CLOUD_ALLOW_FILE_SESSION_STORE`
   opt-in is deprecated and ignored.
 - `/update` gained a `Ctrl+Shift+U` install chord (catalogued in
   `docs/KEYBINDINGS.md`, localized in all 15 packs) and a startup hint that
@@ -391,7 +455,7 @@ item-level change record is retained below the categorized release highlights.
   presentation/media/digest facets and the seven utility-handler migrations
   (#5525).
 - **RepentStar ([@RepentStar](https://github.com/RepentStar))** — reported and
-  reproduced the stale completion-generator path and missing `codew`
+  reproduced the stale completion-generator path and missing `ghosty-tui`
   registration fixed for #5526.
 
 ### Detailed change record
@@ -539,9 +603,9 @@ erase behavior, migration, security, compatibility, or verification details.
   loads here, and `assistant_interrupted` stays a distinct session item — no
   session schema bump and no migration ladder.
 
-- Portable config bundles: `codewhale config export --portable` writes a
+- Portable config bundles: `ghosty config export --portable` writes a
   deterministic, secret-free bundle (credential and machine-specific keys
-  dropped), and `codewhale config import <FILE|URL|->` applies one with a
+  dropped), and `ghosty config import <FILE|URL|->` applies one with a
   strict versioned envelope, a printed added/changed/skipped/conflicting/
   rejected plan, consent gating (`--yes` required headless), a timestamped
   backup with rollback, and idempotent re-import. Credential-shaped entries
@@ -628,15 +692,15 @@ erase behavior, migration, security, compatibility, or verification details.
   in both the xAI and account device flows.
 
 - OAuth device-code login is now one implementation. xAI/Grok device login and
-  Codewhale account login each carried their own hand-rolled RFC 8628 polling
+  Ghosty account login each carried their own hand-rolled RFC 8628 polling
   loop with nothing shared between them; both now call a single primitive
-  (`codewhale-config`'s `device_code`), ported from pi. Three fixes come with
+  (`ghosty-config`'s `device_code`), ported from pi. Three fixes come with
   it. `slow_down` now honours a server-supplied `interval` instead of always
   adding five seconds, which is what stops polling from running early forever
   under WSL and VM clock drift. Timing out after a `slow_down` now says so and
   names clock drift, rather than reading as a plain timeout. And the xAI
   verification URI is validated before it is handed to the browser opener —
-  Codewhale previously opened whatever the device-code response said, so a
+  Ghosty previously opened whatever the device-code response said, so a
   spoofed or compromised issuer could point the platform "open this" call at a
   `file:` path or a custom application scheme. It must now be `https:`, or
   `http:` on a loopback host for self-hosted issuers. Stored credential files
@@ -779,30 +843,30 @@ erase behavior, migration, security, compatibility, or verification details.
 - The first screen of first run no longer cuts its own headline. The welcome
   and ready titles, and the provider-step heading, were emitted as single
   unwrapped lines while the sentence beneath them wrapped, so at 40 columns
-  German read "Codewhale arbeitet mit dir in diesem O", Russian lost its final
+  German read "Ghosty arbeitet mit dir in diesem O", Russian lost its final
   stop, and Japanese lost "します。". Headings are prose and now wrap like it,
   in every shipped locale.
 
 - The workspace-trust screen no longer cuts its own question in half on a small
   terminal. The question, the prompt-injection risk hint, and the trust-effect
   hint were each pushed as one unwrapped line, so at 40 columns the screen read
-  "Should Codewhale work with the instruc" — severed mid-word with nothing
+  "Should Ghosty work with the instruc" — severed mid-word with nothing
   marking the cut, while the workspace path directly beneath it wrapped
   correctly. Asking someone to grant filesystem trust while the question itself
   is truncated is the worst place in the product for that to happen. All three
   now wrap through the same helper the rest of onboarding uses, which also
   means they wrap correctly in Japanese and Chinese. Verified across all
   fifteen shipped locales at 40, 60, 80 and 120 columns.
-- `codewhale completions <shell>` generated a script for the wrong program.
-  The subcommand forwarded to the in-tree `codewhale-tui` binary, which
+- `ghosty completions <shell>` generated a script for the wrong program.
+  The subcommand forwarded to the in-tree `ghosty-tui` binary, which
   rendered completions from *its own* clap tree under *its own* name, so the
-  output ended in `complete -F _codewhale__tui ... codewhale-tui` (bash),
-  `#compdef codewhale-tui` (zsh), and
-  `Register-ArgumentCompleter -Native -CommandName 'codewhale-tui'`
-  (PowerShell). Sourcing it registered nothing for `codewhale` or `codew` —
+  output ended in `complete -F _ghosty__tui ... ghosty-tui` (bash),
+  `#compdef ghosty-tui` (zsh), and
+  `Register-ArgumentCompleter -Native -CommandName 'ghosty-tui'`
+  (PowerShell). Sourcing it registered nothing for `ghosty` or `ghosty-tui` —
   the two commands current installers expose — so tab completion appeared to
   do nothing. The forwarded tree was also stale against the real CLI: it offered
-  `pr`, `scorecard`, and `session-diagnostics`, which `codewhale` does not
+  `pr`, `scorecard`, and `session-diagnostics`, which `ghosty` does not
   have, and omitted `run`, `rc`, `config`, `model`, `thread`, `lane`,
   `workflow`, `web`, `account`, `app-server`, `mcp-server`, `metrics`,
   `update`, `cloud`, `completion`, and `lane-log-proxy`, which it does.
@@ -812,16 +876,16 @@ erase behavior, migration, security, compatibility, or verification details.
   script you installed from an earlier release. Reported by **RepentStar**
   (#5526); part of the `deepseek-tui`-era identifier retirement in #5443.
 
-- Completion scripts now fire for the `codew` shorthand as well as
-  `codewhale`. Releases publish `codew` as a byte-identical copy of the
-  `codewhale` binary, so a script bound to only one of the two names was half
+- Completion scripts now fire for the `ghosty-tui` shorthand as well as
+  `ghosty`. Releases publish `ghosty-tui` as a byte-identical copy of the
+  `ghosty` binary, so a script bound to only one of the two names was half
   installed for anyone who types the short one. Each shell gets its own
   idiomatic hook rather than a second copy of the script: bash re-binds the
   generated function, zsh widens the `#compdef` tag line to
-  `#compdef codewhale codew`, fish adds `complete -c codew -w codewhale`,
-  PowerShell registers `-CommandName 'codewhale','codew'`, and Elvish aliases
+  `#compdef ghosty ghosty-tui`, fish adds `complete -c ghosty-tui -w ghosty`,
+  PowerShell registers `-CommandName 'ghosty','ghosty-tui'`, and Elvish aliases
   the completer with
-  `set edit:completion:arg-completer[codew] = $edit:completion:arg-completer[codewhale]`.
+  `set edit:completion:arg-completer[ghosty-tui] = $edit:completion:arg-completer[ghosty]`.
 
 - Documented shell completions. `docs/INSTALL.md` § 8 now gives the generate
   and install commands for bash, zsh, fish, PowerShell, and Elvish, with a
@@ -937,7 +1001,7 @@ erase behavior, migration, security, compatibility, or verification details.
   `TurnComplete { status: "completed" }` without ever contacting a model, and
   `TurnExecutor` was a struct with a field-copy constructor and a
   `step < max_steps` comparison. Nothing in the workspace referenced any of it —
-  the only mention of `codewhale_core::engine` anywhere was a doc comment inside
+  the only mention of `ghosty_core::engine` anywhere was a doc comment inside
   the tree itself — but its comments ("the real turn loop is wired here in the
   next slice") were what `docs/ARCHITECTURE.md` leaned on to claim that
   `crates/core` owns the agent loop. There is now exactly one turn loop in the
@@ -960,24 +1024,24 @@ erase behavior, migration, security, compatibility, or verification details.
 - Project instructions are bounded by one budget and no longer treat other
   agents' files as law by default. Previously `.claude/instructions.md` and
   `CLAUDE.md` sat at ranks 2 and 3 of the canonical instruction list — *above*
-  Codewhale's own `.codewhale/instructions.md` — `.claude/rules/` was an
+  Ghosty's own `.ghosty/instructions.md` — `.claude/rules/` was an
   auto-discovered rules directory, and `.cursorrules`, `.cursor/rules`,
   `.clinerules`, `.windsurf/rules`, `.gemini`, `.github/copilot-instructions.md`
   and `.github/muse-instructions.md` were all imported into the system prompt
   with no opt-in. Dropping a `CLAUDE.md` written for a different tool into a
   repository silently made it standing authority here, which is an injection
-  surface rather than a convenience. Codewhale now reads `AGENTS.md`, the
+  surface rather than a convenience. Ghosty now reads `AGENTS.md`, the
   cross-agent `.agents/AGENTS.md`, and its own instruction files by default;
   every other agent's format is opt-in by name through
-  `project_instruction_imports` (env `CODEWHALE_PROJECT_INSTRUCTION_IMPORTS`),
-  imported files rank *below* Codewhale's own, and a workspace that contains an
+  `project_instruction_imports` (env `GHOSTY_PROJECT_INSTRUCTION_IMPORTS`),
+  imported files rank *below* Ghosty's own, and a workspace that contains an
   un-imported format says so in a warning naming the exact setting.
 - Separately, a symlinked candidate rules directory — `.cursor/rules`,
   `.windsurf/rules`, or `.gemini` pointing outside the workspace — was
   traversed and its contents imported as instruction authority, because the
   directory check followed the link while only the files inside it were
   checked. The two instruction loaders now apply the same no-follow rule that
-  `.codewhale/rules/` already had.
+  `.ghosty/rules/` already had.
 - The three separate ceilings on standing instructions (200 KiB for the
   root->workspace chain, 500 KiB for the rules block, 40 KiB for imported
   fragments, and a global layer that was merged in after the chain budget had
@@ -997,7 +1061,7 @@ erase behavior, migration, security, compatibility, or verification details.
   and never constrained shell subprocesses, so workspace-write turns had
   unrestricted egress with nothing enforcing anything. Network now comes from
   one of three explicit places: the new `sandbox_network_access` config key
-  (also `CODEWHALE_SANDBOX_NETWORK_ACCESS`), a `danger-full-access` posture, or
+  (also `GHOSTY_SANDBOX_NETWORK_ACCESS`), a `danger-full-access` posture, or
   the existing post-denial elevation prompt that grants network for a single
   call. Yolo and `--yolo`/Bypass are unchanged — they resolve to
   `danger-full-access`, which applies no sandbox at all. `external-sandbox`
@@ -1008,9 +1072,9 @@ erase behavior, migration, security, compatibility, or verification details.
   and `doctor` continue to say so.
 
 - The nightly Windows ARM64 artifact build works again. Every nightly from
-  2026-08-16 failed while compiling `codewhale-tui`, deterministically on the
+  2026-08-16 failed while compiling `ghosty-tui`, deterministically on the
   same codegen unit across all three build attempts, with
-  `thread 'optimize module codewhale_tui...-cgu.13' has overflowed its stack`.
+  `thread 'optimize module ghosty_tui...-cgu.13' has overflowed its stack`.
   The trigger is stack depth in the LLVM worker threads that run per-codegen-unit
   optimization, not the workflow's `lto=off` override: holding the crate and
   every flag fixed and varying only `RUST_MIN_STACK` on aarch64 shows 1 MiB
@@ -1046,7 +1110,7 @@ erase behavior, migration, security, compatibility, or verification details.
   broken in the renderer.
 ## [0.9.10] - 2026-08-19
 
-- Show the full slash-command or `/model` completion row in a bounded, wrapping hover popover whenever narrow terminals truncate it, closing the remaining scoped gap from [#998](https://github.com/Hmbown/CodeWhale/issues/998). Thanks [@AiurArtanis](https://github.com/AiurArtanis) and [@formp3](https://github.com/formp3) for identifying the affected surfaces.
+- Show the full slash-command or `/model` completion row in a bounded, wrapping hover popover whenever narrow terminals truncate it, closing the remaining scoped gap from [#998](https://github.com/Hmbown/GhostyCode/issues/998). Thanks [@AiurArtanis](https://github.com/AiurArtanis) and [@formp3](https://github.com/formp3) for identifying the affected surfaces.
 - `registry_sync` no longer ships the full MCP Registry catalog into the
   conversation. It takes a required query, scores the local snapshot
   host-side, and returns at most eight matches; the complete catalog stays on
@@ -1063,7 +1127,7 @@ erase behavior, migration, security, compatibility, or verification details.
   partial reply was preserved, the retry budget is enforced in mechanism, and
   recovery produces exactly one authoritative final answer.
 
-Codewhale v0.9.10 is a retention, identity, and product-clarity release: the shell and
+Ghosty v0.9.10 is a retention, identity, and product-clarity release: the shell and
 transcript can no longer retain unbounded tool output in memory or on disk,
 mid-turn history inserts no longer strand in-flight tool rows, every agent
 that ran this session is visible from `/agents list`, the PTY acceptance
@@ -1100,7 +1164,7 @@ abort under load.
   recommended`, `/mcp enable`, and `/plugin` install/trust controllers, so
   no second trust path exists. Browser Use and Sandbox Runtime stay
   honestly Unavailable with their real setup routing instead of implying an
-  install Codewhale cannot perform.
+  install Ghosty cannot perform.
 - The Extensions MCP tab now renders one honest inventory: the header count
   and the visible rows derive from the same configured-server set, so
   `MCP (6)` can no longer sit above two rendered rows. Disabled servers
@@ -1141,7 +1205,7 @@ abort under load.
   the default path writes no custom constitution. The startup launch surface
   distinguishes read-only Chat from folder-bound, approval-gated Work.
 - Tabby and other IME bridges no longer observe a stale visible caret while a
-  frame diff is being painted; Codewhale hides the cursor during the diff,
+  frame diff is being painted; Ghosty hides the cursor during the diff,
   restores the canonical composer cell, and only then reveals it again
   (BrathonBai, #5023).
 - Pre-header HTTP/2/SSE transport failures get one bounded HTTP/1.1 retry;
@@ -1154,12 +1218,12 @@ abort under load.
 - Linux npm installs and updates race GitHub Releases against the CNB mirror
   at the checksum-manifest layer, then download from the first verified source
   without making users wait through a doomed slow-source timeout.
-- `CODEWHALE_PREFER_BWRAP` now applies the documented Linux sandbox override,
-  and Codewhale-era names own build metadata, hook session/tool-call IDs, and
+- `GHOSTY_PREFER_BWRAP` now applies the documented Linux sandbox override,
+  and Ghosty-era names own build metadata, hook session/tool-call IDs, and
   sandbox child markers. The corresponding `DEEPSEEK_*` names remain as 0.9.x
   compatibility aliases (#5443).
 - Windows default launch prefers Windows Terminal: zip archives ship
-  `codewhale.bat` (CRLF, `wt.exe` then the exe), `install.bat` copies that
+  `ghosty.bat` (CRLF, `wt.exe` then the exe), `install.bat` copies that
   launcher, and the NSIS Start Menu shortcut opens it instead of the raw
   binary (#1854).
 - `fix(tui): make the header status mark honour its setting` — `status_indicator`
@@ -1203,9 +1267,9 @@ abort under load.
   gate job runs authorization tests in under 15 minutes (test bankruptcy
   restructuring — no tests deleted).
 - Config-fixture tests no longer honor `lock_test_env` as a license to
-  read a populated `~/.codewhale/config.toml`; they need an `EnvVarGuard`
+  read a populated `~/.ghosty/config.toml`; they need an `EnvVarGuard`
   like settings already did. Safety-gate and CNB workspace tests pin a
-  hermetic `CODEWHALE_HOME`. `exec_persistent_service` is serialized in
+  hermetic `GHOSTY_HOME`. `exec_persistent_service` is serialized in
   nextest and inside the cargo-test binary instead of dropped (#5355).
 - Short CLI no longer waits up to three seconds for a telemetry POST on
   exit; `session_end` is recorded and the buffer ships on the next
@@ -1224,7 +1288,7 @@ abort under load.
   into a quiet, width-aware footer identity. Compact layouts keep model and
   effort before provider detail and shed whole low-priority groups instead of
   clipping the composer or control hints.
-- The model picker no longer re-parses `~/.codewhale/config.toml` once per
+- The model picker no longer re-parses `~/.ghosty/config.toml` once per
   provider when deciding who has a saved key.
 
 ### Added
@@ -1257,10 +1321,10 @@ abort under load.
   zero-width characters (PR #5509 by @SparkofSpike).
 - MCP snapshots preserve whether capabilities were advertised by the server,
   discovered through the bounded legacy fallback, or not observed (#4170).
-- `codewhale auth status --diagnostic` reports canonical paths, isolation
+- `ghosty auth status --diagnostic` reports canonical paths, isolation
   source, backend class, and value-free provider-source presence without
   opening credential stores or creating/migrating state (#2369).
-- `codewhale doctor --probe-search` performs an explicit credential-free,
+- `ghosty doctor --probe-search` performs an explicit credential-free,
   policy-checked transport probe for the selected search provider; ordinary
   doctor and JSON output remain offline (#5442).
 - The safe deferred `read_media` tool is available to supported read-only
@@ -1270,7 +1334,7 @@ abort under load.
   fetches the GitHub Releases and CNB checksum manifests for the exact
   package version, locks the first source whose HTTP response and manifest
   validate, and downloads binaries only from that source. Explicit
-  `CODEWHALE_RELEASE_BASE_URL` / `CODEWHALE_USE_CNB_MIRROR=1` still skip the
+  `GHOSTY_RELEASE_BASE_URL` / `GHOSTY_USE_CNB_MIRROR=1` still skip the
   race; other targets stay on GitHub.
 - `/workflow <objective>` and `/workflow run <path>` now produce a bounded,
   tool-less proposal for review. Only `/workflow confirm` can launch that
@@ -1389,7 +1453,7 @@ abort under load.
 
 ## [0.9.9] - 2026-08-18
 
-Codewhale v0.9.9 is a truth-and-resilience release: the shell tool can no
+Ghosty v0.9.9 is a truth-and-resilience release: the shell tool can no
 longer wedge a session when the host runs out of disk or descriptors,
 unverified context windows and output ceilings are labeled honestly at every
 surface, DeepSeek V4 is priced on the published peak/off-peak tiers, SSE
@@ -1431,10 +1495,10 @@ locales grow to 18 and 8.
   `unverified` rung for both, so exec-stream receipts and the model picker
   label them `unverified`/"assumed floor" instead of `documented`. Clamp
   values are unchanged.
-- Telemetry default-on is visible (#5441): `codewhale doctor`'s
+- Telemetry default-on is visible (#5441): `ghosty doctor`'s
   runtime-posture section gained a `telemetry=on (default)`-style row with
   the source that decided it (cli | env | config | default), and
-  `codewhale config get telemetry` reports the resolved consent with its
+  `ghosty config get telemetry` reports the resolved consent with its
   source instead of `key not found` on a machine whose batches ship. Truth
   change only; resolution and behavior are untouched.
 - Fleet: a scout's read-only shell carve-out (#5428) is now honored by both
@@ -1491,7 +1555,7 @@ locales grow to 18 and 8.
   owning Z.ai / DeepSeek catalog row (case-fold fallback, only when exactly
   one provider-owned wire id matches) instead of being classified as another
   provider's bare model (#5475, thanks @h3c-hexin; diagnosis by @asto18089
-  in Pinvou/CodeWhale#14).
+  in Pinvou/GhostyCode#14).
 - Model catalog brought current as of 2026-08-17 against the official
   pricing pages: gpt-5.6-terra / gpt-5.6-luna rates, `claude-sonnet-5` keeps
   $2/$10 (the announced September increase was withdrawn), `claude-opus-5`
@@ -1500,7 +1564,7 @@ locales grow to 18 and 8.
   tiers, Gemini and Qwen limits, and RedNote's `dots3-note` preview as an
   OpenRouter row (no first-party API exists yet) — every number carries its
   source and a pinned test (#5485).
-- Website: copy on codewhale.net rewritten in plain declarative sentences —
+- Website: copy on ghosty.net rewritten in plain declarative sentences —
   one idea per sentence, numbers from the generated facts, no self-narration
   — with a voice sheet at docs/design/WEB_VOICE.md (#5483).
 - CI: the release workflows no longer restore npm/cargo caches after
@@ -1568,7 +1632,7 @@ locales grow to 18 and 8.
   and status cells never inherit the cap (#5436).
 - Localization: README translations for Français, Deutsch, 繁體中文, हिन्दी,
   Türkçe, Italiano, Polski, العربية and Català join the existing nine
-  (#5451); codewhale.net routes fr, de, ca, hi, tr, it, pl and ar (with
+  (#5451); ghosty.net routes fr, de, ca, hi, tr, it, pl and ar (with
   `dir="rtl"` plumbing) as partial locales (#5453).
 - Docs: README Integrations section (incl. the DeepSeek Harness `dsh` plugin
   path, docs/INTEGRATIONS_DSH.md) localized across all READMEs; RFC keeping
@@ -1576,18 +1640,18 @@ locales grow to 18 and 8.
   reference for agents/workflows/plugins/skills
   (docs/design/CLAUDE_CODE_PARITY.md); config.example.toml / SUBAGENTS.md /
   TOOL_LIFECYCLE.md brought back in line with the code (#5447).
-- `dsh` integration: the Codewhale palette is applied through the bundle
+- `dsh` integration: the Ghosty palette is applied through the bundle
   profile via dsh's documented `overrideTokens` (on by default;
-  `codewhale integrations dsh update --skin false` turns it off), replacing
+  `ghosty integrations dsh update --skin false` turns it off), replacing
   the 0.9.8 exported-CSS skin that dsh's inline body variables overrode
   (docs/design/DSH_BUNDLE_SKIN.md, docs/INTEGRATIONS_DSH.md) (#5469).
 - `dsh` integration: an ambient ocean scene behind the DSH web UI — slow
   whale silhouettes, a school of `><>` glyph fish, bubbles — drawn on a
-  canvas under a translucent veil of the Codewhale palette, plus an explicit
-  responsive `WHALE BROTHERS / CODEWHALE × DEEPSEEK HARNESS` lockup; light
+  canvas under a translucent veil of the Ghosty palette, plus an explicit
+  responsive `WHALE BROTHERS / GHOSTY × DEEPSEEK HARNESS` lockup; light
   and dark, ~30 fps capped, paused when hidden, a static frame under
   `prefers-reduced-motion`; on by default with the skin,
-  `codewhale integrations dsh update --ocean false` turns it off (#5484).
+  `ghosty integrations dsh update --ocean false` turns it off (#5484).
 - Fleet: agent shadowing is visible — a roster-row badge, a Layers block in
   agent detail, and a `doctor` "Fleet roster layers" section (JSON
   `operate_fleet.roster.multi_layer`), in all 15 TUI locales. Layer collapse
@@ -1619,7 +1683,7 @@ locales grow to 18 and 8.
 - Gabriel-Degret (@Gabriel-Degret) — configurable auto-router classifier
   timeout (#5494; first contribution).
 - @asto18089 — diagnosed the Z.ai `glm-5.2` casing collision and wrote the
-  first provider-scoped fix in Pinvou/CodeWhale#14 (carried upstream in
+  first provider-scoped fix in Pinvou/GhostyCode#14 (carried upstream in
   #5475).
 - Reports and reproductions that shaped this release: @hardy922 (context-
   window honesty, #5239), @redstar (bwrap extra roots, #5410), @all-lopezg
@@ -1629,16 +1693,16 @@ locales grow to 18 and 8.
 
 ## [0.9.8] - 2026-08-16
 
-Codewhale v0.9.8 ships the remaining assigned finish. Remaining web
+Ghosty v0.9.8 ships the remaining assigned finish. Remaining web
 settings polish moves to v0.9.9. Prefab third-party templates that have
 a published OpenAI-compatible host ship here (#5350).
 
 ### Fixed
 
 - `sudo` (and `su`/setuid helpers) work again for wheel-group administrators
-  who want Codewhale to be able to escalate: the Linux startup hardening's
+  who want Ghosty to be able to escalate: the Linux startup hardening's
   irreversible `PR_SET_NO_NEW_PRIVS` flag — inherited by every child process —
-  is now skippable with `CODEWHALE_NO_NEW_PRIVS=0` (#5413). The flag stays on
+  is now skippable with `GHOSTY_NO_NEW_PRIVS=0` (#5413). The flag stays on
   by default; the no-ptrace and no-core-dump measures are never skipped.
 
 - Abort-class process deaths no longer poison the terminal (#5424). A
@@ -1646,7 +1710,7 @@ a published OpenAI-compatible host ship here (#5350).
   and every cleanup guard, which is how a v0.9.7 user's mid-turn exit left
   mouse capture leaking SGR sequences into their shell. An
   async-signal-safe handler now restores the terminal modes and appends a
-  one-line cause marker to `~/.codewhale/crashes/last-fatal-signal.log`
+  one-line cause marker to `~/.ghosty/crashes/last-fatal-signal.log`
   before re-raising, keeping the honest 128+signal wait status. A SIGKILL
   (OOM killer) remains uninterceptable by design.
 
@@ -1684,10 +1748,10 @@ a published OpenAI-compatible host ship here (#5350).
 - `/plugin marketplace add|list|show|remove|install` completes the
   federated marketplace journey (#5311). `add` reads one LOCAL catalog
   document in the real published schemas (Kimi, Claude, Codex, or
-  Codewhale native) — no network, regular files only — and persists it
+  Ghosty native) — no network, regular files only — and persists it
   beside the plugin state with the same hardened, fail-closed store.
   `list`/`show` render every candidate with per-entry diagnostics,
-  display-only tiers, and honest install plans that say when Codewhale
+  display-only tiers, and honest install plans that say when Ghosty
   cannot fetch a source; `install` routes through the existing reviewed
   installer, so installed bundles still enter disabled and untrusted.
   Foreign auto-install policy (Codex `INSTALLED_BY_DEFAULT`) is visibly
@@ -1705,7 +1769,7 @@ a published OpenAI-compatible host ship here (#5350).
 
 - Z.ai `GLM-5.3` is live on the Coding Plan and is now the default direct
   Z.ai model: `DEFAULT_ZAI_MODEL` resolves to `GLM-5.3` in both
-  `codewhale-tui` and `codewhale-config`, and it is the first `/model` row
+  `ghosty-tui` and `ghosty-config`, and it is the first `/model` row
   after `/provider zai`. Explicit `GLM-5.2` selections (`model = "GLM-5.2"`
   and its `glm-5.2` aliases) keep their own id — only the default moved.
   Limits and reasoning options still inherit from `GLM-5.2` until Z.ai
@@ -1733,20 +1797,20 @@ a published OpenAI-compatible host ship here (#5350).
   subagents; neighboring remotes stay custom and fail closed against
   inherited official credentials.
 
-- Homebrew ships a `codewhale` formula. `brew tap Hmbown/deepseek-tui &&
-  brew install codewhale` is the install path; `brew upgrade codewhale`
+- Homebrew ships a `ghosty` formula. `brew tap Hmbown/deepseek-tui &&
+  brew install ghosty` is the install path; `brew upgrade ghosty`
   updates it. The legacy `deepseek-tui` formula remains a deprecated alias
   for one overlap release.
 
 - `/title [name|off]` sets a per-session tab/window title, shown as
-  `[title] …` in front of the terminal window title (`Codewhale` /
+  `[title] …` in front of the terminal window title (`Ghosty` /
   `reasoning…` / `using tool…` / `done`). The `title` config key supplies
   the default (`/config title … --save` persists it); multi-window
   workflows can tell parallel sessions apart at a glance. `/title` is
   independent of `/rename`, which keeps naming the session in the picker
   and composer. Control, bidi, and zero-width format characters are
   stripped from both the saved session name and the window title, so the
-  picker, the Runtime API, `codewhale sessions`, and the OSC 0 tab title
+  picker, the Runtime API, `ghosty sessions`, and the OSC 0 tab title
   all carry the same escape-free text (#5419, #5430).
 - Eden AI is a named OpenAI-compatible Chat Completions provider (`edenai`,
   aliases `eden-ai` / `eden_ai`) with `EDENAI_API_KEY`, global and EU base-URL
@@ -1769,7 +1833,7 @@ a published OpenAI-compatible host ship here (#5350).
   `consultant`) still never write the workspace. The focused worker's
   header states its effective posture from the runtime snapshot.
 - `/workflow status`, `/workflow cancel [run_id]`, `/workflow settings`, and
-  `/workflow help` are answered by Codewhale itself from the run journal and
+  `/workflow help` are answered by Ghosty itself from the run journal and
   live run state — no model turn — and `/workflow run <path>` launches a
   checked-in workflow as-is. `/config workflow` and `/config goal` explain
   the effective tables. The workflow tool now honors the session `[workflow]`
@@ -1777,7 +1841,7 @@ a published OpenAI-compatible host ship here (#5350).
   limits) instead of product defaults.
 - Goal mode enters as readily as DeepSeek Harness: the agent may create the
   session goal when a direct request describes a verifiable multi-turn end
-  state, and Codewhale shows a one-line `Goal set` receipt with how to pause
+  state, and Ghosty shows a one-line `Goal set` receipt with how to pause
   or clear it. Bare `/goal` shows plain progress (and how to continue when no
   turn is running), prints usage on an empty session instead of asking the
   model, and `/goal help|status` are reserved words.
@@ -1808,30 +1872,30 @@ a published OpenAI-compatible host ship here (#5350).
   and the audit-log path. The footer's `Esc to interrupt` hint is
   localized. See `docs/design/AUTO_MODE_PARITY.md` for the Claude Code /
   Kimi Code parity ledger and follow-ups.
-- `codewhale integrations dsh status|plan|connect|update|launch|disable|enable|remove`
+- `ghosty integrations dsh status|plan|connect|update|launch|disable|enable|remove`
   connects an existing official DeepSeek Harness (`dsh` 0.1.0-rc.6, verified)
-  through Codewhale using only its documented seams: a `--patch` overlay that
-  pins the exact Codewhale provider/model/endpoint identity (native
+  through Ghosty using only its documented seams: a `--patch` overlay that
+  pins the exact Ghosty provider/model/endpoint identity (native
   `deepseek-official` route, or a hand-declared `openai-completions` route
-  named `codewhale-<provider>` for OpenAI-compatible providers), the
-  Codewhale permission posture exported as `DSH_PERMISSION_MODE`, and an
-  append-only receipt. Codewhale writes only under
-  `$CODEWHALE_HOME/integrations/dsh/`, never copies API keys or edits DSH
+  named `ghosty-<provider>` for OpenAI-compatible providers), the
+  Ghosty permission posture exported as `DSH_PERMISSION_MODE`, and an
+  append-only receipt. Ghosty writes only under
+  `$GHOSTY_HOME/integrations/dsh/`, never copies API keys or edits DSH
   files, never broadens permissions (`--allow-full-access` only mirrors an
-  existing Codewhale full-access posture), and reports not-installed /
+  existing Ghosty full-access posture), and reports not-installed /
   offline / incompatible / detected / connected / stale-config /
   stale-version / disabled honestly. Anthropic Messages and OpenAI Responses
   routes are refused as not carriable. The documented DSH plugin path is an
-  explicit opt-in: `install-bundle` materializes a Codewhale bundle package
-  (`codewhale-dsh-bundle`, MIT notice retained) and installs it with
-  `dsh plugin --profile codewhale add <path>` into a dedicated `codewhale`
+  explicit opt-in: `install-bundle` materializes a Ghosty bundle package
+  (`ghosty-dsh-bundle`, MIT notice retained) and installs it with
+  `dsh plugin --profile ghosty add <path>` into a dedicated `ghosty`
   profile (pnpm required, reported truthfully when missing; `web`/`headless`
-  untouched), so `dsh --profile codewhale` alone carries the identity;
+  untouched), so `dsh --profile ghosty` alone carries the identity;
   `update` regenerates the bundle patch and `remove-bundle` reverses it,
-  leaving the DSH-owned profile directory in place. `/setup tools` and `codewhale doctor`
+  leaving the DSH-owned profile directory in place. `/setup tools` and `ghosty doctor`
   show the read-only detection state; `doctor` also lists the DSH read-only
   credential consent alongside Codex and Grok. The optional `--skin` export
-  writes a Codewhale token stylesheet generated from the TUI palette
+  writes a Ghosty token stylesheet generated from the TUI palette
   (Blue Stage dark/light, ombre water column, mode/permission/state colors,
   reduced-motion fallbacks); DSH exposes no custom-theme API, so the sheet is
   labeled an unsupported overlay and is never injected. See
@@ -1957,8 +2021,8 @@ a published OpenAI-compatible host ship here (#5350).
   runtime-contract, persistence-backlog) stay enforced.
 - DeepSeek can reuse a key already stored by official DeepSeek Harness
   (`dsh`) after
-  `codewhale auth external-consent --provider deepseek --mode read-only`.
-  Codewhale reads only `DEEPSEEK_API_KEY` from the exact granted
+  `ghosty auth external-consent --provider deepseek --mode read-only`.
+  Ghosty reads only `DEEPSEEK_API_KEY` from the exact granted
   `$DSH_HOME/.credentials.yaml` and never writes or refreshes that file.
 - The TUI markdown parser now honors CommonMark fence-length rules: a ````
   opener is not closed by a shorter ``` line, so `>` content inside a longer
@@ -1998,7 +2062,7 @@ a published OpenAI-compatible host ship here (#5350).
 
 ## [0.9.7] - 2026-08-12
 
-Codewhale v0.9.7 keeps the catalog ordinary. Grok 4.6 lands as a normal catalog
+Ghosty v0.9.7 keeps the catalog ordinary. Grok 4.6 lands as a normal catalog
 row instead of a provider-shaped pile of special cases, OrcaRouter joins as a
 named provider, and a panic-safety advisory in `lru` is cleared by lifting the
 pin that caused it rather than living around it.
@@ -2075,7 +2139,7 @@ pin that caused it rather than living around it.
 
 ## [0.9.6] - 2026-08-11
 
-Codewhale v0.9.6 is a subtractive release: fewer runtime guards, one stable
+Ghosty v0.9.6 is a subtractive release: fewer runtime guards, one stable
 prompt, truthful provider endings, and a smaller compaction path that preserves
 the provider cache. The changes were grounded by matched Terminal-Bench 2.1
 runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
@@ -2107,13 +2171,13 @@ runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
   advisory built only from configured ready routes. Accept, edit, and reject
   all remain inside the existing human-reviewed profile save boundary; the
   advisory never launches a Fleet or writes a second configuration.
-- `/update` checks for a newer Codewhale release and installs it from inside
+- `/update` checks for a newer Ghosty release and installs it from inside
   the TUI, while `tui_help` gives agents the same command and key map users see.
 - Markdown file paths render as OSC 8 links where the terminal supports them,
   and every agent row can open that agent's transcript directly.
 - ACP editor sessions can execute multi-round file, search, Git, patch, and
   explicitly enabled shell tool calls through the shared Runtime registry.
-  Shell access requires both the client's terminal capability and Codewhale's
+  Shell access requires both the client's terminal capability and Ghosty's
   headless shell opt-in, and cancellation stops an in-flight tool before the
   turn returns (#5225 by @rafaelcavalheri).
 - Lowercase `read` returns bounded typed PNG, JPEG, GIF, and WebP results to
@@ -2124,8 +2188,8 @@ runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
 ### Changed
 
 - Anonymous usage counting is on by default for fresh installs and disclosed in
-  a native first-run Codewhale modal with an immediate opt-out. Prior declines
-  remain off. Codewhale does not collect conversations, code, prompts, files,
+  a native first-run Ghosty modal with an immediate opt-out. Prior declines
+  remain off. Ghosty does not collect conversations, code, prompts, files,
   repo or branch names, credentials, model content, or per-turn activity
   timelines.
 - Wide terminals use a responsive, full-screen ocean canvas with modest
@@ -2171,13 +2235,13 @@ runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
   BOM/CRLF preservation and conservative fuzzy matching, and one foreground
   `bash` command with a bounded chronological output tail. Modes change
   execution authority, not those primitive names.
-- Codewhale no longer re-states the To-do list to the model. The model learns
+- Ghosty no longer re-states the To-do list to the model. The model learns
   what is on the list from the tool result its own `todo_write` call returned,
   which is ordinary conversation history — the same way Pi's To-do works. The
-  transient `<codewhale:work_state>` block that used to ride the tail of every
+  transient `<ghosty:work_state>` block that used to ride the tail of every
   parent turn-loop and sub-agent step request is gone, along with the stable
   system prefix being disturbed by list changes. A snapshot is still shown once,
-  where a person asked for it: the `<codewhale:fork_state>` block a newly forked
+  where a person asked for it: the `<ghosty:fork_state>` block a newly forked
   sub-agent is handed, `/relay` handoff instructions, and the agent card. The
   complete To-do stays visible in the UI. A structural test asserts real
   outbound provider request bodies do not carry the list.
@@ -2194,7 +2258,7 @@ runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
   falsely reporting `Command exited with code -1`; the process keeps running
   and its completion still arrives through the normal runtime event.
 
-- First-run usage disclosure now opens as a native Codewhale modal instead of a
+- First-run usage disclosure now opens as a native Ghosty modal instead of a
   shell questionnaire before application startup. Telemetry remains unarmed
   until the native choice is made, and an in-memory Disable choice governs the
   current session even when its preference cannot be saved.
@@ -2233,7 +2297,7 @@ runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
   inspector instead of the transcript's nearest tool cell, so a selected
   to-do row shows its own content rather than the latest reasoning.
 - The first-run usage disclosure now asks a clear question — "Help improve
-  Codewhale?" — with unambiguous "Yes, keep anonymous counts" / "No, turn off
+  Ghosty?" — with unambiguous "Yes, keep anonymous counts" / "No, turn off
   tracking" choices in every shipped locale, and states the persistent opt-out
   command. Consent semantics are unchanged: telemetry stays unarmed until a
   choice is made.
@@ -2250,7 +2314,7 @@ runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
   the persisted provider, endpoint, and model identity; picker resume also
   leaves a durable transcript receipt.
 - Relative `mcp_config_path` values no longer depend on the launch directory or
-  silently load an empty server pool: Codewhale warns and falls back to the
+  silently load an empty server pool: Ghosty warns and falls back to the
   user-global MCP configuration. Explicit absolute paths remain authoritative.
 - Alibaba Model Studio `qwen3.8-max` and `qwen3.8-max-preview` still stream
   their current reasoning, but no longer replay historical `reasoning_content`
@@ -2295,8 +2359,8 @@ runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
 
 ## [0.9.5] - 2026-08-08
 
-Codewhale v0.9.5 consolidates the terminal application into one compiled
-runtime while preserving the familiar `codewhale` and `codew` commands. It
+Ghosty v0.9.5 consolidates the terminal application into one compiled
+runtime while preserving the familiar `ghosty` and `ghosty-tui` commands. It
 also expands the managed Runtime API, makes session and Fleet work easier to
 inspect and resume, and removes the hidden local continuation backstop that
 could end productive work without a final assistant response.
@@ -2321,15 +2385,15 @@ could end productive work without a final assistant response.
 
 ### Changed
 
-- `codewhale-cli` now contains the terminal runtime directly. Release installers
-  expose byte-identical `codewhale` and `codew` commands without a separate TUI
-  executable. v0.9.5 introduced deprecated `codewhale-tui-*` release filenames
+- `ghosty-cli` now contains the terminal runtime directly. Release installers
+  expose byte-identical `ghosty` and `ghosty-tui` commands without a separate TUI
+  executable. v0.9.5 introduced deprecated `ghosty-tui-*` release filenames
   as byte-identical compatibility copies; later releases retain those filenames
   while installed v0.9.4 clients remain supported upgrade sources.
 - Startup release checks cache successful lookups for one hour. The updater
   downloads and verifies the primary runtime once, then refreshes any existing
-  `codew` or legacy `codewhale-tui` command paths from the same bytes.
-- Headless `codewhale exec` runs and verifier benchmark rollouts no longer
+  `ghosty-tui` or legacy `ghosty-tui` command paths from the same bytes.
+- Headless `ghosty exec` runs and verifier benchmark rollouts no longer
   impose a 100-step default. `--max-turns` remains available as an explicit
   opt-in ceiling; Fleet workers retain their separately configured budget.
 - Goal token and time budgets are telemetry rather than default stop
@@ -2367,7 +2431,7 @@ could end productive work without a final assistant response.
   prompt-based `model = "auto"` routing in PR #5257.
 
 ## [0.9.4] - 2026-08-07
-Codewhale v0.9.4 ships the release-train harness work: the familiar Fleet
+Ghosty v0.9.4 ships the release-train harness work: the familiar Fleet
 roster/setup face with a clear operator-leader and user/folder scope, a
 work strip that keeps actionable agents instead of a permanent archive,
 waiting policy that forbids polling without freezing independent work,
@@ -2390,7 +2454,7 @@ File edits, terminal width, and Windows installation.
   each with before, after, and evidence. Harness removal previously left no
   record at all even though the entry leaves state entirely, so the journal
   is now the only place its content survives.
-- A first-run tip that says so: the first time Codewhale saves something
+- A first-run tip that says so: the first time Ghosty saves something
   durable it points at `/memory`, translated into all fifteen complete
   locale packs. This state shaped later sessions and nothing ever mentioned
   it existed.
@@ -2430,7 +2494,7 @@ File edits, terminal width, and Windows installation.
   settable and inert for a long time, and setting it was never consent.
 
   An enabled session sends its batches to the first-party ingest endpoint,
-  `https://telemetry.codewhale.net/v1/telemetry`, which is the shipped default
+  `https://telemetry.ghosty.net/v1/telemetry`, which is the shipped default
   for `telemetry_endpoint`. That is a Cloudflare Worker whose complete source is
   in this repository under `telemetry-ingest/`; it writes to Workers Analytics
   Engine, whose row is exactly `_sample_interval`, `blob1`–`blob20`, `dataset`,
@@ -2440,17 +2504,17 @@ File edits, terminal width, and Windows installation.
   geo properties, logs nothing, and validates against a closed field set that
   rejects an entire batch carrying any unpublished key. Cloudflare's retention
   for that data is a fixed three months. Setting `telemetry_endpoint = ""`
-  instead writes each batch to `$CODEWHALE_HOME/telemetry/dryrun.jsonl` and
+  instead writes each batch to `$GHOSTY_HOME/telemetry/dryrun.jsonl` and
   constructs no HTTP client at all, so you can read exactly what would have been
   sent.
 
   Turning it off is an answer, not a flag: it deletes the random install id,
   truncates every buffered event, and leaves a permanent tombstone that a
   session already running re-checks before it appends and before it sends. A
-  failed wipe fails closed. `CODEWHALE_TELEMETRY=0` is a hard floor that beats
+  failed wipe fails closed. `GHOSTY_TELEMETRY=0` is a hard floor that beats
   `--telemetry true` and the config key, and a value the parser cannot read
   also resolves to off. Fleet workers are hard-off. A repo-local
-  `.codewhale/config.toml` can set neither key.
+  `.ghosty/config.toml` can set neither key.
 
   Never collected: prompts, completions, tool arguments, diffs, file contents,
   filenames, paths, git remotes, repo or branch names, memory entries, chat
@@ -2461,7 +2525,7 @@ File edits, terminal width, and Windows installation.
   field names out of that file and asserts set equality with the structs the
   serializer uses.
 
-  This supersedes the roadmap's previous "no Codewhale product telemetry" entry,
+  This supersedes the roadmap's previous "no Ghosty product telemetry" entry,
   which moves from "Ruled out" to an opt-in framing. What stays ruled out:
   always-on or silent telemetry, per-keystroke or per-tool-call phone-home, and
   any third-party ad or analytics SDK in the runtime binary.
@@ -2475,9 +2539,9 @@ File edits, terminal width, and Windows installation.
   Z.ai release metadata; pricing is intentionally absent, and `GLM-5.2` remains
   the default Z.ai model. No third-party gateway roster gained the model:
   OpenCode Zen, OpenCode Go, Alibaba Model Studio, and TelecomJS publish no
-  glm-5.3 entry, so Codewhale advertises none.
+  glm-5.3 entry, so Ghosty advertises none.
 
-- Managed Codewhale account commands (`account login`, `status`, `logout`, and
+- Managed Ghosty account commands (`account login`, `status`, `logout`, and
   `keys`) with browser device flow, profile- and origin-scoped secure sessions,
   refresh/revocation, redacted BYOK-vault management, and a token-free Runtime
   account receipt. Provider authentication remains separate, and `cloud`
@@ -2588,7 +2652,7 @@ File edits, terminal width, and Windows installation.
 - Sub-agent and `agents/wait` waits stay short by default and by cap:
   blocking waits default to 30 s and refuse to block past 120 s, because a
   blocked wait deafens the session to typed input and settled children
-  already report back as `<codewhale:subagent.done>` sentinels.
+  already report back as `<ghosty:subagent.done>` sentinels.
 - `Bash` `action=wait` honors `timeout_secs` (seconds) and bare `timeout`
   (milliseconds) alongside canonical `timeout_ms`, and `block` as an alias
   for `wait`, so a habit formed on other wait tools gets the duration it
@@ -2624,7 +2688,7 @@ File edits, terminal width, and Windows installation.
 
   Callers that spelled a read-only narrowing as `type: "implementer"` should
   move it to `role: "implementer"`.
-- User-global credentials survive an explicit workspace `CODEWHALE_CONFIG_PATH`
+- User-global credentials survive an explicit workspace `GHOSTY_CONFIG_PATH`
   that selects a route with no local key — readiness probes the user-global
   provider table before concluding a key is missing.
 - Sub-agent token figures on the work bar accumulate input+output (the same
@@ -2710,7 +2774,7 @@ File edits, terminal width, and Windows installation.
 
 - Alibaba Model Studio reasoning controls are now route- and model-scoped
   instead of provider-wide (#5203, harvested from #5233 by
-  [@Inference1](https://github.com/Inference1)). Codewhale sends
+  [@Inference1](https://github.com/Inference1)). Ghosty sends
   `enable_thinking` / `preserve_thinking` / `reasoning_effort` only when the
   configured `base_url` is a verified Alibaba Chat Completions host, so
   pointing a `modelstudio-*` provider ID at a custom gateway no longer injects
@@ -2721,7 +2785,7 @@ File edits, terminal width, and Windows installation.
   `glm-5.x` map the reasoning tier onto the documented `high` / `max` ladder.
 
 - xAI device login now recovers from a config that points at a missing
-  Codewhale-owned credential generation instead of failing every attempt
+  Ghosty-owned credential generation instead of failing every attempt
   with a generic activation error, and finalize failures report the full
   error chain (#5032).
 - API keys saved to the secret store no longer read as unconfigured for
@@ -2745,7 +2809,7 @@ File edits, terminal width, and Windows installation.
   CRLF/non-ASCII cases, and safely relocate stale unified-diff hunks only when
   whole-file context is unique (PRs #5008 and #5030).
 - Circled digits, enclosed alphanumerics, and keycap graphemes use consistent
-  two-column measurement in Codewhale, Ratatui, and CJK terminals, preventing
+  two-column measurement in Ghosty, Ratatui, and CJK terminals, preventing
   missing-character and phantom-space corruption (PR #5001).
 - SQLite connections install their busy timeout before locking setup and avoid
   rewriting persistent WAL mode on every open, removing the concurrent-open
@@ -2802,7 +2866,7 @@ File edits, terminal width, and Windows installation.
   asks the question it meant to ask: is another *running* child writing in this
   shared checkout. Concurrent writers are still gated; a lone builder writes in
   the workspace you are actually watching.
-- Ctrl-C during the first moments of startup no longer kills Codewhale
+- Ctrl-C during the first moments of startup no longer kills Ghosty
   outright. The terminating-signal handlers were registered inside the task
   that waits on them, and a spawned task does not run until the scheduler
   first polls it, so a SIGINT arriving in that window hit the default
@@ -2864,10 +2928,10 @@ File edits, terminal width, and Windows installation.
 
 ## [0.9.3] - 2026-07-31
 
-This is the Codewhale v0.9.3 source candidate. It is not a published release
+This is the Ghosty v0.9.3 source candidate. It is not a published release
 until the matching tag, packages, checksums, and release assets exist.
 
-DeepSeek V4 Flash is now a first-class Codewhale route, and the agent-facing
+DeepSeek V4 Flash is now a first-class Ghosty route, and the agent-facing
 tool surface has been reduced to the canonical action tools that current
 models actually need. This release also hardens credential, authorization,
 durability, compaction, and macOS File Provider boundaries while deleting
@@ -2882,8 +2946,8 @@ stale runtime and dependency surface.
   `deepseek-vN-*` model IDs inherit that route conservatively, while custom
   DeepSeek-compatible endpoints retain Chat Completions unless configured
   otherwise.
-- A pipe-only `codewhale auth print-api-key` handoff for explicitly selected
-  providers. It shares Codewhale's home-scoped credential authority, refuses
+- A pipe-only `ghosty auth print-api-key` handoff for explicitly selected
+  providers. It shares Ghosty's home-scoped credential authority, refuses
   terminal output, and prevents sentinel placeholders from becoming live
   credentials.
 - Per-turn `max_tool_calls` enforcement at the engine admission gate, plus a
@@ -2905,7 +2969,7 @@ stale runtime and dependency surface.
   semantic repo-law checks as the former write path. Approval, Full Access,
   and workflow execution cannot bypass the repository safety floor by choosing
   the canonical schema.
-- Codewhale home resolution is shared across the CLI, TUI, state, and secret
+- Ghosty home resolution is shared across the CLI, TUI, state, and secret
   stores. `doctor` is offline by default, distinguishes credential source from
   availability, and reports one consistent path snapshot.
 - Durable runtime event writes are serialized across simultaneous processes,
@@ -2966,7 +3030,7 @@ stale runtime and dependency surface.
 
 ## [0.9.2] - 2026-07-29
 
-This is the Codewhale v0.9.2 source candidate. It is not a published release
+This is the Ghosty v0.9.2 source candidate. It is not a published release
 until the matching tag, packages, checksums, and release assets exist.
 
 ### Changed — behavior
@@ -3036,19 +3100,19 @@ says otherwise.
 
 - Slash commands, hotbar actions, and CLI entrypoints for the same Lane/Fleet
   lifecycle operation now share one typed control-plane contract
-  (`codewhale-lane::control`): a stable `<domain>.<verb>` id, read-vs-write
+  (`ghosty-lane::control`): a stable `<domain>.<verb>` id, read-vs-write
   authority, persistence scope, exact-identity target selection, retryability,
   lifecycle outcome, and one bounded, sanitized receipt. `docs/COMMAND_CONTROL_PLANE.md`
   documents it (#1888).
 
 - `/lane [list|status|interrupt|restart|resume]` — durable Lane control from the
-  composer, backed by the same executor `codewhale lane …` calls. `codewhale
+  composer, backed by the same executor `ghosty lane …` calls. `ghosty
   lane interrupt|restart|resume` are the matching CLI verbs; `lane stop` stays as
   a compatibility spelling of `lane interrupt`. Appending `@<lifecycle-seq>` to a
   lane id fences a write to the exact durable generation you observed, so a
   concurrent transition is rejected as a conflict rather than acted on (#1888).
 
-- `codewhale fleet list` and `/fleet [list|status|interrupt|resume]` — durable
+- `ghosty fleet list` and `/fleet [list|status|interrupt|resume]` — durable
   Fleet run inspection and control from either surface, through shared DTOs that
   carry the exact provider, provider-table id, model, effective reasoning tier,
   and route source when the ledger records them, and a typed `not_recorded` /
@@ -3061,7 +3125,7 @@ says otherwise.
   and costs no prompt budget. Its body is a routing card that points at the
   surfaces this build actually exposes — `/help` and `/help <command>`,
   `/skills` and `/skills inspect`, `/config`, `doctor`, and the `docs/` tree
-  when the workspace is a Codewhale checkout — and explicitly forbids pasting a
+  when the workspace is a Ghosty checkout — and explicitly forbids pasting a
   command list or settings table into context (#4698).
 
 - `crates/tui/assets/skills-catalog-matrix.json`: an authored, provider-free
@@ -3089,7 +3153,7 @@ says otherwise.
 - `docs/LIVE_SMOKE.md`: copy-pasteable, opt-in live-smoke instructions for Kimi
   K3 and a second provider/model (DeepSeek). The runs are manual only — nothing
   in CI, tests, or skills invokes them. They use `env -i` plus a throwaway
-  `CODEWHALE_HOME`; `HOME` is left unset rather than repurposed, and ambient
+  `GHOSTY_HOME`; `HOME` is left unset rather than repurposed, and ambient
   provider variables are not forwarded. The operator names the credential
   variable explicitly, and the isolated child reads its value with echo off,
   restores the prior terminal state on exit or interruption, and never persists
@@ -3275,9 +3339,9 @@ says otherwise.
   Implemented in PR #4942 by @nightt5879; reported and root-caused by
   @LmeSzinc.
 
-- `/fleet status` read the current TUI session's sub-agents while `codewhale
-  fleet status` read the durable `.codewhale/fleet.jsonl` ledger — two different
-  things wearing one name, so a run started by `codewhale fleet run` never
+- `/fleet status` read the current TUI session's sub-agents while `ghosty
+  fleet status` read the durable `.ghosty/fleet.jsonl` ledger — two different
+  things wearing one name, so a run started by `ghosty fleet run` never
   appeared in the TUI. `/fleet status` now reads the durable ledger through the
   same code path as the CLI; the session view keeps its own name as
   `/fleet workers` (`/subagents` and `n` still work). When a workspace has no
@@ -3285,8 +3349,8 @@ says otherwise.
   empty-looking "all clear", and neither creates the ledger as a side effect of
   reading it (#4022).
 
-- `codewhale fleet status` (and `list`/`interrupt`/`resume`) created
-  `.codewhale/fleet.jsonl` as a side effect of opening the manager, then
+- `ghosty fleet status` (and `list`/`interrupt`/`resume`) created
+  `.ghosty/fleet.jsonl` as a side effect of opening the manager, then
   reported `no_fleet_ledger` for the file it had just made — so the second
   invocation showed an empty Fleet where none existed. The CLI now refuses
   those verbs before the manager is constructed, matching `/fleet` (#4022).
@@ -3307,7 +3371,7 @@ says otherwise.
   the slash surface skip reconciliation (which probes tmux and takes a lock)
   and say so on the receipt instead of implying freshness; `lane interrupt` is
   CLI-only until that work runs off-thread, and reports
-  `surface_not_supported` naming `codewhale lane interrupt` (#4022).
+  `surface_not_supported` naming `ghosty lane interrupt` (#4022).
 
 - The hotbar is no longer modelled as a third control surface. A slot binds a
   slash command and fires it with no argument, so it runs *as* the slash
@@ -3315,7 +3379,7 @@ says otherwise.
   (`hotbar_bare_dispatch`, true only for `lane.list`) instead of advertising
   target-taking verbs as hotbar-reachable (#1888).
 
-- `codewhale lane list --json` and `lane status --json` keep emitting the
+- `ghosty lane list --json` and `lane status --json` keep emitting the
   `LaneRecord` shape they always have — the receipt did not replace it. The
   human `lane status` output also regained `branch`, `session`, `socket`,
   `attach`, and `log`, which the first cut of the shared DTO had dropped
@@ -3323,7 +3387,7 @@ says otherwise.
 
 - No surface advertises a backend it does not have. `lane restart` and
   `lane resume` have no implementation — a Lane is re-created by
-  `codewhale lane start`, and a stopped Lane's Runtime session is gone — so all
+  `ghosty lane start`, and a stopped Lane's Runtime session is gone — so all
   three surfaces refuse them with `backend_not_implemented` and say why.
   `fleet restart` drives the manager loop to completion, which only the CLI
   runs, so `/fleet restart` reports `surface_not_supported` and names the CLI
@@ -3516,18 +3580,18 @@ Thank you to the contributors whose code, reports, and reviews shaped v0.9.2:
   errors and fixes, problem solving, user messages, pending tasks,
   current work, next step) that carries earlier compaction summaries
   forward and explicitly forbids tool use — replacing the free-form
-  "under N words" instruction. Codewhale's pin/working-set and
+  "under N words" instruction. Ghosty's pin/working-set and
   V4 prefix-cache-aligned machinery are unchanged.
 
 - Saved workflows become slash commands: `*.workflow.js` files under
-  `<workspace>/.codewhale/workflows/` and `~/.codewhale/workflows/` are
+  `<workspace>/.ghosty/workflows/` and `~/.ghosty/workflows/` are
   discovered as `/name` commands that accept custom arguments (forwarded
   to the run's `args`), launch through the `workflow` tool in the
   background, and report their run id. Hand-written `.md` commands with
   the same name always win. The workflow tool's `source_path` now also
-  accepts the user-global `~/.codewhale/workflows/` store, and every
+  accepts the user-global `~/.ghosty/workflows/` store, and every
   settled run leaves a durable synthesized report under
-  `.codewhale/reports/<run_id>.md` (status, goal, gates, progress,
+  `.ghosty/reports/<run_id>.md` (status, goal, gates, progress,
   result, verification).
 
 ### Fixed
@@ -3571,7 +3635,7 @@ Thank you to the contributors whose code, reports, and reviews shaped v0.9.2:
   the error.
 
 
-The Codewhale v0.9.1 source candidate includes a first-class local web client over the Runtime API,
+The Ghosty v0.9.1 source candidate includes a first-class local web client over the Runtime API,
 first-class OpenCode Go and TelecomJS TokenHub providers and restored xAI device login,
 calendar-correct hourly automations, a buildable OpenHarmony workflow-js
 target, and hardening for Auto routing, remote-terminal clipboard transport,
@@ -3580,7 +3644,7 @@ surface.
 
 ### Added
 
-- Add `codewhale web [--port 7878]`, a first-class loopback-only browser
+- Add `ghosty web [--port 7878]`, a first-class loopback-only browser
   client over the canonical Runtime API. The dependency-free embedded shell
   supports thread lifecycle, snapshot-then-SSE transcripts, turn start/steer/
   interrupt, approvals, and user questions, including pending-request recovery
@@ -3594,7 +3658,7 @@ surface.
   provider with `[providers.opencode_go]`, `OPENCODE_GO_API_KEY`, and the eight
   models currently documented on its `/v1/chat/completions` endpoint. Models
   served only through OpenCode Go's Anthropic `/messages` endpoint remain out
-  of this narrow route until Codewhale supports per-model wire selection
+  of this narrow route until Ghosty supports per-model wire selection
   (#1481 by @seanthefuturegorilla; implementation harvested from PR #773 by
   @zhangweiii and PR #1050 by @sternelee).
 - Add TelecomJS TokenHub as a first-class Chat Completions provider with
@@ -3604,7 +3668,7 @@ surface.
   do not delete the other source's rows, matching model ids from unrelated
   providers do not fabricate metadata, and chat requests omit unsupported
   reasoning fields (PR #4370 by @baendlorel; harvested with co-authorship).
-- Prepare native Windows ARM64 `codewhale`, `codew`, and `codewhale-tui`
+- Prepare native Windows ARM64 `ghosty`, `ghosty-tui`, and `ghosty-tui`
   binaries, npm selection, updater support, and standard/portable release
   archives. Build and smoke them on GitHub's native Windows 11 ARM runner,
   and move Linux ARM64 release builds to the native Ubuntu ARM runner to
@@ -3667,7 +3731,7 @@ surface.
 - Mode changes (`/mode agent|plan|operate`) now persist to `settings.toml`
   and restore across sessions (#4628).
 - Billing provenance: every outgoing API request carries an
-  `x-codewhale-provenance` header with client version and provider (#4324).
+  `x-ghosty-provenance` header with client version and provider (#4324).
 - The `/model` picker's typed search now ranks results: provider-name
   matches first (drill-down), then exact id, then id-prefix, then the
   active provider's rows (#4639).
@@ -3723,7 +3787,7 @@ surface.
   explicitly requested (#4485; partial #4406).
 - Serialize test-only configuration-path readers with temporary environment
   redirects so the Windows provider-persistence matrix cannot observe another
-  test's transient `CODEWHALE_HOME` or config path (#4483, closing #4463).
+  test's transient `GHOSTY_HOME` or config path (#4483, closing #4463).
 - Restore direct Moonshot `kimi-k3` to its documented 1,048,576-token
   context window and 131,072-token output limit instead of treating the live
   model as an unknown legacy 128K route. The existing Kimi Code tiered `k3`
@@ -3745,13 +3809,13 @@ surface.
 - Register `/slop` and `/canzha` as compatibility aliases of `/debt`, while
   keeping user-command ownership truthful across dispatch, help, slash
   completion, alias copy, and typo suggestions (PR #4680 by @nightt5879).
-- Fail closed on legacy Kimi CLI credential imports: remove Codewhale's
+- Fail closed on legacy Kimi CLI credential imports: remove Ghosty's
   hard-coded first-party-client impersonation and refresh request, never
   auto-enable or rewrite imported credentials, and label the compatibility
   route as a read-only imported token. An explicitly configured, still-valid
   access token remains usable until expiry; missing, malformed, and expired
   imports recover through the supported Kimi Code API-key route while
-  first-class OAuth awaits Codewhale's own vendor registration (#4417,
+  first-class OAuth awaits Ghosty's own vendor registration (#4417,
   partially addressed).
 - Restore xAI/Grok device-code OAuth login against the live xAI OIDC
   contract: discovery with issuer/endpoint validation and documented
@@ -3759,7 +3823,7 @@ surface.
   code expiry, bounded, sanitized error reporting for denial, expiry, and
   malformed responses, and a shared blocking-worker boundary for both CLI and
   TUI login so reqwest's blocking client never creates or drops its private
-  runtime inside Codewhale's Tokio runtime (#4410).
+  runtime inside Ghosty's Tokio runtime (#4410).
 - Anchor `FREQ=HOURLY` automations with `BYHOUR`/`BYMINUTE` to persisted
   local-calendar slots so intervals keep their wall-clock phase across DST,
   restart, resume, RRULE updates, duplicate-slot recovery, and post-run
@@ -3908,7 +3972,7 @@ Thank you to the contributors whose code, reports, and reviews shaped v0.9.1:
 
 ## [0.9.0] - 2026-07-16
 
-Codewhale v0.9.0 replaces the default terminal shell with the underwater
+Ghosty v0.9.0 replaces the default terminal shell with the underwater
 interaction system, makes Operate message-first, and hardens the Fleet,
 Workflow, routing, accounting, and release surfaces that support day-to-day
 agent work. The release also expands localization and gives the public site a
@@ -3921,7 +3985,7 @@ largest curated model-and-pricing expansion in the project so far.
 - Redact configured, environment, file-backed, and bare active credentials
   from every tool result before it crosses any model-provider wire protocol;
   retrieved spillover content is sanitized again at that boundary. The
-  `read_file` tool also refuses CodeWhale configuration, backup, and
+  `read_file` tool also refuses GhostyCode configuration, backup, and
   credential-store paths, preventing routine tool use from exposing those
   local files.
 - Keep immediate TUI submit failures inside the shell: custom-provider route
@@ -3953,8 +4017,8 @@ largest curated model-and-pricing expansion in the project so far.
   parallel, isolated, or long-running work; child handoffs cannot inherit
   standing Full Access, and each dispatch produces one durable completion
   receipt.
-- Let personal Fleet profiles in `CODEWHALE_HOME/agents` travel across
-  repositories while project profiles in `.codewhale/agents` override them.
+- Let personal Fleet profiles in `GHOSTY_HOME/agents` travel across
+  repositories while project profiles in `.ghosty/agents` override them.
   Saving refreshes the live roster, and the UI now says explicitly that profile
   availability does not expand workspace, trust, or filesystem authority.
 - Move file-mention discovery onto one bounded, generation-safe background
@@ -4007,7 +4071,7 @@ largest curated model-and-pricing expansion in the project so far.
   tool completion or a later status update cannot erase it from scrollback or
   accessibility output. The notice now describes matching, process-scoped
   denials truthfully across all shipped locales; approval audits honor
-  `CODEWHALE_HOME`, and expired status toasts cannot remain trapped behind a
+  `GHOSTY_HOME`, and expired status toasts cannot remain trapped behind a
   persistent entry. Both states remain visible and actionable instead of
   looking like unexplained model or tool failure (#4374 and #4375 by
   @Angel-Hair, with the final hardening in #4385 by @nightt5879).
@@ -4116,7 +4180,7 @@ largest curated model-and-pricing expansion in the project so far.
   acknowledgements (for example "Auto-compaction enabled") expire instead of
   becoming permanent idle chrome, while warnings and errors hold as sticky
   notices until their window passes.
-- Complete the `CODEWHALE_ASCII_SAFE=1` decorative tier: the whale mark,
+- Complete the `GHOSTY_ASCII_SAFE=1` decorative tier: the whale mark,
   context meter, braille state markers (mapped by dot density so the working
   bubble still reads as a rising fill), bubbles, rails, and role/lane glyphs
   all narrow to semantic ASCII while user, model, and CJK text passes
@@ -4157,7 +4221,7 @@ largest curated model-and-pricing expansion in the project so far.
 - Thinking Machines Lab's Inkling through Together using the exact wire model
   `thinkingmachines/inkling`, with `inkling` and `together-inkling` aliases and
   exact `none` / `minimal` / `low` / `medium` / `high` / `max` reasoning
-  values. Codewhale does not invent a context window, price, or offline picker
+  values. Ghosty does not invent a context window, price, or offline picker
   claim while the provider's public catalog metadata remains inconsistent.
 - Expand the verified offline catalog with Claude Sonnet 5, Claude Fable 5,
   GPT-5.3 Codex, and Qwen3.7 Plus, including time-aware Sonnet 5 introductory
@@ -4192,7 +4256,7 @@ largest curated model-and-pricing expansion in the project so far.
   HTTP 400 (PR #4346 by @qinlinwang).
 - Anthropic pricing: bill cache-write tokens at published rates
   (PR #4348 by @knqiufan, #4318).
-- NetBSD: generate QuickJS bindings at build time so `codewhale-workflow-js`
+- NetBSD: generate QuickJS bindings at build time so `ghosty-workflow-js`
   compiles (PR #4349 by @ci4ic4).
 - Real-PTY release gates for six-worker fan-out liveness with Esc cancel,
   multi-terminal route isolation, queued steering via terminal-safe Ctrl+G
@@ -4208,8 +4272,8 @@ largest curated model-and-pricing expansion in the project so far.
   exact-tag-only and execute the same parity gate as automatic tag pushes.
 - Publish a coherent distribution set: both checksum manifests now contain
   usable public basenames and cover the full 29-asset matrix; GHCR, Homebrew,
-  GitHub archives, and the Linux x64 CNB mirror carry `codewhale`, `codew`, and
-  `codewhale-tui`. The CNB shortcut now fails clearly outside Linux/OpenHarmony
+  GitHub archives, and the Linux x64 CNB mirror carry `ghosty`, `ghosty-tui`, and
+  `ghosty-tui`. The CNB shortcut now fails clearly outside Linux/OpenHarmony
   x64 instead of promising assets that the mirror does not build.
 - Preserve task text when a skill is invoked through dollar, unified-slash, or
   explicit skill syntax, while keeping bare skill invocations and management
@@ -4236,7 +4300,7 @@ largest curated model-and-pricing expansion in the project so far.
   payload bytes in the measured text, keeping long links visible, selectable,
   and clickable in supporting terminals.
 
-- Keep headless structured output terminal-clean: `codewhale exec` engines
+- Keep headless structured output terminal-clean: `ghosty exec` engines
   no longer emit interactive terminal-title/taskbar OSC sequences, so
   `--output-format stream-json` stdout stays parseable, escape-free JSONL.
   Interactive TUI sessions keep their terminal chrome.
@@ -4264,7 +4328,7 @@ largest curated model-and-pricing expansion in the project so far.
   historical, superseded, principle-only, or future RFC), correct trackers
   that recorded unshipped work as done, and describe what remains after
   v0.9.0 in `docs/AGENT_RUNTIME.md`.
-- Add `docs/rfcs/UNIFIED_PROVIDER_LOGIN.md`: one `codewhale auth login`
+- Add `docs/rfcs/UNIFIED_PROVIDER_LOGIN.md`: one `ghosty auth login`
   surface for Anthropic, OpenAI Codex, and xAI, with the Anthropic adapter
   gated on verifying flow permissions before any constants are adopted.
 - Refresh `docs/ACCESSIBILITY.md` for treatment-independent ambient life
@@ -4294,11 +4358,11 @@ largest curated model-and-pricing expansion in the project so far.
 - Demote the bundled Models.dev snapshot to an offline/stale fallback after
   live catalog refresh (#4188). ProviderLake precedence is live Models.dev >
   bundled seed > legacy hardcoded completion names; pickers, inventory, and
-  subagent validation stay catalog-backed, and Codewhale-only providers keep
+  subagent validation stay catalog-backed, and Ghosty-only providers keep
   defaults when Models.dev has no rows.
 
 ### Added
-- Wire xAI device-code OAuth into `codewhale auth xai-device`, the TUI
+- Wire xAI device-code OAuth into `ghosty auth xai-device`, the TUI
   `/auth xai-device` command, and guided provider setup, with comment-preserving
   auth-mode persistence and loopback exchange coverage (#4257).
 - Add GPT-5.6 Sol, Terra, and Luna to the OpenAI API route, including their
@@ -4316,7 +4380,7 @@ largest curated model-and-pricing expansion in the project so far.
   (#4115).
 
 - Workflow runs are now durable: every run appends to a
-  `.codewhale/workflow-runs.jsonl` journal and hydrates on startup, so
+  `.ghosty/workflow-runs.jsonl` journal and hydrates on startup, so
   `workflow status` survives restarts; runs left `running` by a dead process
   are recovered as failed (#4011). The transcript renders workflow tool
   output as a run card (status, goal, children, progress, verification)
@@ -4340,7 +4404,7 @@ largest curated model-and-pricing expansion in the project so far.
   release, covering installed binary provenance, release/publication checks,
   headless runtime smoke, setup QA, and remaining manual visual TUI checks.
 - README and README.zh-CN now point users to the community-maintained
-  CodeWhale for VS Code GUI frontend while clarifying that this repository's
+  GhostyCode for VS Code GUI frontend while clarifying that this repository's
   `extensions/vscode/` scaffold remains the read-only Phase 0 viewer (#4035).
 
 ### Fixed
@@ -4363,7 +4427,7 @@ largest curated model-and-pricing expansion in the project so far.
   draft-preview save keypress no longer competes with a separate pager's
   `g`/`G` scroll bindings — the exact TOML preview now renders inline on the
   same Review step that saves it (#4093).
-- `codewhale fleet run` and interactive in-process Fleet launches now honor a
+- `ghosty fleet run` and interactive in-process Fleet launches now honor a
   profile-pinned provider/model route instead of merely recording it on the
   receipt. Headless workers receive the non-secret `--provider` and `--model`
   pair; TUI workers resolve the same explicit route in process. Credentials
@@ -4446,7 +4510,7 @@ largest curated model-and-pricing expansion in the project so far.
 ### Removed
 
 - Remove the deprecated `deepseek` and `deepseek-tui` binary shims in this
-  breaking release. `codewhale`, `codew`, and `codewhale-tui` are the supported
+  breaking release. `ghosty`, `ghosty-tui`, and `ghosty-tui` are the supported
   entry points; existing DeepSeek provider support and legacy config/session
   migration remain intact.
 
@@ -4520,11 +4584,11 @@ reproductions shaped v0.9.0:
 - Demote the bundled Models.dev snapshot to an offline/stale fallback after
   live catalog refresh (#4188). ProviderLake precedence is live Models.dev >
   bundled seed > legacy hardcoded completion names; pickers, inventory, and
-  subagent validation stay catalog-backed, and CodeWhale-only providers keep
+  subagent validation stay catalog-backed, and GhostyCode-only providers keep
   defaults when Models.dev has no rows.
 
 ### Added
-- Wire xAI device-code OAuth into `codewhale auth xai-device`, the TUI
+- Wire xAI device-code OAuth into `ghosty auth xai-device`, the TUI
   `/auth xai-device` command, and guided provider setup, with comment-preserving
   auth-mode persistence and loopback exchange coverage (#4257).
 - Add GPT-5.6 Sol, Terra, and Luna to the OpenAI API route, including their
@@ -4542,7 +4606,7 @@ reproductions shaped v0.9.0:
   (#4115).
 
 - Workflow runs are now durable: every run appends to a
-  `.codewhale/workflow-runs.jsonl` journal and hydrates on startup, so
+  `.ghosty/workflow-runs.jsonl` journal and hydrates on startup, so
   `workflow status` survives restarts; runs left `running` by a dead process
   are recovered as failed (#4011). The transcript renders workflow tool
   output as a run card (status, goal, children, progress, verification)
@@ -4566,7 +4630,7 @@ reproductions shaped v0.9.0:
   release, covering installed binary provenance, release/publication checks,
   headless runtime smoke, setup QA, and remaining manual visual TUI checks.
 - README and README.zh-CN now point users to the community-maintained
-  CodeWhale for VS Code GUI frontend while clarifying that this repository's
+  GhostyCode for VS Code GUI frontend while clarifying that this repository's
   `extensions/vscode/` scaffold remains the read-only Phase 0 viewer (#4035).
 
 ### Fixed
@@ -4589,7 +4653,7 @@ reproductions shaped v0.9.0:
   draft-preview ratify keypress no longer competes with a separate pager's
   `g`/`G` scroll bindings — the exact TOML preview now renders inline on the
   same Review step that ratifies it (#4093).
-- The headless `codewhale fleet run` CLI now launches workers on their profile-pinned route, not just records it on the receipt: `codewhale exec` gains a non-secret `--provider` flag, and a worker whose profile pins provider B is dispatched with `--provider B --model <B's model>` even when the parent session is on provider A (credentials still resolve from the worker's own environment; provider is never inferred from the model id). Workers with no profile-bound provider are unchanged — no `--provider`, run-level model. The interactive TUI spawns roster members in-process and does not yet honor the pinned provider (it uses the session provider); that remainder is tracked in #4193 (#4093).
+- The headless `ghosty fleet run` CLI now launches workers on their profile-pinned route, not just records it on the receipt: `ghosty exec` gains a non-secret `--provider` flag, and a worker whose profile pins provider B is dispatched with `--provider B --model <B's model>` even when the parent session is on provider A (credentials still resolve from the worker's own environment; provider is never inferred from the model id). Workers with no profile-bound provider are unchanged — no `--provider`, run-level model. The interactive TUI spawns roster members in-process and does not yet honor the pinned provider (it uses the session provider); that remainder is tracked in #4193 (#4093).
 - The Fleet setup `m` model-assisted redraft no longer drops a picked
   cross-provider route: the provider/model the operator chose are re-pinned
   onto the drafted profile (a model draft is always `provider: None`), so
@@ -4693,7 +4757,7 @@ reproductions shaped v0.9.0:
   for custom model routes, plus a configured-provider route manager for
   `/provider` and `/model` with a missing-auth handoff into provider key
   entry (#2066, #3830, #3831).
-- Added auto-discovery of `.codewhale/rules/` and `.claude/rules/`
+- Added auto-discovery of `.ghosty/rules/` and `.claude/rules/`
   directories as project context, with a total byte-budget cap on the
   assembled rules block. Contributed by maple (@yekern).
 - Exposed `context_input_budget_for_route` from the engine so external
@@ -4765,10 +4829,10 @@ reproductions shaped v0.9.0:
   admission cap 200 → 1024. Users on metered plans who want the old behavior
   can set `max_subagents = 20` in config.toml.
 - Renamed the internal `whaleflow` subsystem to `workflow` across the
-  workspace: the `codewhale-whaleflow`/`codewhale-whaleflow-js` crates become
-  `codewhale-workflow`/`codewhale-workflow-js`, Rust identifiers and JS bridge
-  symbols are renamed, the `CODEWHALE_WHALEFLOW_JS_*` environment variables
-  become `CODEWHALE_WORKFLOW_JS_*`, and the authoring/RFC docs move to
+  workspace: the `ghosty-whaleflow`/`ghosty-whaleflow-js` crates become
+  `ghosty-workflow`/`ghosty-workflow-js`, Rust identifiers and JS bridge
+  symbols are renamed, the `GHOSTY_WHALEFLOW_JS_*` environment variables
+  become `GHOSTY_WORKFLOW_JS_*`, and the authoring/RFC docs move to
   `WORKFLOW_AUTHORING.md` and `WORKFLOW_EXTERNAL_MEMORY.md`. Historical
   changelog and retro-ledger entries keep the old name as a record.
 - Documented the Homebrew rollout strategy and added a distribution-channel
@@ -4833,10 +4897,10 @@ reproductions shaped v0.9.0:
   names safely, rate-limited child requests checkpoint as resumable provider
   interruptions, and failure records surface the real Responses API error
   (#3884).
-- Fixed fresh launch/setup testing with an explicit `CODEWHALE_HOME` so
+- Fixed fresh launch/setup testing with an explicit `GHOSTY_HOME` so
   config, settings, theme prefs, and doctor legacy-state diagnostics do not
   inherit unrelated ambient `~/.deepseek` files (#4001, #4002).
-- Sub-agent state now persists to `.codewhale/` instead of the lingering
+- Sub-agent state now persists to `.ghosty/` instead of the lingering
   pre-rebrand `.deepseek/` path (#3864). Contributed by Stime (@yekern).
 - `/plugin enable|disable` now persists across restarts (#3918), and the
   plugin command is hidden from the root slash menu and kept canonical after
@@ -4911,7 +4975,7 @@ reproductions shaped v0.9.0:
   panicking. Contributed by Nightt (@nightt5879), reported by Taixin Guo
   (@taixinguo) (#3971, #4045).
 - Fixed Unix dispatcher/TUI output under early-closing pipes such as
-  `codewhale doctor | head` by restoring the default `SIGPIPE` handler before
+  `ghosty doctor | head` by restoring the default `SIGPIPE` handler before
   printing and propagating signal exits quietly. Contributed by @aznikline,
   reported by @BrathonBai (#4030, #4043).
 - Suppressed dead_code warnings in the unused plugin registry module and
@@ -4964,9 +5028,9 @@ reproductions shaped v0.9.0:
 
 ### Added
 
-- Added `codewhale doctor` / `codewhale doctor --json` legacy-state
+- Added `ghosty doctor` / `ghosty doctor --json` legacy-state
   diagnostics that compare known `~/.deepseek` state paths with their
-  `~/.codewhale` counterparts and flag unmigrated or dual-root data (#3727).
+  `~/.ghosty` counterparts and flag unmigrated or dual-root data (#3727).
 - Added Sakana AI Fugu as a first-class OpenAI-compatible provider with
   `sakana`/`fugu` aliases, `FUGU_API_KEY` / `SAKANA_API_KEY` discovery,
   provider-picker wiring, model completions, and provider docs. Harvested from
@@ -4980,7 +5044,7 @@ reproductions shaped v0.9.0:
 - Added provider-level `context_window` overrides so OpenAI-compatible
   gateways and self-hosted providers can budget against their real model
   context window (#3545).
-- Added the native `codew` shim to release archives, Windows installer inputs,
+- Added the native `ghosty-tui` shim to release archives, Windows installer inputs,
   local release-asset preparation, and checksum verification so manual installs
   receive the same short command that Cargo installs build.
 - Added OpenModel as a first-class Anthropic Messages provider, with config,
@@ -4995,8 +5059,8 @@ reproductions shaped v0.9.0:
   `visible_final_answer_chars`, so benchmark harnesses can measure transcript
   growth and final-answer bloat without guessing (#2956, #2957).
 - Added a release evidence ledger for v0.8.66 and opened the external ACP
-  registry submission for CodeWhale after validating the published
-  `codewhale@0.8.65` ACP auth handshake against the upstream registry checker
+  registry submission for GhostyCode after validating the published
+  `ghosty@0.8.65` ACP auth handshake against the upstream registry checker
   (#3192).
 - Added a typed `[verifier]` config table for the verifier-preview lane, with
   `enabled` and the shipped `verdict_policy = "hunt"` mapping documented and
@@ -5005,7 +5069,7 @@ reproductions shaped v0.9.0:
   disambiguation, plus an introductory card that explains and can dismiss the
   Hotbar (#3796, #3788).
 - Release/docs hygiene: guarded public install/version snippets and the npm
-  `codewhaleBinaryVersion` pointer against drift, made `check-docs`/`check-facts`
+  `ghostyBinaryVersion` pointer against drift, made `check-docs`/`check-facts`
   fail on stale snippets or unmapped providers, and stopped `sync-changelog`
   from dropping a release when only `[Unreleased]` exists (#3767, #3768, #3769,
   #3770, #3771, #3772).
@@ -5035,15 +5099,15 @@ reproductions shaped v0.9.0:
 ### Fixed
 
 - Surfaced legacy state relocation with a user-visible migration notice whenever
-  `~/.deepseek/<state>` is moved or copied into `~/.codewhale/<state>`, so
+  `~/.deepseek/<state>` is moved or copied into `~/.ghosty/<state>`, so
   upgraded users know their data was preserved and where the canonical state
   now lives (#3726).
 - Restored legacy `.deepseek/sessions` visibility for upgraded installs where
-  an empty `~/.codewhale/sessions` directory already existed, by copying
-  missing legacy session entries into the primary CodeWhale session store
+  an empty `~/.ghosty/sessions` directory already existed, by copying
+  missing legacy session entries into the primary GhostyCode session store
   without overwriting newer data (#3724).
 - Calmed approval risk classification for read-only shell commands such as
-  `codewhale --version`, `codewhale --help`, and `git status --porcelain` so
+  `ghosty --version`, `ghosty --help`, and `git status --porcelain` so
   the modal no longer labels proven read-only shell as destructive (#3730).
 - Added provider/model route columns to `/cache` turn telemetry so DeepSeek
   cache-hit regressions can be correlated with Auto route changes (#3738).
@@ -5059,16 +5123,16 @@ reproductions shaped v0.9.0:
 - Preserved the durable review safety floor for publish-like shell actions in
   YOLO mode, so `cargo publish`, `npm publish`, and tag/release pushes force
   approval instead of silently auto-approving (#3735).
-- Fixed Ctrl+O external-editor freezes where CodeWhale's terminal input pump
+- Fixed Ctrl+O external-editor freezes where GhostyCode's terminal input pump
   could keep reading keys while Vim/editor owned the terminal, especially in
   Windows mintty/cygwin shells. Thanks @buko for the precise repro (#3657).
 - Hardened the OHOS dependency drift check against transient Cargo registry EOFs
   by retrying the dependency graph probe before failing CI.
-- Updated the `/links` provider fallback to the current CodeWhale docs URL and
+- Updated the `/links` provider fallback to the current GhostyCode docs URL and
   added a Baidu Qianfan docs link. Harvested from #3621 by @noaft.
-- Hardened `CODEWHALE_TOOL_SURFACE=shell-only` for benchmark/exec runs: the
+- Hardened `GHOSTY_TOOL_SURFACE=shell-only` for benchmark/exec runs: the
   shell-only surface hides native tools from the model-visible catalog, and
-  unknown `CODEWHALE_TOOL_SURFACE` values now warn instead of silently falling
+  unknown `GHOSTY_TOOL_SURFACE` values now warn instead of silently falling
   back to the full tool surface (#2954).
 - Sub-agent fanout and lock hot paths: preserved event-channel headroom for
   progress events (#3783, thanks @cyq1017), let independent sub-agent starts
@@ -5122,7 +5186,7 @@ reproductions shaped v0.9.0:
   from #2239 by @gordonlu.
 - **Website and automation.** A runtime/integrations page, provenance and
   mirror-trust copy, a fact-drift CI gate, a published install script, and a
-  weekly community digest archive on codewhale.net (#3419, #3421, #3415, #3482,
+  weekly community digest archive on ghosty.net (#3419, #3421, #3415, #3482,
   #3420); per-automation mode/shell/trust/approval settings (#3467).
 - **Model reference browser.** A read-only `/modeldb` command (aliases
   `model-reference`, `modelref`) opens a pager over the bundled catalog — every
@@ -5275,7 +5339,7 @@ reproductions shaped v0.9.0:
   `windows`, `toml`, `tokio`, `lru`, `similar`, and web tooling security locks.
 - **Public release surface cleanup.** Benchmark-specific materials were kept
   out of the public release repo; benchmark source fragments belong in the
-  separate `codewhale-bench` lane.
+  separate `ghosty-bench` lane.
 
 ## [0.8.63] - 2026-06-19
 
@@ -5330,7 +5394,7 @@ reproductions shaped v0.9.0:
   failures that are missing `setuptools` include an install/retry hint, long
   foreground shell timeouts steer models toward background execution, and noisy
   shell/test/web outputs are compacted earlier for large-context routes.
-- **Config display redaction.** `codew config get/list` now recursively masks
+- **Config display redaction.** `ghosty-tui config get/list` now recursively masks
   token-, secret-, password-, credential-, and authorization-like keys inside
   unknown `extras` tables and redacts sensitive HTTP header values before
   printing config output.
@@ -5352,19 +5416,19 @@ reproductions shaped v0.9.0:
   `HTTP_PROXY` / `HTTPS_PROXY` from `ALL_PROXY`. Reported by @lordwedggie and
   harvested from #3331 by @cyq1017.
 - **Legacy app-server non-loopback auth hardening (#3258).** Bare
-  `codewhale app-server --host 0.0.0.0` now fails fast unless an explicit
-  `--auth-token` or `CODEWHALE_APP_SERVER_TOKEN` is supplied, keeping generated
+  `ghosty app-server --host 0.0.0.0` now fails fast unless an explicit
+  `--auth-token` or `GHOSTY_APP_SERVER_TOKEN` is supplied, keeping generated
   one-time `cwapp_*` tokens loopback-only.
 - **Legacy `.deepseek` state write-path migration (#3240).** State subdirectories
   (`sessions`, `slop_ledger`, `trophies`, `catalog`) are now always written under
-  `~/.codewhale/`, and the first write of a subdir relocates any pre-existing
+  `~/.ghosty/`, and the first write of a subdir relocates any pre-existing
   `~/.deepseek/<sub>` contents into the primary location so the legacy tree stops
   growing while old data is preserved. The read resolver still finds legacy data
   for backfill until each subdir migrates. Reported by @Final527; onboarding
   marker slice from #3302 by @nightt5879.
 - **State subdir validation on Windows (#3240).** State path hardening now
   rejects rooted/prefixed subdir strings such as `/etc` before resolving or
-  migrating state directories, keeping the `.codewhale` write resolver inside
+  migrating state directories, keeping the `.ghosty` write resolver inside
   its state root across platforms.
 
 ## [0.8.62] - 2026-06-17
@@ -5372,7 +5436,7 @@ reproductions shaped v0.9.0:
 ### Changed
 
 - **GLM-5.2 is now the default direct Z.AI model.** `DEFAULT_ZAI_MODEL` resolves
-  to `GLM-5.2` in both `codewhale-tui` and `codewhale-config`; the `glm-5.1`
+  to `GLM-5.2` in both `ghosty-tui` and `ghosty-config`; the `glm-5.1`
   alias still resolves to `GLM-5.1` (the defaulting was decoupled from the alias
   arm so it no longer tracks the default). Docs and `config.example.toml` no
   longer describe GLM-5.2 as an opt-in preview.
@@ -5426,8 +5490,8 @@ reproductions shaped v0.9.0:
   Every summary therefore carries exactly one boundary marker, never both.
 - **Provider metadata centralization.** Provider env vars, config keys, aliases,
   and auth hints are now resolved through the shared `ProviderMetadata` registry
-  across `codewhale-config`, `codewhale-tui`, and `codewhale-cli`, reducing drift
-  between the provider picker, `codewhale auth`, `doctor --json`, and setup
+  across `ghosty-config`, `ghosty-tui`, and `ghosty-cli`, reducing drift
+  between the provider picker, `ghosty auth`, `doctor --json`, and setup
   hints.
 
 ### Added
@@ -5454,9 +5518,9 @@ reproductions shaped v0.9.0:
   corrupt selection. Supporting terminals get live hyperlinks; others see the
   label text unchanged. Clipboard/selection extraction strips residual codes as
   defense-in-depth.
-- **CodeWhale-only skill discovery gate (#3296).** New
-  `[skills].scan_codewhale_only = true` limits session-time skill discovery to
-  CodeWhale-owned roots (`<workspace>/.codewhale/skills`, `~/.codewhale/skills`,
+- **GhostyCode-only skill discovery gate (#3296).** New
+  `[skills].scan_ghosty_only = true` limits session-time skill discovery to
+  GhostyCode-owned roots (`<workspace>/.ghosty/skills`, `~/.ghosty/skills`,
   and any explicit `skills_dir`) while ignoring cross-tool directories such as
   `.claude/skills`, `.opencode/skills`, `.cursor/skills`, and `~/.agents/skills`.
   The default remains the broad compatibility scan.
@@ -5466,7 +5530,7 @@ reproductions shaped v0.9.0:
   in otherwise auto-approved flows and are rejected under
   `approval_mode = "never"`.
 - **Runtime API no-auth documentation.** `docs/RUNTIME_API.md` now documents
-  `codewhale app-server --insecure-no-auth` for loopback-only testing and warns
+  `ghosty app-server --insecure-no-auth` for loopback-only testing and warns
   against combining it with `--mobile` on `0.0.0.0`.
 
 ### Fixed
@@ -5474,7 +5538,7 @@ reproductions shaped v0.9.0:
 - **TUI polish.** The empty-startup welcome block is centered by the actual
   rendered text width, fixing the off-center layout left over from the old
   sidebar-oriented welcome composition. Streaming HTTP body read errors now
-  explain whether CodeWhale can retry before output, or is surfacing a warning
+  explain whether GhostyCode can retry before output, or is surfacing a warning
   after partial output to avoid replaying and duplicating streamed text.
 - **Config comment preservation.** Rewriting `config.toml`, `settings.toml`, or
   `tui.toml` now merges user comments and formatting back into the serialized
@@ -5539,7 +5603,7 @@ folds in several community contributions.
   faster models and `thinking: "off"`.
 - Plan mode is strictly read-only (no shell tools), consistent with its runtime posture.
 - `/swarm` is gated behind the durable worker substrate. (#3218)
-- Legacy `deepseek` install/update path resolves to `codewhale`. (#2960, #2924, #2917)
+- Legacy `deepseek` install/update path resolves to `ghosty`. (#2960, #2924, #2917)
 
 ### Fixed
 
@@ -5592,15 +5656,15 @@ folds in several community contributions.
 - DeepInfra provider support and release-surface follow-through — thanks @idling11 (#3235, closes #3231) and @nightt5879 (#3236)
 - Editable oversized paste composer flow — thanks @idling11 (#3267, closes #3263)
 - WeChat bridge (`integrations/weixin-bridge` via Feishu + Tencent OpenClaw) — thanks @VincentCorleone (#3206)
-- Config robustness: atomic permission-rule save, one-time config `.bak` backup before the first changed write, `CODEWHALE_HOME` as primary config home, and accepting the dispatcher-written config shape (camelCase aliases + `[features.enabled]` table) so legacy/dual-written configs parse cleanly
+- Config robustness: atomic permission-rule save, one-time config `.bak` backup before the first changed write, `GHOSTY_HOME` as primary config home, and accepting the dispatcher-written config shape (camelCase aliases + `[features.enabled]` table) so legacy/dual-written configs parse cleanly
 - Dependency/CI bumps: docker login/qemu actions, softprops gh-release, download-artifact, vitest, @opennextjs/cloudflare, form-data, js-yaml, dompurify, ws
 
 ## [0.8.60] - 2026-06-13
 
 ### Added
 
-- **Agent Fleet real-run cutover (#3154/#3096).** `codewhale fleet run` now
-  launches durable workers through the headless `codewhale exec --output-format
+- **Agent Fleet real-run cutover (#3154/#3096).** `ghosty fleet run` now
+  launches durable workers through the headless `ghosty exec --output-format
   stream-json` path instead of the local simulation interpreter, with terminal
   worker events freeing leases so queued fleet tasks continue running.
 - **Read-only shell parallelism (#2983).** The engine can now run conservative
@@ -5661,9 +5725,9 @@ folds in several community contributions.
   to concise prompt/output discipline unless overridden by config, env, or
   `--verbosity`, while interactive TUI launches remain normal by default.
   Thanks @cyq1017 for the PR.
-- **Ephemeral generated project context (#3058).** Opening CodeWhale in a
+- **Ephemeral generated project context (#3058).** Opening GhostyCode in a
   directory with no instruction files now keeps the bounded generated project
-  overview in memory instead of creating `.codewhale/instructions.md`.
+  overview in memory instead of creating `.ghosty/instructions.md`.
 - **ACP registry auth metadata (#1447).** The ACP stdio adapter now advertises
   terminal authentication setup in `initialize.authMethods`, matching the
   registry's validation requirement.
@@ -5752,7 +5816,7 @@ folds in several community contributions.
   persisted turn items once and groups them by turn instead of reading the
   items directory once per turn, preserving item order while keeping large
   thread detail loads responsive.
-- **Project-local hook trust boundary (#3140).** `.codewhale/hooks.toml` is now
+- **Project-local hook trust boundary (#3140).** `.ghosty/hooks.toml` is now
   loaded only after the workspace is trusted in user-owned config, matching the
   project-local MCP trust model while preserving the documented shell-command
   hook contract.
@@ -5764,18 +5828,18 @@ folds in several community contributions.
   table and falls back to `[providers.siliconflow]` only for unset
   `api_key`/`base_url`/`model` fields. Thanks @Artenx for the report and
   @idling11 for the PR.
-- **Self-update download timeout (#3006).** `codewhale update` now applies a
+- **Self-update download timeout (#3006).** `ghosty update` now applies a
   five-minute HTTP client timeout so blocked or very slow GitHub release
   downloads fail instead of hanging indefinitely. Thanks @New2Niu for the PR.
 - **Legacy `deepseek` update migration (#2960/#3013/#3053).** Running
   `deepseek update` or `deepseek-tui update` from a pre-rebrand install now
   returns copy-pasteable npm, Cargo, Homebrew, and manual-binary migration
-  steps instead of trying to spawn a missing `codewhale` binary. README and
+  steps instead of trying to spawn a missing `ghosty` binary. README and
   rebrand docs now cover the same upgrade path. Thanks @jazzi and
   @tiangangQiu for the reports, @cyq1017 for the update-path PR, and
   @angus-guo for the README PR.
-- **Short `codew` shim delegation.** The `codew` convenience binary now
-  prefers the sibling `codewhale` dispatcher installed next to it before
+- **Short `ghosty-tui` shim delegation.** The `ghosty-tui` convenience binary now
+  prefers the sibling `ghosty` dispatcher installed next to it before
   falling back to `PATH`, preventing fresh local builds or installs from
   accidentally invoking an older global dispatcher.
 - **Constitution trust wording (#2950/#3008).** The base prompt now explains
@@ -5785,8 +5849,8 @@ folds in several community contributions.
   providers now report whether the value came from `--provider`, environment,
   or config. Config-sourced unsupported providers fall back to DeepSeek without
   forwarding stale keyring secrets. Thanks @cyq1017 for the PR.
-- **Exec auto-model handoff (#3148).** `codewhale exec --model auto` now
-  survives the CLI/TUI boundary by honoring the CodeWhale model env alias and
+- **Exec auto-model handoff (#3148).** `ghosty exec --model auto` now
+  survives the CLI/TUI boundary by honoring the GhostyCode model env alias and
   legacy DeepSeek model handoff before falling back to provider defaults.
   Thanks @hongchen1993 for the PR.
 - **macOS shortcut modifiers (#2938/#2943).** Ctrl-like shortcuts that are
@@ -5813,7 +5877,7 @@ folds in several community contributions.
   to `low` and has regression coverage that Codex requests use
   `reasoning.effort`, not DeepSeek `thinking` fields.
 - **OpenAI Codex context metadata (#3070).** The `gpt-5.5` default and
-  CodeWhale aliases now use OpenAI's documented 1,050,000-token context window
+  GhostyCode aliases now use OpenAI's documented 1,050,000-token context window
   and 128,000 max-output metadata for context pressure, prompts, and doctor
   capability output.
 - **OpenAI Codex effective context budgeting.** The public OpenAI API metadata
@@ -5866,14 +5930,14 @@ folds in several community contributions.
   "additionalContext"}` — with deny > ask > allow precedence across multiple
   hooks, last-writer-wins input rewriting, and concatenated context. Exit
   code 2 remains a legacy hard deny. Hooks support glob matchers and
-  project-local `.codewhale/hooks.toml` (#3026).
+  project-local `.ghosty/hooks.toml` (#3026).
 - **Clickable sidebar.** Background-job rows show/cancel on click, the
   Ctrl+K hint row runs `/jobs cancel-all`, and agent rows open `/subagents`;
   row actions are built in the same pass as the rendered lines so a click
   can never target the wrong job (#3028).
 - OSC 8 out-of-band hyperlink infrastructure with per-region open/close
   sequences that survive partial redraws (#3029).
-- `codewhale exec` gains `--allowed-tools`, `--disallowed-tools` (deny wins),
+- `ghosty exec` gains `--allowed-tools`, `--disallowed-tools` (deny wins),
   `--max-turns`, and `--append-system-prompt` (#3027).
 - Constitution prompt source: YAML source-of-truth plus Python renderer for
   the system prompt, with the active prompt now served from
@@ -5960,7 +6024,7 @@ folds in several community contributions.
 - Docs reorganized: internal design notes moved under `docs/rfcs/`; stale
   internal docs (old audits, handoffs, region-specific VM notes) removed.
 - Agent-facing polish: the system prompt environment block reports
-  `codewhale_version` (was `deepseek_version`), the legacy
+  `ghosty_version` (was `deepseek_version`), the legacy
   `.deepseek/instructions.md` path is no longer advertised in the prompt
   (still honored for back-compat), and oversized instruction files are
   truncated with an explicit `[…truncated: N bytes omitted]` marker instead
@@ -5970,7 +6034,7 @@ folds in several community contributions.
 
 - **Docker images build again.** The release `docker` job failed for v0.8.56
   because the Dockerfile still copied the pre-rebrand `deepseek` /
-  `deepseek-tui` binaries; they are now symlinks to the codewhale binaries
+  `deepseek-tui` binaries; they are now symlinks to the ghosty binaries
   inside the image, so legacy container entrypoints keep working.
 - `.devcontainer/devcontainer.json` used the pre-rebrand container name,
   mount path, and `deepseek` remote user.
@@ -6000,7 +6064,7 @@ folds in several community contributions.
 - **Approval dialog localization.** The approval dialog surface is now
   localized across 7 locales: English, Simplified Chinese, Japanese,
   Vietnamese, Portuguese, Spanish, and French (#2891, @gordonlu).
-- **Volcengine provider in TUI dispatcher.** The `codewhale` / `codewhale-tui`
+- **Volcengine provider in TUI dispatcher.** The `ghosty` / `ghosty-tui`
   CLI dispatcher now allows the Volcengine provider, so users can launch
   directly into a Volcengine-backed session (#2923, @hongchen1993).
 - **Dispatcher API-key preference.** When a provider-specific API key is
@@ -6010,7 +6074,7 @@ folds in several community contributions.
 - **Qwen 3.6 Plus model support.** Added complete Qwen 3.6 Plus model
   resolution with dedicated version-bump tests (#2930, @idling11).
 - **Oversized paste spill.** Pastes larger than ~10 KB are now written to
-  `.codewhale/pastes/` instead of being truncated or dropped, preserving the
+  `.ghosty/pastes/` instead of being truncated or dropped, preserving the
   full content for the session (#2920, @sximelon).
 - **Cross-session prompt cache.** Added a disk-backed cross-session prompt
   base-section cache so post-mode-flip and post-restart turns reuse the
@@ -6097,7 +6161,7 @@ folds in several community contributions.
 - Added provider-scoped `insecure_skip_tls_verify` for private
   OpenAI-compatible gateways that cannot use a trusted CA bundle. The setting is
   disabled by default, applies only to the active LLM provider HTTP client, and
-  is surfaced by `codewhale doctor`; `SSL_CERT_FILE` remains the preferred path
+  is surfaced by `ghosty doctor`; `SSL_CERT_FILE` remains the preferred path
   for corporate or private CA roots. Thanks @wavezhang for the original #1893
   direction.
 - Added a default-disabled hard-compaction planner that can identify the
@@ -6110,7 +6174,7 @@ folds in several community contributions.
   grounded objectives, context, sources, critical files, constraints,
   verification, risks, and handoff notes through the transcript card, Plan
   confirmation prompt, `/relay`, fork-state, and saved-session replay.
-- Added the first `codewhale-whaleflow` foundation crate with typed workflow
+- Added the first `ghosty-whaleflow` foundation crate with typed workflow
   config/IR validation and deterministic phase ordering tests. This preserves
   the WhaleFlow direction from #2482/#2486 without exposing a runtime
   `workflow_run` tool until cancellation, replay, and worktree semantics are
@@ -6224,7 +6288,7 @@ folds in several community contributions.
 - Added a static prompt composer override for embedders that need to replace
   the byte-stable base/personality prompt segment while leaving mode metadata,
   approval policy, tool taxonomy, Context Management, and the Compaction Relay
-  under CodeWhale's runtime prompt assembly. This refines the embedder prompt
+  under GhostyCode's runtime prompt assembly. This refines the embedder prompt
   customization path from #2786 without weakening prompt-continuity safeguards.
   Thanks @h3c-hexin.
 - Added `POST /v1/sessions` for runtime clients to save a completed thread as a
@@ -6235,12 +6299,12 @@ folds in several community contributions.
   were previously unpriced: `mimo-v2.5-pro` / `xiaomi/mimo-v2.5-pro` reuse the
   DeepSeek V4-Pro rate table and `mimo-v2.5` / `xiaomi/mimo-v2.5` reuse the
   DeepSeek V4-Flash rates. Existing DeepSeek pricing is unchanged (#2731, #2750).
-- Added a metadata-only `codewhale-config` provider registry with canonical
+- Added a metadata-only `ghosty-config` provider registry with canonical
   lookup, alias-aware resolution, provider defaults, config-table keys, and
   API-key env candidates. Runtime routing remains unchanged and fallback
   providers stay dormant; this harvests the safe provider-trait foundation from
   #2479 toward #2075. Thanks @sximelon.
-- Added optional `[search].base_url` / `CODEWHALE_SEARCH_BASE_URL` support for
+- Added optional `[search].base_url` / `GHOSTY_SEARCH_BASE_URL` support for
   DuckDuckGo-compatible private search endpoints, while keeping
   `DEEPSEEK_SEARCH_BASE_URL` as a legacy alias. Custom endpoints are gated by
   their configured host, do not fall back to public Bing, and report the custom
@@ -6300,7 +6364,7 @@ folds in several community contributions.
 
 - Removed the deprecated `deepseek` and `deepseek-tui` binary shims from the
   v0.9.0 Cargo crates and GitHub release artifact matrix. The canonical
-  `codewhale`, `codew`, and `codewhale-tui` entry points remain, the private
+  `ghosty`, `ghosty-tui`, and `ghosty-tui` entry points remain, the private
   deprecated `npm/deepseek-tui` notice package stays unpublished, and DeepSeek
   provider/model/env/config compatibility remains first-class.
 - Command-adjacent config persistence and auto model routing now live in
@@ -6308,11 +6372,11 @@ folds in several community contributions.
   coupling while preserving current `/config`, `/model`, UI, runtime, and
   sub-agent behavior (#2871). Thanks @aboimpinto for landing this first staged
   command-boundary layer from the broader #2851/#2791 design direction.
-- `/config` now reports the canonical `~/.codewhale/settings.toml` path for TUI
+- `/config` now reports the canonical `~/.ghosty/settings.toml` path for TUI
   settings while still reading legacy DeepSeek-branded settings fallbacks and
-  migrating them into the CodeWhale home on load.
+  migrating them into the GhostyCode home on load.
 - Provider switches now roll back transactionally when the first request to a
-  newly selected provider fails authentication: CodeWhale restores the previous
+  newly selected provider fails authentication: GhostyCode restores the previous
   provider/model, model-ID passthrough, onboarding/API-key state, runtime
   config, persisted provider selection, and engine handle so users can return
   to DeepSeek after a failed Moonshot/Kimi switch (#2754, #2755). Thanks
@@ -6386,12 +6450,12 @@ folds in several community contributions.
   explicitly continue a live checkpointed interrupted child while normal
   completed/failed/cancelled follow-up behavior stays unchanged (#2029).
 - Durable task recovery no longer requeues tasks that were `running` when the
-  previous CodeWhale process exited. On restart those records are marked failed
+  previous GhostyCode process exited. On restart those records are marked failed
   with a recovery note, and any running tool-call summaries are marked failed
   too, so stale shell/task state cannot silently become live work again (#1786).
 - Auto-generated project instructions now reuse the bounded Project Context
   Pack data instead of running an unbounded summary/tree scan when no
-  `.codewhale/instructions.md` file exists. The fallback keeps later
+  `.ghosty/instructions.md` file exists. The fallback keeps later
   top-level folders visible in noisy large workspaces while the dynamic
   `<project_context_pack>` marker remains controlled by its own setting
   (#697, #1827).
@@ -6421,8 +6485,8 @@ folds in several community contributions.
   aligned with the existing stream retry path (#2847). Thanks
   @qamranmushtaq-collab for the Windows/npx DeepSeek report.
 - The TUI footer, `/status`, `/mcp` manager, and command-palette MCP entries
-  now count trusted workspace-local `.codewhale/mcp.json` servers together with
-  the global MCP config, matching `codewhale mcp list` for merged global +
+  now count trusted workspace-local `.ghosty/mcp.json` servers together with
+  the global MCP config, matching `ghosty mcp list` for merged global +
   project setups (#2787). Thanks @yekern for the detailed reproduction.
 - AltGr key chords in the composer no longer get swallowed by sidebar shortcuts
   on AZERTY and other international layouts, so characters such as `@`, `#`,
@@ -6451,8 +6515,8 @@ folds in several community contributions.
   dedicated hydrated status, so it is no longer indistinguishable from a real
   successful execution. A hydrated row also ranks with active work rather than
   completed successes (#2648).
-- `codewhale sessions` now shows `codewhale resume <session-id>` in the footer
-  instead of the invalid dispatcher command `codewhale --resume <session-id>`
+- `ghosty sessions` now shows `ghosty resume <session-id>` in the footer
+  instead of the invalid dispatcher command `ghosty --resume <session-id>`
   (#2758, #2760).
 - TUI HTTP clients now install the Rustls ring crypto provider before building
   `reqwest` clients, covering engine, runtime API, tool, MCP, config, and skill
@@ -6474,7 +6538,7 @@ restore-listing implementation, and pending-input delivery-mode label work
 **@wywsoor** for the broader macOS/iTerm rollback UX report (#2494),
 **@HUQIANTAO** for the `web_run` lock-splitting work (#2502), turn-metadata
 prefix-cache stability work (#2517), and project-context cache direction
-(#2636), **@xyuai** for canonical CodeWhale
+(#2636), **@xyuai** for canonical GhostyCode
 settings-path migration work (#2730), **@gaord** for the runtime thread
 workspace update and completed-thread save APIs (#2640, #2639),
 **@shenjackyuanjie** for the
@@ -6579,9 +6643,9 @@ OpenAI-compatible endpoints (#2558).
   `prompt_cache_hit_tokens` and OpenAI-style `cached_tokens` usage payloads no
   longer infer cache misses from the wrong hit count, avoiding inflated TUI cost
   estimates on cached DeepSeek turns (#2567, #2609).
-- **Cygwin/MSYS2 config paths honor exported `$HOME`.** CodeWhale and legacy
+- **Cygwin/MSYS2 config paths honor exported `$HOME`.** GhostyCode and legacy
   DeepSeek config roots now prefer a non-empty `$HOME` before falling back to the
-  platform home resolver, while `CODEWHALE_HOME` remains the strongest explicit
+  platform home resolver, while `GHOSTY_HOME` remains the strongest explicit
   override (#2369, #2610).
 
 ### Community
@@ -6598,7 +6662,7 @@ patches, retesting, and release-stabilization signals that shaped this pass.
 
 - **Arcee AI as a direct provider.** New `[providers.arcee]` config block and
   `ARCEE_API_KEY` / `ARCEE_BASE_URL` / `ARCEE_MODEL` environment variables,
-  wired through CLI auth (`codewhale auth set --provider arcee`), the TUI
+  wired through CLI auth (`ghosty auth set --provider arcee`), the TUI
   provider picker, and the model registry. The default direct-API model is
   `trinity-large-thinking` (reasoning-capable, 262K context and 262K max
   output); `trinity-large-preview` (262K context, non-reasoning) and
@@ -6702,21 +6766,21 @@ that shaped this release cycle.
 
 - Added a Windows NSIS installer release artifact and classroom/lab deployment
   checklist, harvested from #2045 for #1987. The release workflow now builds
-  `CodeWhaleSetup.exe` from the canonical Windows binaries, and the installer
+  `GhostyCodeSetup.exe` from the canonical Windows binaries, and the installer
   adds/removes only the exact current-user PATH entry.
 - Added deterministic session timestamps in session listings, receipt-export
   boundary docs, and current-model turn metadata for routed/auto sessions.
 - Added exact AtlasCloud provider-hinted model ID pass-through for explicit
   `vendor/model-id` selections, harvested from #2569 without freezing a
   brittle provider catalog.
-- Added Xiaomi MiMo speech/TTS support with a `codewhale speech` CLI command,
+- Added Xiaomi MiMo speech/TTS support with a `ghosty speech` CLI command,
   `tts` tool alias, and config wiring for voice-design and voice-clone models,
   harvested from #2560.
 - Added a three-zone immutable prefix diagnostic layer (FrozenPrefix Phase 2)
   that logs cache-prefix drift at debug level without blocking requests,
   harvested from #2514.
 - Added a Cache Guard CI integration test suite simulating prefix-cache
-  behaviour across nine scenarios, gated behind `CODEWHALE_CACHE_GUARD=1`,
+  behaviour across nine scenarios, gated behind `GHOSTY_CACHE_GUARD=1`,
   harvested from #2503.
 - Added a plan-mode byte-stability invariant test verifying that the tool
   catalog head remains byte-identical across mode toggles, harvested from
@@ -6732,8 +6796,8 @@ that shaped this release cycle.
 
 - Hardened theme repainting and sidebar color use so theme switches do not
   leave stale Whale-dark panel colors behind.
-- Made legacy config migration visible when CodeWhale copies old DeepSeek-era
-  config into the CodeWhale config path.
+- Made legacy config migration visible when GhostyCode copies old DeepSeek-era
+  config into the GhostyCode config path.
 
 ### Fixed
 
@@ -6788,7 +6852,7 @@ UX reports relayed during the final triage pass.
 
 - Fixed the DeepSeek V4-Pro cost estimate after the 2026-05-31 pricing cutoff:
   the post-promotion official rate remains one quarter of the original price,
-  so CodeWhale no longer shows roughly 4x too much after June 1 (#2489).
+  so GhostyCode no longer shows roughly 4x too much after June 1 (#2489).
 - Fixed Kimi/Moonshot tool schema normalization by moving parent `type` fields
   into `anyOf`/`oneOf` items, with regression coverage for nested schema shapes
   that could otherwise still fail Kimi validation (#2438).
@@ -6950,7 +7014,7 @@ screenshots, logs, or retest requests shaped this release: **@buko** (#2359,
 ### Changed
 
 - **DeepSeek-first release framing, project-context logging, state-root
-  migration, CodeWhale README paths, and reasoning-locale behavior** were
+  migration, GhostyCode README paths, and reasoning-locale behavior** were
   finalized for the v0.8.47 release.
 
 ### Fixed
@@ -6973,15 +7037,15 @@ Thanks to contributors credited in the v0.8.47 GitHub Release, including
 
 ### Added
 
-- **`CODEWHALE_*` env aliases.** `CODEWHALE_PROVIDER`, `CODEWHALE_MODEL`,
-  and `CODEWHALE_BASE_URL` are public product-scoped aliases that take
+- **`GHOSTY_*` env aliases.** `GHOSTY_PROVIDER`, `GHOSTY_MODEL`,
+  and `GHOSTY_BASE_URL` are public product-scoped aliases that take
   precedence over the legacy `DEEPSEEK_*` forms. The `DEEPSEEK_*` names
   remain accepted for back-compat.
 - **Platform archive bundles.** Release artifacts now ship as per-platform
   archives (`tar.gz` for Linux/macOS, `.zip` for Windows) containing both
-  `codewhale` and `codewhale-tui` binaries plus an install script. No more
+  `ghosty` and `ghosty-tui` binaries plus an install script. No more
   downloading two loose files and guessing which ones to pick (#2193).
-- **Windows portable archive.** `codewhale-windows-x64-portable.zip` ships
+- **Windows portable archive.** `ghosty-windows-x64-portable.zip` ships
   the two binaries without an install script for USB-stick distribution
   (#2193).
 - **Web install download tile.** The website install page now shows a
@@ -7019,7 +7083,7 @@ Thanks to contributors credited in the v0.8.47 GitHub Release, including
   with Esc now applies the last-highlighted choice instead of reverting
   (#2196).
 - **Web install downloads both binaries.** The `install-binary.tsx`
-  snippet now fetches both `codewhale` and `codewhale-tui`, fixing the
+  snippet now fetches both `ghosty` and `ghosty-tui`, fixing the
   `MISSING_COMPANION_BINARY` trap on fresh npm installs (#2191).
 - **`grep_files` skips large directories.** The pure-Rust search tool
   now skips known-large directories (`.git`, `node_modules`, `target`)
@@ -7098,9 +7162,9 @@ and continuing contributors **@reidliu41**, **@cyq1017**, **@idling11**,
   Thanks @reidliu41 (#2143).
 - **Model picker selection survives Esc.** Dismissing the model picker with Esc
   no longer loses the highlighted selection. Thanks @reidliu41 (#2056).
-- **Moonshot/Kimi sessions launch from the dispatcher.** The `codewhale`
+- **Moonshot/Kimi sessions launch from the dispatcher.** The `ghosty`
   wrapper now includes Moonshot/Kimi in the TUI provider allowlist, so
-  `codewhale --provider moonshot --model kimi-k2.6` reaches the TUI instead of
+  `ghosty --provider moonshot --model kimi-k2.6` reaches the TUI instead of
   stopping after config resolution.
 - **Slash recovery no longer restores command tails in the composer.**
   Resuming a session or recovering from a crash no longer leaves stale
@@ -7135,9 +7199,9 @@ and continuing contributors **@reidliu41**, **@cyq1017**, **@idling11**,
 
 ### Added
 
-- **`codew` convenience alias.** `codew` is a short-form command that silently
-  forwards to `codewhale`. Six fewer keystrokes, same binary. Ships with the
-  Rust `codewhale-cli` crate and the npm `codewhale` package (#2013).
+- **`ghosty-tui` convenience alias.** `ghosty-tui` is a short-form command that silently
+  forwards to `ghosty`. Six fewer keystrokes, same binary. Ships with the
+  Rust `ghosty-cli` crate and the npm `ghosty` package (#2013).
 - **Session picker inline rename.** Press `r` in the session picker (Ctrl+R)
   to rename the selected session inline. Type the new title, Enter to confirm,
   Esc to cancel (#1600).
@@ -7147,18 +7211,18 @@ and continuing contributors **@reidliu41**, **@cyq1017**, **@idling11**,
 - **Agent team UX.** Delegate cards in the transcript now show human-readable
   roles (scout, builder, reviewer, verifier, executor) and the completion
   summary instead of raw `agent_xxx` IDs (#1981).
-- **`--continue` / `-c` CLI flag.** `codewhale --continue` resumes your most
+- **`--continue` / `-c` CLI flag.** `ghosty --continue` resumes your most
   recent interactive session for the current workspace.
 
 ### Changed
 
-- **App state migrates to `~/.codewhale/`.** New installs write product-owned
-  state (config, sessions, tasks, skills, logs, etc.) under `~/.codewhale/`.
+- **App state migrates to `~/.ghosty/`.** New installs write product-owned
+  state (config, sessions, tasks, skills, logs, etc.) under `~/.ghosty/`.
   `~/.deepseek/` continues to work as a compatibility fallback — no data loss,
-  no forced migration. `CODEWHALE_HOME` and `CODEWHALE_CONFIG_PATH` env vars
+  no forced migration. `GHOSTY_HOME` and `GHOSTY_CONFIG_PATH` env vars
   are now supported alongside existing `DEEPSEEK_*` vars (#2011).
-- **Project config overlay prefers `.codewhale/config.toml`** before
-  `.deepseek/config.toml`. Both are read; the CodeWhale root takes precedence.
+- **Project config overlay prefers `.ghosty/config.toml`** before
+  `.deepseek/config.toml`. Both are read; the GhostyCode root takes precedence.
 - **Doctor reports active state root** and whether legacy `~/.deepseek/`
   state is also present.
 - **README contributor acknowledgements are current for this release.**
@@ -7190,11 +7254,11 @@ and continuing contributors **@reidliu41**, **@cyq1017**, **@idling11**,
   now go to the managed sessions directory instead of the current workspace.
   Explicit `/save path/to/file.json` exports still work as before (#2010).
 - **Boot-time session prune** caps managed sessions at 50 on every startup,
-  preventing unbounded growth of `~/.codewhale/sessions/`.
+  preventing unbounded growth of `~/.ghosty/sessions/`.
 - **Checkpoint path resolution** no longer hardcodes `~/.deepseek/` — uses
   the resolved session directory instead.
-- **Plain startup no longer auto-opens the session picker.** `codewhale` and
-  `codew` start in a fresh composer again even when saved sessions exist.
+- **Plain startup no longer auto-opens the session picker.** `ghosty` and
+  `ghosty-tui` start in a fresh composer again even when saved sessions exist.
   Use `/sessions`, Ctrl+R, `--resume`, or `--continue` when you want to resume.
 - **Work sidebar now refreshes immediately** after `checklist_write`,
   `checklist_update`, and `update_plan` tool calls, matching the existing
@@ -7250,7 +7314,7 @@ and continuing contributors **@reidliu41**, **@cyq1017**, **@idling11**,
   include 30+ previously unlisted contributors whose PRs were merged since
   April 2026.
 - **README and web surface rebrand refinements.** Crate descriptions, npm
-  package text, and website copy now consistently position CodeWhale as
+  package text, and website copy now consistently position GhostyCode as
   open-model-first and provider-spanning, with DeepSeek V4 as the first-class
   path.
 - **New contributor names added to README acknowledgements.** Thanks to
@@ -7272,21 +7336,21 @@ and continuing contributors **@reidliu41**, **@cyq1017**, **@idling11**,
   loop now drains late-arriving sub-agent completions at the final checkpoint
   before breaking, so child-agent sentinels surface immediately instead of
   appearing in the following turn (#1961).
-- **`codewhale doctor` now referenced correctly in SSE timeout errors.**
+- **`ghosty doctor` now referenced correctly in SSE timeout errors.**
   The error message shown when SSE streams fail to connect now points users to
-  `codewhale doctor` (not the legacy `deepseek doctor`).
+  `ghosty doctor` (not the legacy `deepseek doctor`).
 
 ## [0.8.42] - 2026-05-24
 
 ### Changed
 
-- **CodeWhale now ships with the Brother Whale agent identity prompt.** The
+- **GhostyCode now ships with the Brother Whale agent identity prompt.** The
   built-in system prompt frames the agent as trusted, calm, careful, and
   responsible, and adds the coordination principle that great intelligence
   creates spaces where future intelligences can work together.
-- **CodeWhale positioning is clarified as DeepSeek-first and open-model
+- **GhostyCode positioning is clarified as DeepSeek-first and open-model
   oriented.** README, rebrand notes, crate metadata, and npm package text now
-  describe CodeWhale as an agentic terminal for open source and open-weight
+  describe GhostyCode as an agentic terminal for open source and open-weight
   coding models while preserving the official DeepSeek provider as first-class.
 - **Model auto-routing is documented separately from TUI modes.** README and
   modes docs now reserve "mode" for Plan / Agent / YOLO, describe
@@ -7346,11 +7410,11 @@ and selection fix in #1964.
 
 ### Changed
 
-- **Project renamed to codewhale.** The canonical CLI dispatcher is now
-  `codewhale` (was `deepseek`) and the TUI runtime is `codewhale-tui`
+- **Project renamed to ghosty.** The canonical CLI dispatcher is now
+  `ghosty` (was `deepseek`) and the TUI runtime is `ghosty-tui`
   (was `deepseek-tui`). The 14 workspace crates are renamed from
-  `deepseek-*` / `deepseek-tui-*` to `codewhale-*` / `codewhale-tui-*`.
-  The npm wrapper package is now `codewhale` (was `deepseek-tui`). See
+  `deepseek-*` / `deepseek-tui-*` to `ghosty-*` / `ghosty-tui-*`.
+  The npm wrapper package is now `ghosty` (was `deepseek-tui`). See
   [docs/REBRAND.md](docs/REBRAND.md) for migration notes.
 - **DeepSeek provider integration is unchanged.** `DEEPSEEK_*` env vars,
   model IDs (`deepseek-v4-pro`, `deepseek-v4-flash`, the legacy
@@ -7365,7 +7429,7 @@ and selection fix in #1964.
   renamed binaries. They will be removed in v0.9.0.
 - The `deepseek-tui` npm package continues to publish for one release
   cycle as a no-`bin` deprecation shim whose postinstall directs users
-  to `npm install -g codewhale`. It will be removed in v0.9.0.
+  to `npm install -g ghosty`. It will be removed in v0.9.0.
 
 ### Fixed
 
@@ -7400,7 +7464,7 @@ and selection fix in #1964.
 ### Thanks
 
 Thanks to **OpenWarp ([@zerx-lab](https://github.com/zerx-lab))** for
-prioritizing codewhale support and collaborating on terminal-agent UX.
+prioritizing ghosty support and collaborating on terminal-agent UX.
 Thanks to **[@leo119](https://github.com/leo119)** for the update-command
 documentation lineage now preserved through the rename.
 
@@ -7575,44 +7639,45 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
-[Unreleased]: https://github.com/Hmbown/CodeWhale/compare/v0.9.11...HEAD
-[0.9.11]: https://github.com/Hmbown/CodeWhale/compare/v0.9.10...v0.9.11
-[0.9.10]: https://github.com/Hmbown/CodeWhale/compare/v0.9.9...v0.9.10
-[0.9.9]: https://github.com/Hmbown/CodeWhale/compare/v0.9.8...v0.9.9
-[0.9.8]: https://github.com/Hmbown/CodeWhale/compare/v0.9.7...v0.9.8
-[0.9.7]: https://github.com/Hmbown/CodeWhale/compare/v0.9.6...v0.9.7
-[0.9.6]: https://github.com/Hmbown/CodeWhale/compare/v0.9.5...v0.9.6
-[0.9.5]: https://github.com/Hmbown/CodeWhale/compare/v0.9.4...v0.9.5
-[0.9.4]: https://github.com/Hmbown/CodeWhale/compare/v0.9.3...v0.9.4
-[0.9.3]: https://github.com/Hmbown/CodeWhale/compare/v0.9.2...v0.9.3
-[0.9.2]: https://github.com/Hmbown/CodeWhale/compare/v0.9.1...v0.9.2
-[0.9.1]: https://github.com/Hmbown/CodeWhale/compare/v0.9.0...v0.9.1
-[0.8.68]: https://github.com/Hmbown/CodeWhale/compare/v0.8.67...v0.8.68
-[0.8.67]: https://github.com/Hmbown/CodeWhale/compare/v0.8.66...v0.8.67
-[0.8.66]: https://github.com/Hmbown/CodeWhale/compare/v0.8.65...v0.8.66
-[0.8.65]: https://github.com/Hmbown/CodeWhale/compare/v0.8.64...v0.8.65
-[0.8.64]: https://github.com/Hmbown/CodeWhale/compare/v0.8.63...v0.8.64
-[0.8.63]: https://github.com/Hmbown/CodeWhale/compare/v0.8.62...v0.8.63
-[0.8.62]: https://github.com/Hmbown/CodeWhale/compare/v0.8.61...v0.8.62
-[0.8.61]: https://github.com/Hmbown/CodeWhale/compare/v0.8.60...v0.8.61
-[0.8.60]: https://github.com/Hmbown/CodeWhale/compare/v0.8.59...v0.8.60
-[0.8.59]: https://github.com/Hmbown/CodeWhale/compare/v0.8.58...v0.8.59
-[0.8.58]: https://github.com/Hmbown/CodeWhale/compare/v0.8.57...v0.8.58
-[0.8.57]: https://github.com/Hmbown/CodeWhale/compare/v0.8.56...v0.8.57
-[0.8.56]: https://github.com/Hmbown/CodeWhale/compare/v0.8.55...v0.8.56
-[0.8.55]: https://github.com/Hmbown/CodeWhale/compare/v0.8.54...v0.8.55
-[0.8.54]: https://github.com/Hmbown/CodeWhale/compare/v0.8.53...v0.8.54
-[0.8.53]: https://github.com/Hmbown/CodeWhale/compare/v0.8.52...v0.8.53
-[0.8.52]: https://github.com/Hmbown/CodeWhale/compare/v0.8.51...v0.8.52
-[0.8.51]: https://github.com/Hmbown/CodeWhale/compare/v0.8.50...v0.8.51
-[0.8.50]: https://github.com/Hmbown/CodeWhale/compare/v0.8.49...v0.8.50
-[0.8.49]: https://github.com/Hmbown/CodeWhale/compare/v0.8.48...v0.8.49
-[0.8.48]: https://github.com/Hmbown/CodeWhale/compare/v0.8.47...v0.8.48
-[0.8.47]: https://github.com/Hmbown/CodeWhale/compare/v0.8.46...v0.8.47
-[0.8.46]: https://github.com/Hmbown/CodeWhale/compare/v0.8.45...v0.8.46
-[0.8.45]: https://github.com/Hmbown/CodeWhale/compare/v0.8.44...v0.8.45
-[0.8.44]: https://github.com/Hmbown/CodeWhale/compare/v0.8.43...v0.8.44
-[0.8.43]: https://github.com/Hmbown/CodeWhale/compare/v0.8.42...v0.8.43
-[0.8.42]: https://github.com/Hmbown/CodeWhale/compare/v0.8.41...v0.8.42
-[0.8.41]: https://github.com/Hmbown/CodeWhale/compare/v0.8.40...v0.8.41
-[0.8.40]: https://github.com/Hmbown/CodeWhale/compare/v0.8.39...v0.8.40
+[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.15...HEAD
+[0.0.15]: https://github.com/blissito/ghostycode/compare/v0.0.14...v0.0.15
+[0.9.11]: https://github.com/Hmbown/GhostyCode/compare/v0.9.10...v0.9.11
+[0.9.10]: https://github.com/Hmbown/GhostyCode/compare/v0.9.9...v0.9.10
+[0.9.9]: https://github.com/Hmbown/GhostyCode/compare/v0.9.8...v0.9.9
+[0.9.8]: https://github.com/Hmbown/GhostyCode/compare/v0.9.7...v0.9.8
+[0.9.7]: https://github.com/Hmbown/GhostyCode/compare/v0.9.6...v0.9.7
+[0.9.6]: https://github.com/Hmbown/GhostyCode/compare/v0.9.5...v0.9.6
+[0.9.5]: https://github.com/Hmbown/GhostyCode/compare/v0.9.4...v0.9.5
+[0.9.4]: https://github.com/Hmbown/GhostyCode/compare/v0.9.3...v0.9.4
+[0.9.3]: https://github.com/Hmbown/GhostyCode/compare/v0.9.2...v0.9.3
+[0.9.2]: https://github.com/Hmbown/GhostyCode/compare/v0.9.1...v0.9.2
+[0.9.1]: https://github.com/Hmbown/GhostyCode/compare/v0.9.0...v0.9.1
+[0.8.68]: https://github.com/Hmbown/GhostyCode/compare/v0.8.67...v0.8.68
+[0.8.67]: https://github.com/Hmbown/GhostyCode/compare/v0.8.66...v0.8.67
+[0.8.66]: https://github.com/Hmbown/GhostyCode/compare/v0.8.65...v0.8.66
+[0.8.65]: https://github.com/Hmbown/GhostyCode/compare/v0.8.64...v0.8.65
+[0.8.64]: https://github.com/Hmbown/GhostyCode/compare/v0.8.63...v0.8.64
+[0.8.63]: https://github.com/Hmbown/GhostyCode/compare/v0.8.62...v0.8.63
+[0.8.62]: https://github.com/Hmbown/GhostyCode/compare/v0.8.61...v0.8.62
+[0.8.61]: https://github.com/Hmbown/GhostyCode/compare/v0.8.60...v0.8.61
+[0.8.60]: https://github.com/Hmbown/GhostyCode/compare/v0.8.59...v0.8.60
+[0.8.59]: https://github.com/Hmbown/GhostyCode/compare/v0.8.58...v0.8.59
+[0.8.58]: https://github.com/Hmbown/GhostyCode/compare/v0.8.57...v0.8.58
+[0.8.57]: https://github.com/Hmbown/GhostyCode/compare/v0.8.56...v0.8.57
+[0.8.56]: https://github.com/Hmbown/GhostyCode/compare/v0.8.55...v0.8.56
+[0.8.55]: https://github.com/Hmbown/GhostyCode/compare/v0.8.54...v0.8.55
+[0.8.54]: https://github.com/Hmbown/GhostyCode/compare/v0.8.53...v0.8.54
+[0.8.53]: https://github.com/Hmbown/GhostyCode/compare/v0.8.52...v0.8.53
+[0.8.52]: https://github.com/Hmbown/GhostyCode/compare/v0.8.51...v0.8.52
+[0.8.51]: https://github.com/Hmbown/GhostyCode/compare/v0.8.50...v0.8.51
+[0.8.50]: https://github.com/Hmbown/GhostyCode/compare/v0.8.49...v0.8.50
+[0.8.49]: https://github.com/Hmbown/GhostyCode/compare/v0.8.48...v0.8.49
+[0.8.48]: https://github.com/Hmbown/GhostyCode/compare/v0.8.47...v0.8.48
+[0.8.47]: https://github.com/Hmbown/GhostyCode/compare/v0.8.46...v0.8.47
+[0.8.46]: https://github.com/Hmbown/GhostyCode/compare/v0.8.45...v0.8.46
+[0.8.45]: https://github.com/Hmbown/GhostyCode/compare/v0.8.44...v0.8.45
+[0.8.44]: https://github.com/Hmbown/GhostyCode/compare/v0.8.43...v0.8.44
+[0.8.43]: https://github.com/Hmbown/GhostyCode/compare/v0.8.42...v0.8.43
+[0.8.42]: https://github.com/Hmbown/GhostyCode/compare/v0.8.41...v0.8.42
+[0.8.41]: https://github.com/Hmbown/GhostyCode/compare/v0.8.40...v0.8.41
+[0.8.40]: https://github.com/Hmbown/GhostyCode/compare/v0.8.39...v0.8.40

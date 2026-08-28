@@ -1,5 +1,5 @@
-use codewhale_telemetry::counters::http_status_counter;
-use codewhale_telemetry::{ErrorCounter, session_counters};
+use ghosty_telemetry::counters::http_status_counter;
+use ghosty_telemetry::{ErrorCounter, session_counters};
 
 #[test]
 fn a_custom_provider_is_recorded_as_the_literal_custom() {
@@ -15,7 +15,7 @@ fn a_custom_provider_is_recorded_as_the_literal_custom() {
         "expected the literal `custom`, got {providers:?}"
     );
 
-    let closed: std::collections::BTreeSet<&str> = codewhale_config::ProviderKind::ALL
+    let closed: std::collections::BTreeSet<&str> = ghosty_config::ProviderKind::ALL
         .iter()
         .map(|kind| kind.as_str())
         .collect();
@@ -47,7 +47,7 @@ fn http_status_classes_land_in_the_right_error_counter() {
 fn the_turn_wall_histogram_buckets_by_wall_clock_not_per_turn_events() {
     // A histogram, never a timestamped series: a stream of per-turn
     // durations reconstructs a session's working rhythm.
-    let mut wall = codewhale_telemetry::TurnWall::default();
+    let mut wall = ghosty_telemetry::TurnWall::default();
     wall.observe_secs(0);
     wall.observe_secs(4);
     wall.observe_secs(5);

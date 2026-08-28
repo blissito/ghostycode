@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://codewhale.ai/schemas/user-theme.schema.json",
-  "title": "Codewhale user theme overlay",
+  "$id": "https://ghosty.ai/schemas/user-theme.schema.json",
+  "title": "Ghosty user theme overlay",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "base", "colors"],

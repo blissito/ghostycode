@@ -1,6 +1,6 @@
 //! One typed, capped, marker-stable ModelContext fragment.
 //!
-//! Caps and identities are unified with `codewhale_core::fragments` — the
+//! Caps and identities are unified with `ghosty_core::fragments` — the
 //! single `crates/core` owner for the bounded fragment system (issue #5264).
 //! This crate re-exports the core caps so every injection goes through a
 //! typed fragment with a stable marker and the hard caps
@@ -11,7 +11,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 /// Re-export the core hard caps — single source of truth.
-pub use codewhale_core::fragments::{
+pub use ghosty_core::fragments::{
     DEFAULT_FRAGMENT_MAX_BYTES, MAX_FRAGMENT_BYTES, MAX_FRAGMENT_TOKENS, MAX_FRAGMENTS_PER_CONTEXT,
 };
 
@@ -108,7 +108,7 @@ pub enum FragmentRole {
     TokenBudget,
     /// Project instructions (AGENTS.md + imported instruction files).
     ProjectInstructions,
-    /// Codewhale-specific repo constitution.
+    /// Ghosty-specific repo constitution.
     Constitution,
 }
 

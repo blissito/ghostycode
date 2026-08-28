@@ -194,9 +194,9 @@ impl ReasoningRouterProfile {
     /// Load one profile from a labelled search root set.
     ///
     /// A bare name present under more than one origin is **ambiguous**: a
-    /// personal `~/.codewhale` Router silently shadowing a project Router would
+    /// personal `~/.ghosty` Router silently shadowing a project Router would
     /// change which provider sees every task's routing summary. Naming the
-    /// origin (`codewhale_home/fast`) resolves it.
+    /// origin (`ghosty_home/fast`) resolves it.
     pub fn load_by_name(
         name: &str,
         search_roots: &[FleetSearchRoot],
@@ -596,7 +596,7 @@ call_reasoning = "low"
         .expect("workspace");
 
         let roots = vec![
-            FleetSearchRoot::new("codewhale_home", &home),
+            FleetSearchRoot::new("ghosty_home", &home),
             FleetSearchRoot::new("workspace", &workspace),
         ];
 
@@ -607,7 +607,7 @@ call_reasoning = "low"
             "{err:?}"
         );
         let message = err.to_string();
-        assert!(message.contains("codewhale_home"), "{message}");
+        assert!(message.contains("ghosty_home"), "{message}");
         assert!(message.contains("workspace"), "{message}");
 
         let (workspace_profile, id) =
@@ -616,9 +616,9 @@ call_reasoning = "low"
         assert_eq!(workspace_profile.model, "gpt-5.6-luna");
 
         let (home_profile, home_id) =
-            ReasoningRouterProfile::load_by_name("codewhale_home/luna-low", &roots)
+            ReasoningRouterProfile::load_by_name("ghosty_home/luna-low", &roots)
                 .expect("qualified");
-        assert_eq!(home_id.qualified(), "codewhale_home/luna-low");
+        assert_eq!(home_id.qualified(), "ghosty_home/luna-low");
         assert_eq!(home_profile.model, "gpt-5.6-luna-mini");
     }
 

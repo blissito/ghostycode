@@ -2,7 +2,7 @@
 
 > 阅读简体中文版：[zh_hans/MCP.md](zh_hans/MCP.md)
 
-codewhale can load additional tools via MCP (Model Context Protocol). MCP servers can be local stdio processes that the TUI starts, or remote URL-based servers that speak Streamable HTTP with legacy SSE fallback.
+ghosty can load additional tools via MCP (Model Context Protocol). MCP servers can be local stdio processes that the TUI starts, or remote URL-based servers that speak Streamable HTTP with legacy SSE fallback.
 
 Browsing note:
 - `Web` is the canonical, deferred built-in browsing tool; it provides
@@ -11,9 +11,9 @@ Browsing note:
   aliases. New prompts and integrations should use `Web`.
 
 Server mode note:
-- `codewhale serve --mcp` runs the MCP stdio server.
-- `codewhale serve --http` runs the runtime HTTP/SSE API (separate mode).
-- `codewhale mcp-server` is an equivalent stdio entrypoint on the same
+- `ghosty serve --mcp` runs the MCP stdio server.
+- `ghosty serve --http` runs the runtime HTTP/SSE API (separate mode).
+- `ghosty mcp-server` is an equivalent stdio entrypoint on the same
   consolidated runtime.
 
 ## Setup wizard vs manual MCP setup (#3407)
@@ -25,8 +25,8 @@ step. That step is discovery/readiness only:
 | --- | --- |
 | Show configured servers as `healthy` / `needs_config` / `off` | Start or connect MCP servers |
 | Report config path presence (global + project) | Write or edit `mcp.json` contents |
-| Safe static health probe (missing command/url, broken absolute path, missing bearer env) | `codewhale mcp validate`, live connect, OAuth login |
-| Point at safe on-ramps (`/mcp`, `codewhale mcp init`, `codewhale doctor`) | Install community skills, trust skills, enable plugins |
+| Safe static health probe (missing command/url, broken absolute path, missing bearer env) | `ghosty mcp validate`, live connect, OAuth login |
+| Point at safe on-ramps (`/mcp`, `ghosty mcp init`, `ghosty doctor`) | Install community skills, trust skills, enable plugins |
 | Share Hotbar source counts from the same skill/MCP adapters (#3399) | Bind Hotbar slots (Hotbar step / `H`) |
 | Record optional/`needs_action` setup_state without blocking first-run | Anything that spawns processes or installs packages |
 
@@ -36,7 +36,7 @@ yet, that’s fine.” Failing or incomplete configured servers surface as
 Enumeration never executes MCP/plugin commands beyond the static probe.
 Summaries redact commands, args, env, headers, and tokens.
 
-`codewhale doctor` reports MCP/skills/tools/plugins health with the same
+`ghosty doctor` reports MCP/skills/tools/plugins health with the same
 optional-surface intent (paths, counts, static checks) so wizard and doctor
 stay consistent.
 
@@ -73,25 +73,25 @@ cancellation. MCP subscriptions are not exposed through plugin bundles. See
 Create a starter MCP config at your resolved MCP path:
 
 ```bash
-codewhale mcp init
+ghosty mcp init
 ```
 
-`codewhale setup --mcp` performs the same MCP bootstrap alongside skills setup.
+`ghosty setup --mcp` performs the same MCP bootstrap alongside skills setup.
 
 Common management commands:
 
 ```bash
-codewhale mcp list
-codewhale mcp tools [server]
-codewhale mcp add <name> --command "<cmd>" --arg "<arg>"
-codewhale mcp add <name> --url "http://localhost:3000/mcp"
-codewhale mcp add <name> --url "https://example.com/mcp" --bearer-token-env-var MCP_TOKEN
-codewhale mcp login <name>
-codewhale mcp logout <name>
-codewhale mcp enable <name>
-codewhale mcp disable <name>
-codewhale mcp remove <name>
-codewhale mcp validate
+ghosty mcp list
+ghosty mcp tools [server]
+ghosty mcp add <name> --command "<cmd>" --arg "<arg>"
+ghosty mcp add <name> --url "http://localhost:3000/mcp"
+ghosty mcp add <name> --url "https://example.com/mcp" --bearer-token-env-var MCP_TOKEN
+ghosty mcp login <name>
+ghosty mcp logout <name>
+ghosty mcp enable <name>
+ghosty mcp disable <name>
+ghosty mcp remove <name>
+ghosty mcp validate
 ```
 
 ## In-TUI Manager
@@ -122,7 +122,7 @@ Supported in-TUI actions:
 
 ### Suggested plugins and companion integrations
 
-`/mcp recommendations` is Codewhale's native, curated suggestions surface.
+`/mcp recommendations` is Ghosty's native, curated suggestions surface.
 The entries are described as product plugins, with their component type and
 provenance, but `/mcp add recommended <id>` still writes only the named MCP
 server component. Viewing recommendations never fetches, installs, trusts, or
@@ -139,20 +139,20 @@ diagnostic surfaces:
 | Chrome DevTools | MCP server (stdio) | `npx -y chrome-devtools-mcp@1.7.0` (`npx.cmd` on Windows) | [Official ChromeDevTools project](https://github.com/ChromeDevTools/chrome-devtools-mcp) | npm may download the pinned package when the user restarts MCP. |
 | Playwright | MCP server (stdio) | `npx -y @playwright/mcp@0.0.79 --isolated` (`npx.cmd` on Windows) | [Official Microsoft project](https://github.com/microsoft/playwright-mcp) | `--isolated` starts a fresh browser profile; npm may download the pinned package only after an explicit restart. |
 | Cua Computer Use | MCP server (stdio) | `cua-driver mcp`; Driver `0.20.0` reviewed for this release | [Official Cua project](https://github.com/trycua/cua); preview integration | The signed driver and OS permissions are separate, explicit installs. `/mcp add recommended cua` only writes config and never installs or grants either. |
-| Browser Use | Skill plus separately installed Python runtime | Skill/runtime release `0.13.8` | [Official browser-use project](https://github.com/browser-use/browser-use) | Optional companion: not an MCP server. Codewhale does not auto-run the upstream Skill installer or install its browser/runtime dependencies. |
-| Anthropic Sandbox Runtime | Sandbox adapter companion | `@anthropic-ai/sandbox-runtime@0.0.73` | [Official anthropic-experimental project](https://github.com/anthropic-experimental/sandbox-runtime); beta | Documentation-only adapter candidate in v0.9.10: not an MCP server and not an active Codewhale plugin adapter. It does not replace Codewhale's sandbox policy. |
+| Browser Use | Skill plus separately installed Python runtime | Skill/runtime release `0.13.8` | [Official browser-use project](https://github.com/browser-use/browser-use) | Optional companion: not an MCP server. Ghosty does not auto-run the upstream Skill installer or install its browser/runtime dependencies. |
+| Anthropic Sandbox Runtime | Sandbox adapter companion | `@anthropic-ai/sandbox-runtime@0.0.73` | [Official anthropic-experimental project](https://github.com/anthropic-experimental/sandbox-runtime); beta | Documentation-only adapter candidate in v0.9.10: not an MCP server and not an active Ghosty plugin adapter. It does not replace Ghosty's sandbox policy. |
 
 [Container Use](https://github.com/dagger/container-use) remains an additional
 experimental suggestion with an MCP server component (`container-use stdio`).
 The binary must be installed separately; `/mcp add recommended container-use`
-only writes config and Codewhale never downloads it.
+only writes config and Ghosty never downloads it.
 
 This presentation follows the same useful boundary found in the local
 Grokbuild extensions view (one product plugin may expose MCP or Skill
 components while component tabs stay inspectable), the Kimi marketplace's
 explicit display name/tier/source fields, and the Codex marketplace's explicit
 source and install-policy fields.
-Codewhale keeps its stricter rule: provenance and foreign policy are display
+Ghosty keeps its stricter rule: provenance and foreign policy are display
 metadata only, never inherited trust or automatic installation. For full
 bundle and marketplace semantics, see [Plugin bundles](PLUGIN_BUNDLES.md).
 
@@ -197,19 +197,19 @@ For bearer-token auth, prefer env-backed config:
 For generic remote MCP OAuth, add the URL server and run login:
 
 ```bash
-codewhale mcp add remote --url "https://example.com/mcp"
-codewhale mcp login remote
+ghosty mcp add remote --url "https://example.com/mcp"
+ghosty mcp login remote
 ```
 
-Codewhale discovers the server OAuth metadata, opens the authorization URL in
+Ghosty discovers the server OAuth metadata, opens the authorization URL in
 your browser, listens on a local callback, exchanges the code, and stores the
-token response through the Codewhale secrets backend. Stored OAuth tokens are
+token response through the Ghosty secrets backend. Stored OAuth tokens are
 looked up by server name plus URL and refreshed when possible before requests.
 During login, the CLI prints the authorization URL and a waiting status while
 the local callback listener is active. If a URL-based server returns 401 or
-Unauthorized during connect/discovery, `codewhale mcp connect <name>` reports
+Unauthorized during connect/discovery, `ghosty mcp connect <name>` reports
 that OAuth authentication is required and points to
-`codewhale mcp login <name>`. Resource helper listings also surface an
+`ghosty mcp login <name>`. Resource helper listings also surface an
 `authentication_required` entry for auth-shaped failures instead of silently
 looking empty.
 
@@ -243,19 +243,19 @@ These callback fields are ignored from project-scope config overlays.
 ## Hugging Face MCP
 
 Hugging Face provides a hosted MCP server for Hub resources, documentation,
-datasets, Spaces, and community tools. Codewhale does not call Hugging Face's
+datasets, Spaces, and community tools. Ghosty does not call Hugging Face's
 Hub HTTP APIs from `/hf`; it only helps you inspect and set up the MCP config
 that the regular MCP manager will load.
 
 The recommended setup path is Hugging Face's settings-generated configuration:
 
 1. Visit <https://huggingface.co/settings/mcp> while signed in.
-2. Choose the MCP client closest to your Codewhale config shape and copy the
+2. Choose the MCP client closest to your Ghosty config shape and copy the
    generated server snippet.
 3. Paste the Hugging Face server entry into your resolved MCP config file.
 4. Run `/mcp reload` to rebuild the live model-visible tool pool.
 
-Codewhale reads both `servers` and `mcpServers`, so settings-generated snippets
+Ghosty reads both `servers` and `mcpServers`, so settings-generated snippets
 can be adapted without changing the rest of the MCP file. A placeholder-only
 shape looks like this:
 
@@ -293,14 +293,14 @@ Official docs: <https://huggingface.co/docs/hub/hf-mcp-server>
 
 Default path:
 
-- `~/.codewhale/mcp.json` (`~/.deepseek/mcp.json` is still read when the Codewhale file is absent)
+- `~/.ghosty/mcp.json` (`~/.deepseek/mcp.json` is still read when the Ghosty file is absent)
 
 Overrides:
 
 - Config: `mcp_config_path = "/path/to/mcp.json"`
 - Env: `DEEPSEEK_MCP_CONFIG=/path/to/mcp.json`
 
-`codewhale mcp init` (and `codewhale setup --mcp`) writes to this resolved path.
+`ghosty mcp init` (and `ghosty setup --mcp`) writes to this resolved path.
 
 The interactive `/config` editor also exposes `mcp_config_path`. Changing it in
 the TUI updates the path used by `/mcp` and marks the pool reload-required;
@@ -352,34 +352,34 @@ The CLI also exposes helper tools when MCP is enabled:
 
 You can also use `mcpServers` instead of `servers` for compatibility with other clients.
 
-## Running Codewhale as an MCP Server
+## Running Ghosty as an MCP Server
 
-You can register your local Codewhale binary as an MCP server so other Codewhale sessions (or any MCP client) can call its tools.
+You can register your local Ghosty binary as an MCP server so other Ghosty sessions (or any MCP client) can call its tools.
 
 ### Quick Setup
 
 ```bash
-codewhale mcp add-self
+ghosty mcp add-self
 ```
 
 This resolves the current binary path, generates a config entry that runs
-`codewhale serve --mcp`, and writes it to your MCP config file. The default
-server name is `codewhale`.
+`ghosty serve --mcp`, and writes it to your MCP config file. The default
+server name is `ghosty`.
 
 Options:
 
-- `--name <NAME>` — custom server name (default: `codewhale`)
+- `--name <NAME>` — custom server name (default: `ghosty`)
 - `--workspace <PATH>` — workspace directory for the server
 
 ### Manual Config
 
-Equivalent manual entry in `~/.codewhale/mcp.json`:
+Equivalent manual entry in `~/.ghosty/mcp.json`:
 
 ```json
 {
   "servers": {
-    "codewhale": {
-      "command": "/path/to/codewhale",
+    "ghosty": {
+      "command": "/path/to/ghosty",
       "args": ["serve", "--mcp"],
       "env": {}
     }
@@ -387,9 +387,9 @@ Equivalent manual entry in `~/.codewhale/mcp.json`:
 }
 ```
 
-The consolidated `codewhale` runtime supports `serve --mcp` directly and also
-offers the equivalent `codewhale mcp-server` stdio entrypoint. Release
-installers expose the same runtime as `codew`; `mcp add-self` automatically
+The consolidated `ghosty` runtime supports `serve --mcp` directly and also
+offers the equivalent `ghosty mcp-server` stdio entrypoint. Release
+installers expose the same runtime as `ghosty-tui`; `mcp add-self` automatically
 resolves the command that invoked it.
 
 ### Prerequisites
@@ -404,29 +404,29 @@ Tools from an MCP server follow the standard naming convention:
 
 - `mcp_<server>_<tool>`
 
-For example, the `shell` tool from the default server (named `codewhale`)
-becomes `mcp_codewhale_shell`.
+For example, the `shell` tool from the default server (named `ghosty`)
+becomes `mcp_ghosty_shell`.
 
 ### MCP Server vs HTTP/SSE API vs ACP
 
-| | `codewhale serve --mcp` | `codewhale serve --http` | `codewhale serve --acp` |
+| | `ghosty serve --mcp` | `ghosty serve --http` | `ghosty serve --acp` |
 |---|---|---|---|
 | **Protocol** | MCP stdio | HTTP/SSE JSON-RPC | ACP stdio |
 | **Use case** | Tool server for MCP clients | Runtime API for apps | Editor agent for Zed/custom ACP clients |
-| **Config** | `~/.codewhale/mcp.json` entry | Direct URL connection | Editor `agent_servers` custom command |
+| **Config** | `~/.ghosty/mcp.json` entry | Direct URL connection | Editor `agent_servers` custom command |
 | **Lifecycle** | Spawned per client session | Long-running daemon | Spawned per editor agent session |
 
-Use `mcp add-self` when you want Codewhale tools available to other MCP clients.
+Use `mcp add-self` when you want Ghosty tools available to other MCP clients.
 Use `serve --http` when building applications that consume the API directly.
-Use `serve --acp` when an editor wants to talk to Codewhale as an ACP agent.
+Use `serve --acp` when an editor wants to talk to Ghosty as an ACP agent.
 
 ### Verification
 
 After adding, test the connection:
 
 ```bash
-codewhale mcp validate
-codewhale mcp tools codewhale
+ghosty mcp validate
+ghosty mcp tools ghosty
 ```
 
 ## Server Fields
@@ -464,9 +464,9 @@ Avoid committing literal `Authorization` headers. Prefer `env_headers`,
 
 ## Troubleshooting
 
-- Run `codewhale doctor` to confirm the MCP config path it resolved and whether it exists.
+- Run `ghosty doctor` to confirm the MCP config path it resolved and whether it exists.
 - In the TUI, run `/mcp validate` to refresh the visible server/tool snapshot.
 - If tools are missing from the model's catalog after a config or credential
   change, run `/mcp reload` — `/mcp validate` only refreshes the UI snapshot.
-- If the MCP config is missing, run `codewhale mcp init --force` to regenerate it.
+- If the MCP config is missing, run `ghosty mcp init --force` to regenerate it.
 - If tools don’t appear, verify the server command works from your shell and that the server supports MCP `tools/list`.

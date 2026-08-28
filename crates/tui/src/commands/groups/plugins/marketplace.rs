@@ -34,7 +34,7 @@ use crate::tui::app::App;
 const MAX_CATALOG_BYTES: u64 = 4 * 1024 * 1024;
 
 const USAGE: &str = "Usage: /plugin marketplace add|list|show|remove|install\n\
-     \x20 add <name> <path>    read a local catalog file (kimi/claude/codex/codewhale)\n\
+     \x20 add <name> <path>    read a local catalog file (kimi/claude/codex/ghosty)\n\
      \x20 list                 show catalogs and their candidates\n\
      \x20 show <name>          one catalog in detail\n\
      \x20 remove <name>        forget a catalog (installed plugins unaffected)\n\
@@ -116,7 +116,7 @@ fn add(app: &mut App, name: &str, raw_path: &str) -> CommandResult {
     // nothing useful was parsed; do not persist it.
     if catalog.candidates.is_empty() && catalog.error_count() > 0 {
         return CommandResult::error(format!(
-            "Catalog `{}` could not be parsed as any known marketplace format (kimi, claude, codex, codewhale):\n{}",
+            "Catalog `{}` could not be parsed as any known marketplace format (kimi, claude, codex, ghosty):\n{}",
             escape_review_text(name),
             render_diagnostics_inline(&catalog.diagnostics)
         ));
@@ -261,7 +261,7 @@ fn install(app: &mut App, catalog_name: &str, candidate_name: &str) -> CommandRe
             unreachable!("is_supported and this match agree");
         };
         return CommandResult::error(format!(
-            "Candidate `{}` cannot be installed by Codewhale: {}",
+            "Candidate `{}` cannot be installed by Ghosty: {}",
             escape_review_text(candidate_name),
             escape_review_text(&localized_marketplace_plan_text(app.ui_locale, reason))
         ));

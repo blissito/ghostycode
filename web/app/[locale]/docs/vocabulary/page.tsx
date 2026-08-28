@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return buildPageMetadata({
     path: "/docs/vocabulary",
     locale,
-    title: isZh ? "产品名词 · Codewhale 文档" : "Vocabulary · Codewhale Docs",
+    title: isZh ? "产品名词 · Ghosty 文档" : "Vocabulary · Ghosty Docs",
     description: isZh
       ? "确切的产品名词：Fleet、Workflow、Lane、Runtime、Consultant，Plan / Work / Operate 与权限姿态，以及请求→实际思考档位、路由来源与测量原则。"
       : "The exact product nouns: Fleet, Workflow, Lane, Runtime, Consultant, Plan / Work / Operate and permission postures, plus requested→effective reasoning, routing source, and measurement principles.",

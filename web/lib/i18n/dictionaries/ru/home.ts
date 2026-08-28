@@ -7,17 +7,17 @@ import type { HomeDict } from "../types";
  * `npm run check:locales` and `dictionaries.test.ts`.
  *
  * Fixed product vocabulary stays Latin and matches the TUI ru locale pack:
- * Plan / Work / Operate, Ask / Auto-Review / Full Access, Codewhale, Fleet.
+ * Plan / Work / Operate, Ask / Auto-Review / Full Access, Ghosty, Fleet.
  * "receipt" is rendered "квитанция", as in `crates/tui/locales/ru.json`.
  * The `seal*` values are the paper's marks, shared across locales.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — ныряет в глубину, чтобы вам не пришлось.",
+  metaTitle: "Ghosty — ныряет в глубину, чтобы вам не пришлось.",
   metaDescription:
-    "Codewhale ныряет в глубину, чтобы вам не пришлось — терминальный кодинг-агент с открытым исходным кодом. Подключите свою модель. Работает на вашей машине. Rust, MIT.",
+    "Ghosty ныряет в глубину, чтобы вам не пришлось — терминальный кодинг-агент с открытым исходным кодом. Подключите свою модель. Работает на вашей машине. Rust, MIT.",
 
   kicker: "Открытый код · Своя модель · В вашем терминале",
-  heroTitleA: "Codewhale ныряет в глубину,",
+  heroTitleA: "Ghosty ныряет в глубину,",
   heroTitleB: "чтобы вам не пришлось.",
   heroIntro:
     "{brand} — кодинг-агент с открытым исходным кодом для вашего терминала. Дайте ему модель и задачу — он читает ваш код, правит файлы, сам запускает проверки и останавливается, когда работа сделана или ему нужны вы. Подойдёт любая модель, а можно и смешивать: закрепите за каждой ролью свою.",
@@ -40,8 +40,8 @@ export const home: HomeDict = {
 
   shotSession: "Текущий сеанс",
   screenshotAlt:
-    "Текущий терминальный сеанс Codewhale: режим Operate, кит, поле ввода и нижняя панель",
-  figcaption: "Текущий сеанс Codewhale · режим Operate · режим разрешений Ask",
+    "Текущий терминальный сеанс Ghosty: режим Operate, кит, поле ввода и нижняя панель",
+  figcaption: "Текущий сеанс Ghosty · режим Operate · режим разрешений Ask",
 
   proofHeading: "Подводная оболочка для терминала. Любая модель. На вашей машине.",
   proofBody:
@@ -67,7 +67,7 @@ export const home: HomeDict = {
   receiptReport: "проверки пройдены · квитанция сохранена",
 
   sealStart: "起",
-  startHeading: "Впервые в Codewhale? Четыре шага от начала до конца.",
+  startHeading: "Впервые в Ghosty? Четыре шага от начала до конца.",
   startLede:
     "Установка → первый сеанс без ключей → подключение провайдера → первый воркфлоу Fleet. Термины — на странице словаря.",
   startGuideLink: "Читать руководство «С чего начать» →",
@@ -87,7 +87,7 @@ export const home: HomeDict = {
   surfacesHeading: "Используйте рантайм там, где идёт работа.",
   surfaces: [
     ["TUI", "Интерактивная работа в терминале"],
-    ["codewhale exec", "Скрипты и CI"],
+    ["ghosty exec", "Скрипты и CI"],
     ["Веб-клиент", "Клиент в браузере, только через loopback"],
     ["Runtime API + MCP", "Локальные интеграции"],
     ["Fleet", "Длительная работа нескольких агентов"],

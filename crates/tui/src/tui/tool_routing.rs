@@ -626,7 +626,7 @@ pub(crate) fn reported_tool_exit_code(result: &Result<ToolResult, ToolError>) ->
 ///
 /// Both are observer events: their stdout is ignored and neither can change
 /// the result that goes back to the model. That is a statement about
-/// Codewhale's control flow only — the commands themselves are arbitrary
+/// Ghosty's control flow only — the commands themselves are arbitrary
 /// shells and may have any external side effect.
 fn fire_tool_completion_hooks(
     app: &mut App,

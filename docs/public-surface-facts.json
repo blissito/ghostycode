@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "product": {
-    "name": "Codewhale",
+    "name": "Ghosty",
     "description": "Terminal coding agent for supported hosted and local models. One runtime on your machine. Rust, MIT.",
     "positioning": "Terminal-native, model/provider-neutral, local-first coding agent",
     "license": "MIT",
@@ -15,7 +15,7 @@
       "Cargo.toml",
       "LICENSE",
       "README.md",
-      "npm/codewhale/package.json",
+      "npm/ghosty/package.json",
       "docs/FLEET.md"
     ]
   },
@@ -38,16 +38,16 @@
     "tag": "v0.9.11",
     "version": "0.9.11",
     "publishedAt": "2026-08-23T17:39:46Z",
-    "url": "https://github.com/Hmbown/CodeWhale/releases/tag/v0.9.11",
+    "url": "https://github.com/blissito/ghostycode/releases/tag/v0.9.11",
     "sources": [
       "web/data/latest-published-release.json"
     ]
   },
   "install": {
-    "recommended": "npm install -g codewhale",
+    "recommended": "npm install -g ghosty",
     "binaries": [
-      "codewhale",
-      "codew"
+      "ghosty",
+      "ghosty-tui"
     ],
     "channels": {
       "npm": "published releases only",
@@ -63,9 +63,9 @@
     },
     "sources": [
       "README.md",
-      "npm/codewhale/package.json",
-      "npm/codewhale/README.md",
-      "npm/codewhale/scripts/artifacts.js",
+      "npm/ghosty/package.json",
+      "npm/ghosty/README.md",
+      "npm/ghosty/scripts/artifacts.js",
       "docs/INSTALL.md",
       "docs/CNB_MIRROR.md"
     ]
@@ -158,7 +158,7 @@
   "surfaces": {
     "availableInSourceCandidate": [
       "TUI",
-      "codewhale exec",
+      "ghosty exec",
       "Web client",
       "Runtime API",
       "MCP",
@@ -176,11 +176,11 @@
     "localRuntime": "runtime, workspace state, and audit log stay on the user's machine",
     "hostedProviderBoundary": "the selected hosted provider receives turn context required for inference",
     "localInference": "a loopback local-model route can keep inference local",
-    "telemetry": "anonymous usage counting is on by default with a clear first-run disclosure and a durable opt-out; Codewhale does not collect conversations, code, prompts, files, file/repo/branch names, model content, credentials, or per-turn/per-tool timelines; it posts aggregate counts and closed enums to the first-party endpoint https://telemetry.codewhale.net/v1/telemetry, whose storage has no IP, country, or geo column and a fixed three-month retention; telemetry_endpoint = \"\" writes only to a local dry-run file; no mandatory hosted relay",
+    "telemetry": "anonymous usage counting is on by default with a clear first-run disclosure and a durable opt-out; Ghosty does not collect conversations, code, prompts, files, file/repo/branch names, model content, credentials, or per-turn/per-tool timelines; it posts aggregate counts and closed enums to the first-party endpoint https://telemetry.ghosty.net/v1/telemetry, whose storage has no IP, country, or geo column and a fixed three-month retention; telemetry_endpoint = \"\" writes only to a local dry-run file; no mandatory hosted relay",
     "account": "no account required for the local runtime",
     "plan": "Plan is read-only",
     "sandbox": "Seatbelt is used on macOS when available; Linux bubblewrap is opt-in and must be installed; Windows currently reports no OS sandbox",
-    "audit": "sensitive events append best-effort to $CODEWHALE_HOME/audit.log (default ~/.codewhale/audit.log); write failures are logged",
+    "audit": "sensitive events append best-effort to $GHOSTY_HOME/audit.log (default ~/.ghosty/audit.log); write failures are logged",
     "usage": "provider token and cache usage is shown locally when available",
     "sources": [
       "docs/PROVIDERS.md",
@@ -210,10 +210,10 @@
     ]
   },
   "repository": {
-    "canonical": "https://github.com/Hmbown/CodeWhale",
+    "canonical": "https://github.com/blissito/ghostycode",
     "mirrors": [
-      "https://cnb.cool/codewhale.net/codewhale",
-      "https://npmmirror.com/package/codewhale"
+      "https://cnb.cool/ghosty.net/ghosty",
+      "https://npmmirror.com/package/ghosty"
     ],
     "creditSources": [
       "CHANGELOG.md",
@@ -229,12 +229,12 @@
   },
   "screenshot": {
     "readme": "assets/screenshot.webp",
-    "website": "web/public/codewhale-tui.webp",
+    "website": "web/public/ghosty-tui.webp",
     "sourceVersion": null,
     "sourceCommit": null,
     "terminal": "unrecorded",
     "theme": "Blue Stage dark",
-    "capture": "current Codewhale session; exact binary identity was not recorded, so this image makes no published-release or exact-candidate claim",
+    "capture": "current Ghosty session; exact binary identity was not recorded, so this image makes no published-release or exact-candidate claim",
     "sources": [
       "crates/tui"
     ]

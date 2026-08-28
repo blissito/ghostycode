@@ -1,5 +1,5 @@
 /**
- * docs-map.ts — canonical documentation registry for codewhale.net.
+ * docs-map.ts — canonical documentation registry for ghosty.net.
  *
  * Maps every first-class documentation topic area to its repo source file(s)
  * and website route. This is the single source of truth for the docs hub
@@ -313,10 +313,10 @@ export function docTopicHref(topic: DocTopic, locale: string): string {
   return `${REPO_DOCS_BASE}/${source}`;
 }
 
-/** Whether following a topic leaves codewhale.net for the source document. */
+/** Whether following a topic leaves ghosty.net for the source document. */
 export function docTopicIsExternal(topic: DocTopic): boolean {
   return !topic.hasPage;
 }
 
 /** Repo source base URL for generating direct links. */
-export const REPO_DOCS_BASE = "https://github.com/Hmbown/CodeWhale/blob/main";
+export const REPO_DOCS_BASE = "https://github.com/blissito/ghostycode/blob/main";

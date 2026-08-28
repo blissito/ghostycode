@@ -1,30 +1,30 @@
 @echo off
 setlocal enabledelayedexpansion
-:: CodeWhale Windows installer
-:: Copies codewhale.exe, codew.exe, and codewhale.bat to %USERPROFILE%\bin (single binary, no codewhale-tui.exe)
+:: GhostyCode Windows installer
+:: Copies ghosty.exe, ghosty-tui.exe, and ghosty.bat to %USERPROFILE%\bin (single binary, no ghosty-tui.exe)
 
 set "BIN_DIR=%USERPROFILE%\bin"
 set "SCRIPT_DIR=%~dp0"
 
 if not exist "%BIN_DIR%" mkdir "%BIN_DIR%"
 
-echo Installing codewhale to %BIN_DIR%...
+echo Installing ghosty to %BIN_DIR%...
 
-copy /Y "%SCRIPT_DIR%codewhale.exe" "%BIN_DIR%\codewhale.exe" >nul
+copy /Y "%SCRIPT_DIR%ghosty.exe" "%BIN_DIR%\ghosty.exe" >nul
 if %ERRORLEVEL% neq 0 (
-    echo ERROR: Failed to copy codewhale.exe
+    echo ERROR: Failed to copy ghosty.exe
     exit /b 1
 )
 
-copy /Y "%SCRIPT_DIR%codew.exe" "%BIN_DIR%\codew.exe" >nul
+copy /Y "%SCRIPT_DIR%ghosty-tui.exe" "%BIN_DIR%\ghosty-tui.exe" >nul
 if %ERRORLEVEL% neq 0 (
-    echo ERROR: Failed to copy codew.exe
+    echo ERROR: Failed to copy ghosty-tui.exe
     exit /b 1
 )
 
-copy /Y "%SCRIPT_DIR%codewhale.bat" "%BIN_DIR%\codewhale.bat" >nul
+copy /Y "%SCRIPT_DIR%ghosty.bat" "%BIN_DIR%\ghosty.bat" >nul
 if %ERRORLEVEL% neq 0 (
-    echo ERROR: Failed to copy codewhale.bat
+    echo ERROR: Failed to copy ghosty.bat
     exit /b 1
 )
 
@@ -41,5 +41,5 @@ echo.
 echo Or run this in an admin PowerShell:
 echo   [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';%BIN_DIR%', 'User')
 echo.
-echo Then run: codewhale
-echo Double-click codewhale.bat (not codewhale.exe) to open Windows Terminal when it is installed.
+echo Then run: ghosty
+echo Double-click ghosty.bat (not ghosty.exe) to open Windows Terminal when it is installed.

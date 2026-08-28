@@ -6,7 +6,7 @@ import type { ChromeDict } from "../types";
  * إعادة صياغة أصلية باتجاه الإنجليزية الحالي — «أي نموذج، على جهازك»،
  * لا تموضع «local-first» المتقاعد.
  *
- * أسماء الأوامر والمنتجات تبقى كما هي: Codewhale و GitHub و Issues
+ * أسماء الأوامر والمنتجات تبقى كما هي: Ghosty و GitHub و Issues
  * و `Runtime` و `Fleet` و TUI. الأسهم تشير إلى الأمام في سياق RTL (←).
  *
  * التسميات الثانوية للتنقل تقارن التسمية العربية بنظيرة إنجليزية
@@ -30,7 +30,7 @@ export const chrome: ChromeDict = {
   skipToContent: "الانتقال إلى المحتوى الرئيسي",
 
   navPrimaryAria: "التنقل الرئيسي",
-  navHomeAria: "الصفحة الرئيسية لـ Codewhale",
+  navHomeAria: "الصفحة الرئيسية لـ Ghosty",
 
   installCta: "ثبّت ←",
 
@@ -70,7 +70,7 @@ export const chrome: ChromeDict = {
   themeTitle: "سمة التوثيق · تلقائي / فاتح / داكن",
 
   footerTagline:
-    "Codewhale يغوص في الأعماق بدلًا منك — توثيق ومصدر ومجتمع لِ Runtime مفتوح المصدر.",
+    "Ghosty يغوص في الأعماق بدلًا منك — توثيق ومصدر ومجتمع لِ Runtime مفتوح المصدر.",
   footerProduct: "المنتج",
   footerProject: "المشروع",
   footerDocs: "التوثيق",

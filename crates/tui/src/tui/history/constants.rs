@@ -3,7 +3,7 @@
 //! ## How the live tool-card budgets were chosen
 //!
 //! The caps below were measured, not guessed. The sample is 53 real saved
-//! sessions from `~/.codewhale/sessions` — 5,470 tool results, 4,001 of them
+//! sessions from `~/.ghosty/sessions` — 5,470 tool results, 4,001 of them
 //! `Bash` (the "run" cards) and 3,777 `Bash` commands.
 //!
 //! Observed `Bash` result length, in source lines:

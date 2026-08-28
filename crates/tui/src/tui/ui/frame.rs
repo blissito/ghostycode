@@ -207,7 +207,7 @@ pub(crate) fn build_engine_config(app: &App, config: &Config) -> EngineConfig {
         notes_path: config.notes_path(),
         mcp_config_path: config.mcp_config_path(),
         skills_dir: app.skills_dir.clone(),
-        skills_scan_codewhale_only: app.skills_scan_codewhale_only,
+        skills_scan_ghosty_only: app.skills_scan_ghosty_only,
         plugin_registry: Some(std::sync::Arc::clone(&app.plugin_registry)),
         instructions: configured_instruction_sources(config),
         project_context_pack_enabled: config.project_context_pack_enabled(),
@@ -343,7 +343,7 @@ pub(crate) fn build_app_system_prompt_with_goal(
                 app.active_route_limits,
             )),
             verbosity: app.verbosity.as_deref(),
-            skills_scan_codewhale_only: app.skills_scan_codewhale_only,
+            skills_scan_ghosty_only: app.skills_scan_ghosty_only,
             plugin_registry: Some(app.plugin_registry.as_ref()),
             mode: app.mode,
         },
@@ -726,7 +726,7 @@ pub(crate) fn render(f: &mut Frame, app: &mut App, _config: &Config) -> Option<(
 
     if app.launch.visible {
         // Launch is a distinct full-canvas choice state, not a reading column.
-        // Keep it edge-to-edge so opening Codewhale never recreates black side
+        // Keep it edge-to-edge so opening Ghosty never recreates black side
         // banks before the responsive session ocean takes over.
         crate::tui::underwater::render_launch_screen(size, f.buffer_mut(), app);
         crate::tui::underwater::record_launch_row_areas(size, &mut app.launch);

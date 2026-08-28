@@ -20,7 +20,7 @@ pub(super) fn execute_subagent_observer_hook(
     // preview text, never the raw prompt/result. No-op when disabled.
     match &event {
         HookEvent::SubagentSpawn => {
-            app.lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+            app.lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
                 event: "subagent_spawn".to_string(),
                 kind: "subagent.spawned".to_string(),
                 thread_id: app.hooks.session_id().to_string(),
@@ -30,9 +30,9 @@ pub(super) fn execute_subagent_observer_hook(
                     "agent_id": agent_id,
                     "subagent": agent_id,
                     "workspace": app.workspace.display().to_string(),
-                    "prompt_preview": codewhale_hooks::bounded_text(
+                    "prompt_preview": ghosty_hooks::bounded_text(
                         &preview,
-                        codewhale_hooks::OUTBOX_PREVIEW_MAX_CHARS,
+                        ghosty_hooks::OUTBOX_PREVIEW_MAX_CHARS,
                     ),
                     "prompt_truncated": truncated,
                 }),
@@ -40,7 +40,7 @@ pub(super) fn execute_subagent_observer_hook(
         }
         HookEvent::SubagentComplete => {
             let status = subagent_completion_status(text).unwrap_or_else(|| "unknown".to_string());
-            app.lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+            app.lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
                 event: "subagent_complete".to_string(),
                 kind: "subagent.completed".to_string(),
                 thread_id: app.hooks.session_id().to_string(),
@@ -51,9 +51,9 @@ pub(super) fn execute_subagent_observer_hook(
                     "subagent": agent_id,
                     "workspace": app.workspace.display().to_string(),
                     "status": status,
-                    "result_preview": codewhale_hooks::bounded_text(
+                    "result_preview": ghosty_hooks::bounded_text(
                         &preview,
-                        codewhale_hooks::OUTBOX_PREVIEW_MAX_CHARS,
+                        ghosty_hooks::OUTBOX_PREVIEW_MAX_CHARS,
                     ),
                     "result_truncated": truncated,
                 }),
@@ -180,8 +180,8 @@ pub(super) fn bounded_subagent_hook_preview(text: &str) -> (String, bool) {
 }
 
 pub(super) fn subagent_completion_status(result: &str) -> Option<String> {
-    const START: &str = "<codewhale:subagent.done>";
-    const END: &str = "</codewhale:subagent.done>";
+    const START: &str = "<ghosty:subagent.done>";
+    const END: &str = "</ghosty:subagent.done>";
 
     if let Some(start) = result.find(START).map(|idx| idx + START.len())
         && let Some(end) = result[start..].find(END).map(|idx| idx + start)
@@ -211,8 +211,8 @@ pub(super) fn subagent_completion_status(result: &str) -> Option<String> {
 }
 
 pub(super) fn subagent_failure_notice(result: &str) -> Option<String> {
-    const START: &str = "<codewhale:subagent.done>";
-    const END: &str = "</codewhale:subagent.done>";
+    const START: &str = "<ghosty:subagent.done>";
+    const END: &str = "</ghosty:subagent.done>";
     let start = result.find(START)? + START.len();
     let end = result[start..].find(END)? + start;
     let value = serde_json::from_str::<serde_json::Value>(&result[start..end]).ok()?;
@@ -253,7 +253,7 @@ pub(super) fn subagent_status_from_completion_result(result: &str) -> SubAgentSt
         .lines()
         .find_map(|line| {
             let trimmed = line.trim();
-            (!trimmed.is_empty() && !trimmed.starts_with("<codewhale:subagent.done>"))
+            (!trimmed.is_empty() && !trimmed.starts_with("<ghosty:subagent.done>"))
                 .then_some(trimmed.to_string())
         })
         .unwrap_or_else(|| "sub-agent finished".to_string());

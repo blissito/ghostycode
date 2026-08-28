@@ -72,7 +72,7 @@ fn mcp_image_result_uses_typed_block_without_base64_in_text() {
     assert!(!rich.result.content.contains(image_data));
     assert_eq!(
         rich.content_blocks,
-        vec![codewhale_tools::ToolResultContentBlock::Image {
+        vec![ghosty_tools::ToolResultContentBlock::Image {
             mime_type: "image/png".to_string(),
             data: image_data.to_string(),
         }]
@@ -137,7 +137,7 @@ fn mcp_image_limits_keep_one_valid_block_and_report_the_rest() {
 
     assert_eq!(
         rich.content_blocks,
-        vec![codewhale_tools::ToolResultContentBlock::Image {
+        vec![ghosty_tools::ToolResultContentBlock::Image {
             mime_type: "image/png".to_string(),
             data: image_data.to_string(),
         }]
@@ -171,7 +171,7 @@ fn mcp_error_text_and_typed_image_are_both_preserved() {
     );
     assert_eq!(
         rich.content_blocks,
-        vec![codewhale_tools::ToolResultContentBlock::Image {
+        vec![ghosty_tools::ToolResultContentBlock::Image {
             mime_type: "image/png".to_string(),
             data: image_data.to_string(),
         }]
@@ -764,7 +764,7 @@ fn machine_verifier_catalog_and_dispatch_add_only_bounded_run() {
     );
     enforce_tool_authority(
         "Run",
-        &json!({"action": "tests", "args": "-p codewhale-tui ordinary_scout"}),
+        &json!({"action": "tests", "args": "-p ghosty-tui ordinary_scout"}),
         run.as_ref(),
         registry.context(),
     )

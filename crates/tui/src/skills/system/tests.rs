@@ -34,10 +34,10 @@ fn fresh_install_creates_bundled_skills_and_marker() {
 }
 
 #[test]
-fn bundled_integration_skills_use_current_codewhale_commands_and_paths() {
+fn bundled_integration_skills_use_current_ghosty_commands_and_paths() {
     for (name, body) in [("mcp-builder", MCP_BUILDER_BODY), ("feishu", FEISHU_BODY)] {
         assert!(
-            body.contains("codewhale mcp"),
+            body.contains("ghosty mcp"),
             "{name} must use the current CLI"
         );
         assert!(
@@ -45,9 +45,9 @@ fn bundled_integration_skills_use_current_codewhale_commands_and_paths() {
             "{name} must not recommend the retired CLI name"
         );
     }
-    assert!(SKILL_CREATOR_BODY.contains("<workspace>/.codewhale/skills"));
-    assert!(SKILL_CREATOR_BODY.contains("~/.codewhale/skills"));
-    assert!(SKILL_INSTALLER_BODY.contains("~/.codewhale/skills"));
+    assert!(SKILL_CREATOR_BODY.contains("<workspace>/.ghosty/skills"));
+    assert!(SKILL_CREATOR_BODY.contains("~/.ghosty/skills"));
+    assert!(SKILL_INSTALLER_BODY.contains("~/.ghosty/skills"));
     // Bundled skills must name live tools. `read_file` is retired and cannot
     // dispatch (crates/tui/src/tools/registry.rs:2067).
     assert!(PDF_BODY.contains("built-in `File` tool (`action: \"read\"`)"));
@@ -90,7 +90,7 @@ fn contributor_onboarding_ships_at_generation_8_and_keeps_its_refusals() {
     assert!(body.contains(".github/workflows/ci.yml"));
     assert!(body.contains("Do not call a model provider"));
     // Provider neutrality: the dogfood step sends nothing anywhere.
-    assert!(body.contains("./target/release/codewhale exec --help"));
+    assert!(body.contains("./target/release/ghosty exec --help"));
     assert!(body.contains("Never select a provider for them"));
     // Contributor credit is part of the skill's own contract.
     assert!(body.contains("@JayBeest"));

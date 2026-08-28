@@ -9,18 +9,18 @@ import { buildPageMetadata } from "@/lib/page-meta";
  * keys and `{token}`s rather than the literals.
  */
 const ENTRY_COMMANDS: Record<string, string> = {
-  http: "codewhale app-server --http",
-  mobile: "codewhale app-server --mobile",
-  stdio: "codewhale app-server --stdio",
-  web: "codewhale web [--port 7878]",
-  doctor: "codewhale doctor --json",
-  acp: "codewhale serve --acp",
-  exec: "codewhale exec [args]",
+  http: "ghosty app-server --http",
+  mobile: "ghosty app-server --mobile",
+  stdio: "ghosty app-server --stdio",
+  web: "ghosty web [--port 7878]",
+  doctor: "ghosty doctor --json",
+  acp: "ghosty serve --acp",
+  exec: "ghosty exec [args]",
 };
 
 const CODE_SPANS: Record<string, string> = {
   authToken: "--auth-token",
-  runtimeTokenEnv: "CODEWHALE_RUNTIME_TOKEN",
+  runtimeTokenEnv: "GHOSTY_RUNTIME_TOKEN",
   legacyTokenEnv: "DEEPSEEK_RUNTIME_TOKEN",
   insecureFlag: "--insecure-no-auth",
   mobileFlag: "app-server --mobile",
@@ -63,7 +63,7 @@ export default async function RuntimeApiPage({ params }: { params: Promise<{ loc
   '{"jsonrpc":"2.0","id":1,"method":"healthz"}' \\
   '{"jsonrpc":"2.0","id":2,"method":"capabilities"}' \\
   '{"jsonrpc":"2.0","id":3,"method":"shutdown"}' \\
-  | codewhale app-server --stdio`}</pre>
+  | ghosty app-server --stdio`}</pre>
         <p className={`${t.bodyClassName} mt-3`}>{t.interruptNote}</p>
       </section>
 

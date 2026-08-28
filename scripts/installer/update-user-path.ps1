@@ -162,7 +162,7 @@ function Set-RegistryPathEntry {
     return $true
 }
 
-function Set-CodeWhaleUserPath {
+function Set-GhostyCodeUserPath {
     param(
         [Parameter(Mandatory = $true)]
         [ValidateSet('Add', 'Remove')]
@@ -173,7 +173,7 @@ function Set-CodeWhaleUserPath {
     )
 
     if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
-        throw 'The CodeWhale user PATH helper only supports Windows.'
+        throw 'The GhostyCode user PATH helper only supports Windows.'
     }
 
     $environmentKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
@@ -200,7 +200,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         throw 'Entry is required.'
     }
 
-    $changed = Set-CodeWhaleUserPath `
+    $changed = Set-GhostyCodeUserPath `
         -RequestedOperation $Operation `
         -RequestedEntry $Entry
 

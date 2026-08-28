@@ -54,7 +54,7 @@ fn is_command_available_detects_present_and_absent_binaries() {
     assert!(is_command_available("sh"), "POSIX `sh` should be on PATH");
 
     assert!(
-        !is_command_available("this-command-cannot-exist-codewhale-tui-test-ENOENT-marker"),
+        !is_command_available("this-command-cannot-exist-ghosty-tui-test-ENOENT-marker"),
         "missing command should return false, not panic"
     );
 }

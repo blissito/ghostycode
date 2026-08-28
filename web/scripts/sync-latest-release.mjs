@@ -26,7 +26,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-const REPO = "Hmbown/CodeWhale";
+const REPO = "blissito/ghostycode";
 const here = dirname(fileURLToPath(import.meta.url));
 const target = resolve(here, "..", "data", "latest-published-release.json");
 const mirror = resolve(here, "..", "..", "docs", "public-surface-facts.json");
@@ -34,7 +34,7 @@ const checkOnly = process.argv.includes("--check");
 
 const headers = {
   accept: "application/vnd.github+json",
-  "user-agent": "codewhale-facts-sync",
+  "user-agent": "ghosty-facts-sync",
 };
 if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 

@@ -505,7 +505,7 @@ async fn transcribe_local_whisper(audio_samples: &[i16]) -> Result<String, Strin
 }
 
 /// Transcribe via Groq Whisper large-v3-turbo (free tier, ~$0.04/hr, fast).
-/// Groq is NOT a full CodeWhale provider yet — this is a direct ASR call
+/// Groq is NOT a full GhostyCode provider yet — this is a direct ASR call
 /// using `GROQ_API_KEY` only (no provider setup needed). Uses the same
 /// chat-completions `input_audio` path as Xiaomi so no `multipart` feature.
 async fn transcribe_groq(audio_samples: &[i16]) -> Result<String, String> {
@@ -522,10 +522,10 @@ async fn transcribe_groq(audio_samples: &[i16]) -> Result<String, String> {
 /// shared async HTTP client. Every failure path returns a localized message
 /// so callers can surface it as a status line.
 /// Resolve ASR model/provider preference.
-/// Priority: explicit config `voice.asr_model` > env `CODEWHALE_ASR_MODEL` > auto-detect (local-whisper > groq > xiaomi).
+/// Priority: explicit config `voice.asr_model` > env `GHOSTY_ASR_MODEL` > auto-detect (local-whisper > groq > xiaomi).
 fn resolve_asr_choice(_config: &Config) -> (String, String) {
     // Check explicit env override first (free, cross-platform)
-    if let Ok(m) = std::env::var("CODEWHALE_ASR_MODEL") {
+    if let Ok(m) = std::env::var("GHOSTY_ASR_MODEL") {
         let m = m.trim().to_ascii_lowercase();
         if m.contains("groq") || m.contains("whisper") {
             return ("groq".into(), GROQ_ASR_MODEL.into());

@@ -203,7 +203,7 @@ pub(crate) async fn run_exec_agent(
         notes_path: execution_config.notes_path(),
         mcp_config_path: execution_config.mcp_config_path(),
         skills_dir: execution_config.skills_dir(),
-        skills_scan_codewhale_only: execution_config.skills_config().scan_codewhale_only(),
+        skills_scan_ghosty_only: execution_config.skills_config().scan_ghosty_only(),
         instructions: {
             let mut instrs: Vec<crate::prompts::InstructionSource> = execution_config
                 .instructions_paths()
@@ -359,20 +359,20 @@ pub(crate) async fn run_exec_agent(
         }
     }
 
-    // Lifecycle outbox (`[lifecycle_outbox]`): headless `codewhale exec`
+    // Lifecycle outbox (`[lifecycle_outbox]`): headless `ghosty exec`
     // gets the same turn boundaries as the interactive TUI. Disabled
     // (all emits no-op) when the config has no path.
     let lifecycle_outbox = config
         .lifecycle_outbox
         .as_ref()
         .map(|outbox| {
-            codewhale_hooks::LifecycleOutbox::new(
+            ghosty_hooks::LifecycleOutbox::new(
                 outbox.path.clone(),
                 outbox.webhook_url.clone(),
                 outbox.webhook_token.clone(),
             )
         })
-        .unwrap_or_else(codewhale_hooks::LifecycleOutbox::disabled);
+        .unwrap_or_else(ghosty_hooks::LifecycleOutbox::disabled);
     // Wall clock for the outbox `turn_end` duration. `exec` never receives
     // a TurnStarted engine event, so the start is marked at the same
     // `Op::SendMessage` boundary where `turn_start` is emitted below.
@@ -414,16 +414,16 @@ pub(crate) async fn run_exec_agent(
     // Lifecycle outbox: the clean headless turn-start boundary. `exec` has
     // no TurnStarted engine event; the message submission above is exactly
     // where the engine begins the turn. No-op when the feature is disabled.
-    lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+    lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
         event: "turn_start".to_string(),
         kind: "turn.started".to_string(),
         thread_id: loaded_session_id.clone().unwrap_or_default(),
         turn_id: None,
         item_id: None,
         payload: serde_json::json!({
-            "model": codewhale_hooks::bounded_text(
+            "model": ghosty_hooks::bounded_text(
                 &effective_model,
-                codewhale_hooks::OUTBOX_DETAIL_MAX_CHARS,
+                ghosty_hooks::OUTBOX_DETAIL_MAX_CHARS,
             ),
             "workspace": workspace.display().to_string(),
         }),
@@ -837,7 +837,7 @@ pub(crate) async fn run_exec_agent(
                         crate::core::events::TurnOutcomeStatus::Failed => "turn.failed",
                         crate::core::events::TurnOutcomeStatus::Interrupted => "turn.interrupted",
                     };
-                    lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+                    lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
                         event: "turn_end".to_string(),
                         kind: kind.to_string(),
                         thread_id: latest_session_id.clone().unwrap_or_default(),
@@ -848,9 +848,9 @@ pub(crate) async fn run_exec_agent(
                             "duration_ms": exec_turn_started_at.elapsed().as_millis() as u64,
                             "workspace": latest_workspace.display().to_string(),
                             "error": summary.error.as_deref().map(|message| {
-                                codewhale_hooks::bounded_text(
+                                ghosty_hooks::bounded_text(
                                     message,
-                                    codewhale_hooks::OUTBOX_DETAIL_MAX_CHARS,
+                                    ghosty_hooks::OUTBOX_DETAIL_MAX_CHARS,
                                 )
                             }),
                         }),
@@ -877,7 +877,7 @@ pub(crate) async fn run_exec_agent(
                 // report every Esc-cancelled turn as a signal. A no-op unless
                 // this process was armed.
                 if !termination_reason.is_success() {
-                    codewhale_telemetry::set_exit_class(codewhale_telemetry::ExitClass::Error);
+                    ghosty_telemetry::set_exit_class(ghosty_telemetry::ExitClass::Error);
                 }
                 let saved_session_id = if should_persist_session && !latest_messages.is_empty() {
                     match persist_exec_session(
@@ -917,13 +917,13 @@ pub(crate) async fn run_exec_agent(
                     // Resolved output ceiling and its provenance, surfaced so a
                     // wrong ceiling is visible in the receipt rather than
                     // requiring packet capture.
-                    let codewhale_max_output_tokens =
+                    let ghosty_max_output_tokens =
                         crate::route_budget::effective_max_output_tokens_for_route(
                             effective_provider,
                             &latest_model,
                             active_route_limits,
                         );
-                    let codewhale_max_output_tokens_source =
+                    let ghosty_max_output_tokens_source =
                         crate::route_budget::output_ceiling_source(
                             effective_provider,
                             &latest_model,
@@ -942,10 +942,8 @@ pub(crate) async fn run_exec_agent(
                             prompt_cache_miss_tokens: usage.prompt_cache_miss_tokens,
                             prompt_cache_write_tokens: usage.prompt_cache_write_tokens,
                             reasoning_tokens: usage.reasoning_tokens,
-                            codewhale_max_output_tokens: Some(codewhale_max_output_tokens),
-                            codewhale_max_output_tokens_source: Some(
-                                codewhale_max_output_tokens_source,
-                            ),
+                            ghosty_max_output_tokens: Some(ghosty_max_output_tokens),
+                            ghosty_max_output_tokens_source: Some(ghosty_max_output_tokens_source),
                             duration_ms: u64::try_from(exec_started.elapsed().as_millis())
                                 .unwrap_or(u64::MAX),
                             retry_count: None,
@@ -1034,7 +1032,7 @@ pub(crate) async fn run_exec_agent(
         // turn receipt. Every emitted `turn_start` still gets its matching
         // `turn_end` so a supervisor never sees an orphaned in-progress
         // turn. No-op when the feature is disabled.
-        lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+        lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
             event: "turn_end".to_string(),
             kind: "turn.failed".to_string(),
             thread_id: latest_session_id.clone().unwrap_or_default(),
@@ -1044,9 +1042,9 @@ pub(crate) async fn run_exec_agent(
                 "status": "failed",
                 "duration_ms": exec_turn_started_at.elapsed().as_millis() as u64,
                 "workspace": latest_workspace.display().to_string(),
-                "error": codewhale_hooks::bounded_text(
+                "error": ghosty_hooks::bounded_text(
                     &error,
-                    codewhale_hooks::OUTBOX_DETAIL_MAX_CHARS,
+                    ghosty_hooks::OUTBOX_DETAIL_MAX_CHARS,
                 ),
             }),
         });

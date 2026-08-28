@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use codewhale_config::{
+use ghosty_config::{
     ConstitutionChoice, ConstitutionSource, ConstitutionValidity, RuntimePostureSource, SetupState,
     SetupStep, UserConstitution, UserConstitutionLoad,
 };
@@ -256,16 +256,16 @@ fn ratify_text(locale: Locale, ids: &[String]) -> String {
 
 /// Explicit schema migration with a receipt (#4782). A rejection writes nothing.
 fn migrate_text(locale: Locale) -> String {
-    let path = match codewhale_config::UserConstitution::path() {
+    let path = match ghosty_config::UserConstitution::path() {
         Ok(path) => path,
         Err(err) => return path_error_preview_text(locale, &err.to_string()),
     };
-    match codewhale_config::UserConstitution::migrate_file(&path) {
+    match ghosty_config::UserConstitution::migrate_file(&path) {
         Err(err) => match locale {
             Locale::ZhHans => format!("迁移失败，文件未更改：{err:#}"),
             _ => format!("Migration failed; the file is unchanged: {err:#}"),
         },
-        Ok(codewhale_config::MigrationOutcome::AlreadyCurrent {
+        Ok(ghosty_config::MigrationOutcome::AlreadyCurrent {
             preserved_unknown_keys,
             ..
         }) => {
@@ -279,7 +279,7 @@ fn migrate_text(locale: Locale) -> String {
                 ),
             }
         }
-        Ok(codewhale_config::MigrationOutcome::Migrated { receipt, .. }) => {
+        Ok(ghosty_config::MigrationOutcome::Migrated { receipt, .. }) => {
             let preserved = format_preserved(&receipt.preserved_unknown_keys, locale);
             let backup = receipt
                 .backup_path
@@ -313,7 +313,7 @@ fn migrate_text(locale: Locale) -> String {
                 ),
             }
         }
-        Ok(codewhale_config::MigrationOutcome::Rejected(rejection)) => match locale {
+        Ok(ghosty_config::MigrationOutcome::Rejected(rejection)) => match locale {
             Locale::ZhHans => format!(
                 "未迁移，文件保持原样。\n{}\n请手动修正后重试，或用 /constitution bundled 改用内置准则。",
                 rejection.receipt()
@@ -327,11 +327,11 @@ fn migrate_text(locale: Locale) -> String {
 }
 
 fn rollback_text(locale: Locale) -> String {
-    let path = match codewhale_config::UserConstitution::path() {
+    let path = match ghosty_config::UserConstitution::path() {
         Ok(path) => path,
         Err(err) => return path_error_preview_text(locale, &err.to_string()),
     };
-    match codewhale_config::UserConstitution::rollback_file(&path) {
+    match ghosty_config::UserConstitution::rollback_file(&path) {
         Ok(backup) => match locale {
             Locale::ZhHans => format!("已从 {} 恢复迁移前的内容。备份已消耗。", backup.display()),
             _ => format!(
@@ -580,7 +580,7 @@ enum UserConstitutionStatus {
     },
     Loaded {
         path: PathBuf,
-        constitution: Box<codewhale_config::UserConstitution>,
+        constitution: Box<ghosty_config::UserConstitution>,
     },
     PathError {
         error: String,
@@ -663,8 +663,8 @@ fn user_constitution_stack_status(
             _ => "unreadable; repair recommended",
         },
         UserConstitutionStatus::PathError { .. } => match locale {
-            Locale::ZhHans => "不可用；CODEWHALE_HOME 错误",
-            _ => "unavailable; CODEWHALE_HOME error",
+            Locale::ZhHans => "不可用；GHOSTY_HOME 错误",
+            _ => "unavailable; GHOSTY_HOME error",
         },
     };
     text.to_string()
@@ -820,7 +820,7 @@ fn help_text(locale: Locale) -> String {
 - /constitution edit：打开 /setup 的引导式协作准则步骤；用 1-6 调整，按 G 预览，再按 G 保存。
 - /constitution repair：说明当前文件状态，然后打开同一个引导式修复步骤。
 - /constitution bundled：记录使用内置/默认准则，不创建自定义文件。
-- /constitution repo：查看 .codewhale/constitution.json 仓库本地准则。
+- /constitution repo：查看 .ghosty/constitution.json 仓库本地准则。
 - /constitution explain：解释内置基础准则、用户全局协作准则、仓库协作准则、AGENTS.md、记忆和交接的区别。
 - /constitution base：显示下一轮实际组装的确切基础提示词，附来源、摘要和字节/词元度量；只读，不发送请求，也不展开工具目录。
 - /constitution suggestions：查看待批准的建议条款；它们不会注入模型，也不影响提示词缓存。
@@ -837,7 +837,7 @@ Common commands:
 - /constitution edit: open the guided /setup Constitution step; tune 1-6, press G to preview, then G again to save.
 - /constitution repair: explain the current file state, then open the same guided repair step.
 - /constitution bundled: record bundled/default law without creating a custom file.
-- /constitution repo: inspect repo-local .codewhale/constitution.json law.
+- /constitution repo: inspect repo-local .ghosty/constitution.json law.
 - /constitution explain: compare Constitution, user-global law, repo law, AGENTS.md, memory, and handoff.
 - /constitution base: show the exact effective base prompt assembled for the next turn, with per-block provenance, digests, and byte/token measures. Read-only: no provider request, no tool-catalog expansion.
 - /constitution suggestions: review suggested clauses awaiting ratification; they are not injected and do not move the prompt-cache digest.
@@ -936,8 +936,8 @@ fn explanation_title(locale: Locale) -> &'static str {
 
 fn no_repo_law_text(locale: Locale) -> &'static str {
     match locale {
-        Locale::ZhHans => "此工作区未找到仓库本地协作准则 .codewhale/constitution.json。",
-        _ => "No repo-local constitution found at .codewhale/constitution.json for this workspace.",
+        Locale::ZhHans => "此工作区未找到仓库本地协作准则 .ghosty/constitution.json。",
+        _ => "No repo-local constitution found at .ghosty/constitution.json for this workspace.",
     }
 }
 
@@ -1009,9 +1009,9 @@ fn unreadable_preview_text(locale: Locale, path: &std::path::Path, error: &str) 
 
 fn path_error_preview_text(locale: Locale, error: &str) -> String {
     match locale {
-        Locale::ZhHans => format!("无法为用户全局协作准则解析 CODEWHALE_HOME：\n\n{error}"),
+        Locale::ZhHans => format!("无法为用户全局协作准则解析 GHOSTY_HOME：\n\n{error}"),
         _ => {
-            format!("Could not resolve CODEWHALE_HOME for the user-global constitution:\n\n{error}")
+            format!("Could not resolve GHOSTY_HOME for the user-global constitution:\n\n{error}")
         }
     }
 }
@@ -1026,11 +1026,11 @@ AGENTS.md 与协作准则
 
 用户全局协作准则是个人长期偏好。它是结构化数据，确定性渲染，并低于当前用户请求和内置基础准则。
 
-.codewhale/constitution.json 是仓库本地协作准则。它属于某个工作区，并作为独立的仓库协作准则块渲染。
+.ghosty/constitution.json 是仓库本地协作准则。它属于某个工作区，并作为独立的仓库协作准则块渲染。
 
 AGENTS.md 和项目说明是项目规则/实现指导。它们可以描述构建命令、仓库规范和本地流程；按优先级顺序，它们低于当前用户请求和内置基础准则，高于用户全局长期偏好、记忆和交接。
 
-WHALE.md 已忽略。将普通项目说明迁移到 AGENTS.md，将 Codewhale 专属权限策略迁移到 .codewhale/constitution.json。
+WHALE.md 已忽略。将普通项目说明迁移到 AGENTS.md，将 Ghosty 专属权限策略迁移到 .ghosty/constitution.json。
 
 运行时姿态是独立设置。协作准则可以建议主动性，但不会改变批准策略、沙盒、Shell、网络、信任、MCP 权限或默认模式。使用 /constitution posture 查看这些控制。"
         }
@@ -1042,11 +1042,11 @@ The bundled Constitution is the compact global judgment contract: identity, grou
 
 The user-global constitution is personal standing preference law. It is structured, rendered deterministically, and subordinate to the current user request and the bundled Constitution.
 
-.codewhale/constitution.json is repo-local law. It belongs to a workspace and is rendered as a separate repo constitution block.
+.ghosty/constitution.json is repo-local law. It belongs to a workspace and is rendered as a separate repo constitution block.
 
 AGENTS.md and project instructions are project law / implementation guidance. They can describe build commands, repository norms, and local workflows. Under “Whose word wins,” they sit below the current user request and bundled Constitution, and above user-global standing preferences, memory, and handoff.
 
-WHALE.md is ignored. Move ordinary project instructions to AGENTS.md and Codewhale-specific authority policy to .codewhale/constitution.json.
+WHALE.md is ignored. Move ordinary project instructions to AGENTS.md and Ghosty-specific authority policy to .ghosty/constitution.json.
 
 Runtime posture is separate. A constitution can recommend autonomy, but it does not change approval policy, sandbox, shell, network, trust, MCP permissions, or default mode. Use /constitution posture to review those controls."
         }
@@ -1114,7 +1114,7 @@ impl ConstitutionManagerCopy {
                 checkpoint_label: "准则检查点代次",
                 preview_header: "预览",
                 preview_action: "/constitution preview 会在存在时打开精确渲染的用户全局块。",
-                repo_action: "/constitution repo 会在存在时显示 .codewhale/constitution.json 本地准则。",
+                repo_action: "/constitution repo 会在存在时显示 .ghosty/constitution.json 本地准则。",
                 maintenance_header: "维护",
                 maintenance_actions: &[
                     "编辑引导式协作准则：/constitution edit",
@@ -1162,7 +1162,7 @@ impl ConstitutionManagerCopy {
                 checkpoint_label: "Constitution checkpoint generation",
                 preview_header: "Preview",
                 preview_action: "/constitution preview opens the exact rendered user-global block when present.",
-                repo_action: "/constitution repo shows .codewhale/constitution.json local law when present.",
+                repo_action: "/constitution repo shows .ghosty/constitution.json local law when present.",
                 maintenance_header: "Maintenance",
                 maintenance_actions: &[
                     "Edit guided constitution: /constitution edit",
@@ -1310,10 +1310,10 @@ mod tests {
     fn constitution_repair_explains_invalid_file_and_opens_setup() {
         let _env_guard = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
-        let home = tmp.path().join("codewhale-home");
+        let home = tmp.path().join("ghosty-home");
         std::fs::create_dir_all(&home).expect("home");
         std::fs::write(home.join("constitution.json"), "{not valid json").expect("invalid file");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
         let mut app = test_app();
         app.ui_locale = Locale::En;
 
@@ -1338,9 +1338,9 @@ mod tests {
     fn constitution_preview_renders_structured_block() {
         let _env_guard = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
-        let home = tmp.path().join("codewhale-home");
+        let home = tmp.path().join("ghosty-home");
         std::fs::create_dir_all(&home).expect("home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
         let constitution = UserConstitution {
             about: Some("Maintains release lanes.".to_string()),
             ..UserConstitution::default()
@@ -1352,18 +1352,18 @@ mod tests {
 
         assert!(result.message.is_none());
         let body = pop_pager_body(&mut app);
-        assert!(body.contains("<codewhale_user_constitution"));
+        assert!(body.contains("<ghosty_user_constitution"));
         assert!(body.contains("Maintains release lanes."));
     }
 
-    /// Seal `CODEWHALE_HOME` to a temp dir and write a constitution there.
+    /// Seal `GHOSTY_HOME` to a temp dir and write a constitution there.
     fn sealed_home(
         tmp: &tempfile::TempDir,
         constitution: &UserConstitution,
     ) -> crate::test_support::EnvVarGuard {
-        let home = tmp.path().join("codewhale-home");
+        let home = tmp.path().join("ghosty-home");
         std::fs::create_dir_all(&home).expect("home");
-        let guard = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
+        let guard = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
         constitution
             .save_to(&home.join("constitution.json"))
             .expect("save constitution");
@@ -1375,8 +1375,8 @@ mod tests {
             about: Some("Maintains release lanes.".to_string()),
             ..UserConstitution::default()
         }
-        .with_recommendation(&codewhale_config::ConstitutionRecommendation {
-            clauses: vec![codewhale_config::ConstitutionClause::suggested(
+        .with_recommendation(&ghosty_config::ConstitutionRecommendation {
+            clauses: vec![ghosty_config::ConstitutionClause::suggested(
                 "c1",
                 "Always run the focused suite before claiming green.",
             )],
@@ -1413,7 +1413,7 @@ mod tests {
         // The same clause must be absent from the injected preview.
         ConstitutionCmd::execute(&mut app, Some("preview"));
         let preview = pop_pager_body(&mut app);
-        assert!(preview.contains("<codewhale_user_constitution"));
+        assert!(preview.contains("<ghosty_user_constitution"));
         assert!(
             !preview.contains("focused suite"),
             "unratified advice reached the model-facing block: {preview}"
@@ -1453,9 +1453,9 @@ mod tests {
     fn migrate_reports_a_receipt_and_rollback_restores() {
         let _env_guard = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
-        let home = tmp.path().join("codewhale-home");
+        let home = tmp.path().join("ghosty-home");
         std::fs::create_dir_all(&home).expect("home");
-        let _home_guard = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
+        let _home_guard = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
         let path = home.join("constitution.json");
         let v1 = r#"{"schema_version":1,"about":"Legacy user."}"#;
         std::fs::write(&path, v1).expect("write v1");
@@ -1486,9 +1486,9 @@ mod tests {
     fn migrate_rejects_a_runtime_policy_key_and_changes_nothing() {
         let _env_guard = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
-        let home = tmp.path().join("codewhale-home");
+        let home = tmp.path().join("ghosty-home");
         std::fs::create_dir_all(&home).expect("home");
-        let _home_guard = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
+        let _home_guard = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
         let path = home.join("constitution.json");
         let raw = r#"{"about":"x","approval_policy":"bypass"}"#;
         std::fs::write(&path, raw).expect("write file");
@@ -1527,9 +1527,9 @@ mod tests {
     fn constitution_manager_uses_zh_hans_copy() {
         let _env_guard = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
-        let home = tmp.path().join("codewhale-home");
+        let home = tmp.path().join("ghosty-home");
         std::fs::create_dir_all(&home).expect("home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
         let mut app = test_app();
         app.ui_locale = crate::localization::Locale::ZhHans;
 
@@ -1549,9 +1549,9 @@ mod tests {
     fn constitution_preview_missing_uses_zh_hans_copy() {
         let _env_guard = crate::test_support::lock_test_env();
         let tmp = tempdir().expect("tempdir");
-        let home = tmp.path().join("codewhale-home");
+        let home = tmp.path().join("ghosty-home");
         std::fs::create_dir_all(&home).expect("home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.as_os_str());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.as_os_str());
         let mut app = test_app();
         app.ui_locale = crate::localization::Locale::ZhHans;
 
@@ -1576,7 +1576,7 @@ mod tests {
         assert!(result.message.is_none());
         let body = pop_pager_body(&mut app);
         assert!(body.contains("AGENTS.md 与协作准则"));
-        assert!(body.contains(".codewhale/constitution.json"));
+        assert!(body.contains(".ghosty/constitution.json"));
         assert!(body.contains("运行时姿态是独立设置"));
         assert!(!body.contains("宪法"));
         assert!(!body.contains("项目法律"));

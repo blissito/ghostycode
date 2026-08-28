@@ -147,7 +147,7 @@ pub async fn execute_js_execution_tool(
 
     // #3273: Node's built-in `fetch` (undici) ignores HTTP(S)_PROXY env vars
     // unless `NODE_USE_ENV_PROXY` is set (Node >= 24). This child already
-    // inherits CodeWhale's proxy environment, so enabling the flag lets
+    // inherits GhostyCode's proxy environment, so enabling the flag lets
     // `js_execution`'s `fetch()` reach the network through the same proxy/VPN
     // as the rest of the app and honor `NO_PROXY`. Only default it on when the
     // user hasn't chosen a value, so an explicit opt-out (`NODE_USE_ENV_PROXY=0`)
@@ -304,11 +304,11 @@ mod tests {
             return;
         }
         let _env_lock = lock_test_env();
-        let _secret = EnvVarGuard::set("CODEWHALE_JS_SECRET_LEAK_TEST", "secret-value");
+        let _secret = EnvVarGuard::set("GHOSTY_JS_SECRET_LEAK_TEST", "secret-value");
         let tmp = tempdir().expect("tempdir");
         let result = execute_js_execution_tool(
             &json!({
-                "code": "process.stdout.write(process.env.CODEWHALE_JS_SECRET_LEAK_TEST || 'missing')"
+                "code": "process.stdout.write(process.env.GHOSTY_JS_SECRET_LEAK_TEST || 'missing')"
             }),
             tmp.path(),
         )

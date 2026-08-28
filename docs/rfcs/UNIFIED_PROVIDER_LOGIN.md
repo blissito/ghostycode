@@ -1,4 +1,4 @@
-# RFC: Unified provider login (`codewhale auth login`)
+# RFC: Unified provider login (`ghosty auth login`)
 
 **Status:** Future RFC — approved direction (maintainer, 2026-07-12);
 implementation is deferred beyond v0.9.0.
@@ -10,12 +10,12 @@ One login surface, one grammar, for every provider that offers an
 interactive auth flow:
 
 ```
-codewhale auth login --provider <anthropic|openai-codex|xai|...>
+ghosty auth login --provider <anthropic|openai-codex|xai|...>
 /auth <provider>
 ```
 
 Today the tree has one interactive flow — xAI device-code OAuth
-(`crates/tui/src/xai_oauth.rs`, `codewhale auth xai-device`, `/auth
+(`crates/tui/src/xai_oauth.rs`, `ghosty auth xai-device`, `/auth
 xai-device`, #4257) — shipped as a provider-specific command. That shape
 does not scale: Anthropic (Claude Pro/Max browser OAuth) and OpenAI Codex
 OAuth are next, and each provider growing its own verb produces a different
@@ -61,7 +61,7 @@ provider picker row, `auth status`, and logout behave identically:
 Do not copy OAuth constants, client IDs, scopes, or Claude-Code-specific
 headers from reference implementations (e.g. Pi's
 `packages/ai/src/utils/oauth/anthropic.ts`) without first verifying that
-CodeWhale is permitted to use that flow. Those details may be
+GhostyCode is permitted to use that flow. Those details may be
 client-specific or governed by Anthropic compatibility policy. This
 verification is an explicit maintainer action and blocks the Anthropic
 adapter, not the shared `auth login` scaffolding.

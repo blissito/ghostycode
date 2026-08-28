@@ -285,7 +285,7 @@ fn normalize_kimi_source(raw: &str) -> (MarketplaceSourceSpec, MarketplaceInstal
                 reason: format!("`{raw}` is not a plain GitHub owner/repo URL"),
             },
             MarketplaceInstallPlan::Unsupported {
-                reason: "Kimi source is a GitHub URL with extra path segments Codewhale cannot map"
+                reason: "Kimi source is a GitHub URL with extra path segments Ghosty cannot map"
                     .to_string(),
                 raw: raw.to_string(),
             },

@@ -2,7 +2,7 @@
 //!
 //! The request DTOs in this module are consumed by the TUI transport today
 //! and are intentionally free of terminal, HTTP, or provider-client state.
-//! Keeping the logical request in `codewhale-core` lets a headless session
+//! Keeping the logical request in `ghosty-core` lets a headless session
 //! prepare the same serializable value before the existing TUI client applies
 //! provider-specific wire shaping.
 

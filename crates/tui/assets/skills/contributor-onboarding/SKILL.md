@@ -27,7 +27,7 @@ the contributor must ask for after reading the plan.
   generated prose.
 - Do not claim a gate passed that you did not run, and do not summarize a
   build you did not observe.
-- Do not privilege any provider. Codewhale is provider-neutral; a dogfood run
+- Do not privilege any provider. Ghosty is provider-neutral; a dogfood run
   uses whatever route the contributor already configured, or none.
 
 ## Workflow
@@ -69,7 +69,7 @@ first, in this order, and let the contributor choose:
 ### 3. Build
 
 ```
-cargo build --release -p codewhale-cli -p codewhale-tui
+cargo build --release -p ghosty-cli -p ghosty-tui
 ```
 
 Report the exit status and the first error if it fails. A build failure ends
@@ -123,11 +123,11 @@ Only after the gate has actually passed, and only if the contributor asks.
 Print the plan and require an explicit yes before running anything:
 
 ```
-./target/release/codewhale exec --help
+./target/release/ghosty exec --help
 ```
 
 This is a provider-free smoke check: it exercises the built binary without
-sending a request anywhere. Anything beyond it — an actual `codewhale exec`
+sending a request anywhere. Anything beyond it — an actual `ghosty exec`
 turn — needs the contributor's own configured route and their explicit
 go-ahead. Never select a provider for them and never fall back to a default
 one.

@@ -11,7 +11,7 @@ use std::sync::{Arc, OnceLock};
 
 use std::path::{Path, PathBuf};
 
-use codewhale_protocol::runtime::DynamicToolSpec;
+use ghosty_protocol::runtime::DynamicToolSpec;
 use serde_json::Value;
 
 use crate::client::DeepSeekClient;

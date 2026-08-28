@@ -1,4 +1,4 @@
-//! `codewhale doctor --fix` repair planning and application (#5552, v1).
+//! `ghosty doctor --fix` repair planning and application (#5552, v1).
 //!
 //! The doctor is a read-only diagnostic by default. `--fix` computes a
 //! concrete repair plan first — pure detection, no mutation — shows it, and
@@ -6,7 +6,7 @@
 //! narrowly scoped and reversible:
 //!
 //! - delete stale `.tmp*` files left behind by interrupted atomic writes in
-//!   the Codewhale home;
+//!   the Ghosty home;
 //! - tighten secret-store file permissions to `0600` on Unix when group or
 //!   world bits are set (the secret store writes private files, but a file
 //!   restored from backup or moved from another machine may have drifted);
@@ -31,7 +31,7 @@ use crate::mcp;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DoctorFixAction {
     /// Delete an interrupted-atomic-write leftover. Only ever a regular file
-    /// whose name starts with `.tmp` directly inside the Codewhale home.
+    /// whose name starts with `.tmp` directly inside the Ghosty home.
     DeleteStaleTempFile { path: PathBuf },
     /// Restrict a secret-store file to owner-only on Unix.
     #[cfg(unix)]
@@ -95,9 +95,9 @@ impl DoctorFixPlan {
     }
 }
 
-/// Stale `.tmp*` regular files directly inside the Codewhale home.
+/// Stale `.tmp*` regular files directly inside the Ghosty home.
 fn stale_temp_files() -> Vec<PathBuf> {
-    let Ok(home) = codewhale_config::codewhale_home() else {
+    let Ok(home) = ghosty_config::ghosty_home() else {
         return Vec::new();
     };
     let Ok(entries) = std::fs::read_dir(&home) else {
@@ -120,7 +120,7 @@ fn stale_temp_files() -> Vec<PathBuf> {
 fn secret_files_needing_tightening() -> Vec<(PathBuf, u32)> {
     use std::os::unix::fs::PermissionsExt;
 
-    let Ok(paths) = codewhale_secrets::FileKeyringStore::default_paths_read_only() else {
+    let Ok(paths) = ghosty_secrets::FileKeyringStore::default_paths_read_only() else {
         return Vec::new();
     };
     let candidates = std::iter::once(paths.0).chain(paths.1);
@@ -373,7 +373,7 @@ fn plan_action_line(action: &DoctorFixAction) -> String {
 mod tests {
     use super::*;
 
-    /// Scoped `CODEWHALE_HOME` override under the process-wide env barrier.
+    /// Scoped `GHOSTY_HOME` override under the process-wide env barrier.
     /// `EnvVarGuard` restores the prior value even on panic.
     struct ScratchHome {
         dir: tempfile::TempDir,
@@ -385,7 +385,7 @@ mod tests {
         fn new() -> (Self, crate::config::Config) {
             let lock = crate::test_support::lock_test_env();
             let dir = tempfile::tempdir().expect("home tempdir");
-            let env = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", dir.path());
+            let env = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", dir.path());
             (
                 Self {
                     dir,
@@ -502,7 +502,7 @@ mod tests {
     fn fix_flags_parse_and_conflict_with_json_modes() {
         use clap::Parser;
 
-        let cli = crate::Cli::try_parse_from(["codewhale", "doctor", "--fix", "--yes"])
+        let cli = crate::Cli::try_parse_from(["ghosty", "doctor", "--fix", "--yes"])
             .expect("--fix --yes parses");
         let Some(crate::Commands::Doctor(args)) = cli.command else {
             panic!("expected doctor command");
@@ -510,11 +510,11 @@ mod tests {
         assert!(args.fix);
         assert!(args.yes);
 
-        crate::Cli::try_parse_from(["codewhale", "doctor", "--fix", "--json"])
+        crate::Cli::try_parse_from(["ghosty", "doctor", "--fix", "--json"])
             .expect_err("--fix conflicts with --json");
-        crate::Cli::try_parse_from(["codewhale", "doctor", "--fix", "--context-json"])
+        crate::Cli::try_parse_from(["ghosty", "doctor", "--fix", "--context-json"])
             .expect_err("--fix conflicts with --context-json");
-        crate::Cli::try_parse_from(["codewhale", "doctor", "--yes"])
+        crate::Cli::try_parse_from(["ghosty", "doctor", "--yes"])
             .expect_err("--yes requires --fix");
     }
 

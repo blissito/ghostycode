@@ -1,6 +1,6 @@
 //! Calm first-run onboarding: one decision per screen.
 //!
-//! The flow asks only for what Codewhale genuinely needs before the user can
+//! The flow asks only for what Ghosty genuinely needs before the user can
 //! begin: language (only when it cannot be confidently inferred from settings
 //! or the environment), a provider/model route (only when no usable route is
 //! configured), and workspace trust (only when a decision is required).
@@ -309,11 +309,11 @@ pub(crate) fn wrap_words(text: &str, width: usize) -> Vec<String> {
 }
 
 pub fn default_marker_path() -> Option<PathBuf> {
-    let primary_home = codewhale_config::codewhale_home().ok()?;
-    let legacy_home = if codewhale_config::codewhale_home_is_explicit() {
+    let primary_home = ghosty_config::ghosty_home().ok()?;
+    let legacy_home = if ghosty_config::ghosty_home_is_explicit() {
         None
     } else {
-        codewhale_config::legacy_deepseek_home().ok()
+        ghosty_config::legacy_deepseek_home().ok()
     };
     Some(marker_path_with_roots(
         &primary_home,
@@ -324,7 +324,7 @@ pub fn default_marker_path() -> Option<PathBuf> {
 #[cfg(test)]
 fn marker_path_with_home(home: &Path) -> PathBuf {
     marker_path_with_roots(
-        &home.join(".codewhale"),
+        &home.join(".ghosty"),
         Some(home.join(".deepseek").as_path()),
     )
 }
@@ -351,7 +351,7 @@ pub fn mark_onboarded() -> std::io::Result<PathBuf> {
     let path = default_marker_path().ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "Codewhale home directory not found",
+            "Ghosty home directory not found",
         )
     })?;
     mark_onboarded_at_path(path)
@@ -777,7 +777,7 @@ mod tests {
         let home = tempfile::tempdir().expect("home");
         let _home = crate::test_support::EnvVarGuard::set("HOME", home.path());
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", home.path());
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
 
         let workspace = tempfile::tempdir().expect("workspace");
         std::fs::write(workspace.path().join("package.json"), "{}\n").expect("marker");
@@ -806,7 +806,7 @@ mod tests {
         let home = tempfile::tempdir().expect("home");
         let _home = crate::test_support::EnvVarGuard::set("HOME", home.path());
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", home.path());
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", home.path());
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", home.path());
 
         let mut app = test_app_with_locale(Locale::En);
         app.onboarding = OnboardingState::Ready;
@@ -826,10 +826,10 @@ mod tests {
     // ── Onboarded-state persistence contract ─────────────────────────────
 
     #[test]
-    fn fresh_install_marker_path_uses_codewhale_not_legacy() {
+    fn fresh_install_marker_path_uses_ghosty_not_legacy() {
         let tmp = tempfile::tempdir().expect("tempdir");
 
-        let expected = tmp.path().join(".codewhale").join(ONBOARDED_MARKER_FILE);
+        let expected = tmp.path().join(".ghosty").join(ONBOARDED_MARKER_FILE);
         assert_eq!(marker_path_with_home(tmp.path()), expected);
 
         let written = mark_onboarded_at_home(tmp.path()).expect("mark onboarded");
@@ -856,9 +856,9 @@ mod tests {
     }
 
     #[test]
-    fn codewhale_marker_wins_over_legacy_marker() {
+    fn ghosty_marker_wins_over_legacy_marker() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let primary = tmp.path().join(".codewhale").join(ONBOARDED_MARKER_FILE);
+        let primary = tmp.path().join(".ghosty").join(ONBOARDED_MARKER_FILE);
         let legacy = tmp.path().join(".deepseek").join(ONBOARDED_MARKER_FILE);
         for marker in [&primary, &legacy] {
             std::fs::create_dir_all(marker.parent().expect("marker parent")).expect("mkdir");
@@ -869,18 +869,17 @@ mod tests {
     }
 
     #[test]
-    fn explicit_codewhale_home_marker_survives_restart_resolution() {
+    fn explicit_ghosty_home_marker_survives_restart_resolution() {
         let _env_lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
         let ambient_home = tmp.path().join("ambient profile");
-        let isolated_home = tmp.path().join("isolated Codewhale state");
+        let isolated_home = tmp.path().join("isolated Ghosty state");
         let ambient_legacy = ambient_home.join(".deepseek").join(ONBOARDED_MARKER_FILE);
         std::fs::create_dir_all(ambient_legacy.parent().expect("legacy parent")).expect("mkdir");
         std::fs::write(&ambient_legacy, "").expect("seed ambient legacy marker");
         let _home = crate::test_support::EnvVarGuard::set("HOME", &ambient_home);
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &ambient_home);
-        let _codewhale_home =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &isolated_home);
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &isolated_home);
 
         let expected = isolated_home.join(ONBOARDED_MARKER_FILE);
         assert_eq!(default_marker_path().as_deref(), Some(expected.as_path()));
@@ -893,7 +892,7 @@ mod tests {
         assert_eq!(default_marker_path().as_deref(), Some(expected.as_path()));
         assert!(ambient_legacy.exists(), "legacy marker remains untouched");
         assert!(
-            !ambient_home.join(".codewhale").exists(),
+            !ambient_home.join(".ghosty").exists(),
             "an explicit state root must not write into the ambient profile"
         );
     }
@@ -1015,7 +1014,7 @@ mod tests {
 
     #[test]
     fn wrap_words_handles_mixed_latin_and_cjk() {
-        let text = "Codewhale はこのフォルダーで一緒に作業します。";
+        let text = "Ghosty はこのフォルダーで一緒に作業します。";
         let lines = wrap_words(text, 20);
         assert_eq!(
             lines.join("").replace(' ', ""),

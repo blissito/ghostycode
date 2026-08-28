@@ -146,11 +146,11 @@ describe("shared getting-started path", () => {
     const guide = repoText("docs/GUIDE.md");
     const fleetDoc = repoText("docs/FLEET.md");
     const install = GETTING_STARTED_STEPS.find((s) => s.id === "install")!;
-    expect(install.commands).toContain("npm install -g codewhale");
-    expect(guide).toContain("codewhale doctor");
+    expect(install.commands).toContain("npm install -g ghosty");
+    expect(guide).toContain("ghosty doctor");
     const provider = GETTING_STARTED_STEPS.find((s) => s.id === "connect-provider")!;
-    expect(provider.commands).toContain("codewhale auth set --provider deepseek");
-    expect(guide).toContain("codewhale auth set --provider deepseek");
+    expect(provider.commands).toContain("ghosty auth set --provider deepseek");
+    expect(guide).toContain("ghosty auth set --provider deepseek");
     const fleet = GETTING_STARTED_STEPS.find((s) => s.id === "fleet-workflow")!;
     for (const command of fleet.commands) {
       expect(`${fleetDoc}\n${guide}`, command).toContain(command);

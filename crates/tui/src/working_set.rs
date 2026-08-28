@@ -1067,7 +1067,7 @@ impl WorkingSet {
     pub fn summary_block(&self, workspace: &Path) -> Option<String> {
         // Only stat-verified paths reach the model. Prose observation happily
         // records tokens that merely look like paths ("120x40",
-        // "Hmbown/CodeWhale"), and a fabricated Active-paths line teaches the
+        // "blissito/ghostycode"), and a fabricated Active-paths line teaches the
         // model false workspace facts it then spends turns disproving.
         // Re-statting at render time also drops files deleted mid-session.
         // Bytes only change when the filesystem genuinely changed — the same
@@ -1124,14 +1124,14 @@ impl WorkingSet {
     }
 
     /// Whether cache-maximal context mode is active: explicit config, or the
-    /// `CODEWHALE_CACHE_MAXIMAL` env toggle (`1`/`true`/`on`/`yes`). The env
+    /// `GHOSTY_CACHE_MAXIMAL` env toggle (`1`/`true`/`on`/`yes`). The env
     /// value is constant for the process, so the rendered block stays
     /// byte-stable turn-over-turn.
     fn cache_maximal_enabled(&self) -> bool {
         if self.config.cache_maximal {
             return true;
         }
-        match std::env::var("CODEWHALE_CACHE_MAXIMAL") {
+        match std::env::var("GHOSTY_CACHE_MAXIMAL") {
             Ok(v) => matches!(
                 v.trim().to_ascii_lowercase().as_str(),
                 "1" | "true" | "on" | "yes"
@@ -1711,7 +1711,7 @@ mod tests {
     #[test]
     fn summary_block_renders_only_paths_that_stat_verify() {
         // Prose observation records tokens that merely look like paths
-        // ("120x40", "Hmbown/CodeWhale"); the rendered Active-paths list must
+        // ("120x40", "blissito/ghostycode"); the rendered Active-paths list must
         // never teach the model a workspace fact the filesystem contradicts.
         let tmp = TempDir::new().expect("tempdir");
         let src = tmp.path().join("src");
@@ -1720,14 +1720,14 @@ mod tests {
 
         let mut ws = WorkingSet::default();
         ws.observe_user_message(
-            "Fix src/real.rs, test at 120x40/80x24, and check Hmbown/CodeWhale",
+            "Fix src/real.rs, test at 120x40/80x24, and check blissito/ghostycode",
             tmp.path(),
         );
 
         let block = ws.summary_block(tmp.path()).expect("block");
         assert!(block.contains("- src/real.rs (file)"), "{block}");
         assert!(!block.contains("120x40"), "{block}");
-        assert!(!block.contains("Hmbown/CodeWhale"), "{block}");
+        assert!(!block.contains("blissito/ghostycode"), "{block}");
 
         // A file deleted mid-session falls out on the next render — the same
         // filesystem-changed exception #280 makes for newly observed paths.
@@ -1743,7 +1743,7 @@ mod tests {
 
     // ── Cache-maximal context mode (#528) ──
     // Tests drive the flag through `config.cache_maximal` directly so they
-    // don't touch the process-wide `CODEWHALE_CACHE_MAXIMAL` env var (which
+    // don't touch the process-wide `GHOSTY_CACHE_MAXIMAL` env var (which
     // would race with parallel tests).
 
     fn cache_maximal_ws() -> WorkingSet {

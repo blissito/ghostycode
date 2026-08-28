@@ -26,10 +26,10 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return buildPageMetadata({
     path: "/digest",
     locale,
-    title: isZh ? "社区摘要 · Codewhale" : "Community Digest · Codewhale",
+    title: isZh ? "社区摘要 · Ghosty" : "Community Digest · Ghosty",
     description: isZh
-      ? "Codewhale 每周社区更新存档：由维护者审核的摘要。"
-      : "Archive of weekly Codewhale community updates — maintainer-approved summaries.",
+      ? "Ghosty 每周社区更新存档：由维护者审核的摘要。"
+      : "Archive of weekly Ghosty community updates — maintainer-approved summaries.",
   });
 }
 
@@ -100,7 +100,7 @@ export default async function DigestArchivePage({ params }: { params: Promise<{ 
         {isZh ? "每周社区更新" : "Weekly Community Updates"}
       </h1>
       <p className="text-ink-mute mb-8">
-        {isZh ? "由 Codewhale 维护者审核的摘要" : "Maintainer-approved summaries from Codewhale"}
+        {isZh ? "由 Ghosty 维护者审核的摘要" : "Maintainer-approved summaries from Ghosty"}
       </p>
 
       <div className="space-y-12">

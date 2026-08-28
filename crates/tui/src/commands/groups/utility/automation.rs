@@ -1,8 +1,8 @@
 //! Operator controls for durable scheduled automations.
 
-use codewhale_command_contract::facets::CommandPresentationContext;
-use codewhale_command_contract::handler::{CommandContexts, CommandHandler};
-use codewhale_command_contract::metadata::{CommandInfo, RegisterCommand};
+use ghosty_command_contract::facets::CommandPresentationContext;
+use ghosty_command_contract::handler::{CommandContexts, CommandHandler};
+use ghosty_command_contract::metadata::{CommandInfo, RegisterCommand};
 
 use crate::commands::CommandResult;
 use crate::tui::app::{AppAction, AutomationAction};

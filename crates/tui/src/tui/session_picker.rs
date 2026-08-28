@@ -1335,7 +1335,7 @@ mod tests {
     fn rename_selected_persists_and_emits_saved_metadata() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
         let manager = SessionManager::default_location().expect("session manager");
         let mut saved = saved_session_with_messages(vec![text_message("user", "hello")]);
         saved.metadata.id = "session-01".to_string();
@@ -1365,7 +1365,7 @@ mod tests {
     fn archive_toggle_persists_hides_the_row_and_emits_an_archive_receipt() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
         let manager = SessionManager::default_location().expect("session manager");
         let mut saved = saved_session_with_messages(vec![text_message("user", "hello")]);
         saved.metadata.id = "session-01".to_string();
@@ -1418,7 +1418,7 @@ mod tests {
     fn preselecting_a_row_lands_on_it_without_resuming_anything() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
         let manager = SessionManager::default_location().expect("session manager");
         let workspace = tmp.path().join("workspace");
         std::fs::create_dir_all(&workspace).expect("workspace");
@@ -1443,7 +1443,7 @@ mod tests {
     fn preselecting_an_archived_row_widens_the_archive_filter_only() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
         let manager = SessionManager::default_location().expect("session manager");
         let workspace = tmp.path().join("workspace");
         std::fs::create_dir_all(&workspace).expect("workspace");

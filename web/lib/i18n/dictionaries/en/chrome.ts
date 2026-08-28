@@ -28,7 +28,7 @@ export const chrome: ChromeDict = {
 
 
   navPrimaryAria: "Primary",
-  navHomeAria: "Codewhale home",
+  navHomeAria: "Ghosty home",
 
   installCta: "Install →",
 
@@ -68,7 +68,7 @@ export const chrome: ChromeDict = {
   themeTitle: "Docs theme · auto / light / dark",
 
   footerTagline:
-    "Codewhale dives into the deep so you don't have to — docs, source, and community for the open-source runtime.",
+    "Ghosty dives into the deep so you don't have to — docs, source, and community for the open-source runtime.",
   footerProduct: "Product",
   footerProject: "Project",
   footerDocs: "Docs",

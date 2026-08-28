@@ -343,8 +343,8 @@ pub const KEYBINDINGS: &[KeybindingEntry] = &[
     },
     KeybindingEntry {
         // Terminal-native copy chords are normally consumed by the local
-        // terminal and never become Codewhale key events. Ctrl+C is the
-        // reliable in-app copy path when a Codewhale selection is active.
+        // terminal and never become Ghosty key events. Ctrl+C is the
+        // reliable in-app copy path when a Ghosty selection is active.
         chord: "Ctrl+C (selection)",
         description_id: crate::localization::MessageId::KbCopySelection,
         section: KeybindingSection::Clipboard,
@@ -601,7 +601,7 @@ mod tests {
         assert_eq!(entry.section, KeybindingSection::Sessions);
         assert_eq!(
             crate::localization::tr(crate::localization::Locale::En, entry.description_id),
-            "Check for and install the latest CodeWhale update (`/update install`)"
+            "Check for and install the latest GhostyCode update (`/update install`)"
         );
     }
 

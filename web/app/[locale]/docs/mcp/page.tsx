@@ -3,20 +3,20 @@ import { getDocsMcp, splitTokens } from "@/lib/i18n/dictionaries";
 import { buildPageMetadata } from "@/lib/page-meta";
 
 const CODE_SPANS: Record<string, string> = {
-  configPath: "~/.codewhale/mcp.json",
+  configPath: "~/.ghosty/mcp.json",
   legacyConfigPath: "~/.deepseek/mcp.json",
   configPathOption: "mcp_config_path",
   configEnvVar: "DEEPSEEK_MCP_CONFIG",
   serversKey: "mcpServers",
-  initCommand: "codewhale mcp init",
+  initCommand: "ghosty mcp init",
   mcpCommand: "/mcp",
   toolNamePattern: "mcp_<server>_<tool>",
   gitServer: "git",
   statusTool: "status",
   gitStatusTool: "mcp_git_status",
-  serveMcp: "codewhale serve --mcp",
-  mcpServerCommand: "codewhale mcp-server",
-  addSelfCommand: "codewhale mcp add-self",
+  serveMcp: "ghosty serve --mcp",
+  mcpServerCommand: "ghosty mcp-server",
+  addSelfCommand: "ghosty mcp add-self",
   serveHttp: "serve --http",
 };
 
@@ -58,11 +58,11 @@ export default async function McpPage({ params }: { params: Promise<{ locale: st
       <section id="setup" className="scroll-mt-32">
         <h2 className="font-display text-2xl mb-1">{t.setupTitle}</h2>
         <p className={`${t.bodyClassName} mt-3`}>{withCodeSpans(t.setupLead)}</p>
-        <pre className="code-block mt-4">{`codewhale mcp add <name> --command "<cmd>" --arg "<arg>"
-codewhale mcp add <name> --url "https://example.com/mcp" --bearer-token-env-var MCP_TOKEN
-codewhale mcp login <name>      # OAuth for remote servers
-codewhale mcp list
-codewhale mcp validate`}</pre>
+        <pre className="code-block mt-4">{`ghosty mcp add <name> --command "<cmd>" --arg "<arg>"
+ghosty mcp add <name> --url "https://example.com/mcp" --bearer-token-env-var MCP_TOKEN
+ghosty mcp login <name>      # OAuth for remote servers
+ghosty mcp list
+ghosty mcp validate`}</pre>
         <p className={`${t.bodyClassName} mt-3`}>{t.setupReload}</p>
       </section>
 

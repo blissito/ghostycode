@@ -1,6 +1,6 @@
 //! Settings system - Persistent user preferences
 //!
-//! Settings are stored at ~/.codewhale/settings.toml, with legacy fallbacks.
+//! Settings are stored at ~/.ghosty/settings.toml, with legacy fallbacks.
 //!
 //! TUI-specific preferences (theme, keybinds, font_size) that survive project
 //! switches are stored separately in tui.toml. See [`TuiPrefs`].
@@ -59,19 +59,19 @@ impl InlineDiffMode {
 }
 
 // ============================================================================
-// TuiPrefs — ~/.codewhale/tui.toml
+// TuiPrefs — ~/.ghosty/tui.toml
 // ============================================================================
 
 /// TUI-specific preferences that are decoupled from agent/project config so
 /// they survive project switches (issue #437).
 ///
-/// Stored at `~/.codewhale/tui.toml` on new installs, with
+/// Stored at `~/.ghosty/tui.toml` on new installs, with
 /// `~/.deepseek/tui.toml` retained as a legacy read fallback. When the file is
 /// absent the values fall back to the `[tui]` section of the normal
 /// `config.toml` (via [`TuiPrefs::load`]), and then to the struct's own
 /// defaults.
 ///
-/// # Example `~/.codewhale/tui.toml`
+/// # Example `~/.ghosty/tui.toml`
 ///
 /// ```toml
 /// theme    = "dark"        # "system" | "dark" | "light" | "grayscale" | "catppuccin-mocha" | ...
@@ -135,10 +135,10 @@ pub struct KeybindPrefs {
 #[allow(dead_code)] // see TuiPrefs note above; deferred to a later settings pass (#657).
 impl TuiPrefs {
     /// Return the canonical path of the TUI preferences file:
-    /// `~/.codewhale/tui.toml`, or legacy `~/.deepseek/tui.toml` when present.
+    /// `~/.ghosty/tui.toml`, or legacy `~/.deepseek/tui.toml` when present.
     ///
     /// Tests may override the home directory through the canonical
-    /// `CODEWHALE_CONFIG_PATH` environment variable. The parent directory of
+    /// `GHOSTY_CONFIG_PATH` environment variable. The parent directory of
     /// the pointed-to config is used instead of the default settings home.
     pub fn path() -> Result<PathBuf> {
         #[cfg(test)]
@@ -158,7 +158,7 @@ impl TuiPrefs {
         tui_prefs_path_from_environment()
     }
 
-    /// Load TUI preferences from `~/.codewhale/tui.toml` or a legacy fallback.
+    /// Load TUI preferences from `~/.ghosty/tui.toml` or a legacy fallback.
     ///
     /// If the file does not exist the struct defaults are returned — no error
     /// is produced. Parse errors surface as `Err` so the caller can warn the
@@ -189,7 +189,7 @@ impl TuiPrefs {
         Ok(prefs)
     }
 
-    /// Save TUI preferences to `~/.codewhale/tui.toml` (or a legacy file when
+    /// Save TUI preferences to `~/.ghosty/tui.toml` (or a legacy file when
     /// it already exists), creating the target directory if needed.
     pub fn save(&self) -> Result<()> {
         let path = Self::path()?;
@@ -211,7 +211,7 @@ impl TuiPrefs {
         let body = if path.exists() {
             let raw = std::fs::read_to_string(path)
                 .with_context(|| format!("Failed to read tui.toml at {}", path.display()))?;
-            codewhale_config::merge_and_preserve_comments(&serialized, &raw).unwrap_or_else(|e| {
+            ghosty_config::merge_and_preserve_comments(&serialized, &raw).unwrap_or_else(|e| {
                 tracing::warn!("failed to merge tui.toml comments, saving without them: {e:#}");
                 serialized
             })
@@ -240,15 +240,15 @@ fn tui_prefs_path_from_environment() -> Result<PathBuf> {
         return Ok(parent.join("tui.toml"));
     }
 
-    let primary = codewhale_config::codewhale_home()
+    let primary = ghosty_config::ghosty_home()
         .ok()
         .map(|home| home.join(TUI_PREFS_FILE_NAME));
-    if codewhale_config::codewhale_home_is_explicit() {
+    if ghosty_config::ghosty_home_is_explicit() {
         return primary.ok_or_else(|| {
-            anyhow::anyhow!("Failed to resolve tui.toml path: no Codewhale home found.")
+            anyhow::anyhow!("Failed to resolve tui.toml path: no Ghosty home found.")
         });
     }
-    let legacy_home = codewhale_config::legacy_deepseek_home()
+    let legacy_home = ghosty_config::legacy_deepseek_home()
         .ok()
         .map(|home| home.join(TUI_PREFS_FILE_NAME));
 
@@ -409,7 +409,7 @@ pub struct Settings {
     pub composer_vim_mode: String,
     /// Transcript spacing rhythm: compact, comfortable, spacious
     pub transcript_spacing: String,
-    /// Show the pre-session launch menu. When false, Codewhale enters a new
+    /// Show the pre-session launch menu. When false, Ghosty enters a new
     /// session directly; resume remains available in-session.
     #[serde(default)]
     pub launch_screen: bool,
@@ -483,7 +483,7 @@ pub struct Settings {
     pub pinned_models: Vec<PinnedModel>,
     /// Header status indicator next to the effort chip. Cycles through a
     /// per-turn animation keyed off `App::turn_started_at`:
-    /// - `"cw"` (default): static typographic Codewhale mark.
+    /// - `"cw"` (default): static typographic Ghosty mark (paints `ghosty`).
     /// - `"whale"`: historical `🐳 → 🐋` 12-frame sequence
     ///   originally shipped in v0.3.5, removed in v0.8.x's "smoother TUI
     ///   streaming" pass, restored in v0.8.30. Idle frame is a steady `🐳`.
@@ -736,7 +736,7 @@ pub fn preset_fields(name: &str) -> Option<&'static [(&'static str, &'static str
 impl Settings {
     /// Get the canonical settings file path.
     ///
-    /// New writes should target `~/.codewhale/settings.toml`. Legacy
+    /// New writes should target `~/.ghosty/settings.toml`. Legacy
     /// DeepSeek-branded paths remain readable as fallbacks during load, but we
     /// no longer surface them as the primary path in `/config`.
     pub fn path() -> Result<PathBuf> {
@@ -757,7 +757,7 @@ impl Settings {
     ///
     /// This preserves the same candidate precedence, parser normalization, and
     /// environment overlays as [`Settings::load`]. Unlike an interactive
-    /// startup, diagnostics must not create `~/.codewhale/settings.toml` just
+    /// startup, diagnostics must not create `~/.ghosty/settings.toml` just
     /// because they inspected a legacy `~/.deepseek/settings.toml` file.
     pub(crate) fn load_read_only() -> Result<Self> {
         let mut settings = Self::load_persisted_read_only()?;
@@ -1117,7 +1117,7 @@ impl Settings {
     /// never share an object — a background startup-default drain and a
     /// synchronous Shift+Tab permission write, the concrete pair that lost
     /// `default_mode` / `permission_posture` against each other — and a
-    /// cross-process file lock, which covers a second Codewhale process on the
+    /// cross-process file lock, which covers a second Ghosty process on the
     /// same home directory.
     ///
     /// The closure must not call `transact`, [`with_settings_transaction`],
@@ -1198,7 +1198,7 @@ impl Settings {
         let body = if path.exists() {
             let raw = std::fs::read_to_string(path)
                 .with_context(|| format!("Failed to read settings at {}", path.display()))?;
-            codewhale_config::merge_and_preserve_comments(&serialized, &raw).unwrap_or_else(|e| {
+            ghosty_config::merge_and_preserve_comments(&serialized, &raw).unwrap_or_else(|e| {
                 tracing::warn!("failed to merge settings comments, saving without them: {e:#}");
                 serialized
             })
@@ -1759,7 +1759,7 @@ impl Settings {
             ),
             (
                 "theme",
-                "UI theme: a compiled name or custom:<name> from the Codewhale themes directory",
+                "UI theme: a compiled name or custom:<name> from the Ghosty themes directory",
             ),
             (
                 "background_color",
@@ -2049,8 +2049,8 @@ impl SettingsTransaction {
 ///    and a synchronous Shift+Tab permission write, the concrete pair that lost
 ///    `default_mode` / `permission_posture` against each other.
 /// 2. An **advisory file lock on an adjacent `settings.toml.lock`**, following
-///    the `codewhale_config::config_document` pattern. The process mutex says
-///    nothing about a second Codewhale process (a second TUI, `codewhale exec`,
+///    the `ghosty_config::config_document` pattern. The process mutex says
+///    nothing about a second Ghosty process (a second TUI, `ghosty exec`,
 ///    the runtime HTTP surface in another instance) doing its own
 ///    load/modify/save. Without a cross-process lock those two interleave and
 ///    the later save reverts the earlier one's field — last-save-wins across
@@ -2094,7 +2094,7 @@ pub(crate) fn with_settings_transaction<T>(
 /// The lock file is opened (not followed) with owner-only permissions and is
 /// created if absent. Dropping the `fd_lock` guard — including on an unwind —
 /// releases it, and the OS releases it if the process dies, so a crash cannot
-/// wedge another Codewhale instance out of its settings.
+/// wedge another Ghosty instance out of its settings.
 fn with_settings_file_lock<T>(path: &Path, operation: impl FnOnce() -> Result<T>) -> Result<T> {
     use std::fs;
 
@@ -2175,7 +2175,7 @@ fn reject_settings_lock_symlink(lock_path: &Path) -> Result<()> {
 /// renaming it into place.
 ///
 /// A direct `fs::write` truncates first, so any concurrent reader — another
-/// Codewhale process, an editor, a `cat` — can observe a half-written file and
+/// Ghosty process, an editor, a `cat` — can observe a half-written file and
 /// parse it as truncated TOML, silently losing every key past the tear. A
 /// same-directory temp file plus the platform's replace primitive makes the
 /// swap atomic for readers: they see either the whole previous file or the
@@ -2379,19 +2379,19 @@ fn settings_path_candidates() -> (Option<PathBuf>, Option<PathBuf>, Option<PathB
 fn settings_path_candidates_from_environment() -> (Option<PathBuf>, Option<PathBuf>, Option<PathBuf>)
 {
     // Allow tests to override the settings directory via the same env vars
-    // used for config. CODEWHALE_CONFIG_PATH is canonical; the legacy alias
+    // used for config. GHOSTY_CONFIG_PATH is canonical; the legacy alias
     // remains a read-only fallback for existing installs.
     if let Some(parent) = config_override_parent() {
         return (Some(parent.join(SETTINGS_FILE_NAME)), None, None);
     }
 
-    let primary = codewhale_config::codewhale_home()
+    let primary = ghosty_config::ghosty_home()
         .ok()
         .map(|home| home.join(SETTINGS_FILE_NAME));
-    if codewhale_config::codewhale_home_is_explicit() {
+    if ghosty_config::ghosty_home_is_explicit() {
         return (primary, None, None);
     }
-    let legacy_home = codewhale_config::legacy_deepseek_home()
+    let legacy_home = ghosty_config::legacy_deepseek_home()
         .ok()
         .map(|home| home.join(SETTINGS_FILE_NAME));
     let legacy_config_dir =
@@ -2402,7 +2402,7 @@ fn settings_path_candidates_from_environment() -> (Option<PathBuf>, Option<PathB
 
 fn config_override_parent() -> Option<PathBuf> {
     fn read() -> Option<PathBuf> {
-        for var in ["CODEWHALE_CONFIG_PATH", "DEEPSEEK_CONFIG_PATH"] {
+        for var in ["GHOSTY_CONFIG_PATH", "DEEPSEEK_CONFIG_PATH"] {
             if let Ok(config_path) = std::env::var(var) {
                 let config_path = config_path.trim();
                 if !config_path.is_empty() {
@@ -2800,8 +2800,8 @@ mod tests {
     // Cross-process settings integrity
     // -----------------------------------------------------------------------
     //
-    // The in-process mutex says nothing about a *second* Codewhale process on
-    // the same home directory — a second TUI, `codewhale exec`, the runtime HTTP
+    // The in-process mutex says nothing about a *second* Ghosty process on
+    // the same home directory — a second TUI, `ghosty exec`, the runtime HTTP
     // surface in another instance. Two of those doing load/modify/save at once
     // is the same last-save-wins bug the in-process lock was added to prevent,
     // and no amount of thread-based testing can observe it: threads share the
@@ -2809,18 +2809,18 @@ mod tests {
     // real child process.
     //
     // The child is this same test binary, re-invoked with `--ignored --exact`
-    // on the helper below. It inherits the sealed `HOME`/`CODEWHALE_HOME`
+    // on the helper below. It inherits the sealed `HOME`/`GHOSTY_HOME`
     // through its environment, so both processes resolve the same
     // `settings.toml`.
 
     /// Selects which child behavior [`settings_cross_process_child_helper`] runs.
-    const CHILD_ROLE_ENV: &str = "CODEWHALE_TEST_SETTINGS_CHILD_ROLE";
+    const CHILD_ROLE_ENV: &str = "GHOSTY_TEST_SETTINGS_CHILD_ROLE";
     /// Path of the parent↔child handshake file. Its meaning is per-role: the
     /// slow writer *creates* it once its transaction is open; the reader *waits*
     /// for it as a stop signal.
-    const CHILD_SIGNAL_ENV: &str = "CODEWHALE_TEST_SETTINGS_CHILD_SIGNAL";
+    const CHILD_SIGNAL_ENV: &str = "GHOSTY_TEST_SETTINGS_CHILD_SIGNAL";
     /// Where the child writes what it observed, for the parent to assert on.
-    const CHILD_RESULT_ENV: &str = "CODEWHALE_TEST_SETTINGS_CHILD_RESULT";
+    const CHILD_RESULT_ENV: &str = "GHOSTY_TEST_SETTINGS_CHILD_RESULT";
 
     /// The other process in the cross-process regressions.
     ///
@@ -2840,9 +2840,9 @@ mod tests {
         // the isolated per-process test root and never touch the parent's file.
         // The child is a fresh process, so the acquisition is uncontended.
         let _env_lock = crate::test_support::lock_test_env();
-        let inherited_home = std::env::var_os("CODEWHALE_HOME")
-            .expect("settings child needs an inherited Codewhale home");
-        let _state_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", inherited_home);
+        let inherited_home =
+            std::env::var_os("GHOSTY_HOME").expect("settings child needs an inherited Ghosty home");
+        let _state_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", inherited_home);
         let signal = PathBuf::from(
             std::env::var(CHILD_SIGNAL_ENV).expect("child helper needs a signal path"),
         );
@@ -2935,9 +2935,9 @@ mod tests {
             .env(CHILD_SIGNAL_ENV, signal)
             .env("HOME", home)
             .env("USERPROFILE", home)
-            .env("CODEWHALE_HOME", home.join(".codewhale"))
+            .env("GHOSTY_HOME", home.join(".ghosty"))
             .env_remove("DEEPSEEK_CONFIG_PATH")
-            .env_remove("CODEWHALE_CONFIG_PATH")
+            .env_remove("GHOSTY_CONFIG_PATH")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
         if let Some(result) = result {
@@ -2951,9 +2951,9 @@ mod tests {
         vec![
             EnvVarGuard::set("HOME", home),
             EnvVarGuard::set("USERPROFILE", home),
-            EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale")),
+            EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty")),
             EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH"),
-            EnvVarGuard::remove("CODEWHALE_CONFIG_PATH"),
+            EnvVarGuard::remove("GHOSTY_CONFIG_PATH"),
         ]
     }
 
@@ -4218,7 +4218,7 @@ mod tests {
                 // test isolates the VTE signal instead, so keep that separate
                 // platform heuristic from changing its motion assertions.
                 #[cfg(windows)]
-                std::env::set_var("WT_SESSION", "codewhale-test");
+                std::env::set_var("WT_SESSION", "ghosty-test");
             }
             let mut settings = animated_settings();
             assert!(!settings.low_motion, "default is animated");
@@ -4461,7 +4461,7 @@ mod tests {
                 }
                 std::env::set_var(var, val);
                 #[cfg(windows)]
-                std::env::set_var("WT_SESSION", "codewhale-test");
+                std::env::set_var("WT_SESSION", "ghosty-test");
             }
             let mut settings = animated_settings();
             assert!(!settings.low_motion, "default is animated");
@@ -4799,15 +4799,15 @@ mod tests {
     fn legacy_startup_modes_migrate_without_losing_permission_intent() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let codewhale_home = tmp.path().join(".codewhale");
-        std::fs::create_dir_all(&codewhale_home).expect("codewhale home");
+        let ghosty_home = tmp.path().join(".ghosty");
+        std::fs::create_dir_all(&ghosty_home).expect("ghosty home");
         std::fs::write(
-            codewhale_home.join("settings.toml"),
+            ghosty_home.join("settings.toml"),
             "default_mode = \"yolo\"\n",
         )
         .expect("legacy settings");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home = EnvVarRestore::set("CODEWHALE_HOME", &codewhale_home);
+        let _ghosty_home = EnvVarRestore::set("GHOSTY_HOME", &ghosty_home);
         let _home = EnvVarRestore::set("HOME", tmp.path());
 
         let loaded = Settings::load_persisted().expect("load legacy settings");
@@ -4816,7 +4816,7 @@ mod tests {
         assert_eq!(loaded.permission_posture.as_deref(), Some("full-access"));
 
         std::fs::write(
-            codewhale_home.join("settings.toml"),
+            ghosty_home.join("settings.toml"),
             "default_mode = \"operate\"\n",
         )
         .expect("operate startup settings");
@@ -4826,20 +4826,20 @@ mod tests {
     }
 
     #[test]
-    fn settings_path_defaults_to_codewhale_home_for_new_writes() {
+    fn settings_path_defaults_to_ghosty_home_for_new_writes() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home = EnvVarRestore::set("CODEWHALE_HOME", tmp.path().join(".codewhale"));
+        let _ghosty_home = EnvVarRestore::set("GHOSTY_HOME", tmp.path().join(".ghosty"));
         let _home = EnvVarRestore::set("HOME", tmp.path());
 
         let got = Settings::path().expect("settings path");
 
-        assert_eq!(got, tmp.path().join(".codewhale").join("settings.toml"));
+        assert_eq!(got, tmp.path().join(".ghosty").join("settings.toml"));
     }
 
     #[test]
-    fn settings_path_prefers_codewhale_home_even_when_legacy_exists() {
+    fn settings_path_prefers_ghosty_home_even_when_legacy_exists() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
         let legacy_dir = tmp.path().join(".deepseek");
@@ -4847,25 +4847,25 @@ mod tests {
         std::fs::write(legacy_dir.join("settings.toml"), "low_motion = true\n")
             .expect("legacy settings");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home = EnvVarRestore::set("CODEWHALE_HOME", tmp.path().join(".codewhale"));
+        let _ghosty_home = EnvVarRestore::set("GHOSTY_HOME", tmp.path().join(".ghosty"));
         let _home = EnvVarRestore::set("HOME", tmp.path());
 
         let got = Settings::path().expect("settings path");
 
-        assert_eq!(got, tmp.path().join(".codewhale").join("settings.toml"));
+        assert_eq!(got, tmp.path().join(".ghosty").join("settings.toml"));
     }
 
     #[test]
-    fn settings_load_migrates_legacy_deepseek_home_into_codewhale_home_without_explicit_home() {
+    fn settings_load_migrates_legacy_deepseek_home_into_ghosty_home_without_explicit_home() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let primary = tmp.path().join(".codewhale").join("settings.toml");
+        let primary = tmp.path().join(".ghosty").join("settings.toml");
         let legacy_dir = tmp.path().join(".deepseek");
         let legacy_home = legacy_dir.join("settings.toml");
         std::fs::create_dir_all(&legacy_dir).expect("legacy dir");
         std::fs::write(&legacy_home, "low_motion = true\n").expect("legacy settings");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home = EnvVarRestore::remove("CODEWHALE_HOME");
+        let _ghosty_home = EnvVarRestore::remove("GHOSTY_HOME");
         let _home = EnvVarRestore::set("HOME", tmp.path());
 
         let loaded = Settings::load_persisted().expect("load persisted settings");
@@ -4878,7 +4878,7 @@ mod tests {
         let display = loaded.display(crate::localization::Locale::En);
         assert!(
             display.contains(&format!("Config file: {}", primary.display())),
-            "settings display should surface the canonical codewhale path:\n{display}"
+            "settings display should surface the canonical ghosty path:\n{display}"
         );
     }
 
@@ -4886,14 +4886,14 @@ mod tests {
     fn settings_load_read_only_reads_legacy_home_without_creating_primary() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let primary = tmp.path().join(".codewhale").join("settings.toml");
+        let primary = tmp.path().join(".ghosty").join("settings.toml");
         let legacy = tmp.path().join(".deepseek").join("settings.toml");
         let legacy_bytes =
             b"default_mode = \"plan\"\nlow_motion = false\nfancy_animations = true\n";
         std::fs::create_dir_all(legacy.parent().expect("legacy parent")).expect("legacy directory");
         std::fs::write(&legacy, legacy_bytes).expect("legacy settings");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home = EnvVarRestore::remove("CODEWHALE_HOME");
+        let _ghosty_home = EnvVarRestore::remove("GHOSTY_HOME");
         let _home = EnvVarRestore::set("HOME", tmp.path());
         let _no_animations = EnvVarRestore::set("NO_ANIMATIONS", "1");
 
@@ -4917,13 +4917,13 @@ mod tests {
     }
 
     #[test]
-    fn settings_load_migrates_platform_legacy_fallback_into_codewhale_home_without_explicit_home() {
+    fn settings_load_migrates_platform_legacy_fallback_into_ghosty_home_without_explicit_home() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let primary = tmp.path().join(".codewhale").join("settings.toml");
+        let primary = tmp.path().join(".ghosty").join("settings.toml");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home =
-            EnvVarRestore::set("CODEWHALE_HOME", primary.parent().expect("primary parent"));
+        let _ghosty_home =
+            EnvVarRestore::set("GHOSTY_HOME", primary.parent().expect("primary parent"));
         let legacy_config_dir = tmp
             .path()
             .join("platform-config")
@@ -4952,15 +4952,15 @@ mod tests {
         let display = loaded.display(crate::localization::Locale::En);
         assert!(
             display.contains(&format!("Config file: {}", primary.display())),
-            "settings display should surface the canonical codewhale path:\n{display}"
+            "settings display should surface the canonical ghosty path:\n{display}"
         );
     }
 
     #[test]
-    fn settings_load_ignores_legacy_files_when_codewhale_home_is_explicit() {
+    fn settings_load_ignores_legacy_files_when_ghosty_home_is_explicit() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let explicit_home = tmp.path().join("isolated-codewhale");
+        let explicit_home = tmp.path().join("isolated-ghosty");
         let legacy_dir = tmp.path().join(".deepseek");
         std::fs::create_dir_all(&legacy_dir).expect("legacy dir");
         std::fs::write(
@@ -4969,26 +4969,26 @@ mod tests {
         )
         .expect("legacy settings");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home = EnvVarRestore::set("CODEWHALE_HOME", &explicit_home);
+        let _ghosty_home = EnvVarRestore::set("GHOSTY_HOME", &explicit_home);
         let _home = EnvVarRestore::set("HOME", tmp.path());
 
         let loaded = Settings::load().expect("load settings");
 
         assert_eq!(
             loaded.theme, "system",
-            "explicit CODEWHALE_HOME must not inherit ambient legacy settings"
+            "explicit GHOSTY_HOME must not inherit ambient legacy settings"
         );
         assert_eq!(
             loaded.composer_density, "comfortable",
-            "explicit CODEWHALE_HOME must not inherit ambient legacy settings"
+            "explicit GHOSTY_HOME must not inherit ambient legacy settings"
         );
         assert_eq!(
             loaded.sidebar_width_percent, 28,
-            "explicit CODEWHALE_HOME must not inherit ambient legacy settings"
+            "explicit GHOSTY_HOME must not inherit ambient legacy settings"
         );
         assert!(
             !explicit_home.join("settings.toml").exists(),
-            "ambient legacy settings must not be migrated into explicit CODEWHALE_HOME"
+            "ambient legacy settings must not be migrated into explicit GHOSTY_HOME"
         );
     }
 
@@ -5024,28 +5024,28 @@ mod tests {
     }
 
     #[test]
-    fn tui_prefs_path_defaults_to_codewhale_home_for_new_writes() {
+    fn tui_prefs_path_defaults_to_ghosty_home_for_new_writes() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home = EnvVarRestore::set("CODEWHALE_HOME", tmp.path().join(".codewhale"));
+        let _ghosty_home = EnvVarRestore::set("GHOSTY_HOME", tmp.path().join(".ghosty"));
         let _home = EnvVarRestore::set("HOME", tmp.path());
 
         let got = TuiPrefs::path().expect("tui prefs path");
 
-        assert_eq!(got, tmp.path().join(".codewhale").join("tui.toml"));
+        assert_eq!(got, tmp.path().join(".ghosty").join("tui.toml"));
     }
 
     #[test]
-    fn tui_prefs_path_ignores_legacy_home_when_codewhale_home_is_explicit() {
+    fn tui_prefs_path_ignores_legacy_home_when_ghosty_home_is_explicit() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let explicit_home = tmp.path().join("isolated-codewhale");
+        let explicit_home = tmp.path().join("isolated-ghosty");
         let legacy_dir = tmp.path().join(".deepseek");
         std::fs::create_dir_all(&legacy_dir).expect("legacy dir");
         std::fs::write(legacy_dir.join("tui.toml"), "theme = \"light\"\n").expect("legacy prefs");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home = EnvVarRestore::set("CODEWHALE_HOME", &explicit_home);
+        let _ghosty_home = EnvVarRestore::set("GHOSTY_HOME", &explicit_home);
         let _home = EnvVarRestore::set("HOME", tmp.path());
 
         let got = TuiPrefs::path().expect("tui prefs path");
@@ -5057,7 +5057,7 @@ mod tests {
     fn tui_prefs_path_reads_legacy_deepseek_home_when_present() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
-        let primary = tmp.path().join(".codewhale").join("tui.toml");
+        let primary = tmp.path().join(".ghosty").join("tui.toml");
         let legacy_dir = tmp.path().join(".deepseek");
         std::fs::create_dir_all(&legacy_dir).expect("legacy dir");
         let legacy_home = legacy_dir.join("tui.toml");
@@ -5256,16 +5256,16 @@ mod tests {
     }
 
     #[test]
-    fn tui_prefs_path_uses_home_codewhale_subdir_by_default() {
+    fn tui_prefs_path_uses_home_ghosty_subdir_by_default() {
         let _g = config_path_test_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
         let _config_override = EnvVarRestore::remove("DEEPSEEK_CONFIG_PATH");
-        let _codewhale_home = EnvVarRestore::set("CODEWHALE_HOME", tmp.path().join(".codewhale"));
+        let _ghosty_home = EnvVarRestore::set("GHOSTY_HOME", tmp.path().join(".ghosty"));
         let _home = EnvVarRestore::set("HOME", tmp.path());
 
         let got = TuiPrefs::path().expect("path should resolve");
 
-        assert_eq!(got, tmp.path().join(".codewhale").join("tui.toml"));
+        assert_eq!(got, tmp.path().join(".ghosty").join("tui.toml"));
     }
 
     #[test]

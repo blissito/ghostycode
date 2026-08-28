@@ -57,7 +57,7 @@ export async function Nav({ locale = "en" }: { locale?: Locale }) {
             <span className="hidden sm:inline">{weekday}</span>
           </div>
           <div className="paper-issue-right">
-            <span className="hidden md:inline">codewhale.net</span>
+            <span className="hidden md:inline">ghosty.net</span>
             <span className="tabular">{versionLabel}</span>
           </div>
         </div>
@@ -68,7 +68,7 @@ export async function Nav({ locale = "en" }: { locale?: Locale }) {
           <Seal char={chrome.wordmarkSeal} size="md" />
           <div className="paper-wordmark-text">
             <span className="paper-wordmark-name">
-              Codewhale
+              Ghosty
               <Whale size={18} className="paper-wordmark-whale" />
             </span>
             <span className="paper-wordmark-tag">{chrome.wordmarkTag}</span>

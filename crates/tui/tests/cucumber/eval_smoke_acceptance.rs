@@ -31,8 +31,8 @@ struct EvalSmokeWorld {
     exit_status: Option<ExitStatus>,
 }
 
-#[given("a clean CodeWhale evaluation workspace")]
-fn clean_codewhale_evaluation_workspace(world: &mut EvalSmokeWorld) {
+#[given("a clean GhostyCode evaluation workspace")]
+fn clean_ghosty_evaluation_workspace(world: &mut EvalSmokeWorld) {
     world._record_dir = Some(TempDir::new().expect("evaluation TempDir"));
 }
 
@@ -43,7 +43,7 @@ fn eval_harness_runs_shell_command(world: &mut EvalSmokeWorld) {
         .as_ref()
         .expect("evaluation workspace should exist");
 
-    let output = Command::new(codewhale_tui_binary())
+    let output = Command::new(ghosty_tui_binary())
         .args([
             "eval",
             "--json",
@@ -53,7 +53,7 @@ fn eval_harness_runs_shell_command(world: &mut EvalSmokeWorld) {
         ])
         .arg(record_dir.path())
         .output()
-        .expect("codewhale-tui eval should start");
+        .expect("ghosty-tui eval should start");
 
     // Capture stdout/stderr for diagnostics
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -88,7 +88,7 @@ fn binary_exits_without_crashing(world: &mut EvalSmokeWorld) {
     assert_no_signal_crash(&status);
     assert!(
         exit_code == 0 || exit_code == 1,
-        "codewhale-tui eval exited with unexpected code {exit_code} (expected 0 or 1)"
+        "ghosty-tui eval exited with unexpected code {exit_code} (expected 0 or 1)"
     );
 
     let report = world.report.as_ref().expect("eval report should exist");
@@ -164,7 +164,7 @@ fn assert_no_signal_crash(status: &ExitStatus) {
     use std::os::unix::process::ExitStatusExt;
     assert!(
         status.signal().is_none(),
-        "codewhale-tui eval was killed by signal {} (crash?)",
+        "ghosty-tui eval was killed by signal {} (crash?)",
         status.signal().unwrap()
     );
 }
@@ -173,11 +173,11 @@ fn assert_no_signal_crash(status: &ExitStatus) {
 #[cfg(not(unix))]
 fn assert_no_signal_crash(_status: &ExitStatus) {}
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
 
@@ -186,6 +186,6 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }

@@ -1,7 +1,7 @@
 /**
  * Interaction contract for #5290 — clickable chrome on non-English routes.
  *
- * Reproduction (Chromium, codewhale.net, 1536×900): `.paper-wordmark` was
+ * Reproduction (Chromium, ghosty.net, 1536×900): `.paper-wordmark` was
  * 0×42px on `/de` and `/pt-BR`, 35×42px on `/id`, and 98×42px on
  * `/de/docs/guide` at 1280. The 2xl companion labels plus an unbounded
  * locale <select> ate the 76rem strip; `overflow-x: clip` then left the

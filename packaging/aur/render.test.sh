@@ -20,27 +20,27 @@ sha256_file() {
 }
 
 for release_arch in x64 arm64; do
-  archive_root="codewhale-linux-${release_arch}"
+  archive_root="ghosty-linux-${release_arch}"
   mkdir -p "${stage_dir}/${archive_root}"
-  printf '#!/usr/bin/env sh\necho codewhale-%s\n' "${release_arch}" \
-    > "${stage_dir}/${archive_root}/codewhale"
-  printf '#!/usr/bin/env sh\necho codew-%s\n' "${release_arch}" \
-    > "${stage_dir}/${archive_root}/codew"
+  printf '#!/usr/bin/env sh\necho ghosty-%s\n' "${release_arch}" \
+    > "${stage_dir}/${archive_root}/ghosty"
+  printf '#!/usr/bin/env sh\necho ghosty-tui-%s\n' "${release_arch}" \
+    > "${stage_dir}/${archive_root}/ghosty-tui"
   chmod 0755 \
-    "${stage_dir}/${archive_root}/codewhale" \
-    "${stage_dir}/${archive_root}/codew"
+    "${stage_dir}/${archive_root}/ghosty" \
+    "${stage_dir}/${archive_root}/ghosty-tui"
   COPYFILE_DISABLE=1 tar -czf "${assets_dir}/${archive_root}.tar.gz" \
     -C "${stage_dir}" "${archive_root}"
 done
 
-for manifest in codewhale-artifacts-sha256.txt codewhale-bundles-sha256.txt; do
+for manifest in ghosty-artifacts-sha256.txt ghosty-bundles-sha256.txt; do
   {
     printf '%s  %s\n' \
-      "$(sha256_file "${assets_dir}/codewhale-linux-x64.tar.gz")" \
-      'codewhale-linux-x64.tar.gz'
+      "$(sha256_file "${assets_dir}/ghosty-linux-x64.tar.gz")" \
+      'ghosty-linux-x64.tar.gz'
     printf '%s  %s\n' \
-      "$(sha256_file "${assets_dir}/codewhale-linux-arm64.tar.gz")" \
-      'codewhale-linux-arm64.tar.gz'
+      "$(sha256_file "${assets_dir}/ghosty-linux-arm64.tar.gz")" \
+      'ghosty-linux-arm64.tar.gz'
   } > "${assets_dir}/${manifest}"
 done
 
@@ -65,9 +65,9 @@ for dependency in glibc gcc-libs dbus; do
 done
 grep -Fqx 'pkgrel=2' "${revision_output}/PKGBUILD"
 grep -Fqx $'\tpkgrel = 2' "${revision_output}/.SRCINFO"
-grep -Fq "/releases/download/v${workspace_version}/codewhale-linux-x64.tar.gz" \
+grep -Fq "/releases/download/v${workspace_version}/ghosty-linux-x64.tar.gz" \
   "${first_output}/.SRCINFO"
-grep -Fq "/releases/download/v${workspace_version}/codewhale-linux-arm64.tar.gz" \
+grep -Fq "/releases/download/v${workspace_version}/ghosty-linux-arm64.tar.gz" \
   "${first_output}/.SRCINFO"
 if grep -R -Eq 'SKIP|@[A-Z0-9_]+@' "${first_output}"; then
   echo "rendered metadata retained a placeholder or SKIP checksum" >&2
@@ -80,7 +80,7 @@ for arch_case in 'x86_64:x64' 'aarch64:arm64'; do
   package_src="${temp_root}/package-src-${carch}"
   package_root="${temp_root}/package-root-${carch}"
   mkdir -p "${package_src}" "${package_root}"
-  tar -xzf "${assets_dir}/codewhale-linux-${release_arch}.tar.gz" -C "${package_src}"
+  tar -xzf "${assets_dir}/ghosty-linux-${release_arch}.tar.gz" -C "${package_src}"
   cp "${repo_root}/LICENSE" "${package_src}/LICENSE-${workspace_version}"
   (
     source "${first_output}/PKGBUILD"
@@ -96,18 +96,18 @@ for arch_case in 'x86_64:x64' 'aarch64:arm64'; do
     package
   )
   cmp \
-    "${stage_dir}/codewhale-linux-${release_arch}/codewhale" \
-    "${package_root}/usr/bin/codewhale"
+    "${stage_dir}/ghosty-linux-${release_arch}/ghosty" \
+    "${package_root}/usr/bin/ghosty"
   cmp \
-    "${stage_dir}/codewhale-linux-${release_arch}/codew" \
-    "${package_root}/usr/bin/codew"
-  test -L "${package_root}/usr/bin/codewhale-tui"
-  test "$(readlink "${package_root}/usr/bin/codewhale-tui")" = codewhale
+    "${stage_dir}/ghosty-linux-${release_arch}/ghosty-tui" \
+    "${package_root}/usr/bin/ghosty-tui"
+  test -L "${package_root}/usr/bin/ghosty-tui"
+  test "$(readlink "${package_root}/usr/bin/ghosty-tui")" = ghosty
   cmp "${repo_root}/LICENSE" \
-    "${package_root}/usr/share/licenses/codewhale-bin/LICENSE"
+    "${package_root}/usr/share/licenses/ghosty-bin/LICENSE"
 done
 
-printf 'tampered\n' >> "${assets_dir}/codewhale-linux-x64.tar.gz"
+printf 'tampered\n' >> "${assets_dir}/ghosty-linux-x64.tar.gz"
 if bash "${repo_root}/packaging/aur/render.sh" \
   "${assets_dir}" "${temp_root}/tampered-output" >/dev/null 2>&1; then
   echo "renderer accepted a release archive that no longer matched its manifests" >&2

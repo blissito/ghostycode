@@ -15,14 +15,14 @@
 //!    them when neither is true is worse than no notice.
 
 /// Headline shown above [`NOTICE_BODY`].
-pub const NOTICE_HEADLINE: &str = "Help improve Codewhale?";
+pub const NOTICE_HEADLINE: &str = "Help improve Ghosty?";
 
 /// The notice itself.
 ///
 /// Wrapped at 72 columns so it renders unchanged in the native responsive
 /// modal and remains readable in an 80-column terminal.
 pub const NOTICE_BODY: &str = "\
-Codewhale counts: which version you run, OS and CPU family, session
+Ghosty counts: which version you run, OS and CPU family, session
 duration and outcome, and aggregate feature and error counters.
 
 It never collects your conversations, code, prompts, files, repo or
@@ -31,6 +31,6 @@ per-turn or per-tool timeline of agent activity.
 
 You are identified only by a random ID stored on this machine, replaced
 every 90 days. Change your mind any time:
-                              codewhale config set telemetry false
+                              ghosty config set telemetry false
 
 Full schema, field by field:  docs/TELEMETRY.md";

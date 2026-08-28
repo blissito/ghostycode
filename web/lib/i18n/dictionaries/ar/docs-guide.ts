@@ -6,7 +6,7 @@ import type { DocsGuideDict } from "../types";
  * CJK treatment.
  */
 export const docsGuide: DocsGuideDict = {
-  metaTitle: "البداية · توثيق Codewhale",
+  metaTitle: "البداية · توثيق Ghosty",
   metaDescription:
     "المسار الكامل من التثبيت إلى أسطولك المثالي: التثبيت، وأول جلسة بلا مفاتيح، وربط مزوّد، وإعداد الأسطول.",
   bodyClassName: "text-ink-soft leading-loose",

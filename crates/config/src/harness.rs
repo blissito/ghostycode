@@ -15,7 +15,7 @@ use crate::ProviderKind;
 
 /// Kinds of built-in harness postures.
 ///
-/// A posture names the runtime strategy CodeWhale should use for a
+/// A posture names the runtime strategy GhostyCode should use for a
 /// provider/model route: how much context to preload, how aggressively to lean
 /// on sub-agents, and how to balance prompt-cache stability against quick
 /// exploration. Runtime selection is wired in later v0.9 slices; this config

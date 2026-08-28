@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce one-way ceilings on Codewhale's provider-free runtime contract.
+"""Enforce one-way ceilings on Ghosty's provider-free runtime contract.
 
 The default invocation runs ``measure-runtime-contract.py`` with Cargo forced
 offline. Pass ``--receipt`` to check an existing JSON receipt without compiling,
@@ -30,8 +30,8 @@ from typing import Any, Sequence
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUDGET_PATH = REPO_ROOT / "scripts" / "runtime-contract-budget.json"
 MEASURE_SCRIPT = REPO_ROOT / "scripts" / "measure-runtime-contract.py"
-RECEIPT_KIND = "codewhale.runtime_contract_receipt"
-BUDGET_KIND = "codewhale.runtime_contract_budget"
+RECEIPT_KIND = "ghosty.runtime_contract_receipt"
+BUDGET_KIND = "ghosty.runtime_contract_budget"
 SCHEMA_VERSION = 1
 REPRESENTATIVE_FIXTURE_ID = "representative-v1"
 TOOL_SURFACE_PROFILE = "production-default-builtins-no-mcp-no-host-interpreters-v1"
@@ -591,9 +591,9 @@ def check_fragment_caps() -> None:
         raise RuntimeContractError(
             f"missing TUI fragment module: {tui_fragment} ({error})"
         ) from error
-    if "codewhale_core::fragments" not in tui_text:
+    if "ghosty_core::fragments" not in tui_text:
         raise RuntimeContractError(
-            "TUI model_context/fragment.rs must re-export caps from codewhale_core::fragments (shared crates/core boundary)"
+            "TUI model_context/fragment.rs must re-export caps from ghosty_core::fragments (shared crates/core boundary)"
         )
     if "ProjectInstructions" not in tui_text:
         raise RuntimeContractError(

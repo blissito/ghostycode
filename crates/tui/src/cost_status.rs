@@ -690,7 +690,7 @@ pub(crate) fn register_runtime_usage_sink(owner: &str, sink: RuntimeUsageSink) {
 /// make replay idempotent.
 #[must_use]
 pub(crate) fn usage_source_fingerprint(source_id: &str) -> String {
-    codewhale_config::catalog::base_url_fingerprint(source_id.trim())
+    ghosty_config::catalog::base_url_fingerprint(source_id.trim())
 }
 
 /// Install the interactive session's synchronous runtime sink. A detached
@@ -1140,7 +1140,7 @@ pub fn endpoint_fingerprint(base_url: &str) -> Option<String> {
     parsed.set_query(None);
     parsed.set_fragment(None);
     let canonical = parsed.as_str().trim_end_matches('/');
-    Some(codewhale_config::catalog::base_url_fingerprint(canonical))
+    Some(ghosty_config::catalog::base_url_fingerprint(canonical))
 }
 
 /// Currency tag for a receipt, derived from authoritative currency coverage —

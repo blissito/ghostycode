@@ -1026,7 +1026,7 @@ fn search_provider_display(config: &Config, locale: crate::localization::Locale)
             .trim_matches(&['(', ')'][..])
             .to_string(),
         SearchProviderSource::Config => "config.toml".to_string(),
-        SearchProviderSource::EnvOverride => "CODEWHALE_SEARCH_PROVIDER".to_string(),
+        SearchProviderSource::EnvOverride => "GHOSTY_SEARCH_PROVIDER".to_string(),
     };
     tr(locale, MessageId::ConfigCommandSource)
         .replace("{value}", resolved.provider.as_str())
@@ -1702,7 +1702,7 @@ fn set_subagents_config_value(
                 Ok(raw) => raw,
                 Err(err) => return CommandResult::error(err),
             };
-            let ceiling = u64::from(codewhale_config::MAX_SPAWN_DEPTH_CEILING);
+            let ceiling = u64::from(ghosty_config::MAX_SPAWN_DEPTH_CEILING);
             let clamped = raw.min(ceiling);
             if clamped != raw {
                 note = Some(format!("clamped from {raw} to {clamped}"));
@@ -3014,9 +3014,9 @@ pub fn lsp_command(app: &mut App, arg: Option<&str>) -> CommandResult {
 /// (#5193) and the provider's durable secret-store slot is deleted too, so
 /// the cleared key cannot reappear through the read chain (#5196). Exact
 /// named custom providers clear only their own table (cae14f4b9). For a
-/// full every-provider wipe, use `codewhale auth logout`; for single-provider
-/// key replacement, use `codewhale auth clear --provider <id>` and
-/// `codewhale auth set --provider <id>`.
+/// full every-provider wipe, use `ghosty auth logout`; for single-provider
+/// key replacement, use `ghosty auth clear --provider <id>` and
+/// `ghosty auth set --provider <id>`.
 pub fn logout(app: &mut App) -> CommandResult {
     let provider_name = app.provider_identity_for_persistence().to_string();
     match clear_active_provider_api_key(&provider_name) {
@@ -3029,7 +3029,7 @@ pub fn logout(app: &mut App) -> CommandResult {
             CommandResult::with_message_and_action(
                 format!(
                     "Cleared API key for {provider_name}. \
-                     Use `codewhale auth clear --provider <id>` to clear a different provider."
+                     Use `ghosty auth clear --provider <id>` to clear a different provider."
                 ),
                 AppAction::OpenProviderPicker,
             )
@@ -3063,15 +3063,15 @@ mod tests {
             let vars = vec![
                 EnvVarGuard::set("HOME", home),
                 EnvVarGuard::set("USERPROFILE", home),
-                EnvVarGuard::remove("CODEWHALE_CONFIG_PATH"),
+                EnvVarGuard::remove("GHOSTY_CONFIG_PATH"),
                 EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", config_path),
-                EnvVarGuard::remove("CODEWHALE_ALLOW_SHELL"),
+                EnvVarGuard::remove("GHOSTY_ALLOW_SHELL"),
                 EnvVarGuard::remove("DEEPSEEK_ALLOW_SHELL"),
                 EnvVarGuard::remove("DEEPSEEK_APPROVAL_POLICY"),
                 EnvVarGuard::remove("NO_ANIMATIONS"),
                 EnvVarGuard::remove("TERM_PROGRAM"),
                 EnvVarGuard::remove("PTYXIS_VERSION"),
-                EnvVarGuard::remove("CODEWHALE_SEARCH_PROVIDER"),
+                EnvVarGuard::remove("GHOSTY_SEARCH_PROVIDER"),
                 EnvVarGuard::remove("DEEPSEEK_SEARCH_PROVIDER"),
             ];
             Self {
@@ -3617,7 +3617,7 @@ mod tests {
     #[test]
     fn config_default_model_cannot_replace_a_non_deepseek_live_route() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-provider-scoped-default-model-test-{}",
+            "ghosty-tui-provider-scoped-default-model-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -3660,7 +3660,7 @@ mod tests {
     #[test]
     fn config_reasoning_effort_uses_codex_provider_labels() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-codex-effort-config-test-{}",
+            "ghosty-tui-codex-effort-config-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -3691,7 +3691,7 @@ mod tests {
     #[test]
     fn config_fancy_animations_keeps_ghostty_full_motion() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-ghostty-fancy-config-test-{}",
+            "ghosty-tui-ghostty-fancy-config-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -3758,7 +3758,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-default-mode-test-{}-{}",
+            "ghosty-tui-default-mode-test-{}-{}",
             std::process::id(),
             nanos
         ));
@@ -3783,7 +3783,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-cost-currency-test-{}-{}",
+            "ghosty-tui-cost-currency-test-{}-{}",
             std::process::id(),
             nanos
         ));
@@ -3919,7 +3919,7 @@ mod tests {
     #[test]
     fn config_command_cannot_bypass_project_shell_constraint() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-project-shell-control-test-{}",
+            "ghosty-project-shell-control-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(temp_root.join(".deepseek")).unwrap();
@@ -3927,10 +3927,10 @@ mod tests {
         let root_config = temp_root.join(".deepseek").join("config.toml");
         fs::write(&root_config, "# user root\n").unwrap();
         let workspace = temp_root.join("workspace");
-        fs::create_dir_all(workspace.join(codewhale_config::CODEWHALE_APP_DIR)).unwrap();
+        fs::create_dir_all(workspace.join(ghosty_config::GHOSTY_APP_DIR)).unwrap();
         fs::write(
             workspace
-                .join(codewhale_config::CODEWHALE_APP_DIR)
+                .join(ghosty_config::GHOSTY_APP_DIR)
                 .join("config.toml"),
             "allow_shell = false\n",
         )
@@ -3960,7 +3960,7 @@ mod tests {
     #[test]
     fn config_command_cannot_bypass_environment_shell_constraint() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-env-shell-control-test-{}",
+            "ghosty-env-shell-control-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(temp_root.join(".deepseek")).unwrap();
@@ -3990,7 +3990,7 @@ mod tests {
     #[test]
     fn config_command_cannot_bypass_project_or_environment_approval() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-external-approval-control-test-{}",
+            "ghosty-external-approval-control-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(temp_root.join(".deepseek")).unwrap();
@@ -3998,10 +3998,10 @@ mod tests {
         let root_config = temp_root.join(".deepseek").join("config.toml");
         fs::write(&root_config, "# root\n").unwrap();
         let workspace = temp_root.join("workspace");
-        fs::create_dir_all(workspace.join(codewhale_config::CODEWHALE_APP_DIR)).unwrap();
+        fs::create_dir_all(workspace.join(ghosty_config::GHOSTY_APP_DIR)).unwrap();
         fs::write(
             workspace
-                .join(codewhale_config::CODEWHALE_APP_DIR)
+                .join(ghosty_config::GHOSTY_APP_DIR)
                 .join("config.toml"),
             "approval_policy = \"never\"\n",
         )
@@ -4051,7 +4051,7 @@ mod tests {
     #[test]
     fn config_command_subagents_off_save_persists_and_updates_runtime() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-subagents-off-save-test-{}",
+            "ghosty-subagents-off-save-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -4079,7 +4079,7 @@ mod tests {
     #[test]
     fn config_command_subagents_depth_save_clamps_to_ceiling() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-subagents-depth-save-test-{}",
+            "ghosty-subagents-depth-save-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -4090,7 +4090,7 @@ mod tests {
         let result = config_command(&mut app, Some("subagents max_depth 99 --save"));
         let msg = result.message.unwrap();
         let saved = fs::read_to_string(&config_path).unwrap();
-        let ceiling = codewhale_config::MAX_SPAWN_DEPTH_CEILING;
+        let ceiling = ghosty_config::MAX_SPAWN_DEPTH_CEILING;
 
         assert!(!result.is_error);
         assert!(msg.contains(&format!("subagents.max_depth = {ceiling}")));
@@ -4109,7 +4109,7 @@ mod tests {
     #[test]
     fn config_command_subagents_status_shows_raw_and_resolved_values() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-subagents-status-test-{}",
+            "ghosty-subagents-status-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -4155,10 +4155,8 @@ heartbeat_timeout_secs = 1
 
     #[test]
     fn config_command_audit_lists_editability_and_current_values() {
-        let temp_root = env::temp_dir().join(format!(
-            "codewhale-config-audit-test-{}",
-            std::process::id()
-        ));
+        let temp_root =
+            env::temp_dir().join(format!("ghosty-config-audit-test-{}", std::process::id()));
         fs::create_dir_all(&temp_root).unwrap();
         // Hermetic: the audit reads Settings::load(); without this guard the
         // developer's real saved permission_posture leaks in and the
@@ -4239,7 +4237,7 @@ completion_sound = "off"
     #[test]
     fn config_command_shows_search_prompt_suggestion_and_notifications() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-config-discovery-show-{}",
+            "ghosty-config-discovery-show-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -4401,7 +4399,7 @@ completion_sound = "bell"
     #[test]
     fn config_context_window_query_shows_override_and_effective_source() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-context-window-query-test-{}",
+            "ghosty-context-window-query-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -4421,7 +4419,7 @@ context_window = 262144
         app.config_path = Some(config_path);
         app.api_provider = ApiProvider::Moonshot;
         app.model = "kimi-k3".to_string();
-        app.active_route_limits = Some(codewhale_config::route::RouteLimits {
+        app.active_route_limits = Some(ghosty_config::route::RouteLimits {
             context_tokens: Some(262_144),
             ..Default::default()
         });
@@ -4559,7 +4557,7 @@ context_window = 262144
             .unwrap()
             .as_nanos();
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-stream-timeout-test-{}-{}",
+            "ghosty-tui-stream-timeout-test-{}-{}",
             std::process::id(),
             nanos
         ));
@@ -4641,7 +4639,7 @@ context_window = 262144
     #[test]
     fn config_command_provider_url_token_plan_persists_provider_base_url() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-provider-url-save-app-path-test-{}",
+            "ghosty-provider-url-save-app-path-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -4689,7 +4687,7 @@ context_window = 262144
             .unwrap()
             .as_nanos();
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-theme-command-test-{}-{}",
+            "ghosty-tui-theme-command-test-{}-{}",
             std::process::id(),
             nanos
         ));
@@ -4708,7 +4706,7 @@ context_window = 262144
     #[test]
     fn explicit_default_background_override_survives_theme_preview() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-background-override-test-{}-{}",
+            "ghosty-tui-background-override-test-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -4742,7 +4740,7 @@ context_window = 262144
     #[test]
     fn session_only_background_override_survives_theme_preview() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-session-background-test-{}-{}",
+            "ghosty-tui-session-background-test-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -4797,7 +4795,7 @@ context_window = 262144
             .unwrap()
             .as_nanos();
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-theme-save-test-{}-{}",
+            "ghosty-tui-theme-save-test-{}-{}",
             std::process::id(),
             nanos
         ));
@@ -4819,7 +4817,7 @@ context_window = 262144
     #[test]
     fn unrelated_save_does_not_persist_no_animations_runtime_overlay() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-no-animations-save-test-{}-{}",
+            "ghosty-no-animations-save-test-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -4864,7 +4862,7 @@ context_window = 262144
     #[test]
     fn preset_save_does_not_persist_runtime_environment_overlays() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-preset-env-overlay-test-{}-{}",
+            "ghosty-preset-env-overlay-test-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -4927,7 +4925,7 @@ context_window = 262144
     #[test]
     fn config_approval_mode_save_persists_top_level_policy() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-approval-policy-save-test-{}",
+            "ghosty-approval-policy-save-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(&temp_root).unwrap();
@@ -4974,7 +4972,7 @@ context_window = 262144
     #[test]
     fn config_approval_policy_can_return_to_saved_tui_permission_default() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-approval-policy-tui-default-test-{}",
+            "ghosty-approval-policy-tui-default-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(temp_root.join(".deepseek")).unwrap();
@@ -5007,7 +5005,7 @@ context_window = 262144
     #[test]
     fn config_approval_policy_full_access_adopts_tui_posture_and_releases_root_override() {
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-approval-policy-full-access-test-{}",
+            "ghosty-approval-policy-full-access-test-{}",
             std::process::id()
         ));
         fs::create_dir_all(temp_root.join(".deepseek")).unwrap();
@@ -5156,7 +5154,7 @@ context_window = 262144
             .unwrap()
             .as_nanos();
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-tui-logout-test-{}-{}",
+            "ghosty-tui-logout-test-{}-{}",
             std::process::id(),
             nanos
         ));
@@ -5186,7 +5184,7 @@ context_window = 262144
             .unwrap()
             .as_nanos();
         let temp_root = env::temp_dir().join(format!(
-            "codewhale-custom-logout-test-{}-{}",
+            "ghosty-custom-logout-test-{}-{}",
             std::process::id(),
             nanos
         ));

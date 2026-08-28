@@ -1,7 +1,7 @@
 //! OpenAI Codex / ChatGPT OAuth credential loading.
 //!
 //! External Codex CLI credentials are read only after an exact, provider-scoped
-//! consent grant. Codewhale never refreshes or rewrites that external file.
+//! consent grant. Ghosty never refreshes or rewrites that external file.
 //!
 //! # Security
 //!
@@ -14,7 +14,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result, bail};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use codewhale_config::ExternalCredentialReadGrant;
+use ghosty_config::ExternalCredentialReadGrant;
 use serde::Deserialize;
 
 /// OAuth token payload stored in `auth.json`.
@@ -55,7 +55,7 @@ pub fn auth_file_path() -> PathBuf {
     if let Ok(path) = std::env::var("OPENAI_CODEX_AUTH_FILE") {
         let p = PathBuf::from(&path);
         if !p.as_os_str().is_empty() {
-            return codewhale_config::resolve_external_credential_path(&p).unwrap_or(p);
+            return ghosty_config::resolve_external_credential_path(&p).unwrap_or(p);
         }
     }
     let codex_home = std::env::var("CODEX_HOME")
@@ -66,7 +66,7 @@ pub fn auth_file_path() -> PathBuf {
                 .join(".codex")
         });
     let path = codex_home.join("auth.json");
-    codewhale_config::resolve_external_credential_path(&path).unwrap_or(path)
+    ghosty_config::resolve_external_credential_path(&path).unwrap_or(path)
 }
 
 /// Try to extract `exp` (epoch seconds) from a JWT without verifying
@@ -94,7 +94,7 @@ fn token_is_expired(access_token: &str) -> bool {
             now + 60 >= exp
         }
         // If we can't prove freshness, fail closed. External credentials are
-        // never refreshed by Codewhale.
+        // never refreshed by Ghosty.
         None => true,
     }
 }
@@ -110,7 +110,7 @@ fn load_credentials(grant: &ExternalCredentialReadGrant) -> Result<Option<CodexC
     let auth: CodexAuthFile = serde_json::from_str(&contents).map_err(|_| {
         anyhow::anyhow!(
             "Codex credential file {} is not valid credential JSON",
-            codewhale_config::quote_os_path(grant.path())
+            ghosty_config::quote_os_path(grant.path())
         )
     })?;
     let tokens = match auth.tokens {
@@ -166,7 +166,7 @@ pub fn get_credentials(grant: &ExternalCredentialReadGrant) -> Result<CodexCrede
 
     bail!(
         "Codex access token in {} is expired. Read-only consent never refreshes or rewrites another CLI's credentials. Run `codex login`, or provide OPENAI_CODEX_ACCESS_TOKEN for this process.",
-        codewhale_config::quote_os_path(grant.path())
+        ghosty_config::quote_os_path(grant.path())
     )
 }
 
@@ -175,11 +175,11 @@ pub fn missing_auth_message() -> String {
     format!(
         "OpenAI Codex OAuth credentials are unavailable.\n\
          \n\
-         Codewhale checks OPENAI_CODEX_ACCESS_TOKEN and CODEX_ACCESS_TOKEN automatically.\n\
+         Ghosty checks OPENAI_CODEX_ACCESS_TOKEN and CODEX_ACCESS_TOKEN automatically.\n\
          Access to the Codex CLI file is disabled by default. After `codex login`, grant read-only access explicitly with:\n\
-         `codewhale auth external-consent --provider openai-codex --mode read-only --path {}`\n\
+         `ghosty auth external-consent --provider openai-codex --mode read-only --path {}`\n\
          Read-only access never refreshes or rewrites the Codex CLI file.",
-        codewhale_config::quote_os_path(&auth_file_path())
+        ghosty_config::quote_os_path(&auth_file_path())
     )
 }
 
@@ -201,14 +201,14 @@ mod tests {
     use super::*;
 
     fn grant(path: &std::path::Path) -> ExternalCredentialReadGrant {
-        codewhale_config::ExternalCredentialConsentToml::read_only(
-            codewhale_config::ProviderKind::OpenaiCodex,
-            codewhale_config::ExternalCredentialSource::CodexCli,
+        ghosty_config::ExternalCredentialConsentToml::read_only(
+            ghosty_config::ProviderKind::OpenaiCodex,
+            ghosty_config::ExternalCredentialSource::CodexCli,
             path.to_path_buf(),
         )
         .read_grant(
-            codewhale_config::ProviderKind::OpenaiCodex,
-            codewhale_config::ExternalCredentialSource::CodexCli,
+            ghosty_config::ProviderKind::OpenaiCodex,
+            ghosty_config::ExternalCredentialSource::CodexCli,
             path,
         )
         .expect("test read grant")
@@ -348,7 +348,7 @@ mod tests {
         assert!(message.contains("OpenAI Codex OAuth credentials are unavailable"));
         assert!(message.contains("OPENAI_CODEX_ACCESS_TOKEN"));
         assert!(message.contains("CODEX_ACCESS_TOKEN"));
-        assert!(message.contains(&codewhale_config::quote_os_path(&auth_file_path())));
+        assert!(message.contains(&ghosty_config::quote_os_path(&auth_file_path())));
         assert!(message.contains("codex login"));
         assert!(message.contains("external-consent"));
         assert!(message.contains("disabled by default"));

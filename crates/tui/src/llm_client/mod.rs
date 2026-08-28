@@ -90,7 +90,7 @@ pub trait LlmClient: Send + Sync {
     }
 
     /// Non-secret limits frozen with the resolved route, when available.
-    fn route_limits(&self) -> Option<codewhale_config::route::RouteLimits> {
+    fn route_limits(&self) -> Option<ghosty_config::route::RouteLimits> {
         None
     }
 

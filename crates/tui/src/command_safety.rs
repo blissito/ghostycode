@@ -515,7 +515,7 @@ fn readonly_tokens_admitted(trimmed: &str) -> bool {
         .iter()
         .map(String::as_str)
         .collect::<Vec<_>>();
-    if is_codewhale_readonly_invocation(&command_refs) {
+    if is_ghosty_readonly_invocation(&command_refs) {
         return true;
     }
     let canonical = classify_command(&command_refs);
@@ -1020,11 +1020,11 @@ fn github_command_targets_unsupported_host(tokens: &[&str]) -> bool {
     false
 }
 
-fn is_codewhale_readonly_invocation(tokens: &[&str]) -> bool {
+fn is_ghosty_readonly_invocation(tokens: &[&str]) -> bool {
     let Some((command, args)) = tokens.split_first() else {
         return false;
     };
-    if !matches!(*command, "codewhale" | "codew") {
+    if !matches!(*command, "ghosty" | "ghosty-tui") {
         return false;
     }
     matches!(args, ["--version"] | ["-V"] | ["-v"] | ["--help"] | ["-h"])
@@ -1771,7 +1771,7 @@ fn is_safe_command(command: &str) -> bool {
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
-        if is_codewhale_readonly_invocation(&refs) {
+        if is_ghosty_readonly_invocation(&refs) {
             return true;
         }
     }
@@ -2088,7 +2088,7 @@ mod tests {
             "find crates -type f -name *.toml | head",
             "sed -n 10p Cargo.toml",
             "sed -n 1,5p README.md",
-            "npm view codewhale version",
+            "npm view ghosty version",
             "sort deps.txt | uniq -c",
             "ls -la *.md",
         ] {
@@ -2220,7 +2220,7 @@ mod tests {
             "find . -name *.rs",
             "git -C crates/tui log",
             "sed -n 10p Cargo.toml",
-            "npm view codewhale version",
+            "npm view ghosty version",
         ] {
             assert!(
                 !is_parallel_readonly_command(command),
@@ -2235,11 +2235,8 @@ mod tests {
         assert_eq!(analyze_command("ls -la").level, SafetyLevel::Safe);
         assert_eq!(analyze_command("cat file.txt").level, SafetyLevel::Safe);
         assert_eq!(analyze_command("git status").level, SafetyLevel::Safe);
-        assert_eq!(
-            analyze_command("codewhale --version").level,
-            SafetyLevel::Safe
-        );
-        assert_eq!(analyze_command("codewhale --help").level, SafetyLevel::Safe);
+        assert_eq!(analyze_command("ghosty --version").level, SafetyLevel::Safe);
+        assert_eq!(analyze_command("ghosty --help").level, SafetyLevel::Safe);
         assert_eq!(
             analyze_command("grep pattern file").level,
             SafetyLevel::Safe
@@ -2512,7 +2509,7 @@ mod tests {
             SafetyLevel::Dangerous
         );
         assert_ne!(
-            analyze_command("cargo run --bin codewhale -- eval").level,
+            analyze_command("cargo run --bin ghosty -- eval").level,
             SafetyLevel::Dangerous
         );
     }
@@ -2536,7 +2533,7 @@ mod tests {
         // contain the substring "eval" but are not eval invocations.
         // Guard against the naive `command.contains("eval")` regression
         // — these should stay safe / workspace-safe, never Dangerous.
-        let evaluate_safe = analyze_command("cargo run --bin codewhale -- eval").level;
+        let evaluate_safe = analyze_command("cargo run --bin ghosty -- eval").level;
         assert_ne!(
             evaluate_safe,
             SafetyLevel::Dangerous,

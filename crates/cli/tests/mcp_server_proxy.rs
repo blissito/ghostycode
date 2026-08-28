@@ -1,4 +1,4 @@
-//! `codewhale mcp-server` must proxy to the user's configured servers.
+//! `ghosty mcp-server` must proxy to the user's configured servers.
 //!
 //! Regression coverage for #4727, where every configured server was wired to
 //! an in-process stub: `command`/`args`/`env` were never executed, `health`
@@ -56,25 +56,25 @@ struct Fixture {
 
 impl Fixture {
     /// Seal HOME before anything writes config. The suite has written to the
-    /// real `~/.codewhale/config.toml` before (#4831); this test must never be
+    /// real `~/.ghosty/config.toml` before (#4831); this test must never be
     /// the one that does it again.
     fn new() -> Self {
         let root = TempDir::new().expect("fixture root");
         let home = root.path().join("sealed-home");
-        fs::create_dir_all(home.join(".codewhale")).expect("sealed config dir");
-        fs::write(home.join(".codewhale").join("config.toml"), "").expect("seed config");
+        fs::create_dir_all(home.join(".ghosty")).expect("sealed config dir");
+        fs::write(home.join(".ghosty").join("config.toml"), "").expect("seed config");
         Self { _root: root, home }
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new(codewhale_binary());
+        let mut command = Command::new(ghosty_binary());
         command
             .env_clear()
             .env("PATH", std::env::var("PATH").unwrap_or_default())
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
-            .env("CODEWHALE_HOME", self.home.join(".codewhale"))
-            .env("CODEWHALE_SECRET_BACKEND", "file");
+            .env("GHOSTY_HOME", self.home.join(".ghosty"))
+            .env("GHOSTY_SECRET_BACKEND", "file");
         command
     }
 
@@ -99,7 +99,7 @@ impl Fixture {
         );
     }
 
-    /// Drive `codewhale mcp-server` over stdio with `requests`, returning the
+    /// Drive `ghosty mcp-server` over stdio with `requests`, returning the
     /// parsed JSON-RPC responses plus stderr.
     fn run_mcp_server(&self, requests: &[Value]) -> (Vec<Value>, String) {
         let mut child = self
@@ -109,7 +109,7 @@ impl Fixture {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect("spawn codewhale mcp-server");
+            .expect("spawn ghosty mcp-server");
 
         {
             let stdin = child.stdin.as_mut().expect("mcp-server stdin");
@@ -128,11 +128,11 @@ impl Fixture {
     }
 }
 
-fn codewhale_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale") {
+fn ghosty_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty") {
         return PathBuf::from(path);
     }
     let mut path = std::env::current_exe().expect("current test executable path");
@@ -140,7 +140,7 @@ fn codewhale_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.join("codewhale")
+    path.join("ghosty")
 }
 
 fn response_for(responses: &[Value], id: i64) -> &Value {
@@ -201,7 +201,7 @@ fn mcp_server_enforces_jsonrpc_identity_and_initialize_lifecycle() {
     assert_eq!(response_for(&responses, 5)["error"]["code"], -32600);
     assert_eq!(response_for(&responses, 6)["result"]["tools"], json!([]));
     assert!(
-        stderr.contains("codewhale mcp-server: stdio server exited"),
+        stderr.contains("ghosty mcp-server: stdio server exited"),
         "missing clean shutdown receipt:\n{stderr}"
     );
 }
@@ -251,7 +251,7 @@ fn mcp_server_proxies_tools_and_resources_from_the_configured_child_process() {
     assert_eq!(initialize["result"]["protocolVersion"], "2024-11-05");
     assert_eq!(
         initialize["result"]["serverInfo"]["name"],
-        "codewhale-mcp-server"
+        "ghosty-mcp-server"
     );
     assert!(initialize["result"]["capabilities"]["tools"].is_object());
     assert!(initialize["result"]["capabilities"]["resources"].is_object());
@@ -309,8 +309,8 @@ fn mcp_server_proxies_tools_and_resources_from_the_configured_child_process() {
         "stale identity in stderr:\n{stderr}"
     );
     assert!(
-        stderr.contains("codewhale mcp-server: stdio server exited"),
-        "missing Codewhale shutdown identity in stderr:\n{stderr}"
+        stderr.contains("ghosty mcp-server: stdio server exited"),
+        "missing Ghosty shutdown identity in stderr:\n{stderr}"
     );
 }
 
@@ -320,7 +320,7 @@ fn mcp_server_reports_a_server_it_could_not_spawn() {
     fixture.configure_servers(json!([{
         "config": {
             "name": "broken",
-            "command": "codewhale-nonexistent-mcp-server-binary",
+            "command": "ghosty-nonexistent-mcp-server-binary",
         }
     }]));
 

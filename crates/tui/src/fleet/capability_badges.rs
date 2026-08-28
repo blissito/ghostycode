@@ -13,8 +13,8 @@
 //! and a completely unknown model resolves to `None` so callers can skip the
 //! line entirely instead of blocking selection or fabricating capabilities.
 
-use codewhale_config::catalog::CatalogSource;
-use codewhale_config::route::{CapabilityState, RouteCapabilities, RouteLimits};
+use ghosty_config::catalog::CatalogSource;
+use ghosty_config::route::{CapabilityState, RouteCapabilities, RouteLimits};
 
 use crate::config::ApiProvider;
 use crate::model_registry::{self, ModelMetadata};
@@ -151,8 +151,8 @@ fn push_state_badge(badges: &mut Vec<String>, state: CapabilityState, name: &str
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codewhale_config::catalog::CatalogOffering;
-    use codewhale_config::models_dev::{ModelsDevLimit, ModelsDevModalities};
+    use ghosty_config::catalog::CatalogOffering;
+    use ghosty_config::models_dev::{ModelsDevLimit, ModelsDevModalities};
 
     #[test]
     fn known_catalog_model_resolves_provider_aware_badges() {

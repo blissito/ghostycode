@@ -2,7 +2,7 @@
 //!
 //! Automations are local-first recurring jobs that enqueue standard background
 //! tasks. This module stores automation definitions and run history under
-//! `~/.codewhale/automations` (or `DEEPSEEK_AUTOMATIONS_DIR` override).
+//! `~/.ghosty/automations` (or `DEEPSEEK_AUTOMATIONS_DIR` override).
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -65,7 +65,7 @@ pub enum DelayedTriggerStatus {
 
 /// A durable one-shot delayed continuation record.
 ///
-/// Stored under `~/.codewhale/automations/triggers/{trigger_id}.json`.
+/// Stored under `~/.ghosty/automations/triggers/{trigger_id}.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DelayedTriggerRecord {
     #[serde(default = "default_trigger_schema_version")]
@@ -1884,7 +1884,7 @@ fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
 
 pub fn default_automations_dir() -> PathBuf {
     // Most-specific override: an explicit automations dir.
-    for var in ["CODEWHALE_AUTOMATIONS_DIR", "DEEPSEEK_AUTOMATIONS_DIR"] {
+    for var in ["GHOSTY_AUTOMATIONS_DIR", "DEEPSEEK_AUTOMATIONS_DIR"] {
         if let Ok(path) = std::env::var(var) {
             let trimmed = path.trim();
             if !trimmed.is_empty() {
@@ -1892,24 +1892,24 @@ pub fn default_automations_dir() -> PathBuf {
             }
         }
     }
-    // $CODEWHALE_HOME is a hard override of the base data directory
+    // $GHOSTY_HOME is a hard override of the base data directory
     // (docs/CONFIGURATION.md): when SET, automations live under it and we do
     // NOT fall back to the legacy ~/.deepseek path — silent fallback would
     // defeat the isolation the override promises. Check the env var directly
-    // (not codewhale_home()'s Ok/Err, which succeeds for the default home too).
-    if let Some(home) = codewhale_paths::codewhale_home_override().ok().flatten() {
+    // (not ghosty_home()'s Ok/Err, which succeeds for the default home too).
+    if let Some(home) = ghosty_paths::ghosty_home_override().ok().flatten() {
         return home.join("automations");
     }
-    codewhale_paths::user_home()
+    ghosty_paths::user_home()
         .map(|home| {
-            let primary = home.join(".codewhale").join("automations");
+            let primary = home.join(".ghosty").join("automations");
             let legacy = home.join(".deepseek").join("automations");
             if primary.exists() || !legacy.exists() {
                 return primary;
             }
             legacy
         })
-        .unwrap_or_else(|| PathBuf::from(".codewhale").join("automations"))
+        .unwrap_or_else(|| PathBuf::from(".ghosty").join("automations"))
 }
 
 pub type SharedAutomationManager = Arc<Mutex<AutomationManager>>;
@@ -3063,38 +3063,38 @@ mod tests {
     }
 
     #[test]
-    fn default_automations_dir_honors_codewhale_home_as_hard_override() {
+    fn default_automations_dir_honors_ghosty_home_as_hard_override() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::TempDir::new().unwrap();
         // SAFETY: serialised by lock_test_env.
         unsafe {
             std::env::remove_var("DEEPSEEK_AUTOMATIONS_DIR");
-            std::env::set_var("CODEWHALE_HOME", tmp.path());
+            std::env::set_var("GHOSTY_HOME", tmp.path());
         }
-        // $CODEWHALE_HOME IS the home dir (no ".codewhale" appended); the
+        // $GHOSTY_HOME IS the home dir (no ".ghosty" appended); the
         // legacy ~/.deepseek fallback is bypassed entirely.
         assert_eq!(default_automations_dir(), tmp.path().join("automations"));
         // SAFETY: cleanup under the same lock.
         unsafe {
-            std::env::remove_var("CODEWHALE_HOME");
+            std::env::remove_var("GHOSTY_HOME");
         }
     }
 
     #[test]
-    fn default_automations_dir_prefers_deepseek_automations_dir_over_codewhale_home() {
+    fn default_automations_dir_prefers_deepseek_automations_dir_over_ghosty_home() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::TempDir::new().unwrap();
         // SAFETY: serialised by lock_test_env.
         unsafe {
             std::env::set_var("DEEPSEEK_AUTOMATIONS_DIR", tmp.path());
-            std::env::set_var("CODEWHALE_HOME", "/should/not/be/used");
+            std::env::set_var("GHOSTY_HOME", "/should/not/be/used");
         }
         // The most-specific override wins over the base-data-dir override.
         assert_eq!(default_automations_dir(), tmp.path());
         // SAFETY: cleanup under the same lock.
         unsafe {
             std::env::remove_var("DEEPSEEK_AUTOMATIONS_DIR");
-            std::env::remove_var("CODEWHALE_HOME");
+            std::env::remove_var("GHOSTY_HOME");
         }
     }
 }

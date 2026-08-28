@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Models.dev catalog refresh / snapshot automation for CodeWhale (#4117).
+"""Models.dev catalog refresh / snapshot automation for GhostyCode (#4117).
 
 Fetches the public Models.dev combined catalog, validates offline bundled seed
 shape, and supports OpenRouter public-listing inspection. The automation is
@@ -20,8 +20,8 @@ Usage examples:
       --sort newest --limit 100
 
 Environment:
-  CODEWHALE_MODELS_DEV_URL   Override Models.dev catalog URL
-  CODEWHALE_MODELS_DEV_PATH  Read catalog JSON from a local file instead of network
+  GHOSTY_MODELS_DEV_URL   Override Models.dev catalog URL
+  GHOSTY_MODELS_DEV_PATH  Read catalog JSON from a local file instead of network
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from typing import Any
 
 DEFAULT_MODELS_DEV_URL = "https://models.dev/catalog.json"
 DEFAULT_OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
-USER_AGENT = "CodeWhale-catalog-automation/0.9.0 (+https://github.com/Hmbown/CodeWhale)"
+USER_AGENT = "GhostyCode-catalog-automation/0.9.0 (+https://github.com/blissito/ghostycode)"
 FETCH_TIMEOUT_SECS = 60
 
 
@@ -88,18 +88,18 @@ def load_models_dev_catalog() -> tuple[dict[str, Any], str, bool]:
 
     Network fetches are dry-run only for write paths: CodeQL treats remote JSON
     as potentially sensitive, and Models.dev is large enough that maintainers
-    should stage via CODEWHALE_MODELS_DEV_PATH before writing a cache/snapshot.
+    should stage via GHOSTY_MODELS_DEV_PATH before writing a cache/snapshot.
     """
-    path_override = os.environ.get("CODEWHALE_MODELS_DEV_PATH", "").strip()
+    path_override = os.environ.get("GHOSTY_MODELS_DEV_PATH", "").strip()
     if path_override:
         p = Path(path_override)
         if not p.is_file():
-            die(f"CODEWHALE_MODELS_DEV_PATH not a file: {p}")
+            die(f"GHOSTY_MODELS_DEV_PATH not a file: {p}")
         raw = p.read_bytes()
         data = load_json_bytes(raw, str(p))
         return ensure_models_dev_shape(data, str(p)), f"file:{p}", True
 
-    url = os.environ.get("CODEWHALE_MODELS_DEV_URL", DEFAULT_MODELS_DEV_URL).strip()
+    url = os.environ.get("GHOSTY_MODELS_DEV_URL", DEFAULT_MODELS_DEV_URL).strip()
     if not url:
         url = DEFAULT_MODELS_DEV_URL
     raw = fetch_url(url)
@@ -110,7 +110,7 @@ def load_models_dev_catalog() -> tuple[dict[str, Any], str, bool]:
 def ensure_models_dev_shape(data: Any, source: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         die(f"{source}: expected object root")
-    # Allow optional _meta (CodeWhale offline seed) and require models+providers
+    # Allow optional _meta (GhostyCode offline seed) and require models+providers
     # when present so we never write a partial secret leak document.
     models = data.get("models")
     providers = data.get("providers")
@@ -233,7 +233,7 @@ def cmd_refresh(args: argparse.Namespace) -> None:
         die(
             "disk writes are intentionally unsupported (secret-free by design); "
             "use `snapshot --check PATH` to validate a local Models.dev-shaped file, "
-            "or `curl`/`CODEWHALE_MODELS_DEV_PATH` for staging"
+            "or `curl`/`GHOSTY_MODELS_DEV_PATH` for staging"
         )
     print("dry-run complete (no secrets; no disk write)")
 
@@ -302,7 +302,7 @@ def refresh_openrouter(args: argparse.Namespace) -> None:
         # OpenRouter listing is always network-sourced; avoid disk write of remote JSON.
         die(
             "OpenRouter refresh is dry-run only (no disk write). "
-            "Use Models.dev with CODEWHALE_MODELS_DEV_PATH for offline snapshots."
+            "Use Models.dev with GHOSTY_MODELS_DEV_PATH for offline snapshots."
         )
     else:
         print("dry-run complete (OpenRouter writes disabled; use Models.dev local path for caches)")
@@ -361,7 +361,7 @@ def cmd_drift(args: argparse.Namespace) -> None:
     """Diff the bundled seed against upstream for limit.output / limit.context.
 
     Dry-run only: no API key, no disk write. Network access (unless
-    CODEWHALE_MODELS_DEV_PATH points at a local file) reads the public
+    GHOSTY_MODELS_DEV_PATH points at a local file) reads the public
     Models.dev catalog. Wiring this as a CI gate is a maintainer decision and
     is deliberately not activated here.
     """

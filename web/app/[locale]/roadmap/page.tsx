@@ -11,10 +11,10 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return buildPageMetadata({
     path: "/roadmap",
     locale,
-    title: isZh ? "路线图 · Codewhale" : "Roadmap · Codewhale",
+    title: isZh ? "路线图 · Ghosty" : "Roadmap · Ghosty",
     description: isZh
-      ? "Codewhale 已完成、进行中、考虑中和明确不在范围内的工作。"
-      : "Current Codewhale work grouped by shipped, underway, considered, and deliberately out-of-scope directions.",
+      ? "Ghosty 已完成、进行中、考虑中和明确不在范围内的工作。"
+      : "Current Ghosty work grouped by shipped, underway, considered, and deliberately out-of-scope directions.",
   });
 }
 
@@ -27,14 +27,14 @@ const tracksEn = [
       { title: "RLM batched processing", note: "Persistent sandboxed Python REPL with 1–16 cheap parallel children for long-input analysis" },
       { title: "Three operating modes", note: "Plan (read-only authority), Work (execution), and Operate (Fleet/Workflow orchestration) keep one primitive vocabulary; Ask / Auto-Review / Full Access remains an orthogonal approval posture." },
       { title: "OS command sandbox", note: "Seatbelt on macOS when available; opt-in bubblewrap on Linux when installed. Windows currently reports no OS sandbox." },
-      { title: "Durable sessions + tasks", note: "Save, resume, rollback; background task queue with replayable timelines under ~/.codewhale/tasks/" },
-      { title: "Bidirectional MCP", note: "Consume tools from external servers; expose as server via `codewhale mcp`; ~/.codewhale/mcp.json" },
-      { title: "Skills + unified slash palette", note: "~/.codewhale/skills/ auto-loading; /help, /mode, /status, /config, /trust, /feedback" },
+      { title: "Durable sessions + tasks", note: "Save, resume, rollback; background task queue with replayable timelines under ~/.ghosty/tasks/" },
+      { title: "Bidirectional MCP", note: "Consume tools from external servers; expose as server via `ghosty mcp`; ~/.ghosty/mcp.json" },
+      { title: "Skills + unified slash palette", note: "~/.ghosty/skills/ auto-loading; /help, /mode, /status, /config, /trust, /feedback" },
       { title: "OpenRouter provider", note: "OpenRouter integration with 300+ models across dozens of providers" },
       { title: "OpenAI-compatible & local runtimes", note: "Generic `openai` route for any OpenAI-compatible gateway, plus vLLM, SGLang, and Ollama against your own localhost endpoints — no key required" },
       { title: "Multi-provider support", note: "Hot-swap between providers (DeepSeek, OpenAI, Anthropic, OpenRouter) per session" },
-      { title: "Local web client", note: "Implemented in the v0.9.1 source candidate: `codewhale web` is a loopback-only browser client over the Runtime API behind a one-time bootstrap session boundary; approvals and user input recover across page reloads (#4423)" },
-      { title: "Anonymous usage counting", note: "On by default with a clear first-run disclosure and a durable opt-out. It posts aggregate session, feature, and error counts and closed enums to the first-party endpoint https://telemetry.codewhale.net/v1/telemetry, a Cloudflare Worker whose full source is in the repo under telemetry-ingest/. Its storage has no IP, country, or geo column — that is structural, not a setting — nothing is logged, and Cloudflare's retention is a fixed three months. Set telemetry_endpoint = \"\" to contact nobody: batches then go to $CODEWHALE_HOME/telemetry/dryrun.jsonl and you can read exactly what would have been sent. Never conversations, code, prompts, files, file/repo/branch names, model content, credentials, or a per-turn/per-tool timeline; the full schema is docs/TELEMETRY.md. Turn it off with `codewhale config set telemetry false` or CODEWHALE_TELEMETRY=0." },
+      { title: "Local web client", note: "Implemented in the v0.9.1 source candidate: `ghosty web` is a loopback-only browser client over the Runtime API behind a one-time bootstrap session boundary; approvals and user input recover across page reloads (#4423)" },
+      { title: "Anonymous usage counting", note: "On by default with a clear first-run disclosure and a durable opt-out. It posts aggregate session, feature, and error counts and closed enums to the first-party endpoint https://telemetry.ghosty.net/v1/telemetry, a Cloudflare Worker whose full source is in the repo under telemetry-ingest/. Its storage has no IP, country, or geo column — that is structural, not a setting — nothing is logged, and Cloudflare's retention is a fixed three months. Set telemetry_endpoint = \"\" to contact nobody: batches then go to $GHOSTY_HOME/telemetry/dryrun.jsonl and you can read exactly what would have been sent. Never conversations, code, prompts, files, file/repo/branch names, model content, credentials, or a per-turn/per-tool timeline; the full schema is docs/TELEMETRY.md. Turn it off with `ghosty config set telemetry false` or GHOSTY_TELEMETRY=0." },
     ],
   },
   {
@@ -61,8 +61,8 @@ const tracksEn = [
     title: "Ruled out",
     items: [
       { title: "Silent or content-level telemetry", note: "Anonymous usage counting is on by default, but the first-run disclosure and every opt-out are mandatory. What stays ruled out: conversations, code, prompts, files, model content, credentials, per-turn or per-tool timelines, collection hidden from the user, and any third-party ad or analytics SDK in the runtime binary. A selected hosted provider still receives the context required for its model turn; loopback routes can keep inference local." },
-      { title: "Mandatory hosted relay for local sessions", note: "The local runtime and bring-your-own-provider routes continue to work without sending sessions through a Codewhale service" },
-      { title: "Required account for the local runtime", note: "Installing and running Codewhale locally requires no account" },
+      { title: "Mandatory hosted relay for local sessions", note: "The local runtime and bring-your-own-provider routes continue to work without sending sessions through a Ghosty service" },
+      { title: "Required account for the local runtime", note: "Installing and running Ghosty locally requires no account" },
       { title: "Sponsored model promotion", note: "Model picker stays neutral — no paid placement" },
       { title: "Public share links for local sessions", note: "The retired share-link direction (#471/#481) is not coming back; any future sharing design starts fresh." },
     ],
@@ -86,14 +86,14 @@ const tracksZh = [
       { title: "RLM 批量处理", note: "持久沙箱 Python REPL，支持 1–16 路廉价并行子调用，处理长文本分析" },
       { title: "三种运行模式", note: "Plan（只读权限）、Work（执行）与 Operate（Fleet / Workflow 编排）使用同一套基础工具名称；Ask、Auto-Review 与 Full Access 审批姿态独立设置。" },
       { title: "OS 命令沙箱", note: "macOS 在可用时使用 Seatbelt；Linux 在安装后可显式启用 bubblewrap。Windows 当前报告无 OS 沙箱。" },
-      { title: "持久化会话 + 后台任务", note: "保存、恢复、回滚；后台任务队列，可回放时间线，位于 ~/.codewhale/tasks/" },
-      { title: "双向 MCP 协议", note: "消费外部服务器工具；通过 `codewhale mcp` 暴露为服务器；~/.codewhale/mcp.json" },
-      { title: "技能 + 统一命令面板", note: "~/.codewhale/skills/ 自动加载；/help、/mode、/status、/config、/trust、/feedback" },
+      { title: "持久化会话 + 后台任务", note: "保存、恢复、回滚；后台任务队列，可回放时间线，位于 ~/.ghosty/tasks/" },
+      { title: "双向 MCP 协议", note: "消费外部服务器工具；通过 `ghosty mcp` 暴露为服务器；~/.ghosty/mcp.json" },
+      { title: "技能 + 统一命令面板", note: "~/.ghosty/skills/ 自动加载；/help、/mode、/status、/config、/trust、/feedback" },
       { title: "OpenRouter 提供商", note: "原生集成 OpenRouter，支持 300+ 模型，覆盖数十个提供商" },
       { title: "OpenAI 兼容与本地运行时", note: "通用 `openai` 路由可接入任意 OpenAI 兼容网关；vLLM、SGLang、Ollama 直连本地端点，无需密钥" },
       { title: "多提供商支持", note: "按会话动态切换提供商（DeepSeek、OpenAI、Anthropic、OpenRouter）" },
-      { title: "本地 Web 客户端", note: "v0.9.1 源码候选版已实现：`codewhale web` 是基于 Runtime API 与一次性引导会话边界的回环地址浏览器客户端；审批与用户输入可在页面刷新后恢复（#4423）" },
-      { title: "匿名使用计数", note: "默认开启，首次运行会清楚说明，并提供永久关闭选项。它只会把聚合的会话、功能与错误计数以及封闭枚举 POST 到第一方端点 https://telemetry.codewhale.net/v1/telemetry；完整源码在 telemetry-ingest/。存储中没有 IP、国家或地理位置列，不写日志，Cloudflare 的保留期固定为三个月。设置 telemetry_endpoint = \"\" 可完全不联系服务器，批次只写入 $CODEWHALE_HOME/telemetry/dryrun.jsonl。永远不收集对话、代码、prompt、文件、文件/仓库/分支名、模型内容、凭据，也不发送逐轮或逐工具时间线；完整 schema 见 docs/TELEMETRY.md。用 `codewhale config set telemetry false` 或 CODEWHALE_TELEMETRY=0 关闭。" },
+      { title: "本地 Web 客户端", note: "v0.9.1 源码候选版已实现：`ghosty web` 是基于 Runtime API 与一次性引导会话边界的回环地址浏览器客户端；审批与用户输入可在页面刷新后恢复（#4423）" },
+      { title: "匿名使用计数", note: "默认开启，首次运行会清楚说明，并提供永久关闭选项。它只会把聚合的会话、功能与错误计数以及封闭枚举 POST 到第一方端点 https://telemetry.ghosty.net/v1/telemetry；完整源码在 telemetry-ingest/。存储中没有 IP、国家或地理位置列，不写日志，Cloudflare 的保留期固定为三个月。设置 telemetry_endpoint = \"\" 可完全不联系服务器，批次只写入 $GHOSTY_HOME/telemetry/dryrun.jsonl。永远不收集对话、代码、prompt、文件、文件/仓库/分支名、模型内容、凭据，也不发送逐轮或逐工具时间线；完整 schema 见 docs/TELEMETRY.md。用 `ghosty config set telemetry false` 或 GHOSTY_TELEMETRY=0 关闭。" },
     ],
   },
   {
@@ -120,8 +120,8 @@ const tracksZh = [
     title: "暂不考虑",
     items: [
       { title: "静默或内容级遥测", note: "匿名使用计数默认开启，但首次运行说明与所有关闭选项都是强制的。仍被排除在外的是：对话、代码、prompt、文件、模型内容、凭据、逐轮或逐工具时间线、对用户隐藏的收集，以及运行时二进制中的任何第三方广告或分析 SDK。选用托管 provider 时仍会发送本轮所需上下文，回环地址路由可让推理保持本地。" },
-      { title: "本地会话强制经过托管中继", note: "本地 Runtime 与自带提供商路由继续工作，无需把会话发送到 Codewhale 服务" },
-      { title: "本地 Runtime 强制注册账户", note: "本地安装和运行 Codewhale 不需要账户" },
+      { title: "本地会话强制经过托管中继", note: "本地 Runtime 与自带提供商路由继续工作，无需把会话发送到 Ghosty 服务" },
+      { title: "本地 Runtime 强制注册账户", note: "本地安装和运行 Ghosty 不需要账户" },
       { title: "赞助商模型推广", note: "模型选择器保持中立——无付费推荐位" },
       { title: "本地会话的公开分享链接", note: "已停用的分享链接方向（#471/#481）不会恢复；未来的分享设计将重新开始。" },
     ],
@@ -137,7 +137,7 @@ const tracksZh = [
 ];
 
 const roadmapText = (text: string) =>
-  text.replace(/^>\s*/, "").replaceAll("**", "").replaceAll("CodeWhale", "Codewhale");
+  text.replace(/^>\s*/, "").replaceAll("**", "").replaceAll("GhostyCode", "Ghosty");
 
 export default async function RoadmapPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -186,9 +186,9 @@ export default async function RoadmapPage({ params }: { params: Promise<{ locale
         contributeTitle: "路线图决策公开进行。",
         contributeBody: "Bug 和范围明确的功能请求请使用 issues；尚在形成中的想法可以先在 Discussions 讨论；已有具体实现时，欢迎发送带测试或文档的 pull request。来自不同语言、平台和提供商的验证结果都能帮助维护者判断优先级。",
         links: [
-          { title: "Issues", detail: "报告问题，或提出范围明确的工作。", href: "https://github.com/Hmbown/CodeWhale/issues" },
-          { title: "Discussions", detail: "在开始实现前讨论尚未成熟的想法。", href: "https://github.com/Hmbown/CodeWhale/discussions/new?category=ideas" },
-          { title: "Pull requests", detail: "审查现有改动，或发送一个范围清楚的补丁。", href: "https://github.com/Hmbown/CodeWhale/pulls" },
+          { title: "Issues", detail: "报告问题，或提出范围明确的工作。", href: "https://github.com/blissito/ghostycode/issues" },
+          { title: "Discussions", detail: "在开始实现前讨论尚未成熟的想法。", href: "https://github.com/blissito/ghostycode/discussions/new?category=ideas" },
+          { title: "Pull requests", detail: "审查现有改动，或发送一个范围清楚的补丁。", href: "https://github.com/blissito/ghostycode/pulls" },
         ],
       }
     : {
@@ -203,9 +203,9 @@ export default async function RoadmapPage({ params }: { params: Promise<{ locale
         contributeTitle: "Keep roadmap decisions in the open.",
         contributeBody: "Use issues for bugs and well-scoped feature requests, Discussions for ideas that need shaping, and pull requests for concrete changes with tests or documentation. Verification across languages, platforms, and providers helps maintainers judge priority.",
         links: [
-          { title: "Issues", detail: "Report a problem or propose scoped work.", href: "https://github.com/Hmbown/CodeWhale/issues" },
-          { title: "Discussions", detail: "Explore an early idea before implementation.", href: "https://github.com/Hmbown/CodeWhale/discussions/new?category=ideas" },
-          { title: "Pull requests", detail: "Review existing work or send a focused change.", href: "https://github.com/Hmbown/CodeWhale/pulls" },
+          { title: "Issues", detail: "Report a problem or propose scoped work.", href: "https://github.com/blissito/ghostycode/issues" },
+          { title: "Discussions", detail: "Explore an early idea before implementation.", href: "https://github.com/blissito/ghostycode/discussions/new?category=ideas" },
+          { title: "Pull requests", detail: "Review existing work or send a focused change.", href: "https://github.com/blissito/ghostycode/pulls" },
         ],
       };
 
@@ -227,7 +227,7 @@ export default async function RoadmapPage({ params }: { params: Promise<{ locale
               <span>{copy.sectionLabel}</span>
               <h2>{copy.sectionTitle}</h2>
             </div>
-            <Link href="https://github.com/Hmbown/CodeWhale/issues">{copy.browseIssues}</Link>
+            <Link href="https://github.com/blissito/ghostycode/issues">{copy.browseIssues}</Link>
           </div>
           {tracks.map((track) => (
             <section key={track.title} className="portal-section-grid py-10 hairline-t">

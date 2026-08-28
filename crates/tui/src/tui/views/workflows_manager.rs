@@ -354,7 +354,7 @@ impl WorkflowsManagerView {
         }
         lines.push(Line::from(Span::styled(
             if detail.has_result {
-                "  Result retained in the run journal (.codewhale/workflow-runs.jsonl)."
+                "  Result retained in the run journal (.ghosty/workflow-runs.jsonl)."
             } else {
                 "  No result recorded yet."
             },

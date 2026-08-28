@@ -51,7 +51,7 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            You are reviewing a pull request against CodeWhale, a Rust workspace
+            You are reviewing a pull request against GhostyCode, a Rust workspace
             (an agentic coding TUI/runtime). The PR branch is already checked out
             in the current working directory.
 

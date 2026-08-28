@@ -2,7 +2,7 @@
 
 use ratatui::style::Color;
 
-// Codewhale Whale palette. Semantic colors own state, never decoration alone.
+// Ghosty Whale palette. Semantic colors own state, never decoration alone.
 pub const WHALE_BG_RGB: (u8, u8, u8) = (3, 7, 13); // #03070D Deep field
 pub const WHALE_CHROME_RGB: (u8, u8, u8) = (8, 17, 28); // #08111C Ink / chrome
 pub const WHALE_PANEL_RGB: (u8, u8, u8) = (14, 23, 41); // #0E1729 Panel surface

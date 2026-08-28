@@ -321,31 +321,31 @@ mod tests {
             command.env_remove(key);
         }
         command
-            .env("CODEWHALE_PROXY_PROBE_CHILD", "1")
+            .env("GHOSTY_PROXY_PROBE_CHILD", "1")
             .env(
-                "CODEWHALE_PROXY_PROBE_GUARDED",
+                "GHOSTY_PROXY_PROBE_GUARDED",
                 if guarded { "1" } else { "0" },
             )
-            .env("CODEWHALE_PROXY_PROBE_TARGET_PORT", target_port.to_string());
+            .env("GHOSTY_PROXY_PROBE_TARGET_PORT", target_port.to_string());
         match kind {
             AmbientProxyKind::Http => {
                 let proxy = format!("http://127.0.0.1:{proxy_port}");
                 command
-                    .env("CODEWHALE_PROXY_PROBE_SCHEME", "http")
+                    .env("GHOSTY_PROXY_PROBE_SCHEME", "http")
                     .env("HTTP_PROXY", &proxy)
                     .env("http_proxy", proxy);
             }
             AmbientProxyKind::HttpsConnect => {
                 let proxy = format!("http://127.0.0.1:{proxy_port}");
                 command
-                    .env("CODEWHALE_PROXY_PROBE_SCHEME", "https")
+                    .env("GHOSTY_PROXY_PROBE_SCHEME", "https")
                     .env("HTTPS_PROXY", &proxy)
                     .env("https_proxy", proxy);
             }
             AmbientProxyKind::SocksRemoteDns => {
                 let proxy = format!("socks5h://127.0.0.1:{proxy_port}");
                 command
-                    .env("CODEWHALE_PROXY_PROBE_SCHEME", "http")
+                    .env("GHOSTY_PROXY_PROBE_SCHEME", "http")
                     .env("ALL_PROXY", &proxy)
                     .env("all_proxy", proxy);
             }
@@ -368,12 +368,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "subprocess helper for ambient proxy regression test"]
     async fn guarded_transport_proxy_probe_child() {
-        if std::env::var_os("CODEWHALE_PROXY_PROBE_CHILD").is_none() {
+        if std::env::var_os("GHOSTY_PROXY_PROBE_CHILD").is_none() {
             return;
         }
-        let guarded = std::env::var("CODEWHALE_PROXY_PROBE_GUARDED").as_deref() == Ok("1");
-        let scheme = std::env::var("CODEWHALE_PROXY_PROBE_SCHEME").expect("probe scheme");
-        let target_port = std::env::var("CODEWHALE_PROXY_PROBE_TARGET_PORT")
+        let guarded = std::env::var("GHOSTY_PROXY_PROBE_GUARDED").as_deref() == Ok("1");
+        let scheme = std::env::var("GHOSTY_PROXY_PROBE_SCHEME").expect("probe scheme");
+        let target_port = std::env::var("GHOSTY_PROXY_PROBE_TARGET_PORT")
             .expect("probe target port")
             .parse::<u16>()
             .expect("numeric target port");
@@ -566,9 +566,8 @@ mod tests {
 
     #[tokio::test]
     async fn unresolved_hostname_is_rejected_before_request() {
-        let url =
-            reqwest::Url::parse("https://codewhale-unresolvable-fetch-target.invalid/resource")
-                .unwrap();
+        let url = reqwest::Url::parse("https://ghosty-unresolvable-fetch-target.invalid/resource")
+            .unwrap();
         let err = validate_fetch_target(&url, &ctx(), "fetch_url")
             .await
             .expect_err("unresolved host must fail preflight");
@@ -732,7 +731,7 @@ mod tests {
     #[tokio::test]
     async fn web_run_tool_label_is_used_in_dns_error() {
         let url =
-            reqwest::Url::parse("https://codewhale-unresolvable-web-run-target.invalid/resource")
+            reqwest::Url::parse("https://ghosty-unresolvable-web-run-target.invalid/resource")
                 .unwrap();
         let err = validate_fetch_target(&url, &ctx(), "web_run")
             .await

@@ -232,7 +232,7 @@ pub fn project_tree(root: &Path, max_depth: usize, follow_symlinks: bool) -> Str
 /// Permission policy for atomic writes.
 ///
 /// - [`AtomicWritePermissions::Private`]: keep tempfile's owner-only defaults
-///   (used for CodeWhale internal persistence such as session/history/trust).
+///   (used for GhostyCode internal persistence such as session/history/trust).
 /// - [`AtomicWritePermissions::Workspace`]: match ordinary workspace file
 ///   semantics — new files request mode `0666` (kernel applies umask); existing
 ///   files retain ordinary `rwx` bits (not setuid/setgid/sticky).
@@ -352,9 +352,8 @@ fn write_atomic_with_permissions(
 
     // Reclaim our own strays before adding another (see the function docs).
     // Private permission policy is also used for user-chosen destinations
-    // such as `/save <path>`; only sweep Codewhale-owned state/config dirs.
-    if permission_policy == AtomicWritePermissions::Private && is_codewhale_owned_state_dir(parent)
-    {
+    // such as `/save <path>`; only sweep Ghosty-owned state/config dirs.
+    if permission_policy == AtomicWritePermissions::Private && is_ghosty_owned_state_dir(parent) {
         sweep_stale_atomic_write_temps(parent);
     }
 
@@ -409,15 +408,15 @@ fn write_atomic_with_permissions(
     Ok(())
 }
 
-/// True when `dir` is under `$CODEWHALE_HOME` / `~/.codewhale`, or the ambient
+/// True when `dir` is under `$GHOSTY_HOME` / `~/.ghosty`, or the ambient
 /// `~/.deepseek` legacy root when that root is still in play.
-fn is_codewhale_owned_state_dir(dir: &Path) -> bool {
+fn is_ghosty_owned_state_dir(dir: &Path) -> bool {
     if dir.as_os_str().is_empty() {
         return false;
     }
-    let primary = codewhale_paths::codewhale_home().ok().flatten();
-    let legacy = (!codewhale_paths::codewhale_home_is_explicit())
-        .then(codewhale_paths::legacy_deepseek_home)
+    let primary = ghosty_paths::ghosty_home().ok().flatten();
+    let legacy = (!ghosty_paths::ghosty_home_is_explicit())
+        .then(ghosty_paths::legacy_deepseek_home)
         .flatten();
     [primary, legacy]
         .into_iter()
@@ -431,19 +430,19 @@ fn is_codewhale_owned_state_dir(dir: &Path) -> bool {
 /// ordinary exit — leaves nothing behind. A `SIGKILL` between `tempfile_in`
 /// and `persist` cannot run a destructor, so the partial file survives, and
 /// nothing ever collected it: five such strays (46 KB each, mode 0600) were
-/// sitting in a real `~/.codewhale/` from a single day three weeks earlier.
+/// sitting in a real `~/.ghosty/` from a single day three weeks earlier.
 /// They accumulate silently in the user's config directory forever.
 ///
 /// Deliberately conservative, because this deletes files under `$HOME`:
 ///
-/// - **Product directories only** — parent must be under `$CODEWHALE_HOME`
-///   (or `~/.codewhale`) or the ambient `~/.deepseek` legacy root. User-chosen
+/// - **Product directories only** — parent must be under `$GHOSTY_HOME`
+///   (or `~/.ghosty`) or the ambient `~/.deepseek` legacy root. User-chosen
 ///   destinations such as `/save <path>` keep the private permission policy
 ///   but are not swept (enforced at the call site).
 /// - **Exact shape only** — `tempfile`'s default naming is the literal prefix
 ///   `.tmp` followed by exactly six alphanumerics and nothing else. A user file
 ///   called `.tmp`, `.tmpfile`, or `.tmp-backup` does not match.
-/// - **Older than an hour** — so a concurrent write by another Codewhale
+/// - **Older than an hour** — so a concurrent write by another Ghosty
 ///   process is never raced. Same threshold and reasoning as
 ///   `shell_dispatcher::sweep_stale_temp_ps1`.
 /// - **Best effort** — every failure is ignored; this must never turn a
@@ -580,7 +579,7 @@ fn browser_open_command(url: &str) -> Result<Command> {
 ///
 /// Wraps the future in `AssertUnwindSafe` + `catch_unwind`. On panic:
 /// 1. Logs the panic with the task name and caller location via `tracing::error!`.
-/// 2. Writes a crash dump to `~/.codewhale/crashes/<timestamp>-<name>.log`.
+/// 2. Writes a crash dump to `~/.ghosty/crashes/<timestamp>-<name>.log`.
 ///
 /// The returned `JoinHandle` resolves to `()` — the panic is caught and
 /// handled internally so the parent process stays alive.
@@ -624,7 +623,7 @@ pub fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
 
 /// Record a panic that was caught at a call site (via `catch_unwind`) rather
 /// than by a task supervisor. Logs it on the `panic` target and writes a
-/// best-effort crash dump to `~/.codewhale/crashes/`, so diagnostics land in
+/// best-effort crash dump to `~/.ghosty/crashes/`, so diagnostics land in
 /// the same place `spawn_supervised` writes them even when the caller recovers
 /// and keeps running.
 #[track_caller]
@@ -637,8 +636,8 @@ pub fn record_caught_panic(name: &'static str, message: &str) {
     // read: a slicing panic embeds the entire string being sliced. The exit
     // class is left alone — the caller recovered, so this process is not
     // ending here. A no-op unless this process was armed.
-    codewhale_telemetry::record_blocking(codewhale_telemetry::Event::Panic {
-        site: codewhale_telemetry::reduce_panic_site(
+    ghosty_telemetry::record_blocking(ghosty_telemetry::Event::Panic {
+        site: ghosty_telemetry::reduce_panic_site(
             location.file(),
             location.line(),
             location.column(),
@@ -646,7 +645,7 @@ pub fn record_caught_panic(name: &'static str, message: &str) {
     });
 }
 
-/// Write a panic dump file to `~/.codewhale/crashes/`.
+/// Write a panic dump file to `~/.ghosty/crashes/`.
 ///
 /// Creates the directory if needed and writes a timestamped log
 /// with the task name, caller location, and panic message.
@@ -659,8 +658,8 @@ fn write_panic_dump(
     let home = crate::config::effective_home_dir().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::NotFound, "home directory not found")
     })?;
-    // Prefer .codewhale, fall back to .deepseek
-    let crash_dir = home.join(".codewhale").join("crashes");
+    // Prefer .ghosty, fall back to .deepseek
+    let crash_dir = home.join(".ghosty").join("crashes");
     if !crash_dir.exists() {
         // Try legacy path for reading, but prefer new for writing
         let _ = std::fs::create_dir_all(&crash_dir);
@@ -697,7 +696,7 @@ fn write_panic_dump_to(
 /// CPU-bound or blocking-I/O task must run off the async runtime and its
 /// completion is *not* awaited — for example a post-turn disk snapshot or a
 /// file-tree build polled later via a shared data structure.  If the closure
-/// panics, a crash dump is written to `~/.codewhale/crashes/` and the panic
+/// panics, a crash dump is written to `~/.ghosty/crashes/` and the panic
 /// is logged at ERROR level rather than being silently swallowed.
 #[track_caller]
 pub fn spawn_blocking_supervised<F>(name: &'static str, f: F) -> tokio::task::JoinHandle<()>
@@ -1291,8 +1290,8 @@ mod atomic_write_tests {
         assert!(real_file.exists());
     }
 
-    /// Seal HOME / CODEWHALE_HOME to `tmp` so sweep policy is deterministic
-    /// and never inspects the developer's real `~/.codewhale`.
+    /// Seal HOME / GHOSTY_HOME to `tmp` so sweep policy is deterministic
+    /// and never inspects the developer's real `~/.ghosty`.
     fn seal_product_home(
         tmp: &std::path::Path,
     ) -> (std::path::PathBuf, Vec<crate::test_support::EnvVarGuard>) {
@@ -1303,8 +1302,8 @@ mod atomic_write_tests {
         let guards = vec![
             EnvVarGuard::set("HOME", tmp),
             EnvVarGuard::set("USERPROFILE", tmp),
-            EnvVarGuard::set("CODEWHALE_HOME", &product),
-            EnvVarGuard::remove("CODEWHALE_CONFIG_PATH"),
+            EnvVarGuard::set("GHOSTY_HOME", &product),
+            EnvVarGuard::remove("GHOSTY_CONFIG_PATH"),
             EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH"),
             EnvVarGuard::remove("DEEPSEEK_HOME"),
         ];
@@ -1318,8 +1317,8 @@ mod atomic_write_tests {
         let (product, _guards) = seal_product_home(tmp.path());
 
         assert!(
-            super::is_codewhale_owned_state_dir(&product),
-            "sealed CODEWHALE_HOME must count as a product dir"
+            super::is_ghosty_owned_state_dir(&product),
+            "sealed GHOSTY_HOME must count as a product dir"
         );
 
         let stray = product.join(".tmpCCCCCC");
@@ -1342,7 +1341,7 @@ mod atomic_write_tests {
         std::fs::create_dir_all(&user_dir).expect("create user dest");
 
         assert!(
-            !super::is_codewhale_owned_state_dir(&user_dir),
+            !super::is_ghosty_owned_state_dir(&user_dir),
             "user-chosen dest must not count as a product dir: {}",
             user_dir.display()
         );
@@ -1362,36 +1361,34 @@ mod atomic_write_tests {
     }
 
     #[test]
-    fn atomic_write_product_dir_detection_matches_codewhale_home_not_siblings() {
+    fn atomic_write_product_dir_detection_matches_ghosty_home_not_siblings() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::TempDir::new().expect("tempdir");
         let (product, explicit_guards) = seal_product_home(tmp.path());
         let sibling = tmp.path().join("product-home-extra");
         std::fs::create_dir_all(&sibling).expect("create sibling");
 
-        assert!(super::is_codewhale_owned_state_dir(&product));
-        assert!(super::is_codewhale_owned_state_dir(
-            &product.join("sessions")
-        ));
-        assert!(!super::is_codewhale_owned_state_dir(&sibling));
-        assert!(!super::is_codewhale_owned_state_dir(tmp.path()));
+        assert!(super::is_ghosty_owned_state_dir(&product));
+        assert!(super::is_ghosty_owned_state_dir(&product.join("sessions")));
+        assert!(!super::is_ghosty_owned_state_dir(&sibling));
+        assert!(!super::is_ghosty_owned_state_dir(tmp.path()));
         drop(explicit_guards);
 
         use crate::test_support::EnvVarGuard;
         let _home = EnvVarGuard::set("HOME", tmp.path());
         let _userprofile = EnvVarGuard::set("USERPROFILE", tmp.path());
-        let _no_explicit = EnvVarGuard::remove("CODEWHALE_HOME");
-        let _no_config = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _no_explicit = EnvVarGuard::remove("GHOSTY_HOME");
+        let _no_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _no_legacy_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
         let _no_legacy_home = EnvVarGuard::remove("DEEPSEEK_HOME");
 
-        assert!(super::is_codewhale_owned_state_dir(
-            &tmp.path().join(".codewhale").join("sessions")
+        assert!(super::is_ghosty_owned_state_dir(
+            &tmp.path().join(".ghosty").join("sessions")
         ));
-        assert!(super::is_codewhale_owned_state_dir(
+        assert!(super::is_ghosty_owned_state_dir(
             &tmp.path().join(".deepseek")
         ));
-        assert!(!super::is_codewhale_owned_state_dir(
+        assert!(!super::is_ghosty_owned_state_dir(
             &tmp.path().join("user-chosen")
         ));
     }

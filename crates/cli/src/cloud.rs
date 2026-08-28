@@ -1,8 +1,8 @@
-//! Codewhale account and BYOK credential commands.
+//! Ghosty account and BYOK credential commands.
 //!
 //! This module is deliberately separate from the provider-facing `login` and
 //! `auth` commands in `lib.rs`: those configure the local runtime, while this
-//! surface signs a CLI profile into the managed Codewhale account and stores
+//! surface signs a CLI profile into the managed Ghosty account and stores
 //! provider keys in that account's remote vault.
 
 use std::io::{self, IsTerminal, Read, Write};
@@ -12,10 +12,10 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Subcommand, ValueEnum};
-use codewhale_config::device_code::DevicePollOutcome;
-use codewhale_config::{ConfigStore, ProviderKind};
-use codewhale_secrets::Secrets;
-use codewhale_secrets::account::{
+use ghosty_config::device_code::DevicePollOutcome;
+use ghosty_config::{ConfigStore, ProviderKind};
+use ghosty_secrets::Secrets;
+use ghosty_secrets::account::{
     ACCOUNT_API_BASE_ENV as CLOUD_API_BASE_ENV, AccountAuthBundle as AuthBundle,
     AccountSessionStore, AccountUser as CloudUser, DEFAULT_ACCOUNT_API_BASE as DEFAULT_API_BASE,
     StoredAccountAuth as StoredCloudAuth, normalize_account_profile as normalized_profile,
@@ -34,7 +34,7 @@ pub(crate) const MAX_LOGIN_TIMEOUT_SECONDS: u64 = 3600;
 
 #[derive(Debug, Args)]
 pub(crate) struct CloudArgs {
-    /// Codewhale account API origin. HTTPS is required except for loopback HTTP.
+    /// Ghosty account API origin. HTTPS is required except for loopback HTTP.
     #[arg(long, global = true, value_name = "URL")]
     api_base: Option<String>,
     #[command(subcommand)]
@@ -49,7 +49,7 @@ enum CloudCommand {
     Status,
     /// Remove this profile's local account session and revoke it when reachable.
     Logout,
-    /// Manage provider API keys stored in the signed-in Codewhale account.
+    /// Manage provider API keys stored in the signed-in Ghosty account.
     Keys(CloudKeysArgs),
     /// Inspect the account document; local settings import is not available yet.
     Pull(CloudPullArgs),
@@ -95,9 +95,9 @@ struct CloudKeysArgs {
 enum CloudKeysCommand {
     /// List configured providers without revealing key values.
     List,
-    /// Save a provider key to the signed-in Codewhale account.
+    /// Save a provider key to the signed-in Ghosty account.
     Set(CloudKeySetArgs),
-    /// Remove a provider key from the signed-in Codewhale account.
+    /// Remove a provider key from the signed-in Ghosty account.
     Remove { provider: CloudProvider },
 }
 
@@ -111,7 +111,7 @@ struct CloudKeySetArgs {
     #[arg(long, conflicts_with = "api_key_stdin")]
     from_local: bool,
     /// Non-secret label shown beside the stored credential.
-    #[arg(long, default_value = "Codewhale CLI")]
+    #[arg(long, default_value = "Ghosty CLI")]
     label: String,
 }
 
@@ -122,6 +122,7 @@ enum CloudProvider {
     Openai,
     Openrouter,
     Zai,
+    Easybits,
     Moonshot,
     Xai,
     #[value(name = "xiaomi", alias = "xiaomi-mimo")]
@@ -129,12 +130,13 @@ enum CloudProvider {
 }
 
 impl CloudProvider {
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 9] = [
         Self::Deepseek,
         Self::Anthropic,
         Self::Openai,
         Self::Openrouter,
         Self::Zai,
+        Self::Easybits,
         Self::Moonshot,
         Self::Xai,
         Self::Xiaomi,
@@ -147,6 +149,7 @@ impl CloudProvider {
             Self::Openai => "openai",
             Self::Openrouter => "openrouter",
             Self::Zai => "zai",
+            Self::Easybits => "easybits",
             Self::Moonshot => "moonshot",
             Self::Xai => "xai",
             Self::Xiaomi => "xiaomi",
@@ -160,6 +163,7 @@ impl CloudProvider {
             Self::Openai => ProviderKind::Openai,
             Self::Openrouter => ProviderKind::Openrouter,
             Self::Zai => ProviderKind::Zai,
+            Self::Easybits => ProviderKind::Easybits,
             Self::Moonshot => ProviderKind::Moonshot,
             Self::Xai => ProviderKind::Xai,
             Self::Xiaomi => ProviderKind::XiaomiMimo,
@@ -205,9 +209,9 @@ impl ReqwestTransport {
             // redirect target. The control-plane origin is an explicit trust
             // boundary, so redirects are treated as ordinary non-2xx replies.
             .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("codewhale/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("ghosty/", env!("CARGO_PKG_VERSION")))
             .build()
-            .context("failed to initialize the Codewhale account HTTP client")?;
+            .context("failed to initialize the Ghosty account HTTP client")?;
         Ok(Self { base, client })
     }
 }
@@ -217,7 +221,7 @@ impl CloudTransport for ReqwestTransport {
         let url = self
             .base
             .join(request.path.trim_start_matches('/'))
-            .context("failed to construct the Codewhale account request URL")?;
+            .context("failed to construct the Ghosty account request URL")?;
         let method = match request.method {
             HttpMethod::Get => reqwest::Method::GET,
             HttpMethod::Post => reqwest::Method::POST,
@@ -238,15 +242,15 @@ impl CloudTransport for ReqwestTransport {
         }
         let response = builder
             .send()
-            .context("could not reach the Codewhale service")?;
+            .context("could not reach the Ghosty service")?;
         let status = response.status().as_u16();
         let mut body = Vec::new();
         response
             .take(MAX_RESPONSE_BYTES + 1)
             .read_to_end(&mut body)
-            .context("failed to read the Codewhale service response")?;
+            .context("failed to read the Ghosty service response")?;
         if body.len() as u64 > MAX_RESPONSE_BYTES {
-            bail!("The Codewhale service returned an unexpectedly large response");
+            bail!("The Ghosty service returned an unexpectedly large response");
         }
         Ok(CloudResponse { status, body })
     }
@@ -318,12 +322,12 @@ impl<'a, T: CloudTransport> CloudClient<'a, T> {
         validate_device_code(&device.device_code)?;
         let server_lifetime =
             Duration::from_secs(device.expires_in.clamp(1, MAX_LOGIN_TIMEOUT_SECONDS));
-        // The Codewhale account service answers HTTP 202 while the code is
+        // The Ghosty account service answers HTTP 202 while the code is
         // still pending, so the first response is already meaningful: poll
         // immediately and sleep afterwards. It has no slow_down.
-        let bundle = codewhale_config::device_code::DeviceCodePoll::new(
+        let bundle = ghosty_config::device_code::DeviceCodePoll::new(
             timeout.min(server_lifetime),
-            "Codewhale account login timed out; run `codewhale account login` to try again",
+            "Ghosty account login timed out; run `ghosty account login` to try again",
         )
         .interval_seconds(Some(device.interval))
         .max_interval_seconds(10)
@@ -352,27 +356,27 @@ impl<'a, T: CloudTransport> CloudClient<'a, T> {
 
     fn load_auth(&self) -> Result<Option<StoredCloudAuth>> {
         self.account_store.load().context(
-            "the local Codewhale account session is unreadable; run `codewhale account logout` and sign in again",
+            "the local Ghosty account session is unreadable; run `ghosty account logout` and sign in again",
         )
     }
 
     fn save_auth(&self, bundle: AuthBundle) -> Result<()> {
         self.account_store
             .save(bundle)
-            .context("failed to save the Codewhale account session in the local secret store")
+            .context("failed to save the Ghosty account session in the local secret store")
     }
 
     fn clear_auth(&self) -> Result<()> {
         self.account_store
             .clear()
-            .context("failed to remove the local Codewhale account session")
+            .context("failed to remove the local Ghosty account session")
     }
 
     fn me(&self) -> Result<CloudUser> {
         let response = self.execute_authenticated(HttpMethod::Get, "/api/me", None)?;
         let me: MeResponse = expect_json(response, &[200])?;
         if me.user.id.trim().is_empty() {
-            bail!("The Codewhale service returned an account without an ID");
+            bail!("The Ghosty service returned an account without an ID");
         }
         if let Some(mut stored) = self.load_auth()? {
             stored.bundle.user = Some(me.user.clone());
@@ -436,7 +440,7 @@ impl<'a, T: CloudTransport> CloudClient<'a, T> {
         body: Option<Vec<u8>>,
     ) -> Result<CloudResponse> {
         let Some(mut stored) = self.load_auth()? else {
-            bail!("Not signed in. Run `codewhale account login` first");
+            bail!("Not signed in. Run `ghosty account login` first");
         };
         let first = self.transport.execute(CloudRequest {
             method,
@@ -460,7 +464,7 @@ impl<'a, T: CloudTransport> CloudClient<'a, T> {
             200 => {}
             401 => {
                 self.clear_auth()?;
-                bail!("The Codewhale account session expired. Run `codewhale account login` again");
+                bail!("The Ghosty account session expired. Run `ghosty account login` again");
             }
             _ => return Err(response_error(&refresh)),
         }
@@ -479,7 +483,7 @@ impl<'a, T: CloudTransport> CloudClient<'a, T> {
         })?;
         if retried.status == 401 {
             self.clear_auth()?;
-            bail!("The Codewhale account session expired. Run `codewhale account login` again");
+            bail!("The Ghosty account session expired. Run `ghosty account login` again");
         }
         Ok(retried)
     }
@@ -527,12 +531,12 @@ pub(crate) fn run(args: CloudArgs, profile: Option<&str>, config: &ConfigStore) 
 fn cloud_session_secrets() -> Result<Secrets> {
     // Codex-style storage contract: the OS credential manager is preferred
     // but never required; without one, sessions live in the private 0600
-    // Codewhale secrets file. Only an unresolvable store path fails here.
+    // Ghosty secrets file. Only an unresolvable store path fails here.
     secure_account_session_secrets().map_err(|err| anyhow!(err.to_string()))
 }
 
-/// `codewhale login` is a convenience entry to the account device flow — the
-/// same path as `codewhale account login`, without re-spelling the subcommand.
+/// `ghosty login` is a convenience entry to the account device flow — the
+/// same path as `ghosty account login`, without re-spelling the subcommand.
 pub(crate) fn run_account_login(
     no_open: bool,
     timeout_seconds: u64,
@@ -555,7 +559,7 @@ pub(crate) fn run_account_login(
 pub(crate) fn reject_inline_api_key(api_key: Option<&str>) -> Result<()> {
     if api_key.is_some() {
         bail!(
-            "`codewhale account` does not accept the global `--api-key` flag because command-line values can leak through shell history. Use `account keys set <provider>` for a hidden prompt, `--api-key-stdin`, or `--from-local`"
+            "`ghosty account` does not accept the global `--api-key` flag because command-line values can leak through shell history. Use `account keys set <provider>` for a hidden prompt, `--api-key-stdin`, or `--from-local`"
         );
     }
     Ok(())
@@ -592,7 +596,7 @@ fn run_with<T: CloudTransport, W: Write>(
                 &device.user_code,
                 true,
             )?;
-            writeln!(out, "Codewhale account sign-in")?;
+            writeln!(out, "Ghosty account sign-in")?;
             writeln!(out, "Code: {}", device.user_code)?;
             writeln!(out, "Open: {verification_uri}")?;
             writeln!(out, "Profile: {}", printable(profile))?;
@@ -605,24 +609,24 @@ fn run_with<T: CloudTransport, W: Write>(
             let _ =
                 client.poll_device(&device, Duration::from_secs(login.timeout_seconds), sleeper)?;
             let user = client.me()?;
-            write_account(out, "Signed in to Codewhale.", profile, api_base, &user)
+            write_account(out, "Signed in to Ghosty.", profile, api_base, &user)
         }
         CloudCommand::Status => match client.load_auth()? {
             Some(_) => {
                 let user = client.me()?;
-                write_account(out, "Signed in to Codewhale.", profile, api_base, &user)
+                write_account(out, "Signed in to Ghosty.", profile, api_base, &user)
             }
             None => {
-                writeln!(out, "Not signed in to Codewhale.")?;
+                writeln!(out, "Not signed in to Ghosty.")?;
                 writeln!(out, "Profile: {}", printable(profile))?;
                 writeln!(out, "API: {api_base}")?;
-                writeln!(out, "Run `codewhale account login` to sign in.")?;
+                writeln!(out, "Run `ghosty account login` to sign in.")?;
                 Ok(())
             }
         },
         CloudCommand::Logout => {
             let remote_revoked = client.logout()?;
-            writeln!(out, "Removed the local Codewhale account session.")?;
+            writeln!(out, "Removed the local Ghosty account session.")?;
             writeln!(out, "Profile: {}", printable(profile))?;
             if !remote_revoked {
                 writeln!(
@@ -635,7 +639,7 @@ fn run_with<T: CloudTransport, W: Write>(
         CloudCommand::Keys(keys) => match keys.command {
             CloudKeysCommand::List => {
                 let user = client.me()?;
-                write_account(out, "Codewhale account keys.", profile, api_base, &user)?;
+                write_account(out, "Ghosty account keys.", profile, api_base, &user)?;
                 for provider in CloudProvider::ALL {
                     let state = user.model_keys.get(provider.slug());
                     if state.is_some_and(|state| state.configured) {
@@ -666,7 +670,7 @@ fn run_with<T: CloudTransport, W: Write>(
                 client.set_key(set.provider, &key, &label)?;
                 writeln!(
                     out,
-                    "Saved {} for Codewhale account {} (profile {}).",
+                    "Saved {} for Ghosty account {} (profile {}).",
                     set.provider.slug(),
                     printable(&user.id),
                     printable(profile)
@@ -678,7 +682,7 @@ fn run_with<T: CloudTransport, W: Write>(
                 client.remove_key(provider)?;
                 writeln!(
                     out,
-                    "Removed {} from Codewhale account {} (profile {}).",
+                    "Removed {} from Ghosty account {} (profile {}).",
                     provider.slug(),
                     printable(&user.id),
                     printable(profile)
@@ -689,7 +693,7 @@ fn run_with<T: CloudTransport, W: Write>(
         CloudCommand::Pull(args) => {
             if !args.dry_run {
                 bail!(
-                    "Account settings import is not available yet; local config was not changed. Run `codewhale account pull --dry-run` to inspect the signed-in account."
+                    "Account settings import is not available yet; local config was not changed. Run `ghosty account pull --dry-run` to inspect the signed-in account."
                 );
             }
             let user = client.me()?;
@@ -764,24 +768,22 @@ struct ValidatedApiBase {
 }
 
 fn validate_api_base(value: &str) -> Result<ValidatedApiBase> {
-    let mut url = Url::parse(value.trim()).context("invalid Codewhale account API base URL")?;
+    let mut url = Url::parse(value.trim()).context("invalid Ghosty account API base URL")?;
     if !url.username().is_empty() || url.password().is_some() {
-        bail!("Codewhale account API base URL must not contain credentials");
+        bail!("Ghosty account API base URL must not contain credentials");
     }
     if url.query().is_some() || url.fragment().is_some() {
-        bail!("Codewhale account API base URL must not contain a query or fragment");
+        bail!("Ghosty account API base URL must not contain a query or fragment");
     }
     if !matches!(url.path(), "" | "/") {
-        bail!("Codewhale account API base URL must be an origin without a path");
+        bail!("Ghosty account API base URL must be an origin without a path");
     }
     let host = url
         .host_str()
-        .ok_or_else(|| anyhow!("Codewhale account API base URL must include a host"))?;
+        .ok_or_else(|| anyhow!("Ghosty account API base URL must include a host"))?;
     let allowed = url.scheme() == "https" || (url.scheme() == "http" && is_loopback_host(host));
     if !allowed {
-        bail!(
-            "Codewhale account API base URL must use HTTPS (loopback HTTP is allowed for testing)"
-        );
+        bail!("Ghosty account API base URL must use HTTPS (loopback HTTP is allowed for testing)");
     }
     url.set_path("/");
     let display = url.as_str().trim_end_matches('/').to_string();
@@ -795,49 +797,49 @@ fn validate_verification_url(
     complete: bool,
 ) -> Result<String> {
     let url =
-        Url::parse(value).context("The Codewhale service returned an invalid verification URL")?;
+        Url::parse(value).context("The Ghosty service returned an invalid verification URL")?;
     if value != url.as_str() {
-        bail!("The Codewhale service returned an unsafe verification URL");
+        bail!("The Ghosty service returned an unsafe verification URL");
     }
-    let host = url.host_str().ok_or_else(|| {
-        anyhow!("The Codewhale service returned a verification URL without a host")
-    })?;
+    let host = url
+        .host_str()
+        .ok_or_else(|| anyhow!("The Ghosty service returned a verification URL without a host"))?;
     if !url.username().is_empty() || url.password().is_some() || url.fragment().is_some() {
-        bail!("The Codewhale service returned an unsafe verification URL");
+        bail!("The Ghosty service returned an unsafe verification URL");
     }
     if url.path() != "/cli/authorize" {
-        bail!("The Codewhale service returned an unsafe verification URL");
+        bail!("The Ghosty service returned an unsafe verification URL");
     }
 
-    let api = Url::parse(api_base).context("invalid Codewhale account API base URL")?;
+    let api = Url::parse(api_base).context("invalid Ghosty account API base URL")?;
     let canonical_api = api.scheme() == "https"
-        && api.host_str() == Some("api.codewhale.net")
+        && api.host_str() == Some("api.ghosty.net")
         && api.port_or_known_default() == Some(443);
     let loopback_api = api.host_str().is_some_and(is_loopback_host);
     if canonical_api {
         if url.scheme() != "https"
-            || !host.eq_ignore_ascii_case("app.codewhale.net")
+            || !host.eq_ignore_ascii_case("app.ghosty.net")
             || url.port_or_known_default() != Some(443)
         {
-            bail!("The Codewhale service returned an untrusted verification origin");
+            bail!("The Ghosty service returned an untrusted verification origin");
         }
     } else if loopback_api {
         if !matches!(url.scheme(), "http" | "https") || !is_loopback_host(host) {
-            bail!("The Codewhale service returned an untrusted verification origin");
+            bail!("The Ghosty service returned an untrusted verification origin");
         }
     } else {
         bail!(
-            "Browser login is only enabled for the canonical Codewhale account API or a loopback test API"
+            "Browser login is only enabled for the canonical Ghosty account API or a loopback test API"
         );
     }
 
     let query = url.query_pairs().collect::<Vec<_>>();
     if complete {
         if query.len() != 1 || query[0].0 != "user_code" || query[0].1 != user_code {
-            bail!("The Codewhale service returned an unsafe verification URL");
+            bail!("The Ghosty service returned an unsafe verification URL");
         }
     } else if !query.is_empty() {
-        bail!("The Codewhale service returned an unsafe verification URL");
+        bail!("The Ghosty service returned an unsafe verification URL");
     }
     Ok(url.to_string())
 }
@@ -864,7 +866,7 @@ fn validate_user_code(code: &str) -> Result<()> {
             .enumerate()
             .any(|(index, byte)| !matches!(index, 4 | 9) && !ALPHABET.contains(byte))
     {
-        bail!("The Codewhale service returned an invalid user code");
+        bail!("The Ghosty service returned an invalid user code");
     }
     Ok(())
 }
@@ -875,7 +877,7 @@ fn validate_device_code(code: &str) -> Result<()> {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
     {
-        bail!("The Codewhale service returned an invalid device authorization response");
+        bail!("The Ghosty service returned an invalid device authorization response");
     }
     Ok(())
 }
@@ -991,7 +993,7 @@ fn read_key_hidden(provider: &str) -> Result<String> {
 }
 
 fn json_body(value: &impl Serialize) -> Result<Vec<u8>> {
-    serde_json::to_vec(value).context("failed to encode Codewhale account request")
+    serde_json::to_vec(value).context("failed to encode Ghosty account request")
 }
 
 fn expect_json<T: DeserializeOwned>(response: CloudResponse, statuses: &[u16]) -> Result<T> {
@@ -1010,7 +1012,7 @@ fn expect_empty(response: CloudResponse, statuses: &[u16]) -> Result<()> {
 }
 
 fn parse_json_body<T: DeserializeOwned>(body: &[u8]) -> Result<T> {
-    serde_json::from_slice(body).context("The Codewhale service returned an invalid JSON response")
+    serde_json::from_slice(body).context("The Ghosty service returned an invalid JSON response")
 }
 
 fn response_error(response: &CloudResponse) -> anyhow::Error {
@@ -1028,13 +1030,10 @@ fn response_error(response: &CloudResponse) -> anyhow::Error {
         });
     match code {
         Some(code) => anyhow!(
-            "Codewhale account request failed (HTTP {}, code {code})",
+            "Ghosty account request failed (HTTP {}, code {code})",
             response.status
         ),
-        None => anyhow!(
-            "Codewhale account request failed (HTTP {})",
-            response.status
-        ),
+        None => anyhow!("Ghosty account request failed (HTTP {})", response.status),
     }
 }
 

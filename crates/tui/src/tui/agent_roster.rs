@@ -11,7 +11,7 @@
 //! The distinction is the whole point: "this worker reported 96,300 input
 //! tokens" and "no usage receipt exists for this worker" are different facts,
 //! and a rail that prints `0` for the second one is lying in the direction that
-//! makes Codewhale look cheap. Nothing here estimates, derives a token count
+//! makes Ghosty look cheap. Nothing here estimates, derives a token count
 //! from text, or back-fills a missing receipt — values come from
 //! [`AgentRunUsage`], which is populated from immutable per-response route
 //! audits, or they are absent.

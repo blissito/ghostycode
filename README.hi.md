@@ -1,31 +1,31 @@
 <!-- source: README.md sha256:a56bca473dbd -->
-# Codewhale
+# Ghosty
 
-Codewhale आपके टर्मिनल के लिए Rust में बना एक ओपन सोर्स कोडिंग एजेंट है, जिसे इसके उपयोगकर्ताओं के साथ सार्वजनिक रूप से बेहतर बनाया जाता है।
+Ghosty आपके टर्मिनल के लिए Rust में बना एक ओपन सोर्स कोडिंग एजेंट है, जिसे इसके उपयोगकर्ताओं के साथ सार्वजनिक रूप से बेहतर बनाया जाता है।
 
-![टर्मिनल में चलता Codewhale](assets/screenshot.webp)
+![टर्मिनल में चलता Ghosty](assets/screenshot.webp)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Tiếng Việt](README.vi.md) · [Bahasa Indonesia](README.id.md) · [한국어](README.ko-KR.md) · [Español](README.es-419.md) · [Português](README.pt-BR.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [繁體中文](README.zh-TW.md) · [Türkçe](README.tr.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [العربية](README.ar.md) · [Català](README.ca.md)
 
-[![CI](https://github.com/Hmbown/CodeWhale/actions/workflows/ci.yml/badge.svg)](https://github.com/Hmbown/CodeWhale/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/codewhale-cli?label=crates.io)](https://crates.io/crates/codewhale-cli)
-[![npm](https://img.shields.io/npm/v/codewhale?label=npm)](https://www.npmjs.com/package/codewhale)
+[![CI](https://github.com/blissito/ghostycode/actions/workflows/ci.yml/badge.svg)](https://github.com/blissito/ghostycode/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/ghosty-cli?label=crates.io)](https://crates.io/crates/ghosty-cli)
+[![npm](https://img.shields.io/npm/v/ghosty?label=npm)](https://www.npmjs.com/package/ghosty)
 [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/37gfS3ksug)
 
 ## इंस्टॉल करें
 
 ```bash
-npm install -g codewhale
-codewhale
+npm install -g ghosty
+ghosty
 ```
 
-पहली बार चलाने पर Codewhale आपको किसी प्रोवाइडर से जुड़ने या ऑफ़लाइन बने रहने में मदद करता है। यह Cargo, Docker, Nix, Scoop, पहले से बने आर्काइव, Android/Termux और CNB मिरर का भी समर्थन करता है। [इंस्टॉलेशन गाइड](docs/INSTALL.md) देखें।
+पहली बार चलाने पर Ghosty आपको किसी प्रोवाइडर से जुड़ने या ऑफ़लाइन बने रहने में मदद करता है। यह Cargo, Docker, Nix, Scoop, पहले से बने आर्काइव, Android/Termux और CNB मिरर का भी समर्थन करता है। [इंस्टॉलेशन गाइड](docs/INSTALL.md) देखें।
 
-हर शेल में Tab completion के लिए केवल एक कमांड चाहिए — `codewhale completion bash|zsh|fish|powershell|elvish`। [शेल कंप्लीशन](docs/INSTALL.md#8-shell-completions) देखें।
+हर शेल में Tab completion के लिए केवल एक कमांड चाहिए — `ghosty completion bash|zsh|fish|powershell|elvish`। [शेल कंप्लीशन](docs/INSTALL.md#8-shell-completions) देखें।
 
 ## उपयोग
 
-Codewhale से वैसे ही बात करें जैसे आप अपनी टीम के किसी सदस्य से करेंगे:
+Ghosty से वैसे ही बात करें जैसे आप अपनी टीम के किसी सदस्य से करेंगे:
 
 ```text
 Fix the failing tests and explain what changed.
@@ -34,12 +34,12 @@ Fix the failing tests and explain what changed.
 या TUI खोले बिना कोई कार्य चलाएँ:
 
 ```bash
-codewhale exec "fix the failing tests and explain what changed"
+ghosty exec "fix the failing tests and explain what changed"
 ```
 
-Codewhale आपकी रिपॉज़िटरी पढ़ सकता है, फ़ाइलें संपादित कर सकता है, कमांड चला सकता है, परिणामों की जाँच कर सकता है और लक्ष्य की ओर काम जारी रख सकता है। उसे कितना एक्सेस देना है, यह आप तय करते हैं।
+Ghosty आपकी रिपॉज़िटरी पढ़ सकता है, फ़ाइलें संपादित कर सकता है, कमांड चला सकता है, परिणामों की जाँच कर सकता है और लक्ष्य की ओर काम जारी रख सकता है। उसे कितना एक्सेस देना है, यह आप तय करते हैं।
 
-## Codewhale क्यों
+## Ghosty क्यों
 
 - **अपनी पसंद का मॉडल इस्तेमाल करें।** होस्ट किए गए प्रोवाइडर या Ollama, vLLM अथवा SGLang के माध्यम से लोकल मॉडल जोड़ें। `/model` से प्रोवाइडर और मॉडल बदलें।
 - **नियंत्रण अपने पास रखें।** Plan केवल पढ़ने के लिए है। Ask, Auto-Review और Full Access अनुमोदन के व्यवहार को स्पष्ट बनाते हैं। `/undo` पिछला टर्न वापस करता है और `/restore` वर्कस्पेस को पहले के स्नैपशॉट पर लौटाता है।
@@ -50,7 +50,7 @@ Codewhale आपकी रिपॉज़िटरी पढ़ सकता ह
 
 ## सुरक्षा
 
-Codewhale आपकी मशीन पर उतने ही एक्सेस के साथ चलता है जितना आप उसे देते हैं। अनुमोदन मोड और रिपॉज़िटरी के नियम एजेंट की गतिविधियों को सीमित करते हैं; समर्थित सिस्टम पर वैकल्पिक OS सैंडबॉक्सिंग अधिक मज़बूत निष्पादन सीमा जोड़ती है। जिन मॉडलों की कीमत ज्ञात नहीं है, उन्हें मुफ़्त बताने के बजाय अज्ञात ही दिखाया जाता है।
+Ghosty आपकी मशीन पर उतने ही एक्सेस के साथ चलता है जितना आप उसे देते हैं। अनुमोदन मोड और रिपॉज़िटरी के नियम एजेंट की गतिविधियों को सीमित करते हैं; समर्थित सिस्टम पर वैकल्पिक OS सैंडबॉक्सिंग अधिक मज़बूत निष्पादन सीमा जोड़ती है। जिन मॉडलों की कीमत ज्ञात नहीं है, उन्हें मुफ़्त बताने के बजाय अज्ञात ही दिखाया जाता है।
 
 नीतियों का सटीक क्रम जानने के लिए [अधिकार क्रम](docs/AUTHORIZATION_ORDER.md) और लोकल सेटिंग के लिए [कॉन्फ़िगरेशन](docs/CONFIGURATION.md) पढ़ें।
 
@@ -64,13 +64,13 @@ Codewhale आपकी मशीन पर उतने ही एक्से�
 
 ## समुदाय से जुड़ें
 
-जब लोग Codewhale का उपयोग करते हैं, असुविधाओं की जानकारी देते हैं और उन्हें ठीक करने में मदद करते हैं, तब यह बेहतर बनता है। यदि कोई प्रोवाइडर उपलब्ध नहीं है, कोई वर्कफ़्लो असहज है या टर्मिनल UI आपके काम में बाधा डालता है, तो [issue खोलें](https://github.com/Hmbown/CodeWhale/issues)। यदि आप इसे बेहतर बनाने का तरीका जानते हैं, तो [pull request खोलें](CONTRIBUTING.md)। पहले योगदान का स्वागत है और स्वीकार किए गए काम का श्रेय योगदानकर्ताओं के पास रहता है।
+जब लोग Ghosty का उपयोग करते हैं, असुविधाओं की जानकारी देते हैं और उन्हें ठीक करने में मदद करते हैं, तब यह बेहतर बनता है। यदि कोई प्रोवाइडर उपलब्ध नहीं है, कोई वर्कफ़्लो असहज है या टर्मिनल UI आपके काम में बाधा डालता है, तो [issue खोलें](https://github.com/blissito/ghostycode/issues)। यदि आप इसे बेहतर बनाने का तरीका जानते हैं, तो [pull request खोलें](CONTRIBUTING.md)। पहले योगदान का स्वागत है और स्वीकार किए गए काम का श्रेय योगदानकर्ताओं के पास रहता है।
 
 [Discord](https://discord.gg/37gfS3ksug) से जुड़ें, या WeChat पर Hunter (`hunterbown`) को जोड़कर Whale Brothers समूह में शामिल होने के लिए कहें।
 
 ## प्रोजेक्ट का इतिहास
 
-Codewhale की शुरुआत `deepseek-tui` के रूप में हुई थी और यह आज भी उसके कॉन्फ़िगरेशन तथा सेशन के साथ संगतता बनाए रखता है। अब यह किसी प्रोवाइडर पर निर्भर नहीं है, स्वतंत्र रूप से अनुरक्षित है और किसी भी मॉडल प्रोवाइडर से संबद्ध नहीं है।
+Ghosty की शुरुआत `deepseek-tui` के रूप में हुई थी और यह आज भी उसके कॉन्फ़िगरेशन तथा सेशन के साथ संगतता बनाए रखता है। अब यह किसी प्रोवाइडर पर निर्भर नहीं है, स्वतंत्र रूप से अनुरक्षित है और किसी भी मॉडल प्रोवाइडर से संबद्ध नहीं है।
 
 हर योगदानकर्ता और प्रोजेक्ट को आगे बढ़ाने वाले ओपन सोर्स समुदायों का धन्यवाद। [योगदानकर्ताओं का रिकॉर्ड](docs/CONTRIBUTORS.md) देखें।
 

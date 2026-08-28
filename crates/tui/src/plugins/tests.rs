@@ -245,7 +245,7 @@ fn aba_source_skill_body_is_replaced_by_the_staged_snapshot_before_activation() 
     let staged_bytes = fs::read(&active.skill_snapshots[0].path).unwrap();
     let mut digest = sha2::Sha256::new();
     use sha2::Digest as _;
-    digest.update(b"codewhale-plugin-file-bytes-v1\0");
+    digest.update(b"ghosty-plugin-file-bytes-v1\0");
     digest.update(staged_bytes);
     let staged_hash = digest
         .finalize()
@@ -257,7 +257,7 @@ fn aba_source_skill_body_is_replaced_by_the_staged_snapshot_before_activation() 
         active.skill_snapshots[0]
             .path
             .starts_with(active.staged_root.as_ref().unwrap()),
-        "active Skill paths must point into the Codewhale-owned staged tree"
+        "active Skill paths must point into the Ghosty-owned staged tree"
     );
 }
 
@@ -1204,7 +1204,7 @@ fn third_party_agent_plugin_with_unknown_extension_namespace_loads_cleanly() {
             "keywords": ["browser", "remote"],
             "extensions": {
                 "com.example.client": {"anything": [1, 2, 3], "nested": {"x": true}},
-                "net.codewhale": {"capabilities": {"network_hosts": ["example.com"]}}
+                "net.ghosty": {"capabilities": {"network_hosts": ["example.com"]}}
             }
         }"#,
     );
@@ -1231,7 +1231,7 @@ fn third_party_agent_plugin_with_unknown_extension_namespace_loads_cleanly() {
                     "type": "sse",
                     "url": "https://example.com/mcp",
                     "extensions": {
-                        "net.codewhale": {"env_headers": {"Authorization": "THIRD_PARTY_REMOTE_TOKEN"}},
+                        "net.ghosty": {"env_headers": {"Authorization": "THIRD_PARTY_REMOTE_TOKEN"}},
                         "com.example.client": {"polling": true}
                     }
                 }
@@ -1434,7 +1434,7 @@ fn export_slugifies_legacy_names_and_collision_is_an_error() {
     super::agent_plugin::validate_plugin_json(&plugin_json).unwrap();
     assert_eq!(plugin_json["name"], "a-b");
     assert_eq!(
-        plugin_json["extensions"]["net.codewhale"]["display_name"],
+        plugin_json["extensions"]["net.ghosty"]["display_name"],
         "a--b"
     );
 }
@@ -1471,7 +1471,7 @@ fn export_moves_custom_skills_layout_to_the_standard_tree() {
     super::agent_plugin::validate_plugin_json(&plugin_json).unwrap();
     assert!(
         plugin_json.get("extensions").is_none(),
-        "a standard-layout bundle emits no Codewhale extension at all: {plugin_json}"
+        "a standard-layout bundle emits no Ghosty extension at all: {plugin_json}"
     );
 
     let rediscovery = DiscoveryConfig {

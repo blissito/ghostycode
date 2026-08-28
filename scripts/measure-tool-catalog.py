@@ -22,7 +22,7 @@ def main() -> int:
         "test",
         "--locked",
         "-p",
-        "codewhale-tui",
+        "ghosty-tui",
         "--lib",
         "core::engine::tests::print_mode_tool_catalog_metrics",
         "--",

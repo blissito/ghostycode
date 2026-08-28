@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  CodeWhaleRuntimeClient,
+  GhostyCodeRuntimeClient,
   RuntimeApiError,
   RuntimeCapabilityError,
   createRuntimeClient,
@@ -24,11 +24,11 @@ function fakeFetch(responseFactory) {
   return fetch;
 }
 
-test("createRuntimeClient returns CodeWhaleRuntimeClient instance", () => {
+test("createRuntimeClient returns GhostyCodeRuntimeClient instance", () => {
   const fetch = fakeFetch(() => jsonResponse({}));
   const client = createRuntimeClient({ fetch });
 
-  assert.ok(client instanceof CodeWhaleRuntimeClient);
+  assert.ok(client instanceof GhostyCodeRuntimeClient);
   assert.equal(client.baseUrl, "http://127.0.0.1:7878/");
 });
 
@@ -73,7 +73,7 @@ test("worker and run actions use POST endpoints", async () => {
           },
     ),
   );
-  const client = new CodeWhaleRuntimeClient({ fetch });
+  const client = new GhostyCodeRuntimeClient({ fetch });
 
   await client.interruptWorker("w1");
   await client.stopWorker("w1");
@@ -101,7 +101,7 @@ test("managed Fleet helpers send explicit launch metadata and reconnect cursors"
         : { execution: "awaiting_start", run: { id: "run-1" }, warnings: [] },
     ),
   );
-  const client = new CodeWhaleRuntimeClient({ fetch });
+  const client = new GhostyCodeRuntimeClient({ fetch });
   const spec = {
     target: "this_computer",
     roles: [{ name: "reviewer" }],
@@ -133,7 +133,7 @@ test("managed Fleet helpers send explicit launch metadata and reconnect cursors"
 
 test("unsupported fleet capabilities raise typed errors", async () => {
   const fetch = fakeFetch(() => jsonResponse({ error: "not found" }, { status: 404 }));
-  const client = new CodeWhaleRuntimeClient({ fetch });
+  const client = new GhostyCodeRuntimeClient({ fetch });
 
   await assert.rejects(
     () => client.createFleetRun({ name: "future" }),
@@ -172,7 +172,7 @@ test("fleetEvents can replay JSON event fixtures when the API exposes them", asy
       ],
     }),
   );
-  const client = new CodeWhaleRuntimeClient({ fetch });
+  const client = new GhostyCodeRuntimeClient({ fetch });
 
   const events = [];
   for await (const event of client.fleetEvents("run-1", { path: "/v1/fleet/runs/run-1/events" })) {
@@ -202,7 +202,7 @@ test("fleetEvents parses text/event-stream frames", async () => {
         headers: { "content-type": "text/event-stream" },
       }),
   );
-  const client = new CodeWhaleRuntimeClient({ fetch });
+  const client = new GhostyCodeRuntimeClient({ fetch });
 
   const events = [];
   for await (const event of client.fleetEvents("run-1", { after: "fev1_previous", limit: 10 })) {
@@ -230,7 +230,7 @@ test("fleetEvents preserves SSE control event names", async () => {
       controller.close();
     },
   });
-  const client = new CodeWhaleRuntimeClient({
+  const client = new GhostyCodeRuntimeClient({
     fetch: fakeFetch(
       () =>
         new Response(body, {
@@ -256,7 +256,7 @@ test("fleetEvents preserves SSE control event names", async () => {
 
 test("ordinary HTTP errors remain RuntimeApiError", async () => {
   const fetch = fakeFetch(() => jsonResponse({ error: "bad" }, { status: 500 }));
-  const client = new CodeWhaleRuntimeClient({ fetch });
+  const client = new GhostyCodeRuntimeClient({ fetch });
 
   await assert.rejects(
     () => client.getFleetRun("run-1"),

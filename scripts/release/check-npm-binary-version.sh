@@ -13,11 +13,11 @@ if [[ "${workspace_version}" == "${npm_binary_version}" ]]; then
   exit 0
 fi
 
-if [[ "${CODEWHALE_ALLOW_NPM_BINARY_MISMATCH:-0}" == "1" ]]; then
+if [[ "${GHOSTY_ALLOW_NPM_BINARY_MISMATCH:-0}" == "1" ]]; then
   echo "Packaging-only npm release: workspace=${workspace_version}, binary=${npm_binary_version:-<missing>} (explicit mismatch override)."
   exit 0
 fi
 
-echo "::error::npm/codewhale/package.json codewhaleBinaryVersion (${npm_binary_version:-<missing>}) does not match workspace Cargo.toml (${workspace_version})." >&2
-echo "Set CODEWHALE_ALLOW_NPM_BINARY_MISMATCH=1 only for an intentional packaging-only npm release." >&2
+echo "::error::npm/ghosty/package.json ghostyBinaryVersion (${npm_binary_version:-<missing>}) does not match workspace Cargo.toml (${workspace_version})." >&2
+echo "Set GHOSTY_ALLOW_NPM_BINARY_MISMATCH=1 only for an intentional packaging-only npm release." >&2
 exit 1

@@ -68,7 +68,7 @@ impl ToolSpec for ImageOcrTool {
 }
 
 pub(crate) fn ocr_available() -> bool {
-    std::env::var_os("CODEWHALE_LOCAL_OCR_UNAVAILABLE").is_none()
+    std::env::var_os("GHOSTY_LOCAL_OCR_UNAVAILABLE").is_none()
         && (crate::dependencies::resolve_tesseract().is_some() || native_ocr_available())
 }
 
@@ -92,7 +92,7 @@ pub(crate) fn ocr_image_path(image_path: &Path) -> Result<String, ToolError> {
     }
 
     Err(ToolError::execution_failed(
-        "image_ocr: no local OCR backend is available. On macOS, update to a version with the Vision framework; on Linux/Windows install tesseract and restart codewhale.",
+        "image_ocr: no local OCR backend is available. On macOS, update to a version with the Vision framework; on Linux/Windows install tesseract and restart ghosty.",
     ))
 }
 

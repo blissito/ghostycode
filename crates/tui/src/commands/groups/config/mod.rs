@@ -232,7 +232,7 @@ pub(in crate::commands) fn workflow_settings(app: &App) -> CommandResult {
             cfg.max_parallel_writes_without_worktree
         ),
         format!(
-            "persist_completed_activity = {} · persist_completed_across_restarts = {}  · keep finished runs visible / across restarts (journal: .codewhale/workflow-runs.jsonl)",
+            "persist_completed_activity = {} · persist_completed_across_restarts = {}  · keep finished runs visible / across restarts (journal: .ghosty/workflow-runs.jsonl)",
             on(cfg.persist_completed_activity),
             on(cfg.persist_completed_across_restarts)
         ),

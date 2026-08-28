@@ -10,7 +10,7 @@ const {
   allReleaseAssetNames,
   BUNDLE_ASSET_NAMES,
   LEGACY_TUI_BRIDGE_ASSET_NAMES,
-} = require(path.join(repoRoot, "npm", "codewhale", "scripts", "artifacts"));
+} = require(path.join(repoRoot, "npm", "ghosty", "scripts", "artifacts"));
 
 function read(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
@@ -84,23 +84,23 @@ assert.deepEqual(
     ...valuesForKey(nightly, "alias_artifact"),
   ].sort(),
   [
-    "codewhale-linux-x64",
-    "codew-linux-x64",
-    "codewhale-linux-arm64",
-    "codew-linux-arm64",
-    "codewhale-macos-x64",
-    "codew-macos-x64",
-    "codewhale-macos-arm64",
-    "codew-macos-arm64",
-    "codewhale-windows-x64.exe",
-    "codew-windows-x64.exe",
-    "codewhale-windows-arm64.exe",
-    "codew-windows-arm64.exe",
+    "ghosty-linux-x64",
+    "ghosty-tui-linux-x64",
+    "ghosty-linux-arm64",
+    "ghosty-tui-linux-arm64",
+    "ghosty-macos-x64",
+    "ghosty-tui-macos-x64",
+    "ghosty-macos-arm64",
+    "ghosty-tui-macos-arm64",
+    "ghosty-windows-x64.exe",
+    "ghosty-tui-windows-x64.exe",
+    "ghosty-windows-arm64.exe",
+    "ghosty-tui-windows-arm64.exe",
   ].sort(),
 );
 assert.match(
   nightly,
-  /cargo build --release --locked --target \$\{\{ matrix\.target \}\} -p codewhale-cli/,
+  /cargo build --release --locked --target \$\{\{ matrix\.target \}\} -p ghosty-cli/,
 );
 assert.match(nightly, /startsWith\(matrix\.target, 'x86_64-'\).*runner\.arch == 'X64'/s);
 assert.match(nightly, /startsWith\(matrix\.target, 'aarch64-'\).*runner\.arch == 'ARM64'/s);
@@ -119,8 +119,8 @@ assert.match(
 assert.match(nightlyArmStaticSmoke, /readelf -l "\$\{bin_path\}"/);
 assert.match(nightlyArmStaticSmoke, /grep -Fq 'INTERP'/);
 assert.match(nightlyArmStaticSmoke, /"\$\{bin_path\}" --version/);
-assert.doesNotMatch(nightly, /codewhale-tui/);
-assert.doesNotMatch(nightly, /target\/[^\n]*\/codew(?:\.exe)?/);
+assert.doesNotMatch(nightly, /ghosty-tui/);
+assert.doesNotMatch(nightly, /target\/[^\n]*\/ghosty-tui(?:\.exe)?/);
 assert.match(nightly, /cp "\$\{bin_path\}" "\$\{dir\}\/\$\{artifact\}"/);
 assert.match(nightly, /cmp -s[\s\S]*nightly-primary[\s\S]*nightly-alias/);
 assert.equal((nightly.match(/retention-days: 14/g) || []).length, 2);
@@ -208,7 +208,7 @@ assert.doesNotMatch(
   "Homebrew recovery must not resurrect release-tag infrastructure",
 );
 assert.match(republishHomebrewJob[0], /gh release download "\$\{\{ needs\.resolve\.outputs\.tag \}\}"/);
-assert.match(republishHomebrewJob[0], /MANIFEST: \/tmp\/codewhale-artifacts-sha256\.txt/);
+assert.match(republishHomebrewJob[0], /MANIFEST: \/tmp\/ghosty-artifacts-sha256\.txt/);
 
 assert.match(artifacts, /^  workflow_call:/m);
 assert.match(artifacts, /^permissions:\n  contents: read$/m);
@@ -229,7 +229,7 @@ assert.match(releaseMuslBuild, /apt-get install -y binutils musl-tools/);
 assert.match(releaseMuslBuild, /rustup target add --toolchain stable \$\{\{ matrix\.target \}\}/);
 assert.match(
   releaseMuslBuild,
-  /cargo build --profile dist --locked --target \$\{\{ matrix\.target \}\} -p codewhale-cli/,
+  /cargo build --profile dist --locked --target \$\{\{ matrix\.target \}\} -p ghosty-cli/,
 );
 const releaseStaticSmoke = namedStep(
   artifacts,
@@ -253,28 +253,28 @@ assert.equal(builtAssetNames.length, 21);
 assert.deepEqual(
   [...new Set(builtAssetNames)].sort(),
   [
-    ...allAssetNames().filter((name) => name !== "codewhale.bat"),
+    ...allAssetNames().filter((name) => name !== "ghosty.bat"),
     ...LEGACY_TUI_BRIDGE_ASSET_NAMES,
   ].sort(),
 );
 assert.match(
   artifacts,
   /stage_binary "\$\{\{ matrix\.cli_binary \}\}" "\$\{\{ matrix\.compat_tui_artifact \}\}"/,
-  "legacy TUI bridge assets must be staged from the one compiled codewhale binary",
+  "legacy TUI bridge assets must be staged from the one compiled ghosty binary",
 );
 const bundleInvocations = [...bundles.matchAll(
   /^bundle (\S+) \\\n\s+\S+ \S+ (tar\.gz|zip) (""|portable)$/gm,
 )].map((match) => {
   const variant = match[3] === "portable" ? "-portable" : "";
-  return `codewhale-${match[1]}${variant}.${match[2]}`;
+  return `ghosty-${match[1]}${variant}.${match[2]}`;
 });
 assert.deepEqual(bundleInvocations.sort(), [...BUNDLE_ASSET_NAMES].sort());
 assert.match(artifacts, /aarch64-pc-windows-msvc/);
 assert.match(artifacts, /aarch64-linux-android/);
-assert.match(artifacts, /codew-windows-arm64\.exe/);
-assert.match(artifacts, /CodeWhaleSetup\.exe/);
+assert.match(artifacts, /ghosty-tui-windows-arm64\.exe/);
+assert.match(artifacts, /GhostyCodeSetup\.exe/);
 assert.match(artifacts, /assemble-release-assets\.js --verify release-assets/);
-assert.match(artifacts, /CODEWHALE_SMOKE_ASSETS_DIR/);
+assert.match(artifacts, /GHOSTY_SMOKE_ASSETS_DIR/);
 assert.match(artifacts, /^  pin:\n/m);
 assert.match(artifacts, /Require source_sha equals github\.sha/);
 assert.doesNotMatch(
@@ -324,7 +324,7 @@ assert.equal(allReleaseAssetNames().length, 34);
 assert.match(release, /^  artifacts:\n/m);
 assert.match(release, /uses: \.\/\.github\/workflows\/release-artifacts\.yml/);
 assert.doesNotMatch(release, /^  (build|bundle|windows-installer):/m);
-assert.match(release, /name: codewhale-release-assets\n\s+path: artifacts/);
+assert.match(release, /name: ghosty-release-assets\n\s+path: artifacts/);
 assert.match(release, /files: artifacts\/\*/);
 assert.equal(
   (release.match(/ensure-release-assets-absent\.js/g) || []).length,
@@ -338,10 +338,10 @@ assert.match(release, /^  docker-build:\n/m);
 assert.match(release, /^  docker:\n/m);
 assert.match(release, /runner: ubuntu-latest\n\s+platform: linux\/amd64/);
 assert.match(release, /runner: ubuntu-24\.04-arm\n\s+platform: linux\/arm64/);
-assert.match(release, /cli_artifact: codewhale-linux-x64/);
-assert.match(release, /cli_artifact: codewhale-linux-arm64/);
-assert.match(release, /shim_artifact: codew-linux-x64/);
-assert.match(release, /shim_artifact: codew-linux-arm64/);
+assert.match(release, /cli_artifact: ghosty-linux-x64/);
+assert.match(release, /cli_artifact: ghosty-linux-arm64/);
+assert.match(release, /shim_artifact: ghosty-tui-linux-x64/);
+assert.match(release, /shim_artifact: ghosty-tui-linux-arm64/);
 assert.doesNotMatch(
   release,
   /docker\/setup-qemu-action/,
@@ -352,13 +352,13 @@ assert.match(releaseDockerBytes, /CLI_ARTIFACT: \$\{\{ matrix\.cli_artifact \}\}
 assert.match(releaseDockerBytes, /SHIM_ARTIFACT: \$\{\{ matrix\.shim_artifact \}\}/);
 assert.match(
   releaseDockerBytes,
-  /mv -- "docker-context\/bin\/\$\{CLI_ARTIFACT\}" docker-context\/bin\/codewhale/,
+  /mv -- "docker-context\/bin\/\$\{CLI_ARTIFACT\}" docker-context\/bin\/ghosty/,
 );
 assert.match(
   releaseDockerBytes,
-  /mv -- "docker-context\/bin\/\$\{SHIM_ARTIFACT\}" docker-context\/bin\/codew/,
+  /mv -- "docker-context\/bin\/\$\{SHIM_ARTIFACT\}" docker-context\/bin\/ghosty-tui/,
 );
-assert.match(releaseDockerBytes, /cmp docker-context\/bin\/codewhale docker-context\/bin\/codew/);
+assert.match(releaseDockerBytes, /cmp docker-context\/bin\/ghosty docker-context\/bin\/ghosty-tui/);
 const releaseDockerBuild = namedStep(release, "Assemble and push native image by digest");
 assert.match(releaseDockerBuild, /context: docker-context/);
 assert.match(releaseDockerBuild, /file: infra\/packaging\/docker\/Dockerfile\.release/);
@@ -372,8 +372,8 @@ assert.match(releaseDockerManifest, /docker buildx imagetools create/);
 const releaseDockerSmoke = namedStep(release, "Verify and smoke published container");
 assert.match(releaseDockerSmoke, /linux\/amd64/);
 assert.match(releaseDockerSmoke, /linux\/arm64/);
-assert.match(releaseDockerSmoke, /--entrypoint codewhale/);
-assert.match(releaseDockerSmoke, /--entrypoint codew/);
+assert.match(releaseDockerSmoke, /--entrypoint ghosty/);
+assert.match(releaseDockerSmoke, /--entrypoint ghosty-tui/);
 
 const npmJob = release.match(/\n  npm:\n([\s\S]*?)\n  homebrew:\n/);
 assert.ok(npmJob, "public release must retain a dedicated npm publication job");
@@ -393,7 +393,7 @@ const npmPublish = namedStep(release, "Publish npm wrapper with trusted publishi
 assert.match(npmTagGate, /verify-remote-tag\.sh/);
 assert.match(npmAssetGate, /verify-release-assets\.sh/);
 assert.match(npmAssetGate, /GH_TOKEN: \$\{\{ github\.token \}\}/);
-assert.match(npmPublish, /working-directory: npm\/codewhale/);
+assert.match(npmPublish, /working-directory: npm\/ghosty/);
 assert.match(npmPublish, /GH_TOKEN: \$\{\{ github\.token \}\}/);
 assert.match(npmPublish, /npm publish --access public/);
 assert.doesNotMatch(npmJob[1], /NPM_TOKEN|NODE_AUTH_TOKEN|secrets\./);
@@ -406,9 +406,9 @@ assert.ok(
 assert.match(releaseDockerfile, /^FROM debian:bookworm-slim$/m);
 assert.match(releaseDockerfile, /ca-certificates/);
 assert.match(releaseDockerfile, /libdbus-1-3/);
-assert.match(releaseDockerfile, /COPY .*bin\/codewhale \/usr\/local\/bin\/codewhale/);
-assert.match(releaseDockerfile, /COPY .*bin\/codew \/usr\/local\/bin\/codew/);
-assert.match(releaseDockerfile, /^USER codewhale$/m);
+assert.match(releaseDockerfile, /COPY .*bin\/ghosty \/usr\/local\/bin\/ghosty/);
+assert.match(releaseDockerfile, /COPY .*bin\/ghosty-tui \/usr\/local\/bin\/ghosty-tui/);
+assert.match(releaseDockerfile, /^USER ghosty$/m);
 assert.doesNotMatch(
   releaseDockerfile,
   /\bcargo\s+build\b|^FROM\s+rust:/m,
@@ -434,8 +434,8 @@ assert.match(
 );
 assert.match(
   cnbRustGates[1],
-  /export HOME="\$\{hermetic_home\}"[\s\S]*export CODEWHALE_HOME="\$\{hermetic_home\}\/\.codewhale"[\s\S]*unset CODEWHALE_CONFIG_PATH DEEPSEEK_CONFIG_PATH DEEPSEEK_HOME/,
-  "CNB workspace tests must not read a populated runner ~/.codewhale (#5355)",
+  /export HOME="\$\{hermetic_home\}"[\s\S]*export GHOSTY_HOME="\$\{hermetic_home\}\/\.ghosty"[\s\S]*unset GHOSTY_CONFIG_PATH DEEPSEEK_CONFIG_PATH DEEPSEEK_HOME/,
+  "CNB workspace tests must not read a populated runner ~/.ghosty (#5355)",
 );
 
 const nextest = read(".config/nextest.toml");
@@ -467,20 +467,20 @@ const cnbPreflight = cnb.match(
 );
 assert.ok(cnbPreflight, "CNB must retain a dedicated release preflight");
 const cnbBuild = cnbPreflight[1].indexOf(
-  "cargo build --jobs 2 --release --locked -p codewhale-cli",
+  "cargo build --jobs 2 --release --locked -p ghosty-cli",
 );
 const cnbAlias = cnbPreflight[1].indexOf(
-  "cp target/release/codewhale target/release/codew",
+  "cp target/release/ghosty target/release/ghosty-tui",
 );
 const cnbSmoke = cnbPreflight[1].indexOf("node scripts/release/npm-wrapper-smoke.js");
 assert.ok(cnbBuild >= 0, "CNB release preflight must build the consolidated runtime");
-assert.ok(cnbAlias > cnbBuild, "CNB release preflight must materialize codew after the build");
-assert.ok(cnbSmoke > cnbAlias, "CNB release preflight must materialize codew before smoke");
+assert.ok(cnbAlias > cnbBuild, "CNB release preflight must materialize ghosty-tui after the build");
+assert.ok(cnbSmoke > cnbAlias, "CNB release preflight must materialize ghosty-tui before smoke");
 
 const cnbTagRelease = cnb.match(/\$:\n  tag_push:\n([\s\S]*)$/);
 assert.ok(cnbTagRelease, "CNB must retain a tag release pipeline");
 const cnbTagStamp = cnbTagRelease[1].indexOf(
-  'export CODEWHALE_BUILD_SHA="$commit_sha"',
+  'export GHOSTY_BUILD_SHA="$commit_sha"',
 );
 const cnbTagBuild = cnbTagRelease[1].indexOf(
   "cargo build --jobs 2 --release --locked \\",
@@ -493,22 +493,22 @@ assert.ok(cnbTagBuild > cnbTagStamp, "CNB tag releases must stamp before compili
 
 assert.doesNotMatch(
   archiveInstaller,
-  /cargo install codewhale --locked/,
-  "glibc recovery must name the published codewhale-cli crate",
+  /cargo install ghosty --locked/,
+  "glibc recovery must name the published ghosty-cli crate",
 );
 assert.equal(
-  (archiveInstaller.match(/cargo install codewhale-cli --locked/g) || []).length,
+  (archiveInstaller.match(/cargo install ghosty-cli --locked/g) || []).length,
   2,
-  "both glibc recovery branches must name codewhale-cli",
+  "both glibc recovery branches must name ghosty-cli",
 );
 assert.match(
   archiveInstaller,
-  /legacy_tui="\$BIN_DIR\/codewhale-tui"[\s\S]*install_binary "\$SCRIPT_DIR\/codewhale" "\$legacy_tui"/,
+  /legacy_tui="\$BIN_DIR\/ghosty-tui"[\s\S]*install_binary "\$SCRIPT_DIR\/ghosty" "\$legacy_tui"/,
   "archive upgrades must refresh the retired TUI path from consolidated bytes",
 );
 assert.doesNotMatch(
   cliDispatcher,
-  /codewhale_config::auto_model::classify/,
+  /ghosty_config::auto_model::classify/,
   "the CLI dispatcher must leave auto routing to the provider-aware runtime",
 );
 

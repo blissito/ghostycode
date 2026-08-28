@@ -18,7 +18,7 @@ Related docs:
 
 1. **You ask naturally** — “audit every crate for unsafe,” “scout then implement,”
    “compare these two providers in parallel.”
-2. **Codewhale decides in Act/Agent** — broad, independent, or staged work can
+2. **Ghosty decides in Act/Agent** — broad, independent, or staged work can
    trigger Workflow; one-file edits, simple commands, and pure Q&A do not.
 3. **It tells you first** — e.g. “This looks set up for a Workflow — three scouts
    then one verifier.”
@@ -74,7 +74,7 @@ isolation by itself.
 ## Controlling a run
 
 `/workflow status [run_id]`, `/workflow cancel [run_id]`, and `/workflow
-settings` are answered by Codewhale itself from the run journal and the live
+settings` are answered by Ghosty itself from the run journal and the live
 run state — they never spend a model turn, so a status check is free and a
 cancel lands even while the model is busy. `/workflow cancel` with no id stops
 the only running workflow.
@@ -139,7 +139,7 @@ Automatic Workflow is suppressed for:
 - Risky writes without a clear decomposition  
 - Estimated children above `auto_start_child_limit` (ask or shrink first)
 
-In those cases Codewhale uses direct tools or a single `agent` instead.
+In those cases Ghosty uses direct tools or a single `agent` instead.
 
 ## Example scenarios (#4131)
 

@@ -1,4 +1,4 @@
-# The CodeWhale Agent Runtime — one durable substrate, familiar launchers
+# The GhostyCode Agent Runtime — one durable substrate, familiar launchers
 
 > 阅读简体中文版：[zh_hans/AGENT_RUNTIME.md](zh_hans/AGENT_RUNTIME.md)
 
@@ -29,7 +29,7 @@ observe that one Runtime.
             launches │              │              │ launches
                      │              │              │
         ┌────────────┴───┐  ┌───────┴────────┐  ┌──┴───────────────────┐
-        │   TUI turn     │  │ `codewhale     │  │   Agent Fleet         │
+        │   TUI turn     │  │ `ghosty     │  │   Agent Fleet         │
         │  (interactive, │  │   exec`        │  │  (identity, member-   │
         │   in-process)  │  │  (headless CLI,│  │   ship, selection) —  │
         │                │  │   anyone/any-  │  │   requests Runtime    │
@@ -42,10 +42,10 @@ observe that one Runtime.
   (`explore`, `review`, `implementer`, `verifier`, ...). It should be backed by
   the same Runtime worker lifecycle used for a Fleet-selected Agent. `agent` is
   the model-facing launcher, not a second runtime.
-- **`codewhale exec`** is the headless front door: usable by anyone at any time
+- **`ghosty exec`** is the headless front door: usable by anyone at any time
   (CI, scripts, another agent), full tools, emits a `stream-json` event stream,
   and can spawn sub-agents. It is *the* runtime with a CLI on it.
-- A **Fleet-selected Agent** executes as a Runtime `codewhale exec` run. Fleet
+- A **Fleet-selected Agent** executes as a Runtime `ghosty exec` run. Fleet
   supplies identity, membership, and selection; it does not re-implement
   execution. Runtime owns the durable ledger, scheduling/leasing/retry,
   authority, local or SSH transport, and terminal lifecycle.
@@ -59,7 +59,7 @@ nested assignment.
 
 If a detached `agent` child can fail on a one-off provider timeout with no
 retry while an equivalent Runtime worker would retry and preserve ledger
-evidence, then the cutover is incomplete. Treat that as a Codewhale Runtime
+evidence, then the cutover is incomplete. Treat that as a Ghosty Runtime
 gap, not as normal "sub-agent behavior".
 
 The compatibility `agent` runtime now retries transient provider header,
@@ -105,7 +105,7 @@ spawn sub-agents.
 
 When the work also needs to be **durable** (survive the TUI closing, a laptop
 sleeping) or **remote** (SSH), Runtime runs the worker out-of-process as
-`codewhale exec`. Fleet may supply the selected Agent identity, but Runtime
+`ghosty exec`. Fleet may supply the selected Agent identity, but Runtime
 retains execution authority and lifecycle ownership. The heavy construction
 then lives in another process entirely, so the orchestrator stays smooth
 regardless of fanout, and the run survives restarts — the day-scale autonomy
@@ -116,7 +116,7 @@ goal of #3154.
 A worker runs at `spawn_depth = 0` and may spawn children while
 `spawn_depth + 1 ≤ max_spawn_depth`, so a budget of `N` affords `N` nested
 delegation levels. Sub-agents and Fleet-selected Runtime workers share **one**
-axis, sourced from `codewhale_config`:
+axis, sourced from `ghosty_config`:
 
 - `DEFAULT_SPAWN_DEPTH = 3` — the default budget for both standalone sub-agents
   and Fleet-selected Runtime workers (so they cannot drift into "two moving
@@ -141,7 +141,7 @@ delegation. The default affords at least three nested levels.
 
 The Runtime execution ledger persists the worker's own event stream rather than
 a separate, simulated taxonomy. Compatibility APIs and types still expose this
-through the `Fleet...` prefix. `codewhale exec --output-format stream-json`
+through the `Fleet...` prefix. `ghosty exec --output-format stream-json`
 emits
 `{"type": "content" | "tool_use" | "tool_result" | "sandbox_denied" |
 "workflow_event" | "session_capture" | "turn_usage" | "metadata" | "done" |
@@ -156,7 +156,7 @@ worker still owns the terminal `done` or `error`. One vocabulary, two surfaces.
 request (turn-step) when the provider reported usage for that call:
 
 ```json
-{"type": "turn_usage", "schema": "codewhale.exec-stream", "schema_version": 1,
+{"type": "turn_usage", "schema": "ghosty.exec-stream", "schema_version": 1,
  "turn": 1, "input_tokens": 1200, "output_tokens": 180,
  "reasoning_tokens": 90, "prompt_cache_hit_tokens": 900,
  "prompt_cache_miss_tokens": 300, "prompt_cache_write_tokens": 0,
@@ -182,13 +182,13 @@ request (turn-step) when the provider reported usage for that call:
 
 ## Convergence with Claude Code (#2972)
 
-CodeWhale should converge with Claude Code on **shape**, not on branding:
+GhostyCode should converge with Claude Code on **shape**, not on branding:
 
 - **Adopt**: a headless runtime with a real CLI/SDK front door; sub-agents as
   isolated runs that return summaries (not transcripts); a compact, event-driven
   fanout projection; capability/role tool profiles; the skills ecosystem
   (#2743); structured run receipts.
-- **Keep distinct**: CodeWhale branding and first-class DeepSeek/GLM/MiniMax/
+- **Keep distinct**: GhostyCode branding and first-class DeepSeek/GLM/MiniMax/
   multi-provider support; the local-first **Agent Fleet** as the identity,
   membership, and selection layer; durable local/SSH execution and authority in
   Runtime; Workflow as the ordering overlay.
@@ -212,7 +212,7 @@ remaining work belongs to later releases:
 
 1. **Rebrand completion** — the `deepseek`/`deepseek-tui` binary shims and
    shim release assets were removed in v0.9.0; the remaining obligation is the
-   Homebrew `codewhale` formula rollout (`docs/REBRAND.md`).
+   Homebrew `ghosty` formula rollout (`docs/REBRAND.md`).
 2. **Operate as a value stream** — a control-board surface over the underwater
    shell (WIP, queue age, bottleneck); phase history (#4039); Workrooms Phase 2
    (#3209/#3210) as the inbox substrate;
@@ -223,7 +223,7 @@ remaining work belongs to later releases:
    tmux/verifier-gate dogfood closing #4175/#4177/#4178/#4179; Fleet consuming
    canonical AgentProfiles and selecting members while Runtime owns execution;
    Conductor/topology (#4010, #4012) as stretch.
-5. **TTC design implementation** (design doc in `codewhale-ops`) — approved and now unblocked after v0.9.0.
+5. **TTC design implementation** (design doc in `ghosty-ops`) — approved and now unblocked after v0.9.0.
 6. **HarnessProfile completion** — the status/UX display lane
    (`docs/rfcs/HARNESS_PROFILE_CUTLINE.md`).
 7. **File decomposition, landed** — the v0.9.0-era offenders were split out:
@@ -241,11 +241,11 @@ probing (needs a product decision).
 ## Public launch contract for an external harness (#4641)
 
 An external evaluation harness (for example a future Verifiers v1 built-in
-harness) embeds CodeWhale by launching the public `codewhale exec` front door
-against an interception endpoint it owns. CodeWhale owns only its **launch
+harness) embeds GhostyCode by launching the public `ghosty exec` front door
+against an interception endpoint it owns. GhostyCode owns only its **launch
 contract**; the harness owns interception, traces, model-call timing, token
 accounting, retries, rollout limits, and runtime orchestration. Do not add a
-harness runtime, trace parser, or receipt schema to CodeWhale.
+harness runtime, trace parser, or receipt schema to GhostyCode.
 
 A reproducible headless launch uses only existing generic surfaces:
 
@@ -258,26 +258,26 @@ A reproducible headless launch uses only existing generic surfaces:
   [providers.openai]
   base_url = ""            # the harness fills in its interception endpoint
   model = ""               # the harness fills in the target model
-  api_key_env = "VF_CODEWHALE_API_KEY"
+  api_key_env = "VF_GHOSTY_API_KEY"
   ```
 
-- `CODEWHALE_HOME` set to a fresh per-run directory;
-- `CODEWHALE_SECRET_BACKEND=file`;
-- `CODEWHALE_MCP_CONFIG` pointing to a generated per-run MCP JSON file that
+- `GHOSTY_HOME` set to a fresh per-run directory;
+- `GHOSTY_SECRET_BACKEND=file`;
+- `GHOSTY_MCP_CONFIG` pointing to a generated per-run MCP JSON file that
   contains only the task servers the harness supplies
   (`{"mcpServers":{"task-tools":{"url":""}}}`; the `mcpServers` alias and
   URL-based Streamable HTTP / SSE transports already exist);
-- `CODEWHALE_MEMORY=false` and `CODEWHALE_TELEMETRY=false`. Anonymous usage
+- `GHOSTY_MEMORY=false` and `GHOSTY_TELEMETRY=false`. Anonymous usage
   counting is on by default, so every sealed harness sets the run-scoped kill
   switch explicitly. It also protects a home the caller reuses, whose ordinary
   sessions send aggregate counts to a live endpoint
-  (`https://telemetry.codewhale.net/v1/telemetry`, the shipped default) rather
+  (`https://telemetry.ghosty.net/v1/telemetry`, the shipped default) rather
   than to a local file. It is a hard floor — an explicit "off" in the
   environment beats `--telemetry true` and `telemetry = true` in config. Set
-  `CODEWHALE_TELEMETRY_ENDPOINT=` (empty) instead if a harness wants an enabled
+  `GHOSTY_TELEMETRY_ENDPOINT=` (empty) instead if a harness wants an enabled
   home to keep buffering locally without contacting anything. See
   [`docs/TELEMETRY.md`](TELEMETRY.md);
-- `CODEWHALE_ALLOW_INSECURE_HTTP=1` **only** when the harness supplies a
+- `GHOSTY_ALLOW_INSECURE_HTTP=1` **only** when the harness supplies a
   trusted `http://` interception endpoint (container/tunnel endpoints are not
   always loopback);
 - `--append-system-prompt` and `--disallowed-tools` when the caller supplies
@@ -290,8 +290,8 @@ the `stream-json` stream, or any generated file.
 The exact argument order is:
 
 ```sh
-codewhale \
-  --config .vf-codewhale/config.toml \
+ghosty \
+  --config .vf-ghosty/config.toml \
   --workspace . \
   --no-project-config \
   --skip-onboarding \
@@ -311,18 +311,18 @@ is the provider-free acceptance lock for this contract.
 
 ### Future upstream checklist (out of scope here — do not run)
 
-Actually adding CodeWhale as a built-in harness lives in the external Verifiers
-repository; the public, immutable CodeWhale GitHub Releases with checksum
+Actually adding GhostyCode as a built-in harness lives in the external Verifiers
+repository; the public, immutable GhostyCode GitHub Releases with checksum
 manifests it needs have existed since v0.9.1 (latest published release is
 v0.9.10; the workspace source candidate is v0.9.11).
 That upstream change is expected to be limited to a new
-`verifiers/v1/harnesses/codewhale/` package plus its test-matrix and docs
-registration, with `CodewhaleHarnessConfig` pinning the target release,
+`verifiers/v1/harnesses/ghosty/` package plus its test-matrix and docs
+registration, with `GhostyHarnessConfig` pinning the target release,
 `setup()` downloading and verifying the released archive, and `launch()`
 writing the temporary route/MCP files above and calling `runtime.run_program(...)`.
 
 Holdouts, explicitly **not** performed by this contract work: tagging,
-publishing, or creating a CodeWhale release; opening or submitting the upstream
+publishing, or creating a GhostyCode release; opening or submitting the upstream
 Verifiers PR; running its credentialed E2E matrix; or claiming
 runtime/architecture support before the exact released archive has run in that
 upstream runtime.

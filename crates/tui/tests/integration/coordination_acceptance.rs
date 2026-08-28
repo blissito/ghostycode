@@ -14,7 +14,7 @@ fn terminal_retry_fixture_preserves_both_real_git_candidates() {
     let repo = tempdir().expect("temp repo");
     git(repo.path(), &["init"]);
     git(repo.path(), &["config", "core.autocrlf", "false"]);
-    git(repo.path(), &["config", "user.name", "codewhale Tests"]);
+    git(repo.path(), &["config", "user.name", "ghosty Tests"]);
     git(repo.path(), &["config", "user.email", "tests@example.com"]);
     git(repo.path(), &["config", "commit.gpgsign", "false"]);
     git(repo.path(), &["commit", "--allow-empty", "-m", "base"]);

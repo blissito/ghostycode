@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use codewhale_protocol::runtime::DynamicToolSpec;
+use ghosty_protocol::runtime::DynamicToolSpec;
 use serde_json::Value;
 
 use crate::tools::spec::{

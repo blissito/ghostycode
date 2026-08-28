@@ -1,7 +1,7 @@
 //! Remembering which version last started, so the first launch after an
 //! update can say what changed.
 //!
-//! An update is invisible from inside the TUI: the user runs `codewhale
+//! An update is invisible from inside the TUI: the user runs `ghosty
 //! update` in a shell, restarts, and lands in a session that looks exactly
 //! like the one before it. The changelog exists (`/change` renders it, already
 //! localized) but nothing points at it at the one moment it is relevant.
@@ -38,8 +38,8 @@ use anyhow::{Context, Result};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
-/// Filename of the last-launch record, relative to the CodeWhale home
-/// directory (`~/.codewhale/last-launch.json` by default).
+/// Filename of the last-launch record, relative to the GhostyCode home
+/// directory (`~/.ghosty/last-launch.json` by default).
 pub const LAST_LAUNCH_FILE: &str = "last-launch.json";
 
 /// What a startup recording found and whether it managed to persist.
@@ -63,7 +63,7 @@ pub struct VersionChange {
     pub current: String,
 }
 
-/// The version that last started CodeWhale on this machine.
+/// The version that last started GhostyCode on this machine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LastLaunch {
     /// The `CARGO_PKG_VERSION` of the binary that last wrote this file.
@@ -114,10 +114,10 @@ impl LastLaunch {
     }
 }
 
-/// Resolve the record path inside a CodeWhale home directory.
+/// Resolve the record path inside a GhostyCode home directory.
 #[must_use]
-pub fn record_path_in(codewhale_home: &Path) -> PathBuf {
-    codewhale_home.join(LAST_LAUNCH_FILE)
+pub fn record_path_in(ghosty_home: &Path) -> PathBuf {
+    ghosty_home.join(LAST_LAUNCH_FILE)
 }
 
 /// Compare a stored version against the running one.
@@ -156,8 +156,8 @@ pub fn version_change(previous: Option<&str>, current: &str) -> Option<VersionCh
 ///
 /// A failed write is reported alongside the answer rather than replacing it:
 /// the comparison has already been made by that point and is still true.
-pub fn record_launch(codewhale_home: &Path, current: &str) -> LaunchOutcome {
-    let path = record_path_in(codewhale_home);
+pub fn record_launch(ghosty_home: &Path, current: &str) -> LaunchOutcome {
+    let path = record_path_in(ghosty_home);
     let previous = LastLaunch::load(&path).map(|record| record.version);
     let change = version_change(previous.as_deref(), current);
 

@@ -94,7 +94,7 @@ function checkInstallSnippets() {
   if (!existsSync(installPath)) return { ok: true, note: "install page not found" };
 
   const src = readFileSync(installPath, "utf-8");
-  const versionRefs = [...src.matchAll(/codewhale.*?([\d]+\.[\d]+\.[\d]+)/g)];
+  const versionRefs = [...src.matchAll(/ghosty.*?([\d]+\.[\d]+\.[\d]+)/g)];
   const stale = [];
   for (const ref of versionRefs) {
     const v = ref[1];
@@ -107,7 +107,7 @@ function checkInstallSnippets() {
   // matches the repository slug exactly. Keep the following `cd` command
   // case-correct so source installation works on case-sensitive filesystems.
   const sourceCheckout = src.match(
-    /git clone https:\/\/github\.com\/Hmbown\/([^\s`]+)\s*\ncd\s+([^\s`]+)/,
+    /git clone https:\/\/github\.com\/blissito\/([^\s`]+)\s*\ncd\s+([^\s`]+)/,
   );
   const checkout = sourceCheckout
     ? {

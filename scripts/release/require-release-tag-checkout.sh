@@ -37,8 +37,8 @@ if [[ -n "${dirty}" ]]; then
 fi
 
 workspace_version="$(grep -E '^version = "' Cargo.toml | head -n1 | sed -E 's/^version = "([^"]+)".*/\1/')"
-npm_version="$(node -p "require('./npm/codewhale/package.json').version")"
-binary_version="$(node -p "require('./npm/codewhale/package.json').codewhaleBinaryVersion")"
+npm_version="$(node -p "require('./npm/ghosty/package.json').version")"
+binary_version="$(node -p "require('./npm/ghosty/package.json').ghostyBinaryVersion")"
 for pair in "workspace:${workspace_version}" "npm:${npm_version}"; do
   label="${pair%%:*}"
   actual="${pair#*:}"
@@ -48,16 +48,16 @@ for pair in "workspace:${workspace_version}" "npm:${npm_version}"; do
   fi
 done
 if [[ "${binary_version}" != "${version}" ]]; then
-  if [[ "${CODEWHALE_ALLOW_NPM_BINARY_MISMATCH:-0}" == "1" ]]; then
+  if [[ "${GHOSTY_ALLOW_NPM_BINARY_MISMATCH:-0}" == "1" ]]; then
     echo "Packaging-only release: ${tag} points at binary release ${binary_version}."
   else
     echo "::error::npm binary version ${binary_version} does not match ${tag}." >&2
-    echo "Set CODEWHALE_ALLOW_NPM_BINARY_MISMATCH=1 only for an intentional packaging-only npm release." >&2
+    echo "Set GHOSTY_ALLOW_NPM_BINARY_MISMATCH=1 only for an intentional packaging-only npm release." >&2
     exit 1
   fi
 fi
 
-remote="${CODEWHALE_RELEASE_REMOTE:-origin}"
+remote="${GHOSTY_RELEASE_REMOTE:-origin}"
 "${repo_root}/scripts/release/verify-remote-tag.sh" \
   "${remote}" \
   "${tag}" \

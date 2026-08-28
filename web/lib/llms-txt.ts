@@ -29,7 +29,7 @@ const EXTRA_PAGES: readonly { path: string; title: string; description: string }
     path: "/constitution",
     title: "Three layers of law",
     description:
-      "Nested constitution: bundled base law, standing law (/constitution), and the repo's .codewhale/constitution.json.",
+      "Nested constitution: bundled base law, standing law (/constitution), and the repo's .ghosty/constitution.json.",
   },
   {
     path: "/roadmap",

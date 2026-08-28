@@ -109,7 +109,7 @@ impl Default for RouteResolver {
 }
 
 impl RouteResolver {
-    /// Construct a resolver with CodeWhale's bundled offline offerings.
+    /// Construct a resolver with GhostyCode's bundled offline offerings.
     ///
     /// The default offerings are the committed Models.dev-shaped catalog asset
     /// (`crate::catalog::bundled_catalog_offerings`, real context windows and
@@ -197,7 +197,11 @@ impl RouteResolver {
         // A custom DeepSeek-compatible endpoint retains that pass-through, but
         // a custom URL must not weaken another model-aware provider's closed
         // protocol roster.
-        let require_catalog_match = model_aware && provider_kind != ProviderKind::Deepseek;
+        let require_catalog_match = model_aware
+            && !matches!(
+                provider_kind,
+                ProviderKind::Deepseek | ProviderKind::Easybits
+            );
         let mut selected = if is_auto {
             match default_offering {
                 None if require_catalog_match => {
@@ -219,7 +223,11 @@ impl RouteResolver {
                 require_catalog_match,
             )?
         };
-        if provider_kind == ProviderKind::Deepseek {
+        // EasyBits revende la API de DeepSeek: mismo roster de endpoints.
+        if matches!(
+            provider_kind,
+            ProviderKind::Deepseek | ProviderKind::Easybits
+        ) {
             if custom_endpoint {
                 selected.endpoint_key = "chat".to_string();
             } else if selected.canonical_model.is_none()
@@ -228,7 +236,7 @@ impl RouteResolver {
                 // DeepSeek introduced its native agent wire on V4 Flash. Keep
                 // exact catalog rows authoritative (notably V4 Pro => Chat),
                 // while allowing future versioned direct models to adopt the
-                // new Responses surface without a Codewhale release.
+                // new Responses surface without a Ghosty release.
                 selected.endpoint_key = "responses".to_string();
             }
         }
@@ -326,7 +334,7 @@ impl RouteResolver {
         require_catalog_match: bool,
     ) -> Result<ResolvedOffering, RouteError> {
         // OpenCode Go publishes one combined model roster across two wire
-        // protocols. Codewhale's provider is deliberately Chat Completions
+        // protocols. Ghosty's provider is deliberately Chat Completions
         // only, so this allowlist must sit at the sole route-candidate seam.
         // In particular, a custom base URL must not reopen generic
         // LocalOrCustom pass-through for Messages-only model ids.
@@ -532,6 +540,9 @@ enum ProviderClass {
 fn classify(kind: ProviderKind) -> ProviderClass {
     match kind {
         // Strict first-party direct providers.
+        // EasyBits queda FUERA: revende DeepSeek bajo su propio id, así que el
+        // catálogo no le atribuye modelos y un roster cerrado lo rechazaría
+        // (`ForeignModelForDirectProvider`). Cae en el pass-through de abajo.
         ProviderKind::Deepseek | ProviderKind::Zai => ProviderClass::StrictDirect,
         // Local runtimes / custom OpenAI-compatible endpoints.
         ProviderKind::Ollama | ProviderKind::Vllm | ProviderKind::Sglang | ProviderKind::Openai => {

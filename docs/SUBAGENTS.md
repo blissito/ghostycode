@@ -22,7 +22,7 @@ The current `agent` implementation delegates to the durable sub-agent runtime
 while that cutover completes. It can still be useful for short in-session
 delegation. Transient provider header/stream/time-out failures are retried with
 backoff inside the child runtime before the worker is marked interrupted; if the
-retry budget is exhausted, Codewhale preserves a checkpoint and returns a
+retry budget is exhausted, Ghosty preserves a checkpoint and returns a
 continuation handle instead of leaving the parent to infer what happened. For
 work that must survive process restarts, sleep, or remote execution, prefer
 Fleet or a Workflow-backed fleet run.
@@ -53,7 +53,7 @@ stance toward the work — not just a different label.
 
 ## Maintainer posture
 
-Sub-agents help Codewhale move faster, but the parent agent still owns the
+Sub-agents help Ghosty move faster, but the parent agent still owns the
 maintainer decision. Use children to gather evidence, review patches, and run
 verification while keeping the community posture in
 [`AGENT_ETHOS.md`](AGENT_ETHOS.md): issues are open intake, PR gates are
@@ -136,7 +136,7 @@ task depends on decisions, files, todos, or plan state already in the parent
 transcript.
 
 Forked state shows the parent's To-do snapshot — the sole Work surface, written
-by `todo_write`. The child's `<codewhale:fork_state>` block carries the bounded
+by `todo_write`. The child's `<ghosty:fork_state>` block carries the bounded
 body rendered by `crates/tui/src/todo_snapshot.rs`, so a fork continues from the
 parent's real progress position rather than a paraphrase. That To-do section is
 resolved when the spawn happens, so a `todo_write` earlier in the same parent
@@ -174,12 +174,12 @@ state goes in `todo_write`.
 
 ## Worktree isolation
 
-For parallel edit lanes, launch the child with `worktree: true`. Codewhale
+For parallel edit lanes, launch the child with `worktree: true`. Ghosty
 creates a fresh git worktree and branch for that child, runs the child from the
 isolated checkout, and reports the resulting workspace/branch in the returned
 session projection and worker record. By default the branch is
 `codex/agent-<name>-<id>` and the checkout lives beside the parent repo under
-`.codewhale-worktrees/`, so the parent checkout stays clean.
+`.ghosty-worktrees/`, so the parent checkout stays clean.
 
 Isolation is not write authority. A prompt-only worker starts read-only.
 A writer also declares `write_authority: "workspace_write"` or
@@ -192,7 +192,7 @@ Optional fields:
 - `worktree_branch`: exact branch to create.
 - `worktree_base`: git ref to branch from; defaults to `HEAD`.
 - `worktree_path`: exact checkout path. Relative paths stay under the default
-  sibling `.codewhale-worktrees/` root.
+  sibling `.ghosty-worktrees/` root.
 
 Do not combine `cwd` with `worktree`; `cwd` remains the manual escape hatch for
 an already-created directory inside the parent workspace.
@@ -244,7 +244,7 @@ OUTPUT: VERDICT, EVIDENCE, GAPS, NEXT.
 
 ```text
 QUESTION: Is the focused prompt/subagent test filter valid, and what fails if not?
-SCOPE: cargo test -p codewhale-tui --bin codewhale-tui --locked prompt; subagent filter if needed.
+SCOPE: cargo test -p ghosty-tui --bin ghosty-tui --locked prompt; subagent filter if needed.
 ALREADY_KNOWN: Do not fix failures; capture exact command, exit code, and first relevant assertion.
 EFFORT: medium
 STOP_CONDITION: Stop after one clean PASS or one reproducible failing assertion with command evidence.
@@ -311,7 +311,7 @@ the next turn.
 ## Concurrency cap
 
 Up to **64** sub-agents run concurrently by default (`DEFAULT_MAX_SUBAGENTS`),
-configurable via `[subagents].max_concurrent` in `~/.codewhale/config.toml` up to
+configurable via `[subagents].max_concurrent` in `~/.ghosty/config.toml` up to
 the hard ceiling of **128** (`MAX_SUBAGENTS`). The session admits a bounded
 queue of up to **1024** running plus queued sub-agents by default
 (`MAX_SUBAGENT_ADMISSION`, `crates/tui/src/config/subagent_limits.rs:21`), so a turn can
@@ -520,7 +520,7 @@ Example: keep the parent session on DeepSeek, but run a formatter child on a
 local LM Studio OpenAI-compatible endpoint:
 
 ```toml
-# ~/.codewhale/config.toml or workspace config
+# ~/.ghosty/config.toml or workspace config
 provider = "deepseek"
 
 [providers.deepseek]
@@ -534,7 +534,7 @@ model = "qwen-2.5-7b"
 ```
 
 ```toml
-# .codewhale/agents/local-formatter.toml
+# .ghosty/agents/local-formatter.toml
 id = "local-formatter"
 role_hint = "formatter"
 provider = "lm-studio"
@@ -547,7 +547,7 @@ text = "Use small, local edits. Keep formatting changes mechanical."
 
 Then call `agent(profile: "local-formatter", prompt: "...")`. In-process
 children build a client for `lm-studio`; Fleet workers forward
-`--provider lm-studio` to `codewhale exec`, which resolves the same
+`--provider lm-studio` to `ghosty exec`, which resolves the same
 `[providers.lm-studio]` table. Unknown or unconfigured provider ids fail the
 spawn rather than silently falling back to the parent provider.
 
@@ -560,7 +560,7 @@ A timed-out attempt is retried with exponential backoff (up to 5
 retries) before the step interrupts with a preserved checkpoint.
 Long-thinking children that legitimately exceed that, for example
 heavy plan or review work behind `agent`, can extend the timeout in
-`~/.codewhale/config.toml`:
+`~/.ghosty/config.toml`:
 
 ```toml
 [subagents]
@@ -598,7 +598,7 @@ Pending → Running → (Completed | Failed(reason) | Cancelled | Interrupted(re
 
 `Interrupted` fires when the manager detects a `Running` agent whose task
 handle is gone — typically after a process restart that loaded the workspace's
-persisted state from `.codewhale/state/subagents.v1.json`. The parent can open a
+persisted state from `.ghosty/state/subagents.v1.json`. The parent can open a
 replacement session with the same assignment or treat it as a terminal state.
 
 ### Session boundaries (#405)
@@ -621,7 +621,7 @@ manager can't match them to the current boot.
 ## Run receipts, follow-up, and takeover
 
 Each compatibility sub-agent has a persisted worker record in
-`.codewhale/state/subagents.v1.json`. The record is the current run-ledger
+`.ghosty/state/subagents.v1.json`. The record is the current run-ledger
 slice for sub-agent lanes until those lanes are backed directly by the fleet
 ledger: it stores `run_id`, objective, role/model,
 workspace/branch, lifecycle events, artifact refs, follow-up target, takeover
@@ -682,15 +682,15 @@ sessions, or a verifier that learns "this test is flaky".
 
 `remember` takes a `scope` of `global` or `workspace`
 (`crates/tui/src/tools/remember.rs:79-108`) and writes through
-`NativeMemoryStore` to `~/.codewhale/memory/global/MEMORY.md` or
-`~/.codewhale/memory/workspace/<id>/MEMORY.md`. Writes do not go through the
+`NativeMemoryStore` to `~/.ghosty/memory/global/MEMORY.md` or
+`~/.ghosty/memory/workspace/<id>/MEMORY.md`. Writes do not go through the
 standard write-approval flow. The legacy single-file `memory.md` path was
 removed in v0.9.4 (remember.rs:165); see `docs/MEMORY.md` for the full layout.
 
 ## Implementation notes
 
 - Source: `crates/tui/src/tools/subagent/mod.rs`.
-- Persisted state: `<workspace>/.codewhale/state/subagents.v1.json`. Schema
+- Persisted state: `<workspace>/.ghosty/state/subagents.v1.json`. Schema
   version `1` (forward-compatible — new optional fields use
   `#[serde(default)]`).
 - Worker records are pruned by time: completed / failed / cancelled /

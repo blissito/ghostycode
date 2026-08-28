@@ -1,6 +1,6 @@
 //! Process hardening for Linux sandbox defense-in-depth (#2183).
 //!
-//! This module applies kernel-level restrictions to the codewhale-tui process
+//! This module applies kernel-level restrictions to the ghosty-tui process
 //! itself. These hardening measures protect the *parent* TUI process and its
 //! descendants from information leaks and privilege-escalation vectors; they
 //! are not a filesystem or network sandbox for child commands. The seccomp
@@ -21,9 +21,9 @@
 //!    irreversible and must be applied before executing any helper binaries or
 //!    subprocesses that might (incorrectly) rely on privilege boundaries.
 //!    Because this also blocks intentional privilege gains — `sudo`, `su`,
-//!    setuid helpers — a user who runs Codewhale as a wheel/wheel-equivalent
+//!    setuid helpers — a user who runs Ghosty as a wheel/wheel-equivalent
 //!    administrator and wants the model to be able to escalate can opt out of
-//!    exactly this one measure with `CODEWHALE_NO_NEW_PRIVS=0` (#5413). The
+//!    exactly this one measure with `GHOSTY_NO_NEW_PRIVS=0` (#5413). The
 //!    other two measures stay on.
 //!
 //! 3. `RLIMIT_CORE` — disables core dumps so that sensitive in-memory data
@@ -40,14 +40,14 @@
 ///
 /// `PR_SET_NO_NEW_PRIVS` is an irreversible, inherited-by-children kernel
 /// flag, so applying it by default breaks workflows where the user *wants*
-/// Codewhale to be able to escalate: `sudo`, `su`, setuid/fscaps helpers run
+/// Ghosty to be able to escalate: `sudo`, `su`, setuid/fscaps helpers run
 /// by a wheel-group administrator (#5413). Setting this variable to any
 /// falsey value (`0`, `false`, `no`, `off`, `disabled`, or empty) skips
 /// exactly this one measure. Any other value, or leaving it unset, keeps the
 /// default hardening. `PR_SET_DUMPABLE` and `RLIMIT_CORE` are never skipped.
-pub(crate) const NO_NEW_PRIVS_ENV: &str = "CODEWHALE_NO_NEW_PRIVS";
+pub(crate) const NO_NEW_PRIVS_ENV: &str = "GHOSTY_NO_NEW_PRIVS";
 
-/// Whether a `CODEWHALE_NO_NEW_PRIVS` value requests skipping the
+/// Whether a `GHOSTY_NO_NEW_PRIVS` value requests skipping the
 /// no-new-privileges flag. Falsey per the workspace env convention — the same
 /// value set (`""`, `0`, `false`, `no`, `off`, `disabled`) that
 /// `docs/CONFIGURATION.md` treats as "not set".
@@ -68,7 +68,7 @@ fn no_new_privs_opted_out() -> bool {
 /// On Linux, this:
 /// - Sets `PR_SET_DUMPABLE` to 0 (prevents ptrace, core dumps)
 /// - Sets `PR_SET_NO_NEW_PRIVS` to 1 (irreversible no-new-privileges),
-///   unless `CODEWHALE_NO_NEW_PRIVS` holds a falsey value (#5413)
+///   unless `GHOSTY_NO_NEW_PRIVS` holds a falsey value (#5413)
 /// - Sets `RLIMIT_CORE` to 0 (disables core dumps)
 ///
 /// On non-Linux platforms this is a no-op.
@@ -122,8 +122,8 @@ fn apply_linux_hardening() {
     // offers.
     //
     // That strength is also the flag's one legitimate break: a wheel-group
-    // administrator running Codewhale over ssh loses `sudo`/`su`/setuid
-    // helpers for the whole process tree (#5413). `CODEWHALE_NO_NEW_PRIVS`
+    // administrator running Ghosty over ssh loses `sudo`/`su`/setuid
+    // helpers for the whole process tree (#5413). `GHOSTY_NO_NEW_PRIVS`
     // with a falsey value skips only this measure, before any thread exists —
     // the same point in startup where the flag itself is applied.
     //
@@ -229,7 +229,7 @@ mod tests {
         // name, and the reader is a pure projection of var_os over that
         // constant. Setting/removing the variable here would race every other
         // test in the process.
-        assert_eq!(NO_NEW_PRIVS_ENV, "CODEWHALE_NO_NEW_PRIVS");
+        assert_eq!(NO_NEW_PRIVS_ENV, "GHOSTY_NO_NEW_PRIVS");
         let projected = std::env::var_os(NO_NEW_PRIVS_ENV)
             .is_some_and(|value| is_no_new_privs_opt_out(&value.to_string_lossy()));
         assert_eq!(projected, no_new_privs_opted_out());

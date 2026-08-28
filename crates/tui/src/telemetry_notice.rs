@@ -10,8 +10,8 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
-use codewhale_config::{SetupState, TELEMETRY_NOTICE_VERSION};
-use codewhale_telemetry::SessionSource;
+use ghosty_config::{SetupState, TELEMETRY_NOTICE_VERSION};
+use ghosty_telemetry::SessionSource;
 
 use crate::localization::{Locale, MessageId, tr};
 
@@ -122,7 +122,7 @@ pub(crate) fn plan_if_due(
         return TelemetryNoticePlan::NotDue;
     }
 
-    let store = match codewhale_config::ConfigStore::load(config_path) {
+    let store = match ghosty_config::ConfigStore::load(config_path) {
         Ok(store) => store,
         Err(error) => {
             // A config we cannot read is a config we must not write.
@@ -141,13 +141,13 @@ pub(crate) fn plan_if_due(
 }
 
 fn plan_for_store_and_state(
-    store: codewhale_config::ConfigStore,
+    store: ghosty_config::ConfigStore,
     setup_state_path: PathBuf,
     session_source: SessionSource,
 ) -> TelemetryNoticePlan {
     let resolved = store
         .config
-        .resolve_runtime_options(&codewhale_config::CliRuntimeOverrides::default());
+        .resolve_runtime_options(&ghosty_config::CliRuntimeOverrides::default());
     let state = match load_notice_state_at(&setup_state_path) {
         Ok(state) => state,
         Err(error) => {
@@ -162,7 +162,7 @@ fn plan_for_store_and_state(
         needs_notice: state.needs_telemetry_notice(TELEMETRY_NOTICE_VERSION),
         persisted_off: resolved.telemetry_explicit_off,
         recorded_opt_out: state.telemetry_opted_out(),
-        floor_in_force: codewhale_config::telemetry_floor_in_force(),
+        floor_in_force: ghosty_config::telemetry_floor_in_force(),
     };
     if gate.may_ask() {
         TelemetryNoticePlan::Due(PendingTelemetryNotice {
@@ -194,7 +194,7 @@ pub(crate) fn apply_decision(
         }
     };
 
-    // The modal can remain open while another Codewhale process records an
+    // The modal can remain open while another Ghosty process records an
     // opt-out. A stale Keep-on click must not overwrite that newer privacy
     // decision after we reload the shared setup state.
     if enabled && state.telemetry_opted_out() {
@@ -263,7 +263,7 @@ fn saved_preference_enabled_at(config: &crate::config::Config, setup_state_path:
     if config.telemetry == Some(false) {
         return false;
     }
-    match codewhale_telemetry::load_setup_state_for_decision_at(setup_state_path) {
+    match ghosty_telemetry::load_setup_state_for_decision_at(setup_state_path) {
         // The telemetry owner returns a fresh default state for a genuinely
         // absent sidecar. `None` therefore means an existing record was
         // unreadable (or the path could not be inspected) and must fail closed.
@@ -296,9 +296,9 @@ pub(crate) fn apply_persistent_preference(
             };
         }
     };
-    let telemetry_root = codewhale_config::codewhale_home()
+    let telemetry_root = ghosty_config::ghosty_home()
         .ok()
-        .map(|home| home.join(codewhale_telemetry::TELEMETRY_DIR));
+        .map(|home| home.join(ghosty_telemetry::TELEMETRY_DIR));
     apply_persistent_preference_at(config_path, setup_state_path, telemetry_root, enabled)
 }
 
@@ -368,7 +368,7 @@ fn apply_persistent_preference_at(
     // Wipe even if both durable writes fail: a successful tombstone stops the
     // already-armed process for the remainder of this session.
     let wipe_result = match telemetry_root.as_deref().filter(|root| root.is_dir()) {
-        Some(root) => codewhale_telemetry::buffer::wipe(root),
+        Some(root) => ghosty_telemetry::buffer::wipe(root),
         None => Ok(()),
     };
     let durable = config_result.is_ok() || state_result.is_ok();
@@ -430,7 +430,7 @@ fn bounded_failure_detail(detail: String) -> String {
 }
 
 fn write_config_preference(config_path: Option<PathBuf>, enabled: bool) -> Result<()> {
-    let mut store = codewhale_config::ConfigStore::load(config_path)?;
+    let mut store = ghosty_config::ConfigStore::load(config_path)?;
     store
         .config
         .set_value("telemetry", if enabled { "true" } else { "false" })?;
@@ -467,7 +467,7 @@ impl NoticeGate {
 
 /// Persist the immediate opt-out in the exact config this process loaded.
 fn write_config_opt_out(config_path: Option<PathBuf>) -> Result<()> {
-    let mut store = codewhale_config::ConfigStore::load(config_path)?;
+    let mut store = ghosty_config::ConfigStore::load(config_path)?;
     store.config.set_value("telemetry", "false")?;
     store.save()
 }
@@ -598,7 +598,7 @@ mod tests {
         std::fs::write(&state_path, "not-json").expect("seed corrupt state");
 
         assert!(load_notice_state_at(&state_path).is_err());
-        let store = codewhale_config::ConfigStore::load(Some(config_path)).expect("load config");
+        let store = ghosty_config::ConfigStore::load(Some(config_path)).expect("load config");
         let plan = plan_for_store_and_state(store, state_path.clone(), SessionSource::Interactive);
         assert!(matches!(&plan, TelemetryNoticePlan::SuppressArming));
         assert!(
@@ -692,7 +692,7 @@ mod tests {
         std::fs::write(&config_path, "telemetry = true\n").expect("seed config");
         std::fs::create_dir_all(&telemetry_root).expect("seed telemetry root");
         std::fs::write(
-            codewhale_telemetry::buffer::buffer_path(&telemetry_root),
+            ghosty_telemetry::buffer::buffer_path(&telemetry_root),
             "queued-event\n",
         )
         .expect("seed buffer");
@@ -715,11 +715,9 @@ mod tests {
                 .expect("saved state")
                 .telemetry_opted_out()
         );
-        assert!(codewhale_telemetry::buffer::tombstone_present(
-            &telemetry_root
-        ));
+        assert!(ghosty_telemetry::buffer::tombstone_present(&telemetry_root));
         assert_eq!(
-            std::fs::read_to_string(codewhale_telemetry::buffer::buffer_path(&telemetry_root))
+            std::fs::read_to_string(ghosty_telemetry::buffer::buffer_path(&telemetry_root))
                 .expect("read wiped buffer"),
             ""
         );
@@ -763,22 +761,22 @@ mod tests {
                 .telemetry_accepted(TELEMETRY_NOTICE_VERSION)
         );
         assert!(
-            codewhale_telemetry::buffer::tombstone_present(&telemetry_root),
+            ghosty_telemetry::buffer::tombstone_present(&telemetry_root),
             "the already-running process stays off; the next launch clears this after a fresh permission check"
         );
 
-        let store = codewhale_config::ConfigStore::load(Some(config_path))
+        let store = ghosty_config::ConfigStore::load(Some(config_path))
             .expect("reload enabled config for the next launch");
         let resolved = store
             .config
-            .resolve_runtime_options(&codewhale_config::CliRuntimeOverrides::default());
+            .resolve_runtime_options(&ghosty_config::CliRuntimeOverrides::default());
         let reloaded_state = SetupState::load_from(&state_path).expect("reload enabled state");
         assert!(
-            codewhale_telemetry::decide_in_home(
+            ghosty_telemetry::decide_in_home(
                 Some(dir.path()),
                 &resolved,
                 &reloaded_state,
-                codewhale_telemetry::Surface::Tui,
+                ghosty_telemetry::Surface::Tui,
             )
             .is_enabled(),
             "a fresh launch may clear the prior tombstone only after both saved registers resolve enabled"
@@ -828,9 +826,7 @@ mod tests {
             applied.outcome,
             TelemetryPreferenceOutcome::DisabledForSession(_)
         ));
-        assert!(codewhale_telemetry::buffer::tombstone_present(
-            &telemetry_root
-        ));
+        assert!(ghosty_telemetry::buffer::tombstone_present(&telemetry_root));
     }
 
     #[test]

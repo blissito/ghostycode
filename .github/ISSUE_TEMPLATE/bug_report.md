@@ -27,18 +27,18 @@ labels: bug
 ## Environment
 
 - OS:
-- codewhale version:
+- ghosty version:
 - Install method:
-- `codewhale doctor` summary:
+- `ghosty doctor` summary:
 - Model/provider:
 - Terminal app:
 - Shell:
 
 <!-- Hints:
 OS: Windows 11 / Ubuntu 22.04 / macOS 14
-codewhale version: run `codewhale --version`
+ghosty version: run `ghosty --version`
 Install method: cargo install / release binary / source build
-codewhale doctor summary: paste only the relevant lines, and redact secrets
+ghosty doctor summary: paste only the relevant lines, and redact secrets
 Model/provider: deepseek-v4-pro / DeepSeek, or qwen2.5-coder / Ollama
 Terminal app: iTerm2 / Windows Terminal / GNOME Terminal / VS Code terminal
 Shell: bash / zsh / fish / PowerShell

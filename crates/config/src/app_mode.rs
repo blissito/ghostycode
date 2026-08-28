@@ -1,4 +1,4 @@
-//! The TUI's user-facing operating mode. Lives in codewhale-config so
+//! The TUI's user-facing operating mode. Lives in ghosty-config so
 //! settings, receipts, and other crates can name it without depending on
 //! the TUI; the TUI adds the localized picker strings through an extension
 //! trait.

@@ -1,6 +1,6 @@
 # Authorization order
 
-Codewhale combines tool availability, hooks, typed permission rules, approval
+Ghosty combines tool availability, hooks, typed permission rules, approval
 posture, repository policy, and sandboxing. An approval from one layer is not a
 universal bypass: a later safety layer can still require review or block the
 call, and an approval is not an operating-system sandbox grant.
@@ -94,7 +94,7 @@ from this ordering contract; see [Runtime API](RUNTIME_API.md).
 
 ## Project overlays
 
-The project config overlay at `<workspace>/.codewhale/config.toml` is not a
+The project config overlay at `<workspace>/.ghosty/config.toml` is not a
 permission-rule layer. It can only move approval and sandbox posture toward
 more restrictive values:
 
@@ -126,9 +126,9 @@ The contract is exercised by tests at the layers that own each decision:
 Focused commands:
 
 ```bash
-cargo test -p codewhale-execpolicy --test authorization_order --locked
-cargo test -p codewhale-tui --bin codewhale-tui --locked full_access_permission_allow_cannot_bypass
-cargo test -p codewhale-config --locked project_merge_only_tightens_approval_and_sandbox_policy
+cargo test -p ghosty-execpolicy --test authorization_order --locked
+cargo test -p ghosty-tui --bin ghosty-tui --locked full_access_permission_allow_cannot_bypass
+cargo test -p ghosty-config --locked project_merge_only_tightens_approval_and_sandbox_policy
 ```
 
 ## Related references

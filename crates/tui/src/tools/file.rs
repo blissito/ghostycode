@@ -120,7 +120,7 @@ pub(super) const EXPECTED_HASH_DESCRIPTION: &str = "The `content_hash` from a pr
 /// Every mainstream harness names the same three file-edit arguments
 /// differently — `old_string`/`new_string`, `old_str`/`new_str`,
 /// `oldText`/`newText` — and models carry whichever spelling their training
-/// saw most. CodeWhale's canonical `search`/`replace` is the odd one out, so a
+/// saw most. GhostyCode's canonical `search`/`replace` is the odd one out, so a
 /// model reaching for its prior used to burn a full turn on a rejection
 /// (#5209) and then guess again. Translating an unambiguous synonym is
 /// strictly better than refusing it: the edit the model asked for is the edit
@@ -143,7 +143,7 @@ const fn alias(alias: &'static str, canonical: &'static str) -> ParamAlias {
     ParamAlias { alias, canonical }
 }
 
-/// Path spellings shared by every file action. `path` is CodeWhale's
+/// Path spellings shared by every file action. `path` is GhostyCode's
 /// canonical name and the most common one in the field, but `file_path` is
 /// widespread enough in training data to be worth accepting everywhere.
 pub(super) const PATH_ALIASES: &[ParamAlias] =
@@ -163,7 +163,7 @@ const EDIT_ALIASES: &[ParamAlias] = &[
 ];
 
 /// Read-window spellings. `offset`/`limit` and `line_offset`/`n_lines` both
-/// name the same two numbers as CodeWhale's `start_line`/`max_lines` in widely
+/// name the same two numbers as GhostyCode's `start_line`/`max_lines` in widely
 /// trained-on tool surfaces. A wrong guess here used to be ignored outright,
 /// silently returning the head of the file instead of the window the model
 /// asked for — a wrong answer shaped like a right one.
@@ -404,7 +404,7 @@ fn config_backup_path_for_credential_guard(config_path: &Path) -> PathBuf {
     let mut file_name = config_path
         .file_name()
         .map(std::ffi::OsString::from)
-        .unwrap_or_else(|| std::ffi::OsString::from(codewhale_config::CONFIG_FILE_NAME));
+        .unwrap_or_else(|| std::ffi::OsString::from(ghosty_config::CONFIG_FILE_NAME));
     file_name.push(".bak");
     config_path
         .parent()
@@ -419,28 +419,28 @@ fn is_config_or_backup(candidate: &Path, config_path: &Path) -> bool {
     candidate == config_path || candidate == backup_path
 }
 
-/// Return whether `read_file` must refuse a CodeWhale-owned credential file.
+/// Return whether `read_file` must refuse a GhostyCode-owned credential file.
 ///
 /// This is deliberately scoped to the active config, the two conventional
-/// config locations (including one-time backups), and CodeWhale's file-backed
+/// config locations (including one-time backups), and GhostyCode's file-backed
 /// secret-store directories. Other dotfiles remain readable. Model-bound
 /// redaction is still required because shell tools can read these files and
 /// arbitrary commands can print credentials without reading a file at all.
-pub(crate) fn is_codewhale_credential_path(path: &Path) -> bool {
+pub(crate) fn is_ghosty_credential_path(path: &Path) -> bool {
     let candidate = canonical_path_for_credential_guard(path);
 
-    if let Ok(active_config) = codewhale_config::resolve_config_path(None)
+    if let Ok(active_config) = ghosty_config::resolve_config_path(None)
         && is_config_or_backup(&candidate, &active_config)
     {
         return true;
     }
 
     let roots = [
-        codewhale_config::codewhale_home(),
-        codewhale_config::legacy_deepseek_home(),
+        ghosty_config::ghosty_home(),
+        ghosty_config::legacy_deepseek_home(),
     ];
     for root in roots.into_iter().flatten() {
-        if is_config_or_backup(&candidate, &root.join(codewhale_config::CONFIG_FILE_NAME)) {
+        if is_config_or_backup(&candidate, &root.join(ghosty_config::CONFIG_FILE_NAME)) {
             return true;
         }
 
@@ -658,7 +658,7 @@ pub struct ReadFileTool;
 
 impl ReadFileTool {
     /// Execute the lowercase `read` primitive without leaking the hidden
-    /// Codewhale hash/snapshot protocol into its small-contract-shaped model contract.
+    /// Ghosty hash/snapshot protocol into its small-contract-shaped model contract.
     pub(super) async fn execute_contract_read(
         input: Value,
         context: &ToolContext,
@@ -668,9 +668,9 @@ impl ReadFileTool {
         let offset = contract_line_number(&input, "offset")?;
         let limit = contract_line_number(&input, "limit")?;
         let file_path = context.resolve_path(path_str)?;
-        if is_codewhale_credential_path(&file_path) {
+        if is_ghosty_credential_path(&file_path) {
             return Err(ToolError::permission_denied(
-                "read cannot expose Codewhale configuration or credential-store files; use `codewhale config list` or `codewhale auth status` for safe inspection",
+                "read cannot expose Ghosty configuration or credential-store files; use `ghosty config list` or `ghosty auth status` for safe inspection",
             ));
         }
         check_file_operation_cancelled(context)?;
@@ -770,7 +770,7 @@ impl ToolSpec for ReadFileTool {
     }
 
     fn description(&self) -> &'static str {
-        "Read a UTF-8 file from the workspace. Use this instead of `cat`, `head`, `tail`, or `sed -n '..p'` in `Bash` — it's faster, sandbox-aware, and skips the approval prompt. Plain text is returned as-is and records the file snapshot required before `edit` will make a narrow in-place edit. Text reads report the whole file's `content_hash=\"sha256:…\"`; pass that value back as `expected_hash` on a later `write`, `edit`, or `patch` to have the write refused if the file changed in between. CodeWhale config files and file-backed credential stores cannot be read with this tool; use `codewhale config list` or `codewhale auth status` for safe inspection. PDFs are text-extracted when the optional `pdftotext` executable (Poppler) is installed. Image screenshots are OCR-extracted when local OCR is available. Cannot read other non-PDF binaries.\n\nFor large files, use `start_line` and `max_lines` to read in chunks. By default, returns up to 500 lines or 16KB, whichever comes first. If `truncated=\"true\"` and `next_start_line` is present, continue reading from there; a byte-limited window instead shows head + tail with a `[CONTENT TRUNCATED]` marker and its note says how to narrow the range. For PDFs, use `pages` instead — `start_line`/`max_lines` only apply to text files."
+        "Read a UTF-8 file from the workspace. Use this instead of `cat`, `head`, `tail`, or `sed -n '..p'` in `Bash` — it's faster, sandbox-aware, and skips the approval prompt. Plain text is returned as-is and records the file snapshot required before `edit` will make a narrow in-place edit. Text reads report the whole file's `content_hash=\"sha256:…\"`; pass that value back as `expected_hash` on a later `write`, `edit`, or `patch` to have the write refused if the file changed in between. GhostyCode config files and file-backed credential stores cannot be read with this tool; use `ghosty config list` or `ghosty auth status` for safe inspection. PDFs are text-extracted when the optional `pdftotext` executable (Poppler) is installed. Image screenshots are OCR-extracted when local OCR is available. Cannot read other non-PDF binaries.\n\nFor large files, use `start_line` and `max_lines` to read in chunks. By default, returns up to 500 lines or 16KB, whichever comes first. If `truncated=\"true\"` and `next_start_line` is present, continue reading from there; a byte-limited window instead shows head + tail with a `[CONTENT TRUNCATED]` marker and its note says how to narrow the range. For PDFs, use `pages` instead — `start_line`/`max_lines` only apply to text files."
     }
 
     fn input_schema(&self) -> Value {
@@ -814,9 +814,9 @@ impl ToolSpec for ReadFileTool {
 
         let path_str = required_str(&input, "path")?;
         let file_path = context.resolve_path(path_str)?;
-        if is_codewhale_credential_path(&file_path) {
+        if is_ghosty_credential_path(&file_path) {
             return Err(ToolError::permission_denied(
-                "File `read` cannot expose CodeWhale configuration or credential-store files; use `codewhale config list` or `codewhale auth status` for safe inspection",
+                "File `read` cannot expose GhostyCode configuration or credential-store files; use `ghosty config list` or `ghosty auth status` for safe inspection",
             ));
         }
         let pages = optional_str(&input, "pages")?;

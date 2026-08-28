@@ -104,7 +104,7 @@ pub fn build_generate_content_body(request: &MessageRequest) -> Result<Value> {
     }
     Ok(json!({
         "model": model,
-        "userAgent": "codewhale",
+        "userAgent": "ghosty",
         "request": {
             "contents": contents,
         }

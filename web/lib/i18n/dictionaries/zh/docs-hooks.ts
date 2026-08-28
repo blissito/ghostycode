@@ -2,13 +2,13 @@ import type { DocsHooksDict } from "../types";
 
 /** Simplified Chinese dictionary for `app/[locale]/docs/hooks/page.tsx`. */
 export const docsHooks: DocsHooksDict = {
-  metaTitle: "钩子 · Codewhale 文档",
+  metaTitle: "钩子 · Ghosty 文档",
   metaDescription:
     "已发布的生命周期钩子：可变 message_submit、tool_call_before 决策、turn_end 与子 Agent 观察事件。",
   bodyClassName: "text-ink-soft leading-[1.9] tracking-wide",
   overviewTitle: "钩子",
   overviewLead:
-    "钩子让你把自己的命令挂进 Codewhale 的生命周期：在消息提交前注入上下文、在工具调用前执行策略、在回合结束或子 Agent 启停时做审计。本页描述当前已发布的行为；docs/rfcs/1364-hooks-lifecycle.md 是这组能力的设计 RFC，完整配置 schema 见 docs/CONFIGURATION.md。",
+    "钩子让你把自己的命令挂进 Ghosty 的生命周期：在消息提交前注入上下文、在工具调用前执行策略、在回合结束或子 Agent 启停时做审计。本页描述当前已发布的行为；docs/rfcs/1364-hooks-lifecycle.md 是这组能力的设计 RFC，完整配置 schema 见 docs/CONFIGURATION.md。",
   configIntro:
     "钩子配置在 config.toml 的 {hooksTable} 条目下；TUI 里运行 {hooksCommand} 可以按事件分组查看每个钩子的名称、命令预览、超时和条件，以及 {enabledKey} 的全局开关状态。",
   events: [
@@ -31,7 +31,7 @@ export const docsHooks: DocsHooksDict = {
   ],
   projectTitle: "项目级钩子",
   projectLead:
-    '仓库可以在 <workspace>/.codewhale/hooks.toml 中携带策略。因为项目钩子是可执行的 shell 配置，Codewhale 只有在工作区通过信任提示或用户配置中的 trust_level = "trusted" 被信任后才加载它们——会话内的 /trust on 和旧版 .deepseek/trusted 标记都不会单独启用项目钩子。受信任后，项目钩子追加在 config.toml 的全局钩子之后运行，因此对 updatedInput 而言最后生效。格式错误但已受信任的项目文件会记警告并回退到只用全局钩子。',
+    '仓库可以在 <workspace>/.ghosty/hooks.toml 中携带策略。因为项目钩子是可执行的 shell 配置，Ghosty 只有在工作区通过信任提示或用户配置中的 trust_level = "trusted" 被信任后才加载它们——会话内的 /trust on 和旧版 .deepseek/trusted 标记都不会单独启用项目钩子。受信任后，项目钩子追加在 config.toml 的全局钩子之后运行，因此对 updatedInput 而言最后生效。格式错误但已受信任的项目文件会记警告并回退到只用全局钩子。',
   sourceNote:
     "来源文档：docs/rfcs/1364-hooks-lifecycle.md（设计 RFC）, docs/CONFIGURATION.md（配置 schema）· 更新时请同步修改 docs-map.ts。",
 };

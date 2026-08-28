@@ -1,4 +1,4 @@
-# RFC: CodeWhale Workrooms — Chat-native Threaded Agent Work
+# RFC: GhostyCode Workrooms — Chat-native Threaded Agent Work
 
 **Issue:** #3209
 **Status:** Future RFC — Phase 1 shipped (protocol types + link parser in
@@ -14,7 +14,7 @@ integration, persistent state, and model-visible tools remain follow-up work.
 
 ## 1. Problem
 
-CodeWhale agent work currently lives in transient TUI sessions, local Runtime API
+GhostyCode agent work currently lives in transient TUI sessions, local Runtime API
 threads, Fleet runs, and chat-bridge message loops — each with its own lifecycle,
 state representation, and context boundary. There is no first-class abstraction
 that:
@@ -136,9 +136,9 @@ pub struct WorkroomLink {
 ### 2.2 Link Format
 
 ```
-codewhale://workroom/wr_abc123def456
-codewhale://workroom/wr_abc123def456/thread/thr_xyz
-codewhale://workroom/wr_abc123def456/event/evt_789
+ghosty://workroom/wr_abc123def456
+ghosty://workroom/wr_abc123def456/thread/thr_xyz
+ghosty://workroom/wr_abc123def456/event/evt_789
 ```
 
 ### 2.3 Mapping to Existing Infrastructure
@@ -176,21 +176,21 @@ Response:
 
 List active threads within a workroom.
 
-### 3.3 `GET /workroom/resolve?link=codewhale://workroom/wr_abc/thread/thr_x`
+### 3.3 `GET /workroom/resolve?link=ghosty://workroom/wr_abc/thread/thr_x`
 
 Resolve a workroom link to scoped context (thread metadata, recent events)
 without replaying the full transcript.
 
 ### 3.4 Planned tool: `resolve_workroom_link`
 
-A model-visible tool that takes a `codewhale://workroom/...` URL and returns
+A model-visible tool that takes a `ghosty://workroom/...` URL and returns
 the scoped context (thread title, recent event summaries, external refs). This
 should not be registered until the backing runtime resolution behavior exists.
 
 ## 4. Security Model
 
 - **Local-first by default.** Persisted workroom state should live under the
-  CodeWhale home directory alongside existing state. No cloud service is
+  GhostyCode home directory alongside existing state. No cloud service is
   assumed.
 - **Runtime API auth required.** Planned workroom endpoints must use the same
   `Authorization: Bearer <token>` protection as other runtime surfaces.
@@ -221,7 +221,7 @@ as bridge notifications.
 ### 5.3 TUI
 
 The TUI should surface workroom inbox events (mentions, approvals) in the
-sidebar, and allow pasting `codewhale://` links into the composer for
+sidebar, and allow pasting `ghosty://` links into the composer for
 context resolution.
 
 ## 6. Implementation Plan
@@ -245,7 +245,7 @@ context resolution.
 
 ## 7. Non-goals for Phase 1
 
-- No hosted public CodeWhale cloud service
+- No hosted public GhostyCode cloud service
 - No default-on Slack/Discord/Feishu/Telegram/GitHub App integration
 - No arbitrary public share links without explicit auth story
 - No model-specific workroom format

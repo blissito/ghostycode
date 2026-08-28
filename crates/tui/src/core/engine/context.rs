@@ -11,7 +11,7 @@ use crate::models::SystemPrompt;
 pub(super) use crate::route_budget::effective_max_output_tokens;
 pub(super) use crate::route_budget::effective_max_output_tokens_for_route;
 use crate::tools::spec::ToolResult;
-use codewhale_config::route::RouteLimits;
+use ghosty_config::route::RouteLimits;
 use serde_json::Value;
 /// Keep this many most recent messages when emergency trimming is required.
 pub(super) const MIN_RECENT_MESSAGES_TO_KEEP: usize = 4;

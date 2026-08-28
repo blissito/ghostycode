@@ -1,5 +1,5 @@
-//! `codewhale integrations …` command surface (dispatched from the outer
-//! `codewhale` binary as a passthrough).
+//! `ghosty integrations …` command surface (dispatched from the outer
+//! `ghosty` binary as a passthrough).
 
 use std::io::IsTerminal;
 use std::path::Path;
@@ -30,7 +30,7 @@ fn status_report(
 ) -> Result<(DshPaths, DshStatusReport)> {
     let paths = DshPaths::from_process()?;
     let detection = detect_now();
-    let identity = dsh::codewhale_route_identity(config, workspace);
+    let identity = dsh::ghosty_route_identity(config, workspace);
     let report = dsh::compute_status(
         &paths,
         detection,
@@ -114,7 +114,7 @@ fn print_status(report: &DshStatusReport) {
         "  dsh plugin path (bundle): {}",
         report.bundle_availability.label()
     );
-    println!("  Codewhale-owned files: {}", report.paths_root.display());
+    println!("  Ghosty-owned files: {}", report.paths_root.display());
     println!(
         "  overlay: {}{}",
         report.overlay_path.display(),
@@ -157,7 +157,7 @@ fn print_status(report: &DshStatusReport) {
         }
         if record.skin_enabled {
             println!(
-                "  skin: on (Codewhale palette via overrideTokens in the bundle profile; `{CLI_COMMAND} update --skin false` turns it off)"
+                "  skin: on (Ghosty palette via overrideTokens in the bundle profile; `{CLI_COMMAND} update --skin false` turns it off)"
             );
             if record.ocean_enabled {
                 println!(
@@ -172,7 +172,7 @@ fn print_status(report: &DshStatusReport) {
     }
     match (&report.current_identity, &report.current_identity_error) {
         (Some(now), _) if now.mappable() => println!(
-            "  current Codewhale route: {}/{} · {} · would map via {}",
+            "  current Ghosty route: {}/{} · {} · would map via {}",
             now.source.provider_id,
             now.source.model,
             now.source.base_url,
@@ -181,12 +181,12 @@ fn print_status(report: &DshStatusReport) {
         (Some(now), _) => {
             if let DshAdapter::Unsupported { reason } = &now.adapter {
                 println!(
-                    "  current Codewhale route: {}/{} · {} · cannot be carried by DSH: {reason}",
+                    "  current Ghosty route: {}/{} · {} · cannot be carried by DSH: {reason}",
                     now.source.provider_id, now.source.model, now.source.base_url
                 );
             }
         }
-        (None, Some(error)) => println!("  current Codewhale route: unresolved ({error})"),
+        (None, Some(error)) => println!("  current Ghosty route: unresolved ({error})"),
         (None, None) => {}
     }
     match &report.state {
@@ -197,7 +197,7 @@ fn print_status(report: &DshStatusReport) {
         DshIntegrationState::Disabled { .. } => println!("  next: `{CLI_COMMAND} enable`"),
         DshIntegrationState::Connected { .. } | DshIntegrationState::StaleVersion { .. } => {
             println!(
-                "  next: `{CLI_COMMAND} launch [--profile web|headless|codewhale] [dsh app args]`"
+                "  next: `{CLI_COMMAND} launch [--profile web|headless|ghosty] [dsh app args]`"
             )
         }
         _ => {}
@@ -214,7 +214,7 @@ fn print_plan(plan: &DshPlan, event: &str) {
         plan.mapped.source.base_url
     );
     println!(
-        "  reasoning: codewhale={} → dsh={}",
+        "  reasoning: ghosty={} → dsh={}",
         plan.mapped
             .source
             .reasoning_effort
@@ -267,8 +267,8 @@ fn run_dsh(config: &Config, workspace: &Path, command: DshIntegrationCommand) ->
             skin,
         } => {
             let (paths, report) = status_report(config, workspace, allow_full_access)?;
-            let identity = dsh::codewhale_route_identity(config, workspace)
-                .map_err(|e| anyhow::anyhow!("cannot resolve the current Codewhale route: {e}"))?;
+            let identity = dsh::ghosty_route_identity(config, workspace)
+                .map_err(|e| anyhow::anyhow!("cannot resolve the current Ghosty route: {e}"))?;
             let plan = dsh::plan(
                 &paths,
                 &report.detection,
@@ -303,8 +303,8 @@ fn run_dsh(config: &Config, workspace: &Path, command: DshIntegrationCommand) ->
                     "DSH is already connected; use `{CLI_COMMAND} update` to rewrite the overlay"
                 );
             }
-            let identity = dsh::codewhale_route_identity(config, workspace)
-                .map_err(|e| anyhow::anyhow!("cannot resolve the current Codewhale route: {e}"))?;
+            let identity = dsh::ghosty_route_identity(config, workspace)
+                .map_err(|e| anyhow::anyhow!("cannot resolve the current Ghosty route: {e}"))?;
             let plan = dsh::plan(
                 &paths,
                 &report.detection,
@@ -315,7 +315,7 @@ fn run_dsh(config: &Config, workspace: &Path, command: DshIntegrationCommand) ->
                 true,
             )?;
             print_plan(&plan, "connect");
-            confirm(yes, "Write these Codewhale-owned files and connect DSH?")?;
+            confirm(yes, "Write these Ghosty-owned files and connect DSH?")?;
             let record =
                 dsh::apply_plan(&paths, &report.detection, &plan, DshReceiptEvent::Connect)?;
             println!(
@@ -341,8 +341,8 @@ fn run_dsh(config: &Config, workspace: &Path, command: DshIntegrationCommand) ->
             let profile = profile.unwrap_or_else(|| record.profile.clone());
             let skin = skin.unwrap_or(record.skin_enabled);
             let ocean = ocean.unwrap_or(record.ocean_enabled);
-            let identity = dsh::codewhale_route_identity(config, workspace)
-                .map_err(|e| anyhow::anyhow!("cannot resolve the current Codewhale route: {e}"))?;
+            let identity = dsh::ghosty_route_identity(config, workspace)
+                .map_err(|e| anyhow::anyhow!("cannot resolve the current Ghosty route: {e}"))?;
             let plan = dsh::plan(
                 &paths,
                 &report.detection,
@@ -353,7 +353,7 @@ fn run_dsh(config: &Config, workspace: &Path, command: DshIntegrationCommand) ->
                 ocean,
             )?;
             print_plan(&plan, "update");
-            confirm(yes, "Rewrite the Codewhale overlay for DSH?")?;
+            confirm(yes, "Rewrite the Ghosty overlay for DSH?")?;
             let record =
                 dsh::apply_plan(&paths, &report.detection, &plan, DshReceiptEvent::Update)?;
             println!(
@@ -424,7 +424,7 @@ fn run_dsh(config: &Config, workspace: &Path, command: DshIntegrationCommand) ->
                 .join(dsh::bundle::BUNDLE_PROFILE);
             println!("{RELATIONSHIP_LABEL} — install-bundle plan (nothing written yet)");
             println!(
-                "  will write (Codewhale-owned): {}/{{package.json,cordis.patch.yml,README.md,NOTICE.md}}",
+                "  will write (Ghosty-owned): {}/{{package.json,cordis.patch.yml,README.md,NOTICE.md}}",
                 paths.bundle_dir.display()
             );
             println!(
@@ -447,10 +447,7 @@ fn run_dsh(config: &Config, workspace: &Path, command: DshIntegrationCommand) ->
             );
             println!("  plugin path: {}", report.bundle_availability.label());
             println!("  no network: both adds are local `link:` paths");
-            confirm(
-                yes,
-                "Install the Codewhale bundle into DSH profile `codewhale`?",
-            )?;
+            confirm(yes, "Install the Ghosty bundle into DSH profile `ghosty`?")?;
             let bundle = dsh::install_bundle(
                 &paths,
                 &report.detection,
@@ -487,13 +484,10 @@ fn run_dsh(config: &Config, workspace: &Path, command: DshIntegrationCommand) ->
                 "  the DSH profile dir {} and its app bundle link stay in place (DSH-owned)",
                 bundle.profile_dir.display()
             );
-            confirm(
-                yes,
-                "Remove the Codewhale bundle from DSH profile `codewhale`?",
-            )?;
+            confirm(yes, "Remove the Ghosty bundle from DSH profile `ghosty`?")?;
             let removed = dsh::remove_bundle(&paths, &report.detection, &dsh::ProcessRunner)?;
             println!(
-                "removed bundle; deleted {} Codewhale-owned file(s)",
+                "removed bundle; deleted {} Ghosty-owned file(s)",
                 removed.len()
             );
             Ok(())
@@ -501,7 +495,7 @@ fn run_dsh(config: &Config, workspace: &Path, command: DshIntegrationCommand) ->
         DshIntegrationCommand::Remove { yes } => {
             let paths = DshPaths::from_process()?;
             println!(
-                "remove will delete only Codewhale-owned files under {}:",
+                "remove will delete only Ghosty-owned files under {}:",
                 paths.root.display()
             );
             for path in [&paths.overlay, &paths.skin, &paths.skin_preview] {

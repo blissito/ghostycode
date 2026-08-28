@@ -2,10 +2,10 @@
 //!
 //! Official `agy` (1.1.13) persists its OAuth token inside the Antigravity
 //! app's VSCode-style SQLite store `state.vscdb`, table `ItemTable`, key
-//! `antigravityUnifiedStateSync.oauthToken`. Codewhale may read that one
-//! value from that exact file only after `codewhale auth external-consent`.
+//! `antigravityUnifiedStateSync.oauthToken`. Ghosty may read that one
+//! value from that exact file only after `ghosty auth external-consent`.
 //! The database is opened read-only and never written, refreshed, or
-//! copied into the process environment. Codewhale-owned
+//! copied into the process environment. Ghosty-owned
 //! `ANTIGRAVITY_API_KEY` and the process's own `AGY_ADC_AUTH` always win
 //! over the external file.
 
@@ -13,7 +13,7 @@ use std::io::{Read as _, Seek, SeekFrom};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use codewhale_config::{ExternalCredentialReadGrant, ExternalCredentialSource};
+use ghosty_config::{ExternalCredentialReadGrant, ExternalCredentialSource};
 
 /// ItemTable key holding the `agy` OAuth token.
 pub const AGY_OAUTH_TOKEN_KEY: &str = "antigravityUnifiedStateSync.oauthToken";
@@ -23,7 +23,7 @@ const AGY_STATE_DB_LIMIT: u64 = 64 * 1024 * 1024;
 
 /// Credential resolution order for the Antigravity route.
 ///
-/// 1. Codewhale-owned `ANTIGRAVITY_API_KEY` (config table or environment)
+/// 1. Ghosty-owned `ANTIGRAVITY_API_KEY` (config table or environment)
 /// 2. The process's own `AGY_ADC_AUTH` (what `agy` itself calls ADC auth)
 /// 3. The consented external `state.vscdb` — read-only, never refreshed
 #[must_use]
@@ -91,23 +91,23 @@ pub(crate) fn antigravity_oauth_token_from_grant(
     let read = file.read(&mut header).with_context(|| {
         format!(
             "reading SQLite header of {}",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         )
     })?;
     if read < 16 || header[..15] != *b"SQLite format 3" {
         bail!(
             "external agy credential file {} is not a SQLite database",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         );
     }
     file.seek(SeekFrom::Start(0)).ok();
     let metadata = file
         .metadata()
-        .with_context(|| format!("statting {}", codewhale_config::quote_os_path(path)))?;
+        .with_context(|| format!("statting {}", ghosty_config::quote_os_path(path)))?;
     if metadata.len() > AGY_STATE_DB_LIMIT {
         bail!(
             "external agy credential store {} exceeds the {} byte safety limit",
-            codewhale_config::quote_os_path(path),
+            ghosty_config::quote_os_path(path),
             AGY_STATE_DB_LIMIT
         );
     }
@@ -122,7 +122,7 @@ pub(crate) fn antigravity_oauth_token_from_grant(
     if pinned != reopened {
         bail!(
             "external agy credential store {} changed while being read",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         );
     }
     parse_agy_oauth_token_value(value)
@@ -173,12 +173,7 @@ fn query_oauth_token(path: &Path) -> Result<Option<String>> {
         path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
-    .with_context(|| {
-        format!(
-            "opening {} read-only",
-            codewhale_config::quote_os_path(path)
-        )
-    })?;
+    .with_context(|| format!("opening {} read-only", ghosty_config::quote_os_path(path)))?;
     let value: Option<String> = connection
         .query_row(
             "SELECT value FROM ItemTable WHERE key = ?1",
@@ -193,13 +188,13 @@ fn query_oauth_token(path: &Path) -> Result<Option<String>> {
         .with_context(|| {
             format!(
                 "querying {} for {AGY_OAUTH_TOKEN_KEY}",
-                codewhale_config::quote_os_path(path)
+                ghosty_config::quote_os_path(path)
             )
         })?;
     Ok(value)
 }
 
-/// The stored value is opaque to Codewhale. Accept only shapes observed in
+/// The stored value is opaque to Ghosty. Accept only shapes observed in
 /// the official store — a bare token string or a JSON object with a token
 /// member — and never synthesize or trim secrets beyond whitespace.
 pub(crate) fn parse_agy_oauth_token_value(value: Option<String>) -> Result<Option<String>> {
@@ -229,17 +224,17 @@ pub(crate) fn parse_agy_oauth_token_value(value: Option<String>) -> Result<Optio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codewhale_config::ExternalCredentialReadGrant;
+    use ghosty_config::ExternalCredentialReadGrant;
     use std::collections::HashMap;
 
     fn grant_for(path: &Path) -> ExternalCredentialReadGrant {
-        codewhale_config::ExternalCredentialConsentToml::read_only(
-            codewhale_config::ProviderKind::Antigravity,
+        ghosty_config::ExternalCredentialConsentToml::read_only(
+            ghosty_config::ProviderKind::Antigravity,
             ExternalCredentialSource::AgyCli,
             path.to_path_buf(),
         )
         .read_grant(
-            codewhale_config::ProviderKind::Antigravity,
+            ghosty_config::ProviderKind::Antigravity,
             ExternalCredentialSource::AgyCli,
             path,
         )
@@ -325,13 +320,13 @@ mod tests {
     #[test]
     fn wrong_grant_source_is_rejected() {
         let (_dir, path) = fixture_db(Some("token"));
-        let grant = codewhale_config::ExternalCredentialConsentToml::read_only(
-            codewhale_config::ProviderKind::Antigravity,
+        let grant = ghosty_config::ExternalCredentialConsentToml::read_only(
+            ghosty_config::ProviderKind::Antigravity,
             ExternalCredentialSource::DshCli,
             path.clone(),
         )
         .read_grant(
-            codewhale_config::ProviderKind::Antigravity,
+            ghosty_config::ProviderKind::Antigravity,
             ExternalCredentialSource::DshCli,
             &path,
         )

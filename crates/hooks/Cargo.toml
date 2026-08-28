@@ -1,11 +1,11 @@
 [package]
-name = "codewhale-hooks"
+name = "ghosty-hooks"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Hook dispatch and notifications support for Codewhale"
+description = "Hook dispatch and notifications support for Ghosty"
 
 [lints]
 workspace = true
@@ -14,8 +14,8 @@ workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
-codewhale-protocol = { path = "../protocol", version = "0.9.11" }
-codewhale-release = { path = "../release", version = "0.9.11" }
+ghosty-protocol = { path = "../protocol", version = "0.0.15" }
+ghosty-release = { path = "../release", version = "0.0.15" }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

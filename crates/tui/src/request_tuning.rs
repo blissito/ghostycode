@@ -1,4 +1,4 @@
-//! Request-tuning intent carried through CodeWhale request routing (#3024).
+//! Request-tuning intent carried through GhostyCode request routing (#3024).
 //!
 //! Request "tuning" here means the optional knobs a caller can attach to an
 //! outbound model request that shape *how* the model responds without changing

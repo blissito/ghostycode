@@ -1,12 +1,12 @@
 [package]
-name = "codewhale-tui"
+name = "ghosty-tui"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Terminal UI for open-source and open-weight coding models"
-default-run = "codewhale-tui"
+default-run = "ghosty-tui"
 
 [lints]
 workspace = true
@@ -20,30 +20,30 @@ toml = ["schemaui/toml"]
 long-running-tests = []
 
 [lib]
-name = "codewhale_tui"
+name = "ghosty_tui"
 path = "src/lib.rs"
 
 [[bin]]
-name = "codewhale-tui"
+name = "ghosty-tui"
 path = "src/main.rs"
 
 [dependencies]
 ahash = "0.8"
 anyhow.workspace = true
-codewhale-config = { path = "../config", version = "0.9.11" }
-codewhale-command-contract = { path = "../command-contract", version = "0.9.11" }
-codewhale-core = { path = "../core", version = "0.9.11" }
-codewhale-execpolicy = { path = "../execpolicy", version = "0.9.11" }
-codewhale-hooks = { path = "../hooks", version = "0.9.11" }
-codewhale-lane = { path = "../lane", version = "0.9.11" }
-codewhale-paths = { path = "../paths", version = "0.9.11" }
-codewhale-protocol = { path = "../protocol", version = "0.9.11" }
-codewhale-release = { path = "../release", version = "0.9.11" }
-codewhale-secrets = { path = "../secrets", version = "0.9.11" }
-codewhale-telemetry = { path = "../telemetry", version = "0.9.11" }
-codewhale-tools = { path = "../tools", version = "0.9.11" }
-codewhale-workflow = { path = "../workflow", version = "0.9.11" }
-codewhale-workflow-js = { path = "../workflow-js", version = "0.9.11" }
+ghosty-config = { path = "../config", version = "0.0.15" }
+ghosty-command-contract = { path = "../command-contract", version = "0.0.15" }
+ghosty-core = { path = "../core", version = "0.0.15" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.15" }
+ghosty-hooks = { path = "../hooks", version = "0.0.15" }
+ghosty-lane = { path = "../lane", version = "0.0.15" }
+ghosty-paths = { path = "../paths", version = "0.0.15" }
+ghosty-protocol = { path = "../protocol", version = "0.0.15" }
+ghosty-release = { path = "../release", version = "0.0.15" }
+ghosty-secrets = { path = "../secrets", version = "0.0.15" }
+ghosty-telemetry = { path = "../telemetry", version = "0.0.15" }
+ghosty-tools = { path = "../tools", version = "0.0.15" }
+ghosty-workflow = { path = "../workflow", version = "0.0.15" }
+ghosty-workflow-js = { path = "../workflow-js", version = "0.0.15" }
 schemaui = { version = "0.12.0", default-features = false, optional = true }
 async-stream = "0.3.6"
 async-trait.workspace = true
@@ -112,7 +112,7 @@ shell-words = "1.1.1"
 mimalloc.workspace = true
 
 [build-dependencies]
-codewhale-build-support = { path = "../build-support", version = "0.9.11" }
+ghosty-build-support = { path = "../build-support", version = "0.0.15" }
 
 [dev-dependencies]
 cucumber = "0.23.0"

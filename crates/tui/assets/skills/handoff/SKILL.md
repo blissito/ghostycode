@@ -56,7 +56,7 @@ Invocation: `model+user`
      preserved (worktrees, uncommitted files, receipts)>
    ```
 
-3. **Persist it.** Always write `.codewhale/handoff.md` in the workspace — that
+3. **Persist it.** Always write `.ghosty/handoff.md` in the workspace — that
    is the only path the runtime reads back. On the next session's first turn it
    is injected as the "## Previous Session Relay" block
    (`HANDOFF_RELATIVE_PATH`, `crates/tui/src/prompts.rs:85`; loader at
@@ -64,7 +64,7 @@ Invocation: `model+user`
    so the next session starts cold no matter how good the note is.
 
    Optionally also write a human-discoverable copy:
-   - If the workspace has an ops/notes convention (e.g. `codewhale-ops/notes/`
+   - If the workspace has an ops/notes convention (e.g. `ghosty-ops/notes/`
      with a living handoff file), update the living handoff's dated facts and
      snapshot, or create `<topic>-handoff-<date>.md` next to it.
    - Otherwise the repo root as `HANDOFF.md` or

@@ -1,6 +1,6 @@
 //! Native Anthropic Messages API adapter (#3014).
 //!
-//! CodeWhale's internal wire types are already Anthropic-shaped (the harness
+//! GhostyCode's internal wire types are already Anthropic-shaped (the harness
 //! speaks Messages internally and translates *out* to OpenAI dialects), so
 //! this adapter is mostly native serialization plus an SSE pass-through:
 //! `StreamEvent` deserializes Anthropic's `message_start` /
@@ -8,7 +8,7 @@
 //! directly. What the adapter adds on top:
 //!
 //! - request shaping: adaptive thinking + `output_config.effort` from
-//!   CodeWhale's `reasoning_effort` tiers, sampling-parameter rules for
+//!   GhostyCode's `reasoning_effort` tiers, sampling-parameter rules for
 //!   models that reject them, and `cache_control` breakpoint placement
 //!   aligned with the prefix-zone model in `prefix_cache.rs`;
 //! - usage normalization (#2961 / #4318): `prompt_cache_hit_tokens` comes from

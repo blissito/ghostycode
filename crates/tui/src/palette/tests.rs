@@ -589,7 +589,7 @@ fn pulse_passes_named_colors_unchanged() {
 
 #[test]
 fn nearest_ansi16_routes_known_brand_colors() {
-    // Codewhale keeps action, live, human, and danger distinct where ANSI-16 allows it.
+    // Ghosty keeps action, live, human, and danger distinct where ANSI-16 allows it.
     assert_eq!(nearest_ansi16(106, 174, 242), Color::LightBlue); // Cobalt action
     assert_eq!(nearest_ansi16(246, 196, 83), Color::LightYellow); // Signal Gold
     assert_eq!(nearest_ansi16(79, 209, 197), Color::LightCyan); // Seafoam

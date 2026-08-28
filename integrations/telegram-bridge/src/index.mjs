@@ -47,30 +47,30 @@ class ThreadStore extends CoreThreadStore {
 const config = {
   botToken: requiredEnv("TELEGRAM_BOT_TOKEN"),
   apiBase: (process.env.TELEGRAM_API_BASE || "https://api.telegram.org").replace(/\/+$/, ""),
-  runtimeUrl: (envFirst(process.env, "CODEWHALE_RUNTIME_URL", "DEEPSEEK_RUNTIME_URL") || "http://127.0.0.1:7878").replace(/\/+$/, ""),
-  runtimeToken: requiredEnvFirst("CODEWHALE_RUNTIME_TOKEN", "DEEPSEEK_RUNTIME_TOKEN"),
-  workspace: envFirst(process.env, "CODEWHALE_WORKSPACE", "DEEPSEEK_WORKSPACE") || process.cwd(),
-  model: envFirst(process.env, "CODEWHALE_MODEL", "DEEPSEEK_MODEL") || "auto",
-  mode: envFirst(process.env, "CODEWHALE_MODE", "DEEPSEEK_MODE") || "agent",
-  allowShell: parseBool(envFirst(process.env, "CODEWHALE_ALLOW_SHELL", "DEEPSEEK_ALLOW_SHELL"), true),
-  trustMode: parseBool(envFirst(process.env, "CODEWHALE_TRUST_MODE", "DEEPSEEK_TRUST_MODE"), false),
-  autoApprove: parseBool(envFirst(process.env, "CODEWHALE_AUTO_APPROVE", "DEEPSEEK_AUTO_APPROVE"), false),
+  runtimeUrl: (envFirst(process.env, "GHOSTY_RUNTIME_URL", "DEEPSEEK_RUNTIME_URL") || "http://127.0.0.1:7878").replace(/\/+$/, ""),
+  runtimeToken: requiredEnvFirst("GHOSTY_RUNTIME_TOKEN", "DEEPSEEK_RUNTIME_TOKEN"),
+  workspace: envFirst(process.env, "GHOSTY_WORKSPACE", "DEEPSEEK_WORKSPACE") || process.cwd(),
+  model: envFirst(process.env, "GHOSTY_MODEL", "DEEPSEEK_MODEL") || "auto",
+  mode: envFirst(process.env, "GHOSTY_MODE", "DEEPSEEK_MODE") || "agent",
+  allowShell: parseBool(envFirst(process.env, "GHOSTY_ALLOW_SHELL", "DEEPSEEK_ALLOW_SHELL"), true),
+  trustMode: parseBool(envFirst(process.env, "GHOSTY_TRUST_MODE", "DEEPSEEK_TRUST_MODE"), false),
+  autoApprove: parseBool(envFirst(process.env, "GHOSTY_AUTO_APPROVE", "DEEPSEEK_AUTO_APPROVE"), false),
   allowlist: parseList(
-    envFirst(process.env, "TELEGRAM_CHAT_ALLOWLIST", "CODEWHALE_CHAT_ALLOWLIST", "DEEPSEEK_CHAT_ALLOWLIST")
+    envFirst(process.env, "TELEGRAM_CHAT_ALLOWLIST", "GHOSTY_CHAT_ALLOWLIST", "DEEPSEEK_CHAT_ALLOWLIST")
   ),
   allowUnlisted: parseBool(
-    envFirst(process.env, "TELEGRAM_ALLOW_UNLISTED", "CODEWHALE_ALLOW_UNLISTED", "DEEPSEEK_ALLOW_UNLISTED"),
+    envFirst(process.env, "TELEGRAM_ALLOW_UNLISTED", "GHOSTY_ALLOW_UNLISTED", "DEEPSEEK_ALLOW_UNLISTED"),
     false
   ),
   threadMapPath:
     process.env.TELEGRAM_THREAD_MAP_PATH ||
-    "/var/lib/codewhale-telegram-bridge/thread-map.json",
+    "/var/lib/ghosty-telegram-bridge/thread-map.json",
   allowGroups: parseBool(process.env.TELEGRAM_ALLOW_GROUPS, false),
   requirePrefixInGroup: parseBool(process.env.TELEGRAM_REQUIRE_PREFIX_IN_GROUP, true),
   groupPrefix: process.env.TELEGRAM_GROUP_PREFIX || "/cw",
   maxReplyChars: Math.min(Number(process.env.TELEGRAM_MAX_REPLY_CHARS || 3500), 4096),
   pollTimeoutSeconds: Number(process.env.TELEGRAM_POLL_TIMEOUT_SECONDS || 50),
-  turnTimeoutMs: Number(envFirst(process.env, "CODEWHALE_TURN_TIMEOUT_MS", "DEEPSEEK_TURN_TIMEOUT_MS") || 900000)
+  turnTimeoutMs: Number(envFirst(process.env, "GHOSTY_TURN_TIMEOUT_MS", "DEEPSEEK_TURN_TIMEOUT_MS") || 900000)
 };
 
 const { runtimeJson, authHeaders } = createRuntimeClient(config);
@@ -91,7 +91,7 @@ function requestStop() {
 process.once("SIGINT", requestStop);
 process.once("SIGTERM", requestStop);
 
-console.log("Starting CodeWhale Telegram bridge");
+console.log("Starting GhostyCode Telegram bridge");
 console.log(`Runtime: ${config.runtimeUrl}`);
 console.log(`Workspace: ${config.workspace}`);
 if (!config.allowlist.length && !config.allowUnlisted) {
@@ -109,7 +109,7 @@ await pollTelegram();
 async function configureBotCommands() {
   await telegramApi("setMyCommands", {
     commands: [
-      { command: "menu", description: "Open CodeWhale controls" },
+      { command: "menu", description: "Open GhostyCode controls" },
       { command: "status", description: "Show runtime and workspace status" },
       { command: "threads", description: "List recent runtime threads" },
       { command: "new", description: "Create a new thread" },
@@ -369,7 +369,7 @@ async function sendMenu(chatId) {
   await sendText(
     chatId,
     [
-      "CodeWhale controls",
+      "GhostyCode controls",
       state?.threadId ? `thread=${state.threadId}` : "thread=(new on first prompt)",
       `model=${state?.model || config.model}`
     ].join("\n"),

@@ -2,7 +2,7 @@
 #
 # `cargo test --workspace --all-features --locked` remains the authoritative
 # release gate. nextest is a faster local loop: it runs each test in its own
-# process, so the 10k-test codewhale-tui unit suite finishes in well under
+# process, so the 10k-test ghosty-tui unit suite finishes in well under
 # half the wall-clock time of libtest on a multi-core machine, and slow or
 # hanging tests are named instead of stalling the whole binary.
 #
@@ -22,7 +22,7 @@ final-status-level = "slow"
 # export 16 MiB so local nextest matches the product thread stack.
 
 [test-groups]
-# Integration tests that spawn the real `codewhale` binary and wait on
+# Integration tests that spawn the real `ghosty` binary and wait on
 # service start-up deadlines; bounded so a fully parallel run on a busy
 # machine cannot starve them past their 30 s budgets.
 spawns-binaries = { max-threads = 3 }

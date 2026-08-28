@@ -1,6 +1,6 @@
 //! Models.dev catalog schema and helpers.
 //!
-//! Models.dev is the upstream taxonomy CodeWhale should use for model facts,
+//! Models.dev is the upstream taxonomy GhostyCode should use for model facts,
 //! provider offerings, pricing, limits, and capabilities. This module is
 //! intentionally network-free: callers provide JSON from a bundled snapshot,
 //! live refresh, or tests. Runtime fetch/cache policy belongs above this layer.
@@ -10,7 +10,7 @@
 //! - `providers.*.models` are provider-scoped wire offerings.
 //!
 //! A provider row may inline inherited facts without exposing a canonical
-//! `base_model` link. CodeWhale must preserve that distinction instead of
+//! `base_model` link. GhostyCode must preserve that distinction instead of
 //! inferring canonical ownership from wire IDs or namespace prefixes.
 
 use std::collections::BTreeMap;
@@ -231,7 +231,7 @@ pub struct ModelsDevProviderModel {
     /// Model family as exposed for this provider row.
     #[serde(default)]
     pub family: Option<String>,
-    /// Whether this is the provider's default model in a CodeWhale snapshot.
+    /// Whether this is the provider's default model in a GhostyCode snapshot.
     #[serde(default, alias = "default")]
     pub default_for_provider: bool,
     /// Whether attachments are accepted.
@@ -350,7 +350,7 @@ pub struct ModelsDevModalities {
 }
 
 /// Provider-scoped cost fields. Values are per million tokens unless a future
-/// Models.dev row specifies a richer tiering object in fields CodeWhale does
+/// Models.dev row specifies a richer tiering object in fields GhostyCode does
 /// not yet model.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelsDevCost {

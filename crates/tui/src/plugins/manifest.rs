@@ -33,7 +33,7 @@ const MAX_MCP_TIMEOUT_SECS: u64 = 3_600;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PluginManifest {
-    /// Missing means the legacy, pre-versioned Codewhale manifest. Legacy
+    /// Missing means the legacy, pre-versioned Ghosty manifest. Legacy
     /// manifests remain readable, but `/plugin validate` reports the migration.
     #[serde(default)]
     pub schema_version: u32,
@@ -179,7 +179,7 @@ impl ResolvedPluginComponents {
 pub struct PluginInventory {
     pub skills: usize,
     pub mcp_servers: usize,
-    /// MCP servers that launch a child process under the Codewhale user's
+    /// MCP servers that launch a child process under the Ghosty user's
     /// host permissions. Kept separate from remote MCP so the review screen
     /// cannot imply that an empty declared filesystem/network list is a
     /// sandbox boundary.
@@ -199,7 +199,7 @@ pub struct PluginInventory {
 }
 
 /// Host compatibility of a reviewed bundle. This is independent of trust,
-/// enablement, and staging: it names whether Codewhale can activate the
+/// enablement, and staging: it names whether Ghosty can activate the
 /// declared surfaces, not whether the operator has turned the bundle on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -208,7 +208,7 @@ pub enum PluginCompatibility {
     Full,
     /// Supported adapters can activate; other declared surfaces stay inactive.
     Partial,
-    /// The bundle only declares surfaces Codewhale cannot activate yet.
+    /// The bundle only declares surfaces Ghosty cannot activate yet.
     Unsupported,
 }
 
@@ -359,7 +359,7 @@ pub struct ValidatedManifest {
 
 /// On-disk manifest encoding, detected from the file name. `plugin.json`
 /// (Agent Plugins v1.0.0) is the native format; `plugin.toml` stays readable
-/// as the legacy Codewhale format. Both parse into the same
+/// as the legacy Ghosty format. Both parse into the same
 /// [`PluginManifest`], so nothing downstream of discovery changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ManifestFormat {
@@ -392,8 +392,8 @@ impl ManifestFormat {
 
 /// Parse manifest text in either encoding. For `plugin.json` this also reads
 /// the sibling `mcp.json` (whose bytes are returned so callers can re-read and
-/// detect mid-validation drift); Codewhale-specific data arrives through
-/// `extensions["net.codewhale"]` and unknown namespaces are ignored.
+/// detect mid-validation drift); Ghosty-specific data arrives through
+/// `extensions["net.ghosty"]` and unknown namespaces are ignored.
 fn parse_manifest(
     format: ManifestFormat,
     text: &str,
@@ -997,7 +997,7 @@ fn read_manifest_bytes(path: &Path, label: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-/// The historical Codewhale `plugin.toml` name rule: lowercase ASCII letters,
+/// The historical Ghosty `plugin.toml` name rule: lowercase ASCII letters,
 /// digits, and internal hyphens (including `--` runs). Kept byte-for-byte for
 /// legacy manifests; `/plugin export` slugifies names that are invalid under
 /// the Agent Plugins standard. `plugin.json` manifests are held to the
@@ -1377,7 +1377,7 @@ fn hash_bundle(
     // The manifest file name is part of the domain: `plugin.toml` produces the
     // exact v2 byte stream existing receipts bind to, while `plugin.json`
     // starts a fresh receipt family.
-    hasher.update(b"codewhale-plugin-content-v2\0");
+    hasher.update(b"ghosty-plugin-content-v2\0");
     hasher.update(manifest_label.as_bytes());
     hasher.update(b"\0");
     hasher.update((manifest_bytes.len() as u64).to_le_bytes());
@@ -1453,7 +1453,7 @@ fn hash_path(
             .len();
         hasher.update(expected_len.to_le_bytes());
         let mut file_hasher = Sha256::new();
-        file_hasher.update(b"codewhale-plugin-file-bytes-v1\0");
+        file_hasher.update(b"ghosty-plugin-file-bytes-v1\0");
         // Keep the read buffer off the stack. `hash_path` is recursive and the
         // fixed-size array inflated every directory frame, which could exhaust
         // a Tokio worker stack while revalidating a nested plugin bundle.
@@ -1851,7 +1851,7 @@ mod tests {
         fs::write(left.path().join("a.bin"), b"alpha").unwrap();
         fs::write(left.path().join("b.bin"), b"omega").unwrap();
 
-        let mut adversarial = b"alpha\0unix-executable\0\0F\0codewhale-os-path-v1\0".to_vec();
+        let mut adversarial = b"alpha\0unix-executable\0\0F\0ghosty-os-path-v1\0".to_vec();
         adversarial.extend_from_slice(&(b"bundle-relative-file".len() as u64).to_le_bytes());
         adversarial.extend_from_slice(b"bundle-relative-file");
         adversarial.extend_from_slice(b"unix-bytes\0");

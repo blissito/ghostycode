@@ -1,4 +1,4 @@
-//! The closed set of message roles Codewhale can put on a transcript.
+//! The closed set of message roles Ghosty can put on a transcript.
 //!
 //! Roles used to be free-form `String`s on [`crate::request::Message`], and
 //! four wire adapters each decided independently what an unfamiliar role

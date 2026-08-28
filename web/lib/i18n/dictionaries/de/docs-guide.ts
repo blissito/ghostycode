@@ -5,7 +5,7 @@ import type { DocsGuideDict } from "../types";
  * the reference body typography is kept.
  */
 export const docsGuide: DocsGuideDict = {
-  metaTitle: "Erste Schritte · Codewhale-Dokumentation",
+  metaTitle: "Erste Schritte · Ghosty-Dokumentation",
   metaDescription:
     "Der komplette Weg von der Installation bis zu deiner idealen Fleet: Installation, eine erste schlüssellose Sitzung, Provider-Anbindung und Fleet-Setup.",
   bodyClassName: "text-ink-soft leading-relaxed",

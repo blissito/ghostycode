@@ -1,10 +1,10 @@
 # Hooks
 > 阅读简体中文版：[zh_hans/HOOKS.md](zh_hans/HOOKS.md)
 
-Hooks run a shell command when the Codewhale **TUI** reaches a lifecycle
+Hooks run a shell command when the Ghosty **TUI** reaches a lifecycle
 point. They are plain processes: they receive context through environment
 variables, some receive a JSON payload on stdin, and three of them can steer
-what Codewhale does next.
+what Ghosty does next.
 
 This page is the authoritative reference for what is implemented today.
 Configuration syntax that overlaps with the rest of `config.toml` lives in
@@ -18,9 +18,9 @@ interactive TUI and in the engine turn loop it drives.
 
 | Surface | Fires hooks |
 | --- | --- |
-| `codewhale` / `codew` interactive TUI | yes |
-| `codewhale exec` (headless one-shot) | no |
-| the `codewhale` CLI dispatcher and its subcommands | no |
+| `ghosty` / `ghosty-tui` interactive TUI | yes |
+| `ghosty exec` (headless one-shot) | no |
+| the `ghosty` CLI dispatcher and its subcommands | no |
 | app-server / ACP | no |
 | the `workflow` tool and sub-agent *internals* | no — but the TUI fires `subagent_spawn` / `subagent_complete` around them |
 | public API | there is none |
@@ -32,14 +32,14 @@ contract with the hooks described here.
 ## Quick start
 
 ```toml
-# ~/.codewhale/config.toml
+# ~/.ghosty/config.toml
 [hooks]
 enabled = true
 
 [[hooks.hooks]]
 name = "announce"
 event = "session_start"
-command = "echo 'Codewhale session started'"
+command = "echo 'Ghosty session started'"
 ```
 
 Run `/hooks` in the TUI to list what is configured, whether the global switch
@@ -56,7 +56,7 @@ working_dir = "/path/to/dir"   # default: the session workspace
 
 [[hooks.hooks]]
 event = "tool_call_before"     # required; one of the 11 names below
-command = "~/.codewhale/hooks/gate.sh"  # required; `sh -c` on Unix, `cmd /C` on Windows
+command = "~/.ghosty/hooks/gate.sh"  # required; `sh -c` on Unix, `cmd /C` on Windows
 name = "gate"                  # optional label for /hooks and log lines
 timeout_secs = 30              # optional, default 30
 background = false             # optional; foreground inside the hook worker
@@ -94,11 +94,11 @@ expires:
   Nothing is reported to the caller, because the caller stopped waiting the
   moment it submitted the hook.
 
-**Termination is best-effort, and the bound that is guaranteed is Codewhale's,
+**Termination is best-effort, and the bound that is guaranteed is Ghosty's,
 not the OS's.** The kill can fail to land — a process wedged in an
 uninterruptible state on Unix, a `TerminateJobObject` a protected process
 survives on Windows — and no user-space program can promise otherwise. What
-Codewhale does guarantee is that it stops waiting: the containment handle is
+Ghosty does guarantee is that it stops waiting: the containment handle is
 released (which re-signals the Unix process group and closes the kill-on-close
 Windows Job Object) and the reap gets one short bounded window. If the child
 still cannot be confirmed dead, that is logged at `warn` and the foreground
@@ -143,10 +143,10 @@ the engine or tool worker rather than the terminal event loop.
 
 ### The hook process environment
 
-A hook command inherits the environment of the Codewhale process, plus the
-`DEEPSEEK_*` variables for its event. Codewhale does not filter that
+A hook command inherits the environment of the Ghosty process, plus the
+`DEEPSEEK_*` variables for its event. Ghosty does not filter that
 inheritance, so treat a hook exactly as you would treat any command you type
-in the same shell that launched Codewhale: whatever is exported there is
+in the same shell that launched Ghosty: whatever is exported there is
 visible to it.
 
 This is *not* true of the command a `shell_env` hook feeds — see
@@ -186,7 +186,7 @@ Three rules keep conditions from lying:
 - **Unsupported conditions are rejected at load.** A condition that references
   context its event never carries can never match, and a hook wearing one is
   silently inert — the dangerous form of that is a `deny` gate the operator
-  believes is armed. Codewhale drops those hooks at load, logs the reason
+  believes is armed. Ghosty drops those hooks at load, logs the reason
   under the `hooks` tracing target, and shows them in `/hooks list` as
   `rejected:`. Nested predicates inside `all` / `any` are checked too. A hook
   with `timeout_secs = 0` or an empty `command` is rejected the same way.
@@ -195,14 +195,14 @@ Three rules keep conditions from lying:
 
 ### Project-local hooks
 
-A repository may ship `<workspace>/.codewhale/hooks.toml` using the same shape,
+A repository may ship `<workspace>/.ghosty/hooks.toml` using the same shape,
 but only its `[[hooks]]` entries are merged — a project file cannot change
 `enabled`, `default_timeout_secs`, or `working_dir`, which always come from your
 own config. Because hooks are executable configuration, project hooks load
 **only** after the workspace is trusted in user-owned config; session
 `/trust on` alone does not enable them. Trusted project hooks are appended
 after global hooks, so they run last and win `updatedInput` ties. A malformed
-trusted project file logs a warning and Codewhale falls back to global hooks
+trusted project file logs a warning and Ghosty falls back to global hooks
 only. Validation runs over the merged set, so a rejected project hook is
 reported the same way a rejected global one is.
 
@@ -224,14 +224,14 @@ reported the same way a rejected global one is.
 
 ### What "observer" means, exactly
 
-Observer means Codewhale ignores the hook's **result**: stdout is discarded, a
+Observer means Ghosty ignores the hook's **result**: stdout is discarded, a
 non-zero exit is logged as a warning, and nothing about the turn, the tool
 result, the sub-agent, or the error changes because of it.
 
 Observer does **not** mean side-effect-free. An observer hook is an arbitrary
 shell command running with your credentials. It can write files, push commits,
 page an on-call rotation, or delete the workspace. The only thing it cannot do
-is change what Codewhale itself does next.
+is change what Ghosty itself does next.
 
 The steering allowlist is exactly three events — `message_submit`,
 `tool_call_before`, `shell_env` — and it is asserted by a test over every
@@ -363,7 +363,7 @@ decision on stdout with exit `0`:
 - precedence across matching hooks: no-verdict-with-`continue_on_error = false`
   > deny > ask > allow
 - `background = true` hooks are submitted and never awaited, so they have no
-  verdict and cannot steer; Codewhale logs a warning when one is configured
+  verdict and cannot steer; Ghosty logs a warning when one is configured
   for this event
 
 **A gate that could not answer is not permission.** If a foreground
@@ -403,7 +403,7 @@ aborted".
 
 **Exactly what the shell command ends up with — local execution.** When
 `exec_shell` runs the command locally (the default), it does not inherit
-Codewhale's ambient environment. Its environment is built as:
+Ghosty's ambient environment. Its environment is built as:
 
 1. a sanitized fixed allowlist of parent variables — `PATH`, `HOME`, `USER`,
    `LANG` and the other `LC_*`/locale entries, `TERM`, `SHELL`, `TMPDIR`,
@@ -415,11 +415,11 @@ Codewhale's ambient environment. Its environment is built as:
 
 So a `shell_env` hook is the supported way to get a credential into one local
 `exec_shell` invocation. Ambient secrets exported in the terminal that launched
-Codewhale are **not** forwarded to a local `exec_shell` on their own.
+Ghosty are **not** forwarded to a local `exec_shell` on their own.
 
 **With an external sandbox backend configured, the allowlist above is not the
 contract.** If `exec_shell` is routed to a configured sandbox/execution
-backend, Codewhale does not construct the process environment at all: it hands
+backend, Ghosty does not construct the process environment at all: it hands
 the command and your `shell_env` values to the backend as extra environment
 variables, and the **backend owns its own base environment**. What is present
 besides your values — an image's baked-in variables, the backend's own
@@ -430,13 +430,13 @@ Disclosure, because it is the part that matters for a hook that emits
 credentials: **`shell_env` values are transmitted to the configured backend.**
 For a remote or containerized backend that means the values leave this machine
 and are subject to that backend's logging, retention, and access controls.
-Codewhale's own audit log still records key names only, but that says nothing
+Ghosty's own audit log still records key names only, but that says nothing
 about what the backend does with the values. If a `shell_env` hook emits a
 secret, scope it to a backend you trust with that secret — for example by
 conditioning the hook, or by not configuring an external backend for sessions
 where those hooks are active.
 
-Resolved **key names — never values** — are written to `~/.codewhale/audit.log`
+Resolved **key names — never values** — are written to `~/.ghosty/audit.log`
 so a session can be reconciled afterwards. A hook that fails or times out
 contributes no variables and does not abort the shell call.
 
@@ -553,12 +553,12 @@ has no effect because later matching hooks always run.
 ## Security notes
 
 - Hooks are arbitrary shell commands from your own config; treat
-  `~/.codewhale/config.toml` as executable.
+  `~/.ghosty/config.toml` as executable.
 - Project-supplied hooks require an explicit workspace trust decision in
   user-owned config.
-- Hook commands inherit Codewhale's own environment. A local `exec_shell` does
+- Hook commands inherit Ghosty's own environment. A local `exec_shell` does
   not — see [`shell_env`](#shell_env).
-- `shell_env` audit records contain key names only. That covers Codewhale's own
+- `shell_env` audit records contain key names only. That covers Ghosty's own
   logging; with an external sandbox backend configured, the values themselves
   are transmitted to that backend and are then subject to its handling.
 - With an external sandbox backend, the local parent-variable allowlist does
@@ -566,7 +566,7 @@ has no effect because later matching hooks always run.
 - Payload previews, tool arguments/results, error messages, captured stdout and
   stderr, replacement messages, and steering objects are bounded so hook input
   or output cannot become an unbounded copy of the transcript.
-- Nothing Codewhale persists in a denial echoes the stdin payload, hook
+- Nothing Ghosty persists in a denial echoes the stdin payload, hook
   environment, raw stdout/stderr/error, command line, or a resolved filesystem
   path. `/hooks list` shows a sanitized, single-line command preview capped at
   60 characters; it is not a verbatim copy. Structured denial reasons are

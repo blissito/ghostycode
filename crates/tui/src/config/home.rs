@@ -11,7 +11,7 @@
 //! `#[cfg(test)]`, and integration test binaries compile *with* `cfg(test)`
 //! set, so including it drags in `test_support` — and then
 //! `config_persistence` behind that. Splitting this function out keeps the
-//! includable surface to `std` + `codewhale-paths` with no `crate::` references
+//! includable surface to `std` + `ghosty-paths` with no `crate::` references
 //! at all, so the test binary picks up production behavior verbatim instead of
 //! a divergent shim.
 //!
@@ -31,5 +31,5 @@ use std::path::PathBuf;
 /// OS lookup last is what makes a faked environment win in tests while
 /// production still falls back to the real thing.
 pub(crate) fn effective_home_dir() -> Option<PathBuf> {
-    codewhale_paths::user_home()
+    ghosty_paths::user_home()
 }

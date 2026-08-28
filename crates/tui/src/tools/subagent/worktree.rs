@@ -10,7 +10,7 @@ use crate::tools::spec::ToolError;
 
 use super::FleetRole;
 
-const SUBAGENT_WORKTREE_ROOT_DIR: &str = ".codewhale-worktrees";
+const SUBAGENT_WORKTREE_ROOT_DIR: &str = ".ghosty-worktrees";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SubAgentWorktreeRequest {
@@ -57,7 +57,7 @@ fn validate_existing_child_cwd(
     };
     let canonical = resolved.canonicalize().map_err(|e| {
         ToolError::invalid_input(format!(
-            "Invalid cwd '{}': {e} (path may not exist yet — use worktree=true to let Codewhale create an isolated checkout)",
+            "Invalid cwd '{}': {e} (path may not exist yet — use worktree=true to let Ghosty create an isolated checkout)",
             requested_cwd.display()
         ))
     })?;

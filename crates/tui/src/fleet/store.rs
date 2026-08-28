@@ -9,11 +9,11 @@
 //!   exact model pin or inherit policy, provider (pins only — never inferred
 //!   from a model string), reasoning level, optional instructions, and
 //!   capability requirements;
-//! - its **save scope and source**: personal (`$CODEWHALE_HOME/fleets/`) or
-//!   workspace (`.codewhale/fleets/`), with the exact file path surfaced.
+//! - its **save scope and source**: personal (`$GHOSTY_HOME/fleets/`) or
+//!   workspace (`.ghosty/fleets/`), with the exact file path surfaced.
 //!
 //! There is exactly one store. The legacy per-role profile files
-//! (`~/.codewhale/agents/*.toml`, `.codewhale/agents/*.toml`,
+//! (`~/.ghosty/agents/*.toml`, `.ghosty/agents/*.toml`,
 //! `[fleet.profiles]`) and the workflow crate's `exact`/legacy named-fleet
 //! files are migration/compat input only — read here, never shadowed, never
 //! the runtime winner alongside a v2 Fleet.
@@ -309,7 +309,7 @@ impl FleetFile {
     }
 
     /// A stable file slug derived from the display name. Safe across the
-    /// filesystems Codewhale supports; collisions are detected at save.
+    /// filesystems Ghosty supports; collisions are detected at save.
     #[must_use]
     pub fn file_slug(&self) -> String {
         slugify(&self.name)
@@ -375,16 +375,16 @@ pub struct SelectedFleet {
 }
 
 fn personal_fleets_dir() -> Result<PathBuf, FleetStoreError> {
-    codewhale_config::codewhale_home()
+    ghosty_config::ghosty_home()
         .map(|home| home.join(FLEET_DIR))
         .map_err(|e| FleetStoreError::Io {
-            path: "$CODEWHALE_HOME/fleets".to_string(),
+            path: "$GHOSTY_HOME/fleets".to_string(),
             message: e.to_string(),
         })
 }
 
 fn workspace_fleets_dir(workspace: &Path) -> PathBuf {
-    workspace.join(".codewhale").join(FLEET_DIR)
+    workspace.join(".ghosty").join(FLEET_DIR)
 }
 
 /// The fleet directory for a scope, creating it if needed.
@@ -802,7 +802,7 @@ pub struct MigrationReceipt {
 /// legacy files themselves are left untouched — they become migration input,
 /// not live config, once a Fleet is selected.
 pub fn migrate_legacy_roster(
-    fleet_config: &codewhale_config::FleetConfigToml,
+    fleet_config: &ghosty_config::FleetConfigToml,
     workspace: &Path,
     save: bool,
     save_scope: FleetScope,
@@ -891,7 +891,7 @@ mod tests {
     use super::*;
     use std::sync::OnceLock;
 
-    /// A sealed CODEWHALE_HOME for personal-scope tests, created once per
+    /// A sealed GHOSTY_HOME for personal-scope tests, created once per
     /// process. Tests must still hold `lock_test_env` before touching it.
     fn sealed_home() -> &'static Path {
         static HOME: OnceLock<PathBuf> = OnceLock::new();
@@ -913,20 +913,20 @@ mod tests {
             // SAFETY: serialised by lock_test_env held by the caller.
             unsafe {
                 match &self.prev {
-                    Some(v) => std::env::set_var("CODEWHALE_HOME", v),
-                    None => std::env::remove_var("CODEWHALE_HOME"),
+                    Some(v) => std::env::set_var("GHOSTY_HOME", v),
+                    None => std::env::remove_var("GHOSTY_HOME"),
                 }
             }
         }
     }
 
-    /// Point CODEWHALE_HOME at a sealed temp dir. Caller must hold
+    /// Point GHOSTY_HOME at a sealed temp dir. Caller must hold
     /// `lock_test_env`.
     fn set_sealed_home() -> EnvGuard {
-        let prev = std::env::var_os("CODEWHALE_HOME");
+        let prev = std::env::var_os("GHOSTY_HOME");
         // SAFETY: serialised by lock_test_env held by the caller.
         unsafe {
-            std::env::set_var("CODEWHALE_HOME", sealed_home());
+            std::env::set_var("GHOSTY_HOME", sealed_home());
         }
         EnvGuard { prev }
     }
@@ -1098,7 +1098,7 @@ role = "scout"
         let fleet = sample_fleet();
         let path = save_fleet(&fleet, FleetScope::Workspace, ws.path()).expect("save");
         assert!(
-            path.ends_with(".codewhale/fleets/deepseek-flash.toml"),
+            path.ends_with(".ghosty/fleets/deepseek-flash.toml"),
             "{path:?}"
         );
 
@@ -1216,7 +1216,7 @@ members = []"#;
         let ws = tempfile::TempDir::new().unwrap();
 
         // A workspace legacy profile file with a pin.
-        let agents_dir = ws.path().join(".codewhale/agents");
+        let agents_dir = ws.path().join(".ghosty/agents");
         std::fs::create_dir_all(&agents_dir).unwrap();
         std::fs::write(
             agents_dir.join("scout.toml"),
@@ -1230,7 +1230,7 @@ provider = "deepseek"
         .unwrap();
 
         let receipt = migrate_legacy_roster(
-            &codewhale_config::FleetConfigToml::default(),
+            &ghosty_config::FleetConfigToml::default(),
             ws.path(),
             true,
             FleetScope::Workspace,

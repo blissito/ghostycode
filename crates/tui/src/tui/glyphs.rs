@@ -1,8 +1,8 @@
-//! Codewhale's terminal glyph charter.
+//! Ghosty's terminal glyph charter.
 //!
 //! Renderers use semantic names from this module instead of choosing visual
 //! punctuation ad hoc. The solid current marker (`●`) is the recurring
-//! Codewhale anchor: it marks the active speaker or current human choice.
+//! Ghosty anchor: it marks the active speaker or current human choice.
 //! ASCII-safe terminals receive the semantic fallback from the same owner.
 
 /// Current speaker or current human choice — the recurring identity anchor.
@@ -38,7 +38,7 @@ pub const fn selection_marker(selected: bool) -> &'static str {
     if selected { SELECTION } else { " " }
 }
 
-/// Reduce a single Codewhale-authored decorative glyph to narrow ASCII.
+/// Reduce a single Ghosty-authored decorative glyph to narrow ASCII.
 /// Language text and model/user content are intentionally outside this map.
 #[must_use]
 pub fn ascii_fallback(symbol: &str) -> Option<&'static str> {
@@ -75,6 +75,12 @@ pub fn ascii_fallback(symbol: &str) -> Option<&'static str> {
         "≈≈>" => Some("~>"),
         "≈" | "～" => Some("~"),
         "🐳" | "🐋" => Some("w"),
+        // Ojos del fantasma (pantalla vacía / bienvenida): ver `underwater::GHOST_EYE_TIMELINE`.
+        "◐" | "◑" | "◓" | "◒" | "◕" | "◔" => Some("o"),
+        "◠" => Some("^"),
+        "♥" => Some("v"),
+        "˘" => Some("-"),
+        "✧" => Some("*"),
         "…" => Some("."),
         _ => None,
     }

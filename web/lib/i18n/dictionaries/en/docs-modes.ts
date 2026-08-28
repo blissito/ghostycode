@@ -1,15 +1,15 @@
 import type { DocsModesDict } from "../types";
 
 export const docsModes: DocsModesDict = {
-  metaTitle: "Modes · Codewhale Docs",
+  metaTitle: "Modes · Ghosty Docs",
   metaDescription: "Plan, Work, Operate modes and independent permission postures.",
   bodyClassName: "text-ink-soft leading-relaxed",
   overviewTitle: "Modes",
   overviewLead:
-    "A mode decides how Codewhale handles the work. A permission posture decides how it handles consequential tool calls. They are separate controls.",
+    "A mode decides how Ghosty handles the work. A permission posture decides how it handles consequential tool calls. They are separate controls.",
   modes: [
-    ["Plan", "Read-only investigation and planning. Codewhale can inspect the workspace, but it cannot run shell commands or edit files."],
-    ["Act", "Normal interactive coding. Codewhale can inspect, edit, and use tools; shell availability and approval prompts follow the active configuration and permission posture."],
+    ["Plan", "Read-only investigation and planning. Ghosty can inspect the workspace, but it cannot run shell commands or edit files."],
+    ["Act", "Normal interactive coding. Ghosty can inspect, edit, and use tools; shell availability and approval prompts follow the active configuration and permission posture."],
     ["Operate", "Multitask coordination from the same composer. The parent can inspect, edit, and use shell or MCP tools under the same permission posture, sandbox, and safety rules as Act. Fleet workers are preferred for independent, parallel, background, or long-running work, but delegation is not required for every executable step. Workflow is optional unless the work needs ordered phases, gates, or deterministic fan-in."],
   ],
   switchingTitle: "Switch modes",

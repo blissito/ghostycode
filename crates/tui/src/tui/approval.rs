@@ -31,7 +31,7 @@
 use crate::config::ApprovalDefaultSelection;
 use crate::localization::{Locale, MessageId, tr};
 use crate::tools::canonical_action::canonical_action_alias;
-use codewhale_config::ToolAskRule;
+use ghosty_config::ToolAskRule;
 use serde_json::Value;
 use std::path::Path;
 #[cfg(test)]
@@ -76,9 +76,9 @@ pub use policy::{
 };
 
 /// Determines when tool executions require user approval. Defined in
-/// codewhale-execpolicy (next to `AskForApproval`); re-exported here so
+/// ghosty-execpolicy (next to `AskForApproval`); re-exported here so
 /// `crate::tui::approval::ApprovalMode` keeps working.
-pub use codewhale_execpolicy::ApprovalMode;
+pub use ghosty_execpolicy::ApprovalMode;
 
 /// User's decision for a pending approval
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,7 +138,7 @@ pub struct ApprovalDetail {
 impl ApprovalRequest {
     /// Mechanical repo-law asks are a distinct authority boundary, not an
     /// ordinary risk prompt. The engine stamps this stable prefix when a
-    /// `.codewhale/constitution.json` ask rule forces review.
+    /// `.ghosty/constitution.json` ask rule forces review.
     #[must_use]
     pub fn is_repo_law_prompt(&self) -> bool {
         description_is_repo_law_prompt(&self.description)
@@ -279,7 +279,7 @@ impl ApprovalRequest {
         if self.persistent_ask_rules.is_empty() {
             return None;
         }
-        let permissions = codewhale_config::PermissionsToml {
+        let permissions = ghosty_config::PermissionsToml {
             rules: self.persistent_ask_rules.clone(),
         };
         toml::to_string_pretty(&permissions).ok()
@@ -309,7 +309,7 @@ impl ApprovalRequest {
 
 fn description_is_repo_law_prompt(description: &str) -> bool {
     description.starts_with("Repo law holds this write:")
-        && description.contains(".codewhale/constitution.json")
+        && description.contains(".ghosty/constitution.json")
 }
 
 fn param_preview(params: &Value, keys: &[&str], max_len: usize) -> Option<String> {

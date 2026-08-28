@@ -15,10 +15,10 @@ case "${mode}" in
 esac
 
 packages=("${release_crates[@]}")
-crates_user_agent="CodeWhale release publish check (https://github.com/Hmbown/CodeWhale)"
+crates_user_agent="GhostyCode release publish check (https://github.com/blissito/ghostycode)"
 
 workspace_version=""
-workspace_codewhale_packages=()
+workspace_ghosty_packages=()
 workspace_package_dep_flags=()
 
 metadata_inventory="$(
@@ -30,7 +30,7 @@ while IFS=$'\t' read -r kind name value; do
       workspace_version="${name}"
       ;;
     crate)
-      workspace_codewhale_packages+=("${name}")
+      workspace_ghosty_packages+=("${name}")
       workspace_package_dep_flags+=("${value}")
       ;;
   esac
@@ -51,8 +51,8 @@ fi
 package_has_workspace_deps() {
   local package_name="$1"
   local index
-  for ((index = 0; index < ${#workspace_codewhale_packages[@]}; index += 1)); do
-    if [[ "${workspace_codewhale_packages[$index]}" == "${package_name}" ]]; then
+  for ((index = 0; index < ${#workspace_ghosty_packages[@]}; index += 1)); do
+    if [[ "${workspace_ghosty_packages[$index]}" == "${package_name}" ]]; then
       [[ "${workspace_package_dep_flags[$index]}" == "1" ]]
       return
     fi

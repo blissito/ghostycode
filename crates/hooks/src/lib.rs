@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use codewhale_protocol::EventFrame;
+use ghosty_protocol::EventFrame;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -223,11 +223,11 @@ impl WebhookHookSink {
         Self {
             url,
             bearer_token,
-            client: codewhale_release::platform_http_client_builder()
+            client: ghosty_release::platform_http_client_builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
                 .unwrap_or_else(|_| {
-                    codewhale_release::platform_http_client_builder()
+                    ghosty_release::platform_http_client_builder()
                         .build()
                         .unwrap_or_else(|_| reqwest::Client::new())
                 }),

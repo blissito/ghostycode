@@ -6,14 +6,14 @@ import type { DocsConstitutionDict } from "../types";
  * belongs in its own commit, never mixed into a structural move.
  */
 export const docsConstitution: DocsConstitutionDict = {
-  metaTitle: "Constitution and /constitution · Codewhale Docs",
+  metaTitle: "Constitution and /constitution · Ghosty Docs",
   metaDescription:
     "User-global constitution, repo-local law, project instructions, and runtime boundaries.",
   bodyClassName: "text-ink-soft leading-relaxed",
   overviewTitle: "Constitution and /constitution",
   overviewTitleAside: "宪章与 /constitution",
   overviewLead:
-    "Codewhale gives the agent an accountable address, then a legal system for context conflicts. {constitutionCommand} is the primary personal constitution surface: guided setup stores structured user-global data in {homeConfig} and renders it as model-facing prose. Repos can still add local law via {repoConfig}; runtime policy separately encodes modes, approval, sandbox, cost, and tool boundaries.",
+    "Ghosty gives the agent an accountable address, then a legal system for context conflicts. {constitutionCommand} is the primary personal constitution surface: guided setup stores structured user-global data in {homeConfig} and renders it as model-facing prose. Repos can still add local law via {repoConfig}; runtime policy separately encodes modes, approval, sandbox, cost, and tool boundaries.",
   principles: [
     [
       "userGlobal",
@@ -21,7 +21,7 @@ export const docsConstitution: DocsConstitutionDict = {
     ],
     [
       "repoLocal",
-      ".codewhale/constitution.json is optional project policy for protected invariants, branch rules, verification, and escalation.",
+      ".ghosty/constitution.json is optional project policy for protected invariants, branch rules, verification, and escalation.",
     ],
     [
       "runtime",

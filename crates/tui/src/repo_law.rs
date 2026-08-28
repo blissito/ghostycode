@@ -1,6 +1,6 @@
 //! Mechanical enforcement of repo-law protected invariants.
 //!
-//! `.codewhale/constitution.json` invariants were previously advisory prose
+//! `.ghosty/constitution.json` invariants were previously advisory prose
 //! rendered into the prompt. Entries that carry `paths` globs now also
 //! compile into write holds evaluated in the engine's tool gate — the law
 //! becomes mechanism, with a receipt naming the invariant.
@@ -79,7 +79,7 @@ pub(crate) fn repo_law_plan_decision(
     let (rule, target) = hold?;
     let protects = rule.patterns.join(", ");
     let reason = format!(
-        "Repo law holds this write: \"{}\" protects {protects} (matched {target}, .codewhale/constitution.json)",
+        "Repo law holds this write: \"{}\" protects {protects} (matched {target}, .ghosty/constitution.json)",
         rule.text
     );
     Some(match rule.action {
@@ -209,7 +209,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn write_law(workspace: &Path, body: &str) {
-        let dir = workspace.join(".codewhale");
+        let dir = workspace.join(".ghosty");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("constitution.json"), body).unwrap();
     }
@@ -254,7 +254,7 @@ mod tests {
         };
         assert!(reason.contains("The wire format is frozen"), "{reason}");
         assert!(reason.contains("crates/protocol/wire.rs"), "{reason}");
-        assert!(reason.contains(".codewhale/constitution.json"), "{reason}");
+        assert!(reason.contains(".ghosty/constitution.json"), "{reason}");
     }
 
     #[test]

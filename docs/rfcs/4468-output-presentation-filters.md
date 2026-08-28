@@ -8,7 +8,7 @@
 
 ## Decision
 
-Codewhale will not run an arbitrary user script between a model response and
+Ghosty will not run an arbitrary user script between a model response and
 the canonical session record. Model-native assistant and thinking blocks remain
 the durable audit, replay, cache-accounting, debugging, and provider-signature
 source of truth.
@@ -18,9 +18,9 @@ first supported controls are the existing safe surfaces:
 
 - TUI `show_thinking = false` hides thinking from the rendered transcript but
   does not delete it from the canonical message/receipt path.
-- `codewhale exec --output-format text|stream-json` selects a documented output
+- `ghosty exec --output-format text|stream-json` selects a documented output
   encoding. Structured output retains block identity so downstream tools can
-  select `thinking` or `text` without Codewhale rewriting either.
+  select `thinking` or `text` without Ghosty rewriting either.
 - Exports may add a future `--view canonical|response-only|thinking-only`
   selector. A filtered export must label itself as a derived view and retain a
   canonical session reference; it must never overwrite the session.
@@ -64,7 +64,7 @@ deltas.
 ### Trust and failure
 
 No new arbitrary command execution is added. An external consumer may read
-`stream-json` and apply its own bounded transform outside Codewhale. Its failure
+`stream-json` and apply its own bounded transform outside Ghosty. Its failure
 cannot corrupt, delay, or replace the session. The canonical record therefore
 provides the fail-open source automatically.
 
@@ -83,7 +83,7 @@ provides the fail-open source automatically.
 Example response-only presentation:
 
 ```sh
-codewhale exec --output-format stream-json "..." \
+ghosty exec --output-format stream-json "..." \
   | jq -r 'select(.type == "message_delta") | .text // empty'
 ```
 
@@ -120,4 +120,4 @@ disclosure, latency, and dual-form retention semantics.
 
 Credit: the CIPHER measurements and the bounded stdin/stdout/fail-open proposal
 came from @eugenicum in #4468. The v0.9.2 decision preserves that integration
-use case while keeping Codewhale's canonical receipts trustworthy.
+use case while keeping Ghosty's canonical receipts trustworthy.

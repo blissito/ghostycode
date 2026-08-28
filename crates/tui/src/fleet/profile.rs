@@ -11,13 +11,13 @@ use serde::Deserialize;
 use crate::tui::app::ReasoningEffort;
 
 #[allow(unused_imports)]
-pub use codewhale_config::{
+pub use ghosty_config::{
     FleetDelegationHints, FleetLoadout, FleetProfile, FleetProfilePermissions, FleetRole, FleetSlot,
 };
 
 pub use super::roster::ProfileOrigin;
 
-pub const WORKSPACE_AGENT_PROFILE_DIR: &str = ".codewhale/agents";
+pub const WORKSPACE_AGENT_PROFILE_DIR: &str = ".ghosty/agents";
 pub const PERSONAL_AGENT_PROFILE_DIR: &str = "agents";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,7 +39,7 @@ impl FleetProfileScope {
     pub fn display_dir(self) -> &'static str {
         match self {
             Self::Project => WORKSPACE_AGENT_PROFILE_DIR,
-            Self::Personal => "$CODEWHALE_HOME/agents",
+            Self::Personal => "$GHOSTY_HOME/agents",
         }
     }
 
@@ -53,7 +53,7 @@ impl FleetProfileScope {
 }
 
 pub fn personal_agent_profile_dir() -> Result<PathBuf> {
-    Ok(codewhale_config::codewhale_home()?.join(PERSONAL_AGENT_PROFILE_DIR))
+    Ok(ghosty_config::ghosty_home()?.join(PERSONAL_AGENT_PROFILE_DIR))
 }
 
 pub fn agent_profile_dir_for_scope(scope: FleetProfileScope, workspace: &Path) -> Result<PathBuf> {
@@ -804,7 +804,7 @@ fn sanitize_profile_prose(text: &str, max_len: usize) -> String {
 
 /// Extract the first balanced `{...}` object from untrusted output, so fenced
 /// or prose-wrapped JSON still parses. Mirrors the constitution pipeline's
-/// extractor (which is private to codewhale-config).
+/// extractor (which is private to ghosty-config).
 fn extract_first_json_object(raw: &str) -> Option<&str> {
     let start = raw.find('{')?;
     let mut depth = 0usize;

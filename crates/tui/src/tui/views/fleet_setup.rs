@@ -3,7 +3,7 @@
 //! `/fleet setup` routes here only when no named v2 Fleet is selected. When a
 //! v2 Fleet is selected, the host opens that Fleet's exact detail editor so a
 //! save can never appear to update a member while writing an ignored legacy
-//! `.codewhale/agents/*.toml` profile.
+//! `.ghosty/agents/*.toml` profile.
 //!
 //! Replaces the old six-column config matrix (#3791). Fleet is presented as an
 //! agent team: the shortest valid path remains role → provider/model →
@@ -25,11 +25,11 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use codewhale_workflow::fleet_composition::{
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ghosty_workflow::fleet_composition::{
     CompositionError, CompositionRole, ConfiguredModel, FleetCompositionProposal,
     FleetCompositionRequest, RatificationState, RoleSuggestion,
 };
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -49,7 +49,7 @@ use crate::tui::views::{
     render_modal_footer_with_gutter, render_modal_surface, truncate_view_text,
 };
 
-const PROFILE_DIR: &str = ".codewhale/agents";
+const PROFILE_DIR: &str = ".ghosty/agents";
 
 /// The only two truthful destinations for `/fleet setup`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,7 +159,7 @@ const ROLES: [Choice; 9] = [
         label: Cow::Borrowed("custom"),
         summary: Cow::Borrowed("Author a profile by hand"),
         description: Cow::Borrowed(
-            "Define the posture yourself in a workspace agent TOML profile under .codewhale/agents/.",
+            "Define the posture yourself in a workspace agent TOML profile under .ghosty/agents/.",
         ),
     },
 ];
@@ -215,7 +215,7 @@ const THINKING_CHOICES: &[Choice] = &[
     },
     Choice {
         label: Cow::Borrowed("auto"),
-        summary: Cow::Borrowed("Let Codewhale choose"),
+        summary: Cow::Borrowed("Let Ghosty choose"),
         description: Cow::Borrowed("Choose a thinking tier from the worker prompt at runtime."),
     },
 ];
@@ -251,7 +251,7 @@ pub struct FleetSetupSnapshot {
     /// offered disabled with that reason instead of writing a file nothing
     /// will load.
     project_profiles_enabled: bool,
-    /// Resolved personal profile directory (`$CODEWHALE_HOME/agents`), or the
+    /// Resolved personal profile directory (`$GHOSTY_HOME/agents`), or the
     /// reason it could not be resolved. Captured once at snapshot time so the
     /// wizard never re-reads the environment while painting and tests can
     /// point it at a temp dir.
@@ -296,8 +296,8 @@ impl FleetSetupSnapshot {
             .fleet
             .as_ref()
             .map(|fleet| fleet.exec.max_spawn_depth)
-            .unwrap_or_else(|| codewhale_config::FleetExecConfig::default().max_spawn_depth)
-            .min(codewhale_config::MAX_SPAWN_DEPTH_CEILING);
+            .unwrap_or_else(|| ghosty_config::FleetExecConfig::default().max_spawn_depth)
+            .min(ghosty_config::MAX_SPAWN_DEPTH_CEILING);
         let roster =
             crate::fleet::roster::FleetRoster::load(&config.fleet_config(), &app.workspace);
         let roster_members = roster
@@ -2222,7 +2222,7 @@ impl FleetSetupView {
                 self.snapshot.max_admitted,
                 self.snapshot.subagent_spawn_depth,
                 self.snapshot.fleet_spawn_depth,
-                codewhale_config::MAX_SPAWN_DEPTH_CEILING,
+                ghosty_config::MAX_SPAWN_DEPTH_CEILING,
             ),
         );
         section(&mut lines, "Review policy", self.review_policy_summary());
@@ -2288,7 +2288,7 @@ impl FleetSetupView {
 
     fn review_policy_summary(&self) -> String {
         format!(
-            "Workers run without a token cap by default · {}s api, {}s heartbeat. Launch with Fleet → exec; /fleet workers (or /subagents) shows sub-agents in the current interactive session; /fleet status and codewhale fleet status both read the persistent .codewhale/fleet.jsonl ledger.",
+            "Workers run without a token cap by default · {}s api, {}s heartbeat. Launch with Fleet → exec; /fleet workers (or /subagents) shows sub-agents in the current interactive session; /fleet status and ghosty fleet status both read the persistent .ghosty/fleet.jsonl ledger.",
             self.snapshot.api_timeout_secs, self.snapshot.heartbeat_timeout_secs
         )
     }
@@ -2534,7 +2534,7 @@ mod tests {
 
     fn snapshot() -> FleetSetupSnapshot {
         FleetSetupSnapshot {
-            workspace: PathBuf::from("/tmp/codewhale-test-workspace"),
+            workspace: PathBuf::from("/tmp/ghosty-test-workspace"),
             locale: crate::localization::Locale::En,
             provider_ready: true,
             provider: "DeepSeek".to_string(),
@@ -2577,7 +2577,7 @@ mod tests {
         let workspace = tempfile::TempDir::new().expect("workspace");
         let personal_home = workspace.path().join("personal-home");
         std::fs::create_dir_all(&personal_home).expect("personal home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &personal_home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &personal_home);
         assert_eq!(
             resolve_fleet_setup_edit_target(workspace.path()).expect("no selection"),
             FleetSetupEditTarget::LegacyProfiles
@@ -2617,7 +2617,7 @@ mod tests {
     }
 
     /// A hermetic personal profile dir shared by the fixture snapshot, so no
-    /// test reads the developer's real `$CODEWHALE_HOME/agents`.
+    /// test reads the developer's real `$GHOSTY_HOME/agents`.
     fn test_personal_dir() -> PathBuf {
         static DIR: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
         DIR.get_or_init(|| tempfile::tempdir().expect("personal dir"))
@@ -4260,8 +4260,8 @@ mod tests {
         let policy = FleetSetupView::from_snapshot(snapshot()).review_policy_summary();
         for truth in [
             "current interactive session",
-            "codewhale fleet status",
-            ".codewhale/fleet.jsonl",
+            "ghosty fleet status",
+            ".ghosty/fleet.jsonl",
         ] {
             assert!(policy.contains(truth), "review policy missing: {truth}");
         }
@@ -4407,9 +4407,9 @@ mod tests {
             openai_codex: crate::config::ProviderConfig {
                 auth_mode: Some("oauth".to_string()),
                 external_credentials: Some(
-                    codewhale_config::ExternalCredentialConsentToml::read_only(
-                        codewhale_config::ProviderKind::OpenaiCodex,
-                        codewhale_config::ExternalCredentialSource::CodexCli,
+                    ghosty_config::ExternalCredentialConsentToml::read_only(
+                        ghosty_config::ProviderKind::OpenaiCodex,
+                        ghosty_config::ExternalCredentialSource::CodexCli,
                         codex_home.path().join("auth.json"),
                     ),
                 ),
@@ -4448,9 +4448,9 @@ mod tests {
             xai: crate::config::ProviderConfig {
                 auth_mode: Some("oauth".to_string()),
                 external_credentials: Some(
-                    codewhale_config::ExternalCredentialConsentToml::read_only(
-                        codewhale_config::ProviderKind::Xai,
-                        codewhale_config::ExternalCredentialSource::GrokCli,
+                    ghosty_config::ExternalCredentialConsentToml::read_only(
+                        ghosty_config::ProviderKind::Xai,
+                        ghosty_config::ExternalCredentialSource::GrokCli,
                         grok_home.path().join("grok-auth.json"),
                     ),
                 ),

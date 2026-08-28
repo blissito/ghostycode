@@ -2,8 +2,8 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use codewhale_protocol::{ToolKind, ToolOutput, ToolPayload};
-use codewhale_tools::{
+use ghosty_protocol::{ToolKind, ToolOutput, ToolPayload};
+use ghosty_tools::{
     ToolCall, ToolCallSource, ToolDescriptor, ToolHandler, ToolInvocation, ToolRegistry,
 };
 use serde_json::json;
@@ -24,7 +24,7 @@ impl ToolHandler for EchoHandler {
     async fn handle(
         &self,
         invocation: ToolInvocation,
-    ) -> std::result::Result<ToolOutput, codewhale_tools::FunctionCallError> {
+    ) -> std::result::Result<ToolOutput, ghosty_tools::FunctionCallError> {
         Ok(ToolOutput::Function {
             body: Some(json!({
                 "tool": invocation.tool_name,
@@ -49,7 +49,7 @@ impl ToolHandler for BlockingHandler {
     async fn handle(
         &self,
         invocation: ToolInvocation,
-    ) -> std::result::Result<ToolOutput, codewhale_tools::FunctionCallError> {
+    ) -> std::result::Result<ToolOutput, ghosty_tools::FunctionCallError> {
         self.started.notify_waiters();
         self.release.notified().await;
         Ok(ToolOutput::Function {
@@ -75,7 +75,7 @@ impl ToolHandler for ReentrantHandler {
     async fn handle(
         &self,
         _invocation: ToolInvocation,
-    ) -> std::result::Result<ToolOutput, codewhale_tools::FunctionCallError> {
+    ) -> std::result::Result<ToolOutput, ghosty_tools::FunctionCallError> {
         let registry = self.registry.get().expect("registry initialized").clone();
         registry
             .dispatch(

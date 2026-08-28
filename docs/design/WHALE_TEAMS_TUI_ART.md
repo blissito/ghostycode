@@ -60,7 +60,7 @@ The glyph vocabulary is deliberately the same one `whales::art` uses for the
 six role portraits (`▗▄…▖` back, `▐█…▙` body, `▝▀…▘` belly, `▄` stock,
 `▚△▞` crown fluke), so the hero and the `/fleet` roster are one animal at two
 scales. Every glyph has a `glyphs::ascii_fallback` entry; with
-`CODEWHALE_ASCII_SAFE=1` the hero narrows to
+`GHOSTY_ASCII_SAFE=1` the hero narrows to
 
 ```
     o

@@ -16,21 +16,21 @@ pub use launch::{LaunchOutcome, VersionChange, record_launch};
 ///
 /// Mirror directories must contain this file alongside platform binaries so
 /// that download integrity can be verified.
-pub const CHECKSUM_MANIFEST_ASSET: &str = "codewhale-artifacts-sha256.txt";
+pub const CHECKSUM_MANIFEST_ASSET: &str = "ghosty-artifacts-sha256.txt";
 
 /// GitHub API URL for the single latest stable release.
 pub const LATEST_RELEASE_URL: &str =
-    "https://api.github.com/repos/Hmbown/CodeWhale/releases/latest";
+    "https://api.github.com/repos/blissito/ghostycode/releases/latest";
 
 /// GitHub API URL listing recent releases (up to 100), used to find beta tags.
 pub const RELEASES_URL: &str =
-    "https://api.github.com/repos/Hmbown/CodeWhale/releases?per_page=100";
+    "https://api.github.com/repos/blissito/ghostycode/releases?per_page=100";
 
-/// Base URL of the CodeWhale repository on the CNB mirror platform.
-pub const CNB_REPO_URL: &str = "https://cnb.cool/codewhale.net/codewhale";
+/// Base URL of the GhostyCode repository on the CNB mirror platform.
+pub const CNB_REPO_URL: &str = "https://cnb.cool/ghosty.net/ghosty";
 
 /// Environment variable that overrides the base URL for release asset downloads.
-pub const RELEASE_BASE_URL_ENV: &str = "CODEWHALE_RELEASE_BASE_URL";
+pub const RELEASE_BASE_URL_ENV: &str = "GHOSTY_RELEASE_BASE_URL";
 
 /// Legacy environment variable (alias for [`RELEASE_BASE_URL_ENV`]).
 pub const LEGACY_RELEASE_BASE_URL_ENV: &str = "DEEPSEEK_TUI_RELEASE_BASE_URL";
@@ -39,7 +39,7 @@ pub const LEGACY_RELEASE_BASE_URL_ENV: &str = "DEEPSEEK_TUI_RELEASE_BASE_URL";
 pub const DEEPSEEK_RELEASE_BASE_URL_ENV: &str = "DEEPSEEK_RELEASE_BASE_URL";
 
 /// Environment variable that, when set, enables the CNB mirror for downloads.
-pub const CNB_MIRROR_ENV: &str = "CODEWHALE_USE_CNB_MIRROR";
+pub const CNB_MIRROR_ENV: &str = "GHOSTY_USE_CNB_MIRROR";
 
 /// Environment variable that pins the update target version.
 pub const UPDATE_VERSION_ENV: &str = "DEEPSEEK_TUI_VERSION";
@@ -48,9 +48,9 @@ pub const UPDATE_VERSION_ENV: &str = "DEEPSEEK_TUI_VERSION";
 pub const LEGACY_UPDATE_VERSION_ENV: &str = "DEEPSEEK_VERSION";
 
 /// User-Agent header sent with release metadata requests.
-pub const UPDATE_USER_AGENT: &str = "codewhale-updater";
+pub const UPDATE_USER_AGENT: &str = "ghosty-updater";
 
-const CNB_RELEASE_ASSET_BASE: &str = "https://cnb.cool/codewhale.net/codewhale/-/releases/download";
+const CNB_RELEASE_ASSET_BASE: &str = "https://cnb.cool/ghosty.net/ghosty/-/releases/download";
 const RELEASE_METADATA_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Build a reqwest client builder with the TLS roots appropriate for the
@@ -149,7 +149,7 @@ pub fn resolve_release_query(channel: ReleaseChannel) -> ReleaseQuery {
 }
 
 /// Reads the release base URL from environment variables, falling back to the
-/// CNB mirror if `CODEWHALE_USE_CNB_MIRROR=1`. Returns `None` when no override
+/// CNB mirror if `GHOSTY_USE_CNB_MIRROR=1`. Returns `None` when no override
 /// is configured.
 pub fn release_base_url_from_env(version: &str) -> Option<String> {
     if let Some(base_url) = explicit_release_base_url_from_env() {
@@ -185,7 +185,7 @@ pub fn explicit_release_base_url_from_env() -> Option<String> {
     None
 }
 
-/// True when `CODEWHALE_USE_CNB_MIRROR` is the override actually in effect —
+/// True when `GHOSTY_USE_CNB_MIRROR` is the override actually in effect —
 /// it is exactly `1`, and no explicit base URL outranks it.
 pub fn cnb_mirror_override_active() -> bool {
     explicit_release_base_url_from_env().is_none() && cnb_mirror_requested_from_env()
@@ -233,10 +233,10 @@ pub fn update_network_fallback_hint() -> String {
         "GitHub release downloads may be blocked or slow on this network.\n\
          For mainland China, use one of these fallback paths:\n\
            1. Source build from the CNB mirror, installing the shipped binary:\n\
-              cargo install --git {CNB_REPO_URL} --tag vX.Y.Z codewhale-cli --locked --force\n\
+              cargo install --git {CNB_REPO_URL} --tag vX.Y.Z ghosty-cli --locked --force\n\
            2. Use a binary asset mirror:\n\
-              {RELEASE_BASE_URL_ENV}=https://<mirror>/<release-assets>/ {UPDATE_VERSION_ENV}=X.Y.Z codewhale update\n\
-         The mirror directory must contain {CHECKSUM_MANIFEST_ASSET} and the codewhale platform binary."
+              {RELEASE_BASE_URL_ENV}=https://<mirror>/<release-assets>/ {UPDATE_VERSION_ENV}=X.Y.Z ghosty update\n\
+         The mirror directory must contain {CHECKSUM_MANIFEST_ASSET} and the ghosty platform binary."
     )
 }
 
@@ -597,7 +597,7 @@ mod tests {
 
         assert_eq!(
             release_base_url_from_env("v1.2.3"),
-            Some("https://cnb.cool/codewhale.net/codewhale/-/releases/download/v1.2.3".to_string())
+            Some("https://cnb.cool/ghosty.net/ghosty/-/releases/download/v1.2.3".to_string())
         );
 
         set_release_env(RELEASE_BASE_URL_ENV, "https://explicit.example.com");
@@ -635,7 +635,7 @@ mod tests {
             set_release_env(CNB_MIRROR_ENV, disabled);
             assert!(
                 !cnb_mirror_override_active(),
-                "only CODEWHALE_USE_CNB_MIRROR=1 may force CNB, got {disabled:?}"
+                "only GHOSTY_USE_CNB_MIRROR=1 may force CNB, got {disabled:?}"
             );
         }
     }
@@ -706,11 +706,11 @@ mod tests {
             "hint missing CHECKSUM_MANIFEST_ASSET"
         );
         assert!(
-            hint.contains("codewhale platform binary"),
+            hint.contains("ghosty platform binary"),
             "hint must describe the sole implementation asset"
         );
         assert!(
-            !hint.contains("codewhale-tui"),
+            !hint.contains("ghosty-tui"),
             "hint must not request the removed TUI implementation asset"
         );
     }
@@ -826,11 +826,11 @@ mod tests {
     fn cnb_release_base_url_includes_tag_directory() {
         assert_eq!(
             cnb_release_base_url("0.8.47"),
-            "https://cnb.cool/codewhale.net/codewhale/-/releases/download/v0.8.47"
+            "https://cnb.cool/ghosty.net/ghosty/-/releases/download/v0.8.47"
         );
         assert_eq!(
             cnb_release_base_url("v0.8.47"),
-            "https://cnb.cool/codewhale.net/codewhale/-/releases/download/v0.8.47"
+            "https://cnb.cool/ghosty.net/ghosty/-/releases/download/v0.8.47"
         );
     }
 

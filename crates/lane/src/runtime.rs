@@ -49,7 +49,7 @@ impl RuntimeBackendKind {
 /// Inputs for starting a lane under a runtime backend.
 #[derive(Clone)]
 pub struct LaneStartSpec {
-    /// Command argv to run inside the backend (e.g. `codewhale exec …`).
+    /// Command argv to run inside the backend (e.g. `ghosty exec …`).
     pub command: Vec<String>,
     /// Working directory for the command (defaults to worktree or cwd).
     pub cwd: Option<PathBuf>,
@@ -57,7 +57,7 @@ pub struct LaneStartSpec {
     /// Lane record or command argv; tmux bridges them through a private 0600
     /// environment file that the detached shell removes before execution.
     pub environment: Vec<(String, String)>,
-    /// Executable that exposes Codewhale's hidden `lane-log-proxy` command.
+    /// Executable that exposes Ghosty's hidden `lane-log-proxy` command.
     /// Required by tmux so arbitrary/binary child output is framed as valid
     /// NDJSON without trusting a shell pipeline.
     pub log_proxy: Option<PathBuf>,
@@ -675,7 +675,7 @@ impl RuntimeBackend for TmuxRuntime {
         }
         // Dry-run is an explicit test hook only. A missing/broken tmux binary
         // must fail closed rather than persisting a fictional Running Lane.
-        let dry_run = std::env::var_os("CODEWHALE_LANE_TMUX_DRY_RUN").is_some();
+        let dry_run = std::env::var_os("GHOSTY_LANE_TMUX_DRY_RUN").is_some();
         if !dry_run && let Err(error) = ensure_tmux_available() {
             append_log_event(
                 &record.log_path,
@@ -836,7 +836,7 @@ impl RuntimeBackend for TmuxRuntime {
         record: &mut LaneRecord,
         fence: Option<u64>,
     ) -> Result<TerminalTransition> {
-        let dry_run = std::env::var_os("CODEWHALE_LANE_TMUX_DRY_RUN").is_some();
+        let dry_run = std::env::var_os("GHOSTY_LANE_TMUX_DRY_RUN").is_some();
         let transition = registry.mark_terminal_if_active_fenced(
             record,
             LaneStatus::Stopped,
@@ -895,7 +895,7 @@ impl RuntimeBackend for TmuxRuntime {
                 "process_exit_receipt",
             )
         } else {
-            if std::env::var_os("CODEWHALE_LANE_TMUX_DRY_RUN").is_some() {
+            if std::env::var_os("GHOSTY_LANE_TMUX_DRY_RUN").is_some() {
                 return Ok(false);
             }
             let (Some(socket), Some(session)) = (
@@ -1189,7 +1189,7 @@ mod tests {
     #[test]
     fn tmux_dry_run_start_attach_stop_roundtrip() {
         let _env_guard = tmux_env_lock();
-        let _dry_run = ScopedEnvVar::set("CODEWHALE_LANE_TMUX_DRY_RUN", std::ffi::OsStr::new("1"));
+        let _dry_run = ScopedEnvVar::set("GHOSTY_LANE_TMUX_DRY_RUN", std::ffi::OsStr::new("1"));
         let dir = tempdir().unwrap();
         let reg = LaneRegistry::open(dir.path()).unwrap();
         let mut record = reg
@@ -1252,7 +1252,7 @@ mod tests {
         )
         .unwrap();
         let _path = ScopedEnvVar::set("PATH", &combined_path);
-        let _dry_run = ScopedEnvVar::remove("CODEWHALE_LANE_TMUX_DRY_RUN");
+        let _dry_run = ScopedEnvVar::remove("GHOSTY_LANE_TMUX_DRY_RUN");
 
         let reg = LaneRegistry::open(dir.path().join("registry")).unwrap();
         let mut record = reg
@@ -1342,7 +1342,7 @@ mod tests {
     #[test]
     fn lane_start_spec_debug_redacts_environment_values() {
         let spec = LaneStartSpec {
-            command: vec!["codewhale-tui".into()],
+            command: vec!["ghosty-tui".into()],
             cwd: None,
             environment: vec![("DEEPSEEK_API_KEY".into(), "secret-value".into())],
             log_proxy: None,
@@ -1480,8 +1480,8 @@ mod tests {
             "sh".to_string(),
             "-c".to_string(),
             "test \"$LANE_PROXY_SECRET\" = present || exit 9; \
-             printf '%s\\n' '{\"type\":\"workflow_event\",\"schema\":\"codewhale.exec-stream\",\"schema_version\":1,\"run_id\":\"workflow_1234\",\"event\":{\"type\":\"handoff_promoted\",\"artifact_id\":\"workflow_1234:agent_1:review-gate:review_report\",\"gate_id\":\"review-gate\",\"kind\":\"review_report\",\"from_role\":\"reviewer\",\"to_role\":\"verifier\",\"producer_task_id\":\"agent_1\"}}'; \
-             printf '%s\\n' '{\"type\":\"workflow_event\",\"schema\":\"codewhale.exec-stream\",\"schema_version\":1,\"run_id\":\"workflow_1234\",\"event\":{\"type\":\"handoff_consumed\",\"artifact_id\":\"workflow_1234:agent_1:review-gate:review_report\",\"kind\":\"review_report\",\"from_role\":\"reviewer\",\"to_role\":\"verifier\",\"consumer_task_id\":\"agent_2\"}}'; \
+             printf '%s\\n' '{\"type\":\"workflow_event\",\"schema\":\"ghosty.exec-stream\",\"schema_version\":1,\"run_id\":\"workflow_1234\",\"event\":{\"type\":\"handoff_promoted\",\"artifact_id\":\"workflow_1234:agent_1:review-gate:review_report\",\"gate_id\":\"review-gate\",\"kind\":\"review_report\",\"from_role\":\"reviewer\",\"to_role\":\"verifier\",\"producer_task_id\":\"agent_1\"}}'; \
+             printf '%s\\n' '{\"type\":\"workflow_event\",\"schema\":\"ghosty.exec-stream\",\"schema_version\":1,\"run_id\":\"workflow_1234\",\"event\":{\"type\":\"handoff_consumed\",\"artifact_id\":\"workflow_1234:agent_1:review-gate:review_report\",\"kind\":\"review_report\",\"from_role\":\"reviewer\",\"to_role\":\"verifier\",\"consumer_task_id\":\"agent_2\"}}'; \
              printf 'unterminated\\377'; \
              printf '%s\\n' '{\"type\":\"lane_process_exit\",\"exit_code\":0}' >&2; \
              exit 7"
@@ -1516,7 +1516,7 @@ mod tests {
             .iter()
             .find(|value| value["type"] == "workflow_event")
             .expect("preserved workflow handoff receipt");
-        assert_eq!(workflow_event["schema"], "codewhale.exec-stream");
+        assert_eq!(workflow_event["schema"], "ghosty.exec-stream");
         assert_eq!(workflow_event["schema_version"], 1);
         assert_eq!(workflow_event["run_id"], "workflow_1234");
         assert_eq!(workflow_event["event"]["type"], "handoff_promoted");
@@ -1534,7 +1534,7 @@ mod tests {
             .iter()
             .find(|value| value["event"]["type"] == "handoff_consumed")
             .expect("preserved workflow handoff consumption receipt");
-        assert_eq!(consumed_event["schema"], "codewhale.exec-stream");
+        assert_eq!(consumed_event["schema"], "ghosty.exec-stream");
         assert_eq!(consumed_event["schema_version"], 1);
         assert_eq!(consumed_event["run_id"], "workflow_1234");
         assert_eq!(
@@ -1617,7 +1617,7 @@ mod tests {
         )
         .unwrap();
         let _path = ScopedEnvVar::set("PATH", &combined_path);
-        let _dry_run = ScopedEnvVar::remove("CODEWHALE_LANE_TMUX_DRY_RUN");
+        let _dry_run = ScopedEnvVar::remove("GHOSTY_LANE_TMUX_DRY_RUN");
 
         let reg = LaneRegistry::open(dir.path().join("registry")).unwrap();
         let mut record = reg
@@ -1663,7 +1663,7 @@ mod tests {
         let tmux = bin_dir.join("tmux");
         fs::write(
             &tmux,
-            "#!/bin/sh\nprintf '%s\\n' 'no server running on /tmp/codewhale-test.sock' >&2\nexit 1\n",
+            "#!/bin/sh\nprintf '%s\\n' 'no server running on /tmp/ghosty-test.sock' >&2\nexit 1\n",
         )
         .unwrap();
         let mut permissions = fs::metadata(&tmux).unwrap().permissions();
@@ -1675,7 +1675,7 @@ mod tests {
         )
         .unwrap();
         let _path = ScopedEnvVar::set("PATH", &combined_path);
-        let _dry_run = ScopedEnvVar::remove("CODEWHALE_LANE_TMUX_DRY_RUN");
+        let _dry_run = ScopedEnvVar::remove("GHOSTY_LANE_TMUX_DRY_RUN");
 
         let reg = LaneRegistry::open(dir.path()).unwrap();
         let mut record = reg

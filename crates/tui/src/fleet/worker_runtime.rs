@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
-use codewhale_protocol::fleet::{
+use ghosty_protocol::fleet::{
     FleetEffectivePermissions, FleetResolvedRoute, FleetTaskSpec, FleetTaskWorkerProfile,
     FleetWorkerSpec,
 };
@@ -38,7 +38,7 @@ use crate::worker_profile::{ChildLaunchManifest, ModelRoute, ToolScope, WorkerRu
 /// Keeping the selected identity snapshot inside the already-durable task
 /// record prevents a queued run or retry from silently changing member/model
 /// when a profile file is edited after run creation.
-pub(crate) const FROZEN_FLEET_MEMBER_METADATA_KEY: &str = "_codewhale.frozen_fleet_member.v1";
+pub(crate) const FROZEN_FLEET_MEMBER_METADATA_KEY: &str = "_ghosty.frozen_fleet_member.v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct FrozenFleetMember {
@@ -394,7 +394,7 @@ pub fn fleet_task_to_worker_spec_with_profiles(
     let agent_type = fleet_role_to_agent_type(role.as_deref());
     let tool_profile = fleet_tool_profile(worker_profile);
     let objective = fleet_task_prompt_with_profile(task_spec, agent_profile);
-    let max_spawn_depth = codewhale_config::FleetExecConfig::default().max_spawn_depth;
+    let max_spawn_depth = ghosty_config::FleetExecConfig::default().max_spawn_depth;
     let loadout = effective_fleet_loadout(worker_profile, agent_profile);
     let (effective_model, model_source) =
         effective_fleet_model_with_source(model, worker_profile, agent_profile);
@@ -786,8 +786,8 @@ pub(crate) fn resolve_fleet_route_from_worker_report(
 }
 
 /// Plain-string label for a resolved wire protocol (no config type leaks).
-fn route_protocol_label(protocol: codewhale_config::route::RequestProtocol) -> &'static str {
-    use codewhale_config::route::RequestProtocol;
+fn route_protocol_label(protocol: ghosty_config::route::RequestProtocol) -> &'static str {
+    use ghosty_config::route::RequestProtocol;
     match protocol {
         RequestProtocol::ChatCompletions => "chat_completions",
         RequestProtocol::Responses => "responses",
@@ -796,8 +796,8 @@ fn route_protocol_label(protocol: codewhale_config::route::RequestProtocol) -> &
 }
 
 /// Collapse an `inherit` (no-op) loadout to `None` for the receipt.
-fn loadout_intent_label(loadout: &codewhale_config::FleetLoadout) -> Option<String> {
-    if *loadout == codewhale_config::FleetLoadout::Inherit {
+fn loadout_intent_label(loadout: &ghosty_config::FleetLoadout) -> Option<String> {
+    if *loadout == ghosty_config::FleetLoadout::Inherit {
         None
     } else {
         Some(loadout.as_str().to_string())
@@ -835,7 +835,7 @@ fn fleet_task_prompt_with_profile(
     let role = effective_fleet_role(task_spec.worker.as_ref(), agent_profile)
         .unwrap_or_else(|| "general".to_string());
     let mut prompt = String::new();
-    prompt.push_str("You have been summoned as a Codewhale Fleet member (");
+    prompt.push_str("You have been summoned as a Ghosty Fleet member (");
     prompt.push_str(&role);
     prompt.push_str(") by the Fleet orchestrator.\n\n");
     prompt.push_str("Fleet operating contract:\n");
@@ -1039,20 +1039,20 @@ fn effective_fleet_role_with_source(
 fn effective_fleet_loadout(
     worker_profile: Option<&FleetTaskWorkerProfile>,
     agent_profile: Option<&AgentProfile>,
-) -> codewhale_config::FleetLoadout {
+) -> ghosty_config::FleetLoadout {
     effective_fleet_loadout_with_source(worker_profile, agent_profile).0
 }
 
 fn effective_fleet_loadout_with_source(
     worker_profile: Option<&FleetTaskWorkerProfile>,
     agent_profile: Option<&AgentProfile>,
-) -> (codewhale_config::FleetLoadout, Option<&'static str>) {
+) -> (ghosty_config::FleetLoadout, Option<&'static str>) {
     if let Some(model_class) = worker_profile
         .and_then(|worker| worker.model_class.as_deref())
         .and_then(non_empty_trimmed)
     {
         return (
-            codewhale_config::FleetLoadout::from_name(model_class),
+            ghosty_config::FleetLoadout::from_name(model_class),
             Some("task.model_class"),
         );
     }
@@ -1061,17 +1061,17 @@ fn effective_fleet_loadout_with_source(
         .and_then(non_empty_trimmed)
     {
         return (
-            codewhale_config::FleetLoadout::from_name(loadout),
+            ghosty_config::FleetLoadout::from_name(loadout),
             Some("task.loadout"),
         );
     }
     if let Some(loadout) = agent_profile
         .map(|profile| profile.profile.loadout.clone())
-        .filter(|loadout| *loadout != codewhale_config::FleetLoadout::Inherit)
+        .filter(|loadout| *loadout != ghosty_config::FleetLoadout::Inherit)
     {
         return (loadout, Some("agent_profile.loadout"));
     }
-    (codewhale_config::FleetLoadout::Inherit, None)
+    (ghosty_config::FleetLoadout::Inherit, None)
 }
 
 fn effective_fleet_model(
@@ -1141,7 +1141,7 @@ pub(crate) fn explicit_fleet_provider_id(agent_profile: Option<&AgentProfile>) -
 ///
 /// `pub(crate)` so the interactive-TUI in-process spawn path
 /// (`tools::subagent`) resolves the pinned provider from the SAME
-/// explicit-only source as the headless `codewhale exec` launch route (#4193),
+/// explicit-only source as the headless `ghosty exec` launch route (#4193),
 /// instead of re-deriving it and risking a second, divergent policy. User-named
 /// custom providers intentionally return `None` here; launch paths that can
 /// carry strings should use [`explicit_fleet_provider_id`].
@@ -1187,7 +1187,7 @@ pub(crate) fn fleet_worker_launch_reasoning_effort(
 }
 
 /// The route (model selector + optional explicit provider id) that a fleet
-/// worker's actual `codewhale exec` subprocess should launch on (#4093 AC #4).
+/// worker's actual `ghosty exec` subprocess should launch on (#4093 AC #4).
 ///
 /// This is the launch-side twin of [`resolve_fleet_route`] (the receipt): both
 /// read the worker's model from the same task/profile/run precedence
@@ -1203,7 +1203,7 @@ pub(crate) fn fleet_worker_launch_reasoning_effort(
 ///   caller omits `--provider` and the worker keeps its own session default,
 ///   preserving today's behavior for profile-less workers. Built-ins use their
 ///   canonical ids; user-named custom providers preserve the profile's id so
-///   `codewhale exec --provider <id>` can resolve `[providers.<id>]`.
+///   `ghosty exec --provider <id>` can resolve `[providers.<id>]`.
 pub(crate) fn fleet_worker_launch_route(
     task_spec: &FleetTaskSpec,
     agent_profiles: &[AgentProfile],
@@ -1334,7 +1334,7 @@ fn fleet_worker_runtime_profile_for_loadout(
     model: &str,
     spawn_depth: u32,
     max_spawn_depth: u32,
-    loadout: &codewhale_config::FleetLoadout,
+    loadout: &ghosty_config::FleetLoadout,
     model_source: &'static str,
 ) -> WorkerRuntimeProfile {
     let mut profile = fleet_worker_runtime_profile(
@@ -1345,7 +1345,7 @@ fn fleet_worker_runtime_profile_for_loadout(
         max_spawn_depth,
     );
     profile.model = if matches!(model_source, "task.model" | "agent_profile.model") {
-        fleet_model_route_for_loadout(model, &codewhale_config::FleetLoadout::Inherit)
+        fleet_model_route_for_loadout(model, &ghosty_config::FleetLoadout::Inherit)
     } else {
         fleet_model_route_for_loadout("auto", loadout)
     };
@@ -1359,14 +1359,14 @@ fn non_empty_trimmed(value: &str) -> Option<&str> {
 
 pub(crate) fn fleet_model_route_for_loadout(
     model: &str,
-    loadout: &codewhale_config::FleetLoadout,
+    loadout: &ghosty_config::FleetLoadout,
 ) -> ModelRoute {
     let model = model.trim();
     if !model.is_empty() && !model.eq_ignore_ascii_case("auto") {
         return ModelRoute::Fixed(model.to_string());
     }
     match loadout {
-        codewhale_config::FleetLoadout::Inherit => ModelRoute::Inherit,
+        ghosty_config::FleetLoadout::Inherit => ModelRoute::Inherit,
         // `Fast` used to mean "cheap sibling" — silently route the child to a
         // different, cheaper model than the parent turn. That is a routing
         // decision the operator never made and cannot see: the child's model
@@ -1379,8 +1379,8 @@ pub(crate) fn fleet_model_route_for_loadout(
         // authority to re-price it. `Fast` now inherits the parent's route
         // like every other default; a genuinely different model stays
         // available, but only when someone pins it explicitly.
-        codewhale_config::FleetLoadout::Fast => ModelRoute::Inherit,
-        codewhale_config::FleetLoadout::Custom(_) => ModelRoute::Auto,
+        ghosty_config::FleetLoadout::Fast => ModelRoute::Inherit,
+        ghosty_config::FleetLoadout::Custom(_) => ModelRoute::Auto,
     }
 }
 
@@ -1391,7 +1391,7 @@ pub(crate) fn fleet_model_route_for_loadout(
 /// appended when configured.
 pub fn apply_exec_hardening(
     mut spec: AgentWorkerSpec,
-    exec: &codewhale_config::FleetExecConfig,
+    exec: &ghosty_config::FleetExecConfig,
 ) -> AgentWorkerSpec {
     // Cap max_steps to config max_turns (0 means no cap).
     if exec.max_turns > 0 {
@@ -1403,7 +1403,7 @@ pub fn apply_exec_hardening(
     }
     spec.max_spawn_depth = exec
         .max_spawn_depth
-        .min(codewhale_config::MAX_SPAWN_DEPTH_CEILING);
+        .min(ghosty_config::MAX_SPAWN_DEPTH_CEILING);
     spec.runtime_profile.max_spawn_depth = spec.max_spawn_depth.saturating_sub(spec.spawn_depth);
 
     // Apply tool filtering
@@ -1559,7 +1559,7 @@ pub(crate) fn network_posture_warning_for_task(
         &tool_profile,
         &model,
         0,
-        codewhale_config::FleetExecConfig::default().max_spawn_depth,
+        ghosty_config::FleetExecConfig::default().max_spawn_depth,
         &loadout,
         model_source,
     );
@@ -1603,7 +1603,7 @@ fn tool_scope_label(tools: &ToolScope) -> &'static str {
 /// Filter a tool profile against allowed/disallowed lists.
 fn filter_tool_profile(
     profile: &AgentWorkerToolProfile,
-    exec: &codewhale_config::FleetExecConfig,
+    exec: &ghosty_config::FleetExecConfig,
 ) -> AgentWorkerToolProfile {
     match profile {
         AgentWorkerToolProfile::Explicit(tools) => {
@@ -1632,7 +1632,7 @@ fn filter_tool_profile(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codewhale_protocol::fleet::{FleetHostSpec, FleetTaskBudget, FleetWorkspaceRequirements};
+    use ghosty_protocol::fleet::{FleetHostSpec, FleetTaskBudget, FleetWorkspaceRequirements};
     use std::path::{Path, PathBuf};
 
     fn explicit_deepseek_config() -> Config {
@@ -1904,16 +1904,16 @@ mod tests {
         id: &str,
         role: &str,
         instructions: Option<&str>,
-        loadout: codewhale_config::FleetLoadout,
+        loadout: ghosty_config::FleetLoadout,
     ) -> AgentProfile {
         AgentProfile {
             id: id.to_string(),
             display_name: Some(format!("{role} profile")),
             description: Some(format!("{role} description")),
             requires: Vec::new(),
-            profile: codewhale_config::FleetProfile {
-                slot: codewhale_config::FleetSlot::from_name(role),
-                role: codewhale_config::FleetRole {
+            profile: ghosty_config::FleetProfile {
+                slot: ghosty_config::FleetSlot::from_name(role),
+                role: ghosty_config::FleetRole {
                     name: role.to_string(),
                     description: Some(format!("{role} role")),
                     instructions: instructions.map(str::to_string),
@@ -1922,8 +1922,8 @@ mod tests {
                 model: None,
                 provider: None,
                 reasoning_effort: None,
-                permissions: codewhale_config::FleetProfilePermissions::default(),
-                delegation: codewhale_config::FleetDelegationHints::default(),
+                permissions: ghosty_config::FleetProfilePermissions::default(),
+                delegation: ghosty_config::FleetDelegationHints::default(),
             },
             source: std::path::PathBuf::from(format!("{id}.toml")),
             origin: crate::fleet::roster::ProfileOrigin::Workspace,
@@ -2018,7 +2018,7 @@ mod tests {
             "synthesizer",
             "synthesizer",
             None,
-            codewhale_config::FleetLoadout::Fast,
+            ghosty_config::FleetLoadout::Fast,
         );
         assert_eq!(roster_member_agent_type(&member), FleetRole::Planner);
 
@@ -2026,13 +2026,10 @@ mod tests {
             "custom-summarizer",
             "summarizer",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         slot_only.profile.role.name = String::new();
-        assert_eq!(
-            slot_only.profile.slot,
-            codewhale_config::FleetSlot::Summarizer
-        );
+        assert_eq!(slot_only.profile.slot, ghosty_config::FleetSlot::Summarizer);
         assert_eq!(roster_member_agent_type(&slot_only), FleetRole::Planner);
     }
 
@@ -2205,7 +2202,7 @@ mod tests {
             "audit",
             "reviewer",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("deepseek-v4-flash".to_string());
         let task = fleet_task(
@@ -2352,7 +2349,7 @@ mod tests {
 
         let prompt = fleet_task_prompt(&task);
 
-        assert!(prompt.contains("summoned as a Codewhale Fleet member (general)"));
+        assert!(prompt.contains("summoned as a Ghosty Fleet member (general)"));
         assert!(prompt.contains("Fleet operating contract:"));
         assert!(prompt.contains("keep sibling or topology assumptions out of your answer"));
         assert!(prompt.contains("Review protocol"));
@@ -2368,7 +2365,7 @@ mod tests {
             "reviewer",
             "reviewer",
             Some("Focus on regressions and missing tests."),
-            codewhale_config::FleetLoadout::Custom("balanced".to_string()),
+            ghosty_config::FleetLoadout::Custom("balanced".to_string()),
         );
         let task = fleet_task(
             "review",
@@ -2409,7 +2406,7 @@ mod tests {
         assert_eq!(spec.agent_type, FleetRole::Reviewer);
         assert!(
             spec.objective
-                .contains("summoned as a Codewhale Fleet member (reviewer)")
+                .contains("summoned as a Ghosty Fleet member (reviewer)")
         );
         assert!(spec.objective.contains("Fleet profile: reviewer"));
         assert!(
@@ -2565,7 +2562,7 @@ mod tests {
             "audit",
             "reviewer",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("deepseek-v4-pro".to_string());
         let pinned_task = fleet_task(
@@ -2600,7 +2597,7 @@ mod tests {
             "builder-luna",
             "builder",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("gpt-5.6-luna".to_string());
         let task = fleet_task(
@@ -2631,7 +2628,7 @@ mod tests {
             "unscoped",
             "builder",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("deepseek-v4-flash".to_string());
         let task = fleet_task(
@@ -2668,7 +2665,7 @@ mod tests {
             "grok-builder",
             "builder",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.provider = Some("xai".to_string());
         let task = fleet_task(
@@ -2709,7 +2706,7 @@ mod tests {
             "private-gateway-builder",
             "builder",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.provider = Some("private-gateway".to_string());
         let task = fleet_task(
@@ -2753,7 +2750,7 @@ mod tests {
             "moonshot-builder",
             "builder",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("deepseek-v4-pro".to_string());
         let task = fleet_task(
@@ -2792,7 +2789,7 @@ mod tests {
             "builder-ds",
             "builder",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         good.profile.model = Some("deepseek-v4-flash".to_string());
         good.profile.provider = Some("deepseek".to_string());
@@ -2815,7 +2812,7 @@ mod tests {
             "inherit-role",
             "builder",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         let inherit_task = fleet_task(
             "inherit-build",
@@ -2843,7 +2840,7 @@ mod tests {
             "preview-builder",
             "builder",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("trinity-large-preview".to_string());
         profile.profile.provider = Some("arcee".to_string());
@@ -2873,7 +2870,7 @@ mod tests {
             "deep-builder",
             "builder",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("deepseek-v4-flash".to_string());
         profile.profile.provider = Some("deepseek".to_string());
@@ -2901,7 +2898,7 @@ mod tests {
                 "preview-builder",
                 "builder",
                 None,
-                codewhale_config::FleetLoadout::Inherit,
+                ghosty_config::FleetLoadout::Inherit,
             );
             profile.profile.model = Some("trinity-large-preview".to_string());
             profile.profile.provider = Some("arcee".to_string());
@@ -2934,7 +2931,7 @@ mod tests {
             "cross-provider",
             "scout",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("deepseek-v4-flash".to_string());
         profile.profile.provider = Some("openrouter".to_string());
@@ -3059,12 +3056,8 @@ mod tests {
 
     #[test]
     fn resolve_fleet_route_preserves_exact_named_custom_provider_without_secrets() {
-        let mut profile = agent_profile(
-            "local",
-            "scout",
-            None,
-            codewhale_config::FleetLoadout::Inherit,
-        );
+        let mut profile =
+            agent_profile("local", "scout", None, ghosty_config::FleetLoadout::Inherit);
         profile.profile.model = Some("qwen-2.5-7b".to_string());
         profile.profile.provider = Some("lm-studio".to_string());
         let task = fleet_task(
@@ -3154,7 +3147,7 @@ mod tests {
             "case-local",
             "scout",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("case-model".to_string());
         profile.profile.provider = Some("CUSTOM".to_string());
@@ -3288,12 +3281,8 @@ mod tests {
 
         // 1) Explicit cross-provider pin: model + provider both come from the
         //    profile, not the parent/session model.
-        let mut pinned = agent_profile(
-            "cross",
-            "scout",
-            None,
-            codewhale_config::FleetLoadout::Inherit,
-        );
+        let mut pinned =
+            agent_profile("cross", "scout", None, ghosty_config::FleetLoadout::Inherit);
         pinned.profile.model = Some("glm-5.2".to_string());
         pinned.profile.provider = Some("openrouter".to_string());
         pinned.profile.reasoning_effort = Some("high".to_string());
@@ -3319,14 +3308,10 @@ mod tests {
         );
 
         // 1b) User-named OpenAI-compatible providers are launchable too: keep
-        //     the exact provider id so `codewhale exec --provider lm-studio`
+        //     the exact provider id so `ghosty exec --provider lm-studio`
         //     can resolve `[providers.lm-studio]` from config (#3965).
-        let mut custom = agent_profile(
-            "local",
-            "scout",
-            None,
-            codewhale_config::FleetLoadout::Inherit,
-        );
+        let mut custom =
+            agent_profile("local", "scout", None, ghosty_config::FleetLoadout::Inherit);
         custom.profile.model = Some("qwen-2.5-7b".to_string());
         custom.profile.provider = Some("lm-studio".to_string());
         let custom_task = fleet_task(
@@ -3353,7 +3338,7 @@ mod tests {
             "modelonly",
             "scout",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         model_only.profile.model = Some("deepseek-v4-flash".to_string());
         let model_only_task = fleet_task(
@@ -3413,7 +3398,7 @@ mod tests {
             "flash-scout",
             "scout",
             Some("Inspect the requested surface."),
-            codewhale_config::FleetLoadout::Fast,
+            ghosty_config::FleetLoadout::Fast,
         );
         profile.display_name = Some("Scout One".to_string());
         profile.profile.provider = Some("deepseek".to_string());
@@ -3473,19 +3458,14 @@ mod tests {
 
     #[test]
     fn fleet_task_member_selector_reports_ambiguity() {
-        let mut first = agent_profile(
-            "scout-a",
-            "scout",
-            None,
-            codewhale_config::FleetLoadout::Fast,
-        );
+        let mut first = agent_profile("scout-a", "scout", None, ghosty_config::FleetLoadout::Fast);
         first.profile.provider = Some("deepseek".to_string());
         first.profile.model = Some("deepseek-v4-flash".to_string());
         let mut second = agent_profile(
             "scout-b",
             "reviewer",
             None,
-            codewhale_config::FleetLoadout::Fast,
+            ghosty_config::FleetLoadout::Fast,
         );
         second.profile.provider = Some("deepseek".to_string());
         second.profile.model = Some("deepseek-v4-flash".to_string());
@@ -3534,18 +3514,8 @@ mod tests {
 
     #[test]
     fn ambiguous_legacy_role_never_falls_back_to_anonymous_posture() {
-        let first = agent_profile(
-            "scout-a",
-            "scout",
-            None,
-            codewhale_config::FleetLoadout::Fast,
-        );
-        let second = agent_profile(
-            "scout-b",
-            "scout",
-            None,
-            codewhale_config::FleetLoadout::Fast,
-        );
+        let first = agent_profile("scout-a", "scout", None, ghosty_config::FleetLoadout::Fast);
+        let second = agent_profile("scout-b", "scout", None, ghosty_config::FleetLoadout::Fast);
         let mut task = fleet_task(
             "ambiguous-role",
             Some(worker_profile(
@@ -3572,7 +3542,7 @@ mod tests {
             "flash-scout",
             "scout",
             None,
-            codewhale_config::FleetLoadout::Fast,
+            ghosty_config::FleetLoadout::Fast,
         );
         let mut missing = fleet_task(
             "missing-member",
@@ -3612,7 +3582,7 @@ mod tests {
             "flash-scout",
             "scout",
             Some("Inspect the selected surface."),
-            codewhale_config::FleetLoadout::Fast,
+            ghosty_config::FleetLoadout::Fast,
         );
         original.display_name = Some("Scout One".to_string());
         original.profile.provider = Some("deepseek".to_string());
@@ -3647,7 +3617,7 @@ mod tests {
             "flash-scout",
             "reviewer",
             Some("This edit happened after queueing."),
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         edited.profile.provider = Some("openrouter".to_string());
         edited.profile.model = Some("gpt-5.6".to_string());
@@ -3668,7 +3638,7 @@ mod tests {
             "advisor",
             "reviewer",
             None,
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         let mut task = fleet_task(
             "advisor-selection",
@@ -3695,7 +3665,7 @@ mod tests {
             "flash-scout",
             "scout",
             None,
-            codewhale_config::FleetLoadout::Fast,
+            ghosty_config::FleetLoadout::Fast,
         );
         profile.profile.provider = Some("deepseek".to_string());
         profile.profile.model = Some("deepseek-v4-flash".to_string());
@@ -3758,7 +3728,7 @@ mod tests {
             "reviewer",
             "reviewer",
             Some("Focus on regressions and missing tests."),
-            codewhale_config::FleetLoadout::Inherit,
+            ghosty_config::FleetLoadout::Inherit,
         );
         profile.profile.model = Some("glm-5.2".to_string());
         let worker = FleetWorkerSpec {
@@ -3836,7 +3806,7 @@ mod tests {
             "scout-openrouter",
             "scout",
             Some("Use the OpenRouter scout route."),
-            codewhale_config::FleetLoadout::Fast,
+            ghosty_config::FleetLoadout::Fast,
         );
         profile.profile.model = Some("deepseek-v4-flash".to_string());
         profile.profile.provider = Some("openrouter".to_string());
@@ -3905,8 +3875,7 @@ mod tests {
         };
         let run_model = "deepseek-v4-pro";
 
-        let mut profile =
-            agent_profile("scout", "scout", None, codewhale_config::FleetLoadout::Fast);
+        let mut profile = agent_profile("scout", "scout", None, ghosty_config::FleetLoadout::Fast);
         profile.profile.model = Some("deepseek-v4-flash".to_string());
 
         let task_model = fleet_task_to_worker_spec_with_profiles(
@@ -4133,14 +4102,14 @@ mod tests {
         // sub-agent default (3) so fleet and sub-agents are one substrate and
         // at least 3 nested delegation levels are afforded.
         assert_eq!(spec.spawn_depth, 0);
-        assert_eq!(spec.max_spawn_depth, codewhale_config::DEFAULT_SPAWN_DEPTH);
+        assert_eq!(spec.max_spawn_depth, ghosty_config::DEFAULT_SPAWN_DEPTH);
         assert_eq!(spec.max_spawn_depth, 3);
 
         // End-to-end reachability: walk the SAME gate the SubAgentRuntime
         // enforces (`would_exceed_depth` = `spawn_depth + 1 > max_spawn_depth`).
         // A depth-0 root must reach 3 nested levels, then stop. This fails if
         // anyone lowers the shared default below 3 (Hunter: afford >= 3).
-        let hardened = apply_exec_hardening(spec, &codewhale_config::FleetExecConfig::default());
+        let hardened = apply_exec_hardening(spec, &ghosty_config::FleetExecConfig::default());
         let would_exceed = |spawn_depth: u32| spawn_depth + 1 > hardened.max_spawn_depth;
         assert!(
             !would_exceed(0),
@@ -4287,17 +4256,17 @@ mod tests {
         // sibling: a loadout says how much work a role should do, not which
         // model it is billed as, so it inherits like every other default.
         assert_eq!(
-            fleet_model_route_for_loadout("auto", &codewhale_config::FleetLoadout::Fast),
+            fleet_model_route_for_loadout("auto", &ghosty_config::FleetLoadout::Fast),
             ModelRoute::Inherit,
         );
         assert_eq!(
-            fleet_model_route_for_loadout("auto", &codewhale_config::FleetLoadout::Inherit),
+            fleet_model_route_for_loadout("auto", &ghosty_config::FleetLoadout::Inherit),
             ModelRoute::Inherit,
         );
         assert_eq!(
             fleet_model_route_for_loadout(
                 "auto",
-                &codewhale_config::FleetLoadout::Custom("strong".to_string())
+                &ghosty_config::FleetLoadout::Custom("strong".to_string())
             ),
             ModelRoute::Auto,
         );
@@ -4305,7 +4274,7 @@ mod tests {
         assert_eq!(
             fleet_model_route_for_loadout(
                 "deepseek-v4-flash",
-                &codewhale_config::FleetLoadout::Custom("strong".to_string())
+                &ghosty_config::FleetLoadout::Custom("strong".to_string())
             ),
             ModelRoute::Fixed("deepseek-v4-flash".to_string()),
         );
@@ -4333,7 +4302,7 @@ mod tests {
         let deepseek = provider_router_candidates(ApiProvider::Deepseek, parent);
         assert_eq!(
             resolve(
-                &fleet_model_route_for_loadout("auto", &codewhale_config::FleetLoadout::Fast),
+                &fleet_model_route_for_loadout("auto", &ghosty_config::FleetLoadout::Fast),
                 &deepseek,
             ),
             parent,
@@ -4346,7 +4315,7 @@ mod tests {
         assert_eq!(no_sibling.cheap, None);
         assert_eq!(
             resolve(
-                &fleet_model_route_for_loadout("auto", &codewhale_config::FleetLoadout::Fast),
+                &fleet_model_route_for_loadout("auto", &ghosty_config::FleetLoadout::Fast),
                 &no_sibling,
             ),
             parent,
@@ -4377,7 +4346,7 @@ mod tests {
             child_route: None,
             launch_manifest: None,
         };
-        let exec = codewhale_config::FleetExecConfig {
+        let exec = ghosty_config::FleetExecConfig {
             max_turns: 50,
             ..Default::default()
         };
@@ -4409,24 +4378,24 @@ mod tests {
             launch_manifest: None,
         };
 
-        let exec = codewhale_config::FleetExecConfig {
+        let exec = ghosty_config::FleetExecConfig {
             max_spawn_depth: 2,
             ..Default::default()
         };
         let hardened = apply_exec_hardening(spec.clone(), &exec);
         assert_eq!(hardened.max_spawn_depth, 2);
 
-        let exec = codewhale_config::FleetExecConfig {
+        let exec = ghosty_config::FleetExecConfig {
             max_spawn_depth: 99,
             ..Default::default()
         };
         let hardened = apply_exec_hardening(spec.clone(), &exec);
         assert_eq!(
             hardened.max_spawn_depth,
-            codewhale_config::MAX_SPAWN_DEPTH_CEILING
+            ghosty_config::MAX_SPAWN_DEPTH_CEILING
         );
 
-        let exec = codewhale_config::FleetExecConfig {
+        let exec = ghosty_config::FleetExecConfig {
             max_spawn_depth: 0,
             ..Default::default()
         };
@@ -4441,7 +4410,7 @@ mod tests {
             "exec_shell".to_string(),
             "git_diff".to_string(),
         ]);
-        let exec = codewhale_config::FleetExecConfig {
+        let exec = ghosty_config::FleetExecConfig {
             disallowed_tools: vec!["exec_shell".to_string()],
             ..Default::default()
         };
@@ -4461,7 +4430,7 @@ mod tests {
             "exec_shell".to_string(),
             "git_diff".to_string(),
         ]);
-        let exec = codewhale_config::FleetExecConfig {
+        let exec = ghosty_config::FleetExecConfig {
             allowed_tools: vec!["read_file".to_string(), "git_diff".to_string()],
             ..Default::default()
         };
@@ -4480,7 +4449,7 @@ mod tests {
             "read_file".to_string(),
             "exec_shell".to_string(),
         ]);
-        let exec = codewhale_config::FleetExecConfig {
+        let exec = ghosty_config::FleetExecConfig {
             allowed_tools: vec!["read_file".to_string(), "exec_shell".to_string()],
             disallowed_tools: vec!["exec_shell".to_string()],
             ..Default::default()
@@ -4515,7 +4484,7 @@ mod tests {
             child_route: None,
             launch_manifest: None,
         };
-        let exec = codewhale_config::FleetExecConfig {
+        let exec = ghosty_config::FleetExecConfig {
             append_system_prompt: "never push to main".to_string(),
             ..Default::default()
         };

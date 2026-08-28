@@ -54,7 +54,7 @@ impl ExecPolicyConfig {
         // Only the deny loop is widened. The allow loop below still matches the
         // command as written, so a broader expansion can never turn into a
         // broader auto-approval.
-        let deny_targets = codewhale_execpolicy::shell_expand::expanded_commands(command);
+        let deny_targets = ghosty_execpolicy::shell_expand::expanded_commands(command);
         for (group, rules) in &self.rules {
             for pattern in &rules.deny {
                 if deny_targets

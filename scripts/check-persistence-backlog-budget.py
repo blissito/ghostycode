@@ -18,8 +18,8 @@ MEASURE_SCRIPT = ROOT / "scripts" / "measure-persistence-backlog.py"
 BUDGET_PATH = ROOT / "scripts" / "persistence-backlog-budget.json"
 BASELINE_RECEIPT_PATH = ROOT / "scripts" / "persistence-backlog-baseline-receipt.json"
 BASELINE_RECEIPT_REFERENCE = "scripts/persistence-backlog-baseline-receipt.json"
-RECEIPT_KIND = "codewhale.persistence_backlog_receipt"
-BUDGET_KIND = "codewhale.persistence_backlog_budget"
+RECEIPT_KIND = "ghosty.persistence_backlog_receipt"
+BUDGET_KIND = "ghosty.persistence_backlog_budget"
 SCHEMA_VERSION = 2
 
 FIXTURE = {

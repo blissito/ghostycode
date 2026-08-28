@@ -17,7 +17,7 @@ pub(super) struct SetupPersistenceFacts {
 impl Default for SetupPersistenceFacts {
     fn default() -> Self {
         Self {
-            home_result: "CODEWHALE_HOME not loaded".to_string(),
+            home_result: "GHOSTY_HOME not loaded".to_string(),
             config_result: "config path not loaded".to_string(),
             state_result: "setup state path not loaded".to_string(),
             constitution_result: "constitution path not loaded".to_string(),
@@ -29,20 +29,20 @@ impl Default for SetupPersistenceFacts {
 }
 
 impl SetupPersistenceFacts {
-    pub(super) fn from_app_config(app: &App, config: &Config, codewhale_home: &Path) -> Self {
-        let home_source = if codewhale_config::codewhale_home_is_explicit() {
+    pub(super) fn from_app_config(app: &App, config: &Config, ghosty_home: &Path) -> Self {
+        let home_source = if ghosty_config::ghosty_home_is_explicit() {
             "explicit"
         } else {
             "default"
         };
-        let home_presence = dir_presence(codewhale_home);
-        let config_path = codewhale_config::resolve_config_path(app.config_path.clone())
-            .unwrap_or_else(|_| codewhale_home.join("config.toml"));
-        let state_path = codewhale_config::SetupState::path().unwrap_or_else(|_| {
-            codewhale_home.join(codewhale_config::setup_state::SETUP_STATE_FILE_NAME)
+        let home_presence = dir_presence(ghosty_home);
+        let config_path = ghosty_config::resolve_config_path(app.config_path.clone())
+            .unwrap_or_else(|_| ghosty_home.join("config.toml"));
+        let state_path = ghosty_config::SetupState::path().unwrap_or_else(|_| {
+            ghosty_home.join(ghosty_config::setup_state::SETUP_STATE_FILE_NAME)
         });
-        let constitution_path = codewhale_config::UserConstitution::path()
-            .unwrap_or_else(|_| codewhale_home.join("constitution.json"));
+        let constitution_path = ghosty_config::UserConstitution::path()
+            .unwrap_or_else(|_| ghosty_home.join("constitution.json"));
         let memory_path = config.memory_path();
         let notes_path = config.notes_path();
 
@@ -54,8 +54,8 @@ impl SetupPersistenceFacts {
 
         Self {
             home_result: format!(
-                "{home_source} CODEWHALE_HOME at {} ({home_presence})",
-                codewhale_home.display()
+                "{home_source} GHOSTY_HOME at {} ({home_presence})",
+                ghosty_home.display()
             ),
             config_result: path_result(&config_path, config_presence),
             state_result: path_result(&state_path, state_presence),

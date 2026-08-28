@@ -6,7 +6,7 @@
 //! | mode | what it actually is |
 //! |------|---------------------|
 //! | [`RemoteMode::LocalOnly`] | the default: this machine, nothing exposed |
-//! | [`RemoteMode::RuntimeApi`] | `codewhale serve --http` on loopback, token-authenticated |
+//! | [`RemoteMode::RuntimeApi`] | `ghosty serve --http` on loopback, token-authenticated |
 //! | [`RemoteMode::MobileLan`] | the same runtime reachable from a phone on the LAN |
 //! | [`RemoteMode::ChatBridge`] | a chat bridge (Telegram, Feishu/Lark) in front of the runtime |
 //!
@@ -27,17 +27,17 @@ use crate::tui::app::App;
 
 /// Env var carrying the runtime API bearer token, plus the legacy alias the
 /// runtime still honors. Only presence is ever inspected.
-const RUNTIME_TOKEN_VARS: [&str; 2] = ["CODEWHALE_RUNTIME_TOKEN", "DEEPSEEK_RUNTIME_TOKEN"];
+const RUNTIME_TOKEN_VARS: [&str; 2] = ["GHOSTY_RUNTIME_TOKEN", "DEEPSEEK_RUNTIME_TOKEN"];
 
 /// Env var a user sets to bind the runtime somewhere other than loopback. The
 /// shipped systemd unit hardcodes `127.0.0.1`, so without this the LAN/mobile
 /// mode is genuinely unavailable rather than merely unconfigured.
-const RUNTIME_HOST_VARS: [&str; 2] = ["CODEWHALE_RUNTIME_HOST", "DEEPSEEK_RUNTIME_HOST"];
+const RUNTIME_HOST_VARS: [&str; 2] = ["GHOSTY_RUNTIME_HOST", "DEEPSEEK_RUNTIME_HOST"];
 
 /// Placeholder substituted for every secret in the generated plan preview.
 const REDACTED: &str = "<redacted>";
 
-/// The four ways a Codewhale runtime can be reached.
+/// The four ways a Ghosty runtime can be reached.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RemoteMode {
     LocalOnly,
@@ -162,7 +162,7 @@ impl SetupRemoteFacts {
             .iter()
             .map(|bridge| bridge.slug)
             .collect::<Vec<_>>();
-        let provider_count = codewhale_config::ProviderKind::all().len();
+        let provider_count = ghosty_config::ProviderKind::all().len();
         // Keep the exact route identity. Named custom routes are not yet
         // representable by the remote bundle registry, so the generated CLI
         // command must fail explicitly for that name instead of silently
@@ -332,7 +332,7 @@ fn observe_modes(lookup: &dyn Fn(&str) -> Option<String>) -> Vec<RemoteModeFact>
 ///
 /// This deliberately goes through the same `remote_setup::bundle` planning
 /// contract the CLI uses, so the preview cannot drift from what
-/// `codewhale remote-setup --generate-only` would produce. It calls
+/// `ghosty remote-setup --generate-only` would produce. It calls
 /// [`bundle::render_bundle`] (a pure function) and never
 /// [`bundle::write_bundle`]: no file is created, no command is run, and no
 /// cloud resource is provisioned.
@@ -372,7 +372,7 @@ so no plan can be generated for it."
 
     let mut out = String::from(
         "Preview only. Nothing below has been written, applied, or provisioned.\n\
-Every secret is shown as <redacted>; Codewhale never reads their values here.\n\n",
+Every secret is shown as <redacted>; Ghosty never reads their values here.\n\n",
     );
     for file in bundle::render_bundle(&inputs) {
         out.push_str(&format!("── {} ──\n", file.relative_path));
@@ -394,7 +394,7 @@ pub(super) fn on_ramp_text(
     command_provider: &str,
 ) -> String {
     let command = format!(
-        "codewhale remote-setup --generate-only --cloud lighthouse --bridge telegram --provider {command_provider} --out ./codewhale-deploy/lighthouse-telegram"
+        "ghosty remote-setup --generate-only --cloud lighthouse --bridge telegram --provider {command_provider} --out ./ghosty-deploy/lighthouse-telegram"
     );
     let base = tr(locale, MessageId::SetupRemoteOnRampText);
     let mut out = base
@@ -459,7 +459,7 @@ mod tests {
 
     #[test]
     fn a_lan_bind_without_a_token_asks_for_action_rather_than_claiming_ready() {
-        let modes = observe_modes(&env(&[("CODEWHALE_RUNTIME_HOST", "0.0.0.0")]));
+        let modes = observe_modes(&env(&[("GHOSTY_RUNTIME_HOST", "0.0.0.0")]));
         let lan = modes
             .iter()
             .find(|fact| fact.mode == RemoteMode::MobileLan)
@@ -467,8 +467,8 @@ mod tests {
         assert_eq!(lan.status, RemoteModeStatus::NeedsAction);
 
         let both = observe_modes(&env(&[
-            ("CODEWHALE_RUNTIME_HOST", "0.0.0.0"),
-            ("CODEWHALE_RUNTIME_TOKEN", "t-secret-value"),
+            ("GHOSTY_RUNTIME_HOST", "0.0.0.0"),
+            ("GHOSTY_RUNTIME_TOKEN", "t-secret-value"),
         ]));
         assert_eq!(
             both.iter()
@@ -497,8 +497,8 @@ mod tests {
         let hostile_token = "t-\u{202e}AKIAIOSFODNN7EXAMPLE/../../etc/passwd";
         let hostile_bot = "999:AAsuper-secret-bot-token";
         let modes = observe_modes(&env(&[
-            ("CODEWHALE_RUNTIME_TOKEN", hostile_token),
-            ("CODEWHALE_RUNTIME_HOST", "10.0.0.5"),
+            ("GHOSTY_RUNTIME_TOKEN", hostile_token),
+            ("GHOSTY_RUNTIME_HOST", "10.0.0.5"),
             ("TELEGRAM_BOT_TOKEN", hostile_bot),
             ("FEISHU_APP_ID", "cli_hostile"),
             ("FEISHU_APP_SECRET", "shh"),
@@ -516,7 +516,7 @@ mod tests {
             );
         }
         // Names are fine and are what makes the status explainable.
-        assert!(rendered.contains("CODEWHALE_RUNTIME_TOKEN"));
+        assert!(rendered.contains("GHOSTY_RUNTIME_TOKEN"));
         // A LAN address is host configuration the user typed, not a secret,
         // but it is still not echoed back.
         assert!(!rendered.contains("10.0.0.5"));
@@ -534,7 +534,7 @@ mod tests {
             "secrets must render as the redaction placeholder"
         );
         // The generated token slot must be the placeholder, not a real token.
-        assert!(preview.contains(&format!("CODEWHALE_RUNTIME_TOKEN={REDACTED}")));
+        assert!(preview.contains(&format!("GHOSTY_RUNTIME_TOKEN={REDACTED}")));
     }
 
     #[test]
@@ -546,7 +546,7 @@ mod tests {
 
         let after = std::fs::read_dir(tmp.path()).expect("read tempdir").count();
         assert_eq!(before, after, "the preview must not create any file");
-        assert!(!std::path::Path::new("./codewhale-deploy").exists());
+        assert!(!std::path::Path::new("./ghosty-deploy").exists());
     }
 
     #[test]

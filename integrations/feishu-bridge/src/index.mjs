@@ -35,24 +35,24 @@ const config = {
   appId: requiredEnv("FEISHU_APP_ID"),
   appSecret: requiredEnv("FEISHU_APP_SECRET"),
   domain: process.env.FEISHU_DOMAIN || "feishu",
-  runtimeUrl: (process.env.CODEWHALE_RUNTIME_URL || process.env.DEEPSEEK_RUNTIME_URL || "http://127.0.0.1:7878").replace(/\/+$/, ""),
-  runtimeToken: process.env.CODEWHALE_RUNTIME_TOKEN || process.env.DEEPSEEK_RUNTIME_TOKEN || requiredEnv("CODEWHALE_RUNTIME_TOKEN"),
-  workspace: process.env.CODEWHALE_WORKSPACE || process.env.DEEPSEEK_WORKSPACE || process.cwd(),
-  model: process.env.CODEWHALE_MODEL || process.env.DEEPSEEK_MODEL || "auto",
-  mode: process.env.CODEWHALE_MODE || process.env.DEEPSEEK_MODE || "agent",
-  allowShell: parseBool(process.env.CODEWHALE_ALLOW_SHELL ?? process.env.DEEPSEEK_ALLOW_SHELL, true),
-  trustMode: parseBool(process.env.CODEWHALE_TRUST_MODE ?? process.env.DEEPSEEK_TRUST_MODE, false),
-  autoApprove: parseBool(process.env.CODEWHALE_AUTO_APPROVE ?? process.env.DEEPSEEK_AUTO_APPROVE, false),
-  allowlist: parseList(process.env.CODEWHALE_CHAT_ALLOWLIST || process.env.DEEPSEEK_CHAT_ALLOWLIST),
-  allowUnlisted: parseBool(process.env.CODEWHALE_ALLOW_UNLISTED ?? process.env.DEEPSEEK_ALLOW_UNLISTED, false),
+  runtimeUrl: (process.env.GHOSTY_RUNTIME_URL || process.env.DEEPSEEK_RUNTIME_URL || "http://127.0.0.1:7878").replace(/\/+$/, ""),
+  runtimeToken: process.env.GHOSTY_RUNTIME_TOKEN || process.env.DEEPSEEK_RUNTIME_TOKEN || requiredEnv("GHOSTY_RUNTIME_TOKEN"),
+  workspace: process.env.GHOSTY_WORKSPACE || process.env.DEEPSEEK_WORKSPACE || process.cwd(),
+  model: process.env.GHOSTY_MODEL || process.env.DEEPSEEK_MODEL || "auto",
+  mode: process.env.GHOSTY_MODE || process.env.DEEPSEEK_MODE || "agent",
+  allowShell: parseBool(process.env.GHOSTY_ALLOW_SHELL ?? process.env.DEEPSEEK_ALLOW_SHELL, true),
+  trustMode: parseBool(process.env.GHOSTY_TRUST_MODE ?? process.env.DEEPSEEK_TRUST_MODE, false),
+  autoApprove: parseBool(process.env.GHOSTY_AUTO_APPROVE ?? process.env.DEEPSEEK_AUTO_APPROVE, false),
+  allowlist: parseList(process.env.GHOSTY_CHAT_ALLOWLIST || process.env.DEEPSEEK_CHAT_ALLOWLIST),
+  allowUnlisted: parseBool(process.env.GHOSTY_ALLOW_UNLISTED ?? process.env.DEEPSEEK_ALLOW_UNLISTED, false),
   threadMapPath:
     process.env.FEISHU_THREAD_MAP_PATH ||
-    "/var/lib/codewhale-feishu-bridge/thread-map.json",
+    "/var/lib/ghosty-feishu-bridge/thread-map.json",
   allowGroups: parseBool(process.env.FEISHU_ALLOW_GROUPS, false),
   requirePrefixInGroup: parseBool(process.env.FEISHU_REQUIRE_PREFIX_IN_GROUP, true),
   groupPrefix: process.env.FEISHU_GROUP_PREFIX || "/ds",
   maxReplyChars: Number(process.env.FEISHU_MAX_REPLY_CHARS || 3500),
-  turnTimeoutMs: Number(process.env.CODEWHALE_TURN_TIMEOUT_MS || process.env.DEEPSEEK_TURN_TIMEOUT_MS || 900000)
+  turnTimeoutMs: Number(process.env.GHOSTY_TURN_TIMEOUT_MS || process.env.DEEPSEEK_TURN_TIMEOUT_MS || 900000)
 };
 
 const { runtimeJson, authHeaders } = createRuntimeClient(config);

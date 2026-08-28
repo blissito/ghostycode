@@ -122,7 +122,7 @@ impl PluginDiscoveryContext {
         Arc::clone(&self.host_environment)
     }
 
-    /// The pre-dotenv user plugins root (`~/.codewhale/plugins`). Exposed for
+    /// The pre-dotenv user plugins root (`~/.ghosty/plugins`). Exposed for
     /// the install on-ramp (#5182), which must fetch into exactly the root
     /// this context discovers from.
     #[must_use]
@@ -170,9 +170,9 @@ mod tests {
         let second_home = temp.path().join("second-home");
         let workspace = temp.path().join("workspace");
         fs::create_dir_all(&workspace).unwrap();
-        let _first = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &first_home);
+        let _first = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &first_home);
         let context = PluginDiscoveryContext::capture_pre_dotenv();
-        let _second = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &second_home);
+        let _second = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &second_home);
 
         for (home, name) in [(&first_home, "before"), (&second_home, "after")] {
             let bundle = home.join("plugins").join(name);
@@ -198,7 +198,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("workspace");
         let next_workspace = temp.path().join("next-workspace");
-        let bundle = next_workspace.join(".codewhale/plugins/ambient");
+        let bundle = next_workspace.join(".ghosty/plugins/ambient");
         fs::create_dir_all(&bundle).unwrap();
         fs::write(
             bundle.join("plugin.toml"),

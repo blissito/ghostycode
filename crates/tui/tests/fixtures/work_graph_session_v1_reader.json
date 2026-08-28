@@ -9,7 +9,7 @@
     "total_tokens": 0,
     "model": "fixture-model",
     "model_provider": "deepseek",
-    "workspace": "/tmp/codewhale-wg2-old-reader",
+    "workspace": "/tmp/ghosty-wg2-old-reader",
     "mode": "plan"
   },
   "messages": [],

@@ -1,26 +1,26 @@
 # Local browser client
 
-`codewhale web` opens Codewhale's embedded browser client over the canonical
+`ghosty web` opens Ghosty's embedded browser client over the canonical
 Runtime API. It is a local surface: the server always binds to
 `127.0.0.1`, cannot be rebound to a LAN address, and cannot run with Runtime
 authentication disabled.
 
 ## Start it
 
-From the workspace Codewhale should operate in, run:
+From the workspace Ghosty should operate in, run:
 
 ```bash
-codewhale web
+ghosty web
 ```
 
 The default address is `http://127.0.0.1:7878`. To avoid a local port
 collision, choose another loopback port:
 
 ```bash
-codewhale web --port 8788
+ghosty web --port 8788
 ```
 
-Codewhale starts the Runtime API, serves the dependency-free client embedded
+Ghosty starts the Runtime API, serves the dependency-free client embedded
 in the installed binary, prints a single-use launch URL, and asks the operating
 system to open that URL in the default browser. If the browser does not open,
 use the printed URL within ten minutes. Stop the process with `Ctrl+C`; the
@@ -59,11 +59,11 @@ API behavior.
 
 ## Local means local
 
-`codewhale web` accepts only `--port`; there is no `--host` or insecure-auth
+`ghosty web` accepts only `--port`; there is no `--host` or insecure-auth
 option on this command. Do not treat it as a public website or expose its port
 directly through router forwarding, a public reverse proxy, or a tunnel.
 
-The separate `codewhale app-server --mobile` and `--http` modes have different
+The separate `ghosty app-server --mobile` and `--http` modes have different
 deployment and authentication contracts. Read [RUNTIME_API.md](RUNTIME_API.md)
 before operating either one, especially before selecting a non-loopback bind.
 
@@ -71,12 +71,12 @@ before operating either one, especially before selecting a non-loopback bind.
 
 - If port `7878` is occupied, pass an unused `--port` value.
 - If the browser does not open, copy the printed single-use bootstrap URL into
-  a browser on the same machine within ten minutes. Start `codewhale web` again
+  a browser on the same machine within ten minutes. Start `ghosty web` again
   if that URL has already been used or expired.
-- If the page loads but a provider is unavailable, inspect `codewhale doctor`
+- If the page loads but a provider is unavailable, inspect `ghosty doctor`
   and `/provider`; the web command does not configure or move provider
   credentials.
-- If a session expired, stop and restart `codewhale web` to mint a new
+- If a session expired, stop and restart `ghosty web` to mint a new
   process-local session. Reusing an old bootstrap URL is expected to fail.
 
 For integration endpoints, headers, events, and the complete web-session

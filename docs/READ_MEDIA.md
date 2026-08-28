@@ -1,6 +1,6 @@
 # `read_media` Operator Guide
 
-`read_media` is a safe, first-class image reading and preprocessing tool for Codewhale v0.9.10. It allows vision-capable coding models to inspect visual assets (diagrams, UI mockups, screenshots, rendered graphs) with strict security, memory bounds, and privacy guards.
+`read_media` is a safe, first-class image reading and preprocessing tool for Ghosty v0.9.10. It allows vision-capable coding models to inspect visual assets (diagrams, UI mockups, screenshots, rendered graphs) with strict security, memory bounds, and privacy guards.
 
 ---
 
@@ -15,7 +15,7 @@
 - Paste a clipboard image into the composer with the normal terminal paste
   shortcut, or run `/attach <path>` for an existing PNG, JPEG, GIF, or WebP.
 - A visible attachment row appears above the composer before the turn is sent.
-  Temporary macOS `NSIRD_screencaptureui` paths are copied into Codewhale's
+  Temporary macOS `NSIRD_screencaptureui` paths are copied into Ghosty's
   stable attachment store when ingested.
 - Ask the agent to inspect the screenshot. The image is sent only as part of
   that explicit turn action; merely having a screenshot path or artifact does
@@ -66,7 +66,7 @@ always_load = ["read_media"]
 
 ### 4.1. Workspace Boundary and Credential Protection
 - **Workspace Containment:** Paths must resolve within the workspace or user-approved trusted external paths (`/trust`). Symlink escapes outside trusted roots are rejected.
-- **Credential Protection:** Codewhale configuration (`config.toml`, `.codewhale/`, `.deepseek/`, secrets directory) cannot be read via `read_media` and will fail with `PermissionDenied`.
+- **Credential Protection:** Ghosty configuration (`config.toml`, `.ghosty/`, `.deepseek/`, secrets directory) cannot be read via `read_media` and will fail with `PermissionDenied`.
 
 ### 4.2. Decompression-Bomb and Memory Limits
 - **Source Byte Limit:** Maximum source file size before decoding is **20 MiB** (`MAX_SOURCE_IMAGE_BYTES`). Oversized files are rejected before allocation.

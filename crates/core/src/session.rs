@@ -1,6 +1,6 @@
 //! `Thread` / `Session` split (issue #5261).
 //!
-//! `codewhale`'s `Session` was really a thread. The new split is:
+//! `ghosty`'s `Session` was really a thread. The new split is:
 //! - `Thread` — durable, persisted, owns the append-only `Journal` and the
 //!   `leafId` cursor. One row in `state.threads`, one directory on disk.
 //! - `Session` — ephemeral, per-turn / per-engine-lifetime, owns the

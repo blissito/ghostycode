@@ -1,4 +1,4 @@
-Codewhale empty-state whale mark — CURRENT (main) vs NEW (Signal Cut)
+Ghosty empty-state whale mark — CURRENT (main) vs NEW (Signal Cut)
 
 == classic ==
 
@@ -14,7 +14,7 @@ Codewhale empty-state whale mark — CURRENT (main) vs NEW (Signal Cut)
      ▐█·████████▙▄▄▞
       ▝▀▀▀▀▀▀▀▀▘
 
-  AFTER, CODEWHALE_ASCII_SAFE=1
+  AFTER, GHOSTY_ASCII_SAFE=1
         o
       .########.  \^/
      |#.###########/
@@ -36,7 +36,7 @@ Codewhale empty-state whale mark — CURRENT (main) vs NEW (Signal Cut)
      ▐█░·░█████▙▄▄▞
       ▝▀▀▀▀▀▀▀▘
 
-  AFTER, CODEWHALE_ASCII_SAFE=1
+  AFTER, GHOSTY_ASCII_SAFE=1
         o*
       .#######.  \^/
      |#:.:########/

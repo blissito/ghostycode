@@ -1,9 +1,9 @@
 //! Consolidated harness for plain `#[test]`/`#[tokio::test]` acceptance suites.
 //!
 //! See `crates/tui/tests/README.md` for why this exists: 17 small integration
-//! binaries each re-linked the full `codewhale-tui` graph — one harness keeps the
+//! binaries each re-linked the full `ghosty-tui` graph — one harness keeps the
 //! same test names (`integration::adaptive_evidence_acceptance::...`) so
-//! `cargo test -p codewhale-tui adaptive_evidence_acceptance` still filters.
+//! `cargo test -p ghosty-tui adaptive_evidence_acceptance` still filters.
 
 // Production modules that are `#[path]`-included by the test files below and
 // that themselves use `crate::`. They must exist at the harness crate root so
@@ -88,9 +88,9 @@ mod package_digest;
 mod palette;
 #[path = "../../src/shell_dispatcher.rs"]
 mod shell_dispatcher;
-// The legacy text tool-call parser lives in codewhale-core now; keep the
+// The legacy text tool-call parser lives in ghosty-core now; keep the
 // `crate::tool_parser` path the suites use.
-use codewhale_core::tool_parser;
+use ghosty_core::tool_parser;
 
 mod adaptive_evidence_acceptance;
 mod cache_guard;

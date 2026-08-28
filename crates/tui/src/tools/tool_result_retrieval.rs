@@ -338,7 +338,7 @@ fn resolve_spillover_reference(
 
     // Resolve the session's `artifacts/` directory.
     // `session_artifact_absolute_path(sid, p)` returns
-    // `~/.codewhale/sessions/<sid>/<p>` — so passing the literal
+    // `~/.ghosty/sessions/<sid>/<p>` — so passing the literal
     // `ARTIFACTS_DIR_NAME` ("artifacts") gets us the real artifacts
     // root. An earlier draft passed `Path::new(".")` and took
     // `.parent()`, which landed one directory too high (`<sid>` instead

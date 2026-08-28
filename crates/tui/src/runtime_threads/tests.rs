@@ -1,7 +1,7 @@
 use super::*;
 use crate::core::engine::{MockApprovalEvent, mock_engine_handle};
 use crate::core::events::{Event as EngineEvent, TurnOutcomeStatus};
-use codewhale_protocol::agent_mail::{AgentMailDeliveryMode, AgentMailSender, AgentMailStatus};
+use ghosty_protocol::agent_mail::{AgentMailDeliveryMode, AgentMailSender, AgentMailStatus};
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
@@ -11,14 +11,14 @@ fn test_runtime_dir() -> PathBuf {
     std::env::temp_dir().join(format!("deepseek-runtime-threads-{}", Uuid::new_v4()))
 }
 
-const EVENT_PROCESS_ROLE_ENV: &str = "CODEWHALE_TEST_EVENT_PROCESS_ROLE";
-const EVENT_PROCESS_ROOT_ENV: &str = "CODEWHALE_TEST_EVENT_PROCESS_ROOT";
-const EVENT_PROCESS_THREAD_ENV: &str = "CODEWHALE_TEST_EVENT_PROCESS_THREAD";
-const EVENT_PROCESS_SIGNAL_ENV: &str = "CODEWHALE_TEST_EVENT_PROCESS_SIGNAL";
-const EVENT_PROCESS_START_ENV: &str = "CODEWHALE_TEST_EVENT_PROCESS_START";
-const EVENT_PROCESS_RELEASE_ENV: &str = "CODEWHALE_TEST_EVENT_PROCESS_RELEASE";
-const EVENT_PROCESS_WORKER_ENV: &str = "CODEWHALE_TEST_EVENT_PROCESS_WORKER";
-const EVENT_PROCESS_COUNT_ENV: &str = "CODEWHALE_TEST_EVENT_PROCESS_COUNT";
+const EVENT_PROCESS_ROLE_ENV: &str = "GHOSTY_TEST_EVENT_PROCESS_ROLE";
+const EVENT_PROCESS_ROOT_ENV: &str = "GHOSTY_TEST_EVENT_PROCESS_ROOT";
+const EVENT_PROCESS_THREAD_ENV: &str = "GHOSTY_TEST_EVENT_PROCESS_THREAD";
+const EVENT_PROCESS_SIGNAL_ENV: &str = "GHOSTY_TEST_EVENT_PROCESS_SIGNAL";
+const EVENT_PROCESS_START_ENV: &str = "GHOSTY_TEST_EVENT_PROCESS_START";
+const EVENT_PROCESS_RELEASE_ENV: &str = "GHOSTY_TEST_EVENT_PROCESS_RELEASE";
+const EVENT_PROCESS_WORKER_ENV: &str = "GHOSTY_TEST_EVENT_PROCESS_WORKER";
+const EVENT_PROCESS_COUNT_ENV: &str = "GHOSTY_TEST_EVENT_PROCESS_COUNT";
 const EVENT_PROCESS_HELPER: &str = "runtime_threads::tests::runtime_event_process_child_helper";
 // Deadlock ceiling for monitor settlement in the 10k-test lib binary. This is
 // a test watchdog, not an expected runtime latency or a customer-facing SLO.
@@ -619,7 +619,7 @@ fn set_test_turn_route(
 
 #[test]
 fn runtime_compaction_uses_provider_route_context() {
-    let limits = codewhale_config::route::RouteLimits {
+    let limits = ghosty_config::route::RouteLimits {
         context_tokens: Some(272_000),
         input_tokens: None,
         output_tokens: None,
@@ -3839,11 +3839,11 @@ fn runtime_process_owner_lock_copy_helps_the_user_recover() {
         "{RUNTIME_PROCESS_OWNER_LOCK_HELD}"
     );
     assert!(
-        RUNTIME_PROCESS_OWNER_LOCK_HELD.contains("Close the other Codewhale session"),
+        RUNTIME_PROCESS_OWNER_LOCK_HELD.contains("Close the other Ghosty session"),
         "{RUNTIME_PROCESS_OWNER_LOCK_HELD}"
     );
     assert!(
-        RUNTIME_PROCESS_OWNER_LOCK_HELD.contains("CODEWHALE_RUNTIME_DIR"),
+        RUNTIME_PROCESS_OWNER_LOCK_HELD.contains("GHOSTY_RUNTIME_DIR"),
         "{RUNTIME_PROCESS_OWNER_LOCK_HELD}"
     );
     assert!(
@@ -3870,11 +3870,11 @@ fn runtime_manager_store_has_one_lifetime_process_owner() -> Result<()> {
         "unexpected owner-lock error: {error:#}"
     );
     assert!(
-        message.contains("CODEWHALE_RUNTIME_DIR"),
+        message.contains("GHOSTY_RUNTIME_DIR"),
         "owner-lock error should name the override for a shared root: {error:#}"
     );
     assert!(
-        message.contains("Close the other Codewhale session"),
+        message.contains("Close the other Ghosty session"),
         "owner-lock error should name the recovery action: {error:#}"
     );
     assert!(
@@ -3898,8 +3898,8 @@ fn session_scoped_runtime_default_lives_under_the_session_directory() {
     let _lock = crate::test_support::lock_test_env();
     let temp = tempfile::tempdir().expect("temp home");
     let home = temp.path().join("cw-home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
-    let _runtime = crate::test_support::EnvVarGuard::remove("CODEWHALE_RUNTIME_DIR");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
+    let _runtime = crate::test_support::EnvVarGuard::remove("GHOSTY_RUNTIME_DIR");
     let _legacy = crate::test_support::EnvVarGuard::remove("DEEPSEEK_RUNTIME_DIR");
 
     let cfg = RuntimeThreadManagerConfig::for_session(home.join("tasks"), "sess-1");
@@ -3915,8 +3915,8 @@ fn explicit_runtime_dir_override_beats_session_scope() {
     let temp = tempfile::tempdir().expect("temp home");
     let home = temp.path().join("cw-home");
     let override_dir = temp.path().join("shared-runtime");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
-    let _runtime = crate::test_support::EnvVarGuard::set("CODEWHALE_RUNTIME_DIR", &override_dir);
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
+    let _runtime = crate::test_support::EnvVarGuard::set("GHOSTY_RUNTIME_DIR", &override_dir);
     let _legacy = crate::test_support::EnvVarGuard::remove("DEEPSEEK_RUNTIME_DIR");
 
     let cfg = RuntimeThreadManagerConfig::for_session(home.join("tasks"), "sess-1");
@@ -3928,8 +3928,8 @@ fn session_scoped_runtime_roots_do_not_share_the_process_owner_lock() -> Result<
     let _lock = crate::test_support::lock_test_env();
     let temp = tempfile::tempdir()?;
     let home = temp.path().join("cw-home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
-    let _runtime = crate::test_support::EnvVarGuard::remove("CODEWHALE_RUNTIME_DIR");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
+    let _runtime = crate::test_support::EnvVarGuard::remove("GHOSTY_RUNTIME_DIR");
     let _legacy = crate::test_support::EnvVarGuard::remove("DEEPSEEK_RUNTIME_DIR");
     let tasks = home.join("tasks");
 
@@ -5694,8 +5694,8 @@ async fn create_thread_defaults_auto_approve_to_false() -> Result<()> {
 #[tokio::test]
 async fn update_thread_workspace_persists_event_and_evicts_idle_engine() -> Result<()> {
     let manager = test_manager(test_runtime_dir())?;
-    let old_workspace = std::env::temp_dir().join("codewhale-runtime-old-workspace");
-    let new_workspace = std::env::temp_dir().join("codewhale-runtime-new-workspace");
+    let old_workspace = std::env::temp_dir().join("ghosty-runtime-old-workspace");
+    let new_workspace = std::env::temp_dir().join("ghosty-runtime-new-workspace");
     let thread = manager
         .create_thread(CreateThreadRequest {
             model: None,
@@ -5795,8 +5795,8 @@ async fn update_thread_workspace_rejects_empty_path() -> Result<()> {
 #[tokio::test]
 async fn update_thread_workspace_rejects_active_turn() -> Result<()> {
     let manager = test_manager(test_runtime_dir())?;
-    let old_workspace = std::env::temp_dir().join("codewhale-runtime-active-old");
-    let new_workspace = std::env::temp_dir().join("codewhale-runtime-active-new");
+    let old_workspace = std::env::temp_dir().join("ghosty-runtime-active-old");
+    let new_workspace = std::env::temp_dir().join("ghosty-runtime-active-new");
     let thread = manager
         .create_thread(CreateThreadRequest {
             model: None,
@@ -10992,12 +10992,12 @@ fn summary_strip_handles_missing_end_sentinel() {
 
 /// Release acceptance: the full two-task Agent Mail matrix in one run, with
 /// evidence written to disk. Run explicitly:
-///   CODEWHALE_MAIL_ACCEPTANCE_DIR=/Volumes/VIXinSSD/CW/artifacts/... \
-///     cargo test -p codewhale-tui --lib agent_mail_release_acceptance -- --ignored
+///   GHOSTY_MAIL_ACCEPTANCE_DIR=/Volumes/VIXinSSD/CW/artifacts/... \
+///     cargo test -p ghosty-tui --lib agent_mail_release_acceptance -- --ignored
 #[tokio::test]
-#[ignore = "release acceptance: run explicitly with CODEWHALE_MAIL_ACCEPTANCE_DIR"]
+#[ignore = "release acceptance: run explicitly with GHOSTY_MAIL_ACCEPTANCE_DIR"]
 async fn agent_mail_release_acceptance_two_task_matrix() -> Result<()> {
-    use codewhale_protocol::agent_mail::AGENT_MAIL_EVENT_READ;
+    use ghosty_protocol::agent_mail::AGENT_MAIL_EVENT_READ;
     use std::time::Instant as StdInstant;
 
     let runtime_dir = test_runtime_dir();
@@ -11005,7 +11005,7 @@ async fn agent_mail_release_acceptance_two_task_matrix() -> Result<()> {
     let foreign_workspace = runtime_dir.join("workspace-foreign");
     fs::create_dir_all(&workspace)?;
     fs::create_dir_all(&foreign_workspace)?;
-    let artifacts = std::env::var("CODEWHALE_MAIL_ACCEPTANCE_DIR")
+    let artifacts = std::env::var("GHOSTY_MAIL_ACCEPTANCE_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| runtime_dir.join("acceptance-artifacts"));
     fs::create_dir_all(&artifacts)?;

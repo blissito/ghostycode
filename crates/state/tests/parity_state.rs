@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use codewhale_state::{SessionSource, StateStore, ThreadListFilters, ThreadMetadata, ThreadStatus};
+use ghosty_state::{SessionSource, StateStore, ThreadListFilters, ThreadMetadata, ThreadStatus};
 use rusqlite::Connection;
 
 fn temp_state_path(label: &str) -> PathBuf {

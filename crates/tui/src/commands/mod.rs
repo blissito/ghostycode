@@ -117,10 +117,10 @@ fn build_registry() -> traits::CommandRegistry {
 struct Feat015TestCommand;
 
 #[cfg(test)]
-impl codewhale_command_contract::metadata::RegisterCommand<CommandResult> for Feat015TestCommand {
-    fn info() -> &'static codewhale_command_contract::metadata::CommandInfo {
-        static INFO: codewhale_command_contract::metadata::CommandInfo =
-            codewhale_command_contract::metadata::CommandInfo {
+impl ghosty_command_contract::metadata::RegisterCommand<CommandResult> for Feat015TestCommand {
+    fn info() -> &'static ghosty_command_contract::metadata::CommandInfo {
+        static INFO: ghosty_command_contract::metadata::CommandInfo =
+            ghosty_command_contract::metadata::CommandInfo {
                 name: "feat015ctx",
                 aliases: &[],
                 usage: "/feat015ctx",
@@ -129,8 +129,8 @@ impl codewhale_command_contract::metadata::RegisterCommand<CommandResult> for Fe
         &INFO
     }
 
-    fn handler() -> codewhale_command_contract::handler::CommandHandler<CommandResult> {
-        codewhale_command_contract::handler::CommandHandler::Contextual(feat015_contextual)
+    fn handler() -> ghosty_command_contract::handler::CommandHandler<CommandResult> {
+        ghosty_command_contract::handler::CommandHandler::Contextual(feat015_contextual)
     }
 }
 
@@ -139,10 +139,10 @@ impl codewhale_command_contract::metadata::RegisterCommand<CommandResult> for Fe
 /// concrete `App` parameter or TUI state in its input surface.
 #[cfg(test)]
 fn feat015_contextual(
-    contexts: codewhale_command_contract::handler::CommandContexts<'_>,
+    contexts: ghosty_command_contract::handler::CommandContexts<'_>,
     arg: Option<&str>,
 ) -> CommandResult {
-    use codewhale_command_contract::handler::ContextParts;
+    use ghosty_command_contract::handler::ContextParts;
     let parts: ContextParts<'_> = contexts.into_parts();
     let workspace = parts.workspace.expect("workspace facet").workspace();
     let mode = parts.mode_policy.expect("mode-policy facet").mode();
@@ -268,10 +268,10 @@ pub fn execute(cmd: &str, app: &mut App) -> CommandResult {
         if let Some(handler) = command_object.contextual_handler() {
             let mut bundle = app.command_contexts();
             return match handler {
-                codewhale_command_contract::handler::CommandHandler::Pure(pure_fn) => {
+                ghosty_command_contract::handler::CommandHandler::Pure(pure_fn) => {
                     pure_fn(command_arg)
                 }
-                codewhale_command_contract::handler::CommandHandler::Contextual(contextual) => {
+                ghosty_command_contract::handler::CommandHandler::Contextual(contextual) => {
                     contextual(bundle.contexts(), command_arg)
                 }
             };
@@ -289,7 +289,7 @@ pub fn execute(cmd: &str, app: &mut App) -> CommandResult {
             "The /deepseek command was renamed. Use /links (aliases: /dashboard, /api).",
         ),
         "doctor" => CommandResult::error(
-            "The /doctor command is a CLI diagnostic. Run `codewhale doctor` or `codewhale doctor --json`; use `/setup` in the TUI for readiness and verification.",
+            "The /doctor command is a CLI diagnostic. Run `ghosty doctor` or `ghosty doctor --json`; use `/setup` in the TUI for readiness and verification.",
         ),
 
         _ => {
@@ -502,7 +502,7 @@ mod tests {
     #[test]
     fn user_command_shadows_builtin_before_group_dispatch() {
         let temp = tempdir().unwrap();
-        let commands_dir = temp.path().join(".codewhale").join("commands");
+        let commands_dir = temp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("help.md"),
@@ -525,7 +525,7 @@ mod tests {
     #[test]
     fn removed_user_command_reloads_and_falls_back_to_builtin() {
         let temp = tempdir().unwrap();
-        let commands_dir = temp.path().join(".codewhale").join("commands");
+        let commands_dir = temp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         let command_path = commands_dir.join("help.md");
         std::fs::write(&command_path, "user help").unwrap();
@@ -1379,10 +1379,10 @@ mod tests {
         for cmd in ["/links", "/dashboard", "/api", "/lianjie"] {
             let result = execute(cmd, &mut app);
             let msg = result.message.expect("links commands should return text");
-            assert!(msg.contains("https://codewhale.net/en/docs"));
-            assert!(msg.contains("https://codewhale.net/en/community"));
-            assert!(msg.contains("https://github.com/Hmbown/CodeWhale"));
-            assert!(msg.contains("https://app.codewhale.net"));
+            assert!(msg.contains("https://ghosty.net/en/docs"));
+            assert!(msg.contains("https://ghosty.net/en/community"));
+            assert!(msg.contains("https://github.com/blissito/ghostycode"));
+            assert!(msg.contains("https://app.ghosty.net"));
             assert!(msg.contains("separate sign-in"));
             assert!(msg.contains("not connected to the current local session"));
             assert!(msg.contains("https://platform.deepseek.com"));

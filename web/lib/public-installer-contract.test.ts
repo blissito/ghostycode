@@ -42,7 +42,7 @@ function installFixture(
     glibc = "2.39",
     expectedStatus = 0,
   } = options;
-  const root = mkdtempSync(path.join(tmpdir(), "codewhale-web-installer-"));
+  const root = mkdtempSync(path.join(tmpdir(), "ghosty-web-installer-"));
   fixtureRoots.push(root);
   const releaseDir = path.join(root, "release");
   const installDir = path.join(root, "install");
@@ -51,14 +51,14 @@ function installFixture(
   mkdirSync(installDir, { recursive: true });
   mkdirSync(fakeBin, { recursive: true });
 
-  const runtime = executable("codewhale 0.9.5 (fixture)");
+  const runtime = executable("ghosty 0.9.5 (fixture)");
   const target = `${os === "Darwin" ? "macos" : "linux"}-${arch === "aarch64" ? "arm64" : "x64"}`;
-  const assets = [`codewhale-${target}`, `codew-${target}`];
+  const assets = [`ghosty-${target}`, `ghosty-tui-${target}`];
   for (const asset of assets) {
     writeFileSync(path.join(releaseDir, asset), runtime);
   }
   writeFileSync(
-    path.join(releaseDir, "codewhale-artifacts-sha256.txt"),
+    path.join(releaseDir, "ghosty-artifacts-sha256.txt"),
     assets.map((asset) => `${sha256(runtime)}  ${asset}`).join("\n") + "\n",
   );
 
@@ -101,9 +101,9 @@ function installFixture(
     chmodSync(destination, 0o755);
   }
 
-  const legacyPath = path.join(installDir, "codewhale-tui");
+  const legacyPath = path.join(installDir, "ghosty-tui");
   if (withLegacyTui) {
-    writeFileSync(legacyPath, executable("codewhale-tui 0.9.4 (legacy fixture)"));
+    writeFileSync(legacyPath, executable("ghosty-tui 0.9.4 (legacy fixture)"));
     chmodSync(legacyPath, 0o755);
   }
 
@@ -111,9 +111,9 @@ function installFixture(
     encoding: "utf8",
     env: {
       ...process.env,
-      CODEWHALE_INSTALL_DIR: installDir,
-      CODEWHALE_RELEASE_BASE_URL: "https://fixtures.invalid/download",
-      ...(version ? { CODEWHALE_VERSION: version } : {}),
+      GHOSTY_INSTALL_DIR: installDir,
+      GHOSTY_RELEASE_BASE_URL: "https://fixtures.invalid/download",
+      ...(version ? { GHOSTY_VERSION: version } : {}),
       FAKE_RELEASE_DIR: releaseDir,
       HOME: path.join(root, "home"),
       PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
@@ -134,19 +134,19 @@ describe.skipIf(process.platform === "win32")("public installer compatibility co
   it("refreshes a v0.9.4 legacy TUI command from verified consolidated bytes", () => {
     const { installDir, legacyPath, result, runtime } = installFixture(true);
 
-    expect(readFileSync(path.join(installDir, "codewhale"))).toEqual(runtime);
-    expect(readFileSync(path.join(installDir, "codew"))).toEqual(runtime);
+    expect(readFileSync(path.join(installDir, "ghosty"))).toEqual(runtime);
+    expect(readFileSync(path.join(installDir, "ghosty-tui"))).toEqual(runtime);
     expect(readFileSync(legacyPath)).toEqual(runtime);
     expect(result.stdout).toContain("Refreshed legacy compatibility command:");
-    expect(result.stdout).toContain("codewhale 0.9.5 (fixture)");
+    expect(result.stdout).toContain("ghosty 0.9.5 (fixture)");
     expect(result.stdout).not.toContain("0.9.4");
   });
 
   it("does not create the retired TUI command for a clean v0.9.5 install", () => {
     const { installDir, legacyPath, result, runtime } = installFixture(false);
 
-    expect(readFileSync(path.join(installDir, "codewhale"))).toEqual(runtime);
-    expect(readFileSync(path.join(installDir, "codew"))).toEqual(runtime);
+    expect(readFileSync(path.join(installDir, "ghosty"))).toEqual(runtime);
+    expect(readFileSync(path.join(installDir, "ghosty-tui"))).toEqual(runtime);
     expect(existsSync(legacyPath)).toBe(false);
     expect(result.stdout).not.toContain("Refreshed legacy compatibility command:");
   });
@@ -161,8 +161,8 @@ describe.skipIf(process.platform === "win32")("public installer compatibility co
         glibc: "2.17",
       });
 
-      expect(existsSync(path.join(installDir, "codewhale"))).toBe(true);
-      expect(existsSync(path.join(installDir, "codew"))).toBe(true);
+      expect(existsSync(path.join(installDir, "ghosty"))).toBe(true);
+      expect(existsSync(path.join(installDir, "ghosty-tui"))).toBe(true);
     },
   );
 
@@ -176,7 +176,7 @@ describe.skipIf(process.platform === "win32")("public installer compatibility co
     });
 
     expect(result.stderr).toContain(
-      "Codewhale v0.9.5 linux-arm64 assets require glibc 2.39 or newer",
+      "Ghosty v0.9.5 linux-arm64 assets require glibc 2.39 or newer",
     );
     expect(result.stderr).toContain(
       "Current v0.9.6+ assets are static musl builds",

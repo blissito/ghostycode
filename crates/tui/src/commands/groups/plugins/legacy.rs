@@ -123,11 +123,11 @@ fn approval_label(approval: ApprovalRequirement) -> &'static str {
 fn plugin_dir_for(app: &App) -> Option<PathBuf> {
     app.legacy_plugin_tools_dir
         .clone()
-        .or_else(default_codewhale_tools_dir)
+        .or_else(default_ghosty_tools_dir)
 }
 
-fn default_codewhale_tools_dir() -> Option<PathBuf> {
-    codewhale_config::codewhale_home()
+fn default_ghosty_tools_dir() -> Option<PathBuf> {
+    ghosty_config::ghosty_home()
         .ok()
         .map(|home| home.join("tools"))
 }

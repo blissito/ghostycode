@@ -991,7 +991,7 @@ fn canonical_git_run_and_web_actions_use_semantic_history_cells() {
         &mut app,
         "Web-search",
         "Web",
-        &serde_json::json!({"action": "search", "query": "Codewhale"}),
+        &serde_json::json!({"action": "search", "query": "Ghosty"}),
     );
     let active = app.active_cell.as_ref().expect("active cell");
     assert!(matches!(
@@ -1259,7 +1259,7 @@ fn coordination_event_projection_is_retained_as_typed_app_state() {
 
 /// Owner report 2026-08-04: switching model/provider mid-session raced the
 /// new engine against its predecessor for the coordination flock and fired a
-/// 30-second sticky warning blaming "another Codewhale process" that does
+/// 30-second sticky warning blaming "another Ghosty process" that does
 /// not exist. A same-process handover self-heals and stays off the sticky
 /// strip; a genuinely different process still warns.
 #[test]
@@ -1317,7 +1317,7 @@ fn coordination_handover_within_this_process_does_not_toast() {
         &mut foreign_app,
         CoordinationDetailProjection {
             process_lock_note: Some(
-                "another Codewhale process (pid 4242) owns delegated coordination for /ws: busy"
+                "another Ghosty process (pid 4242) owns delegated coordination for /ws: busy"
                     .to_string(),
             ),
             ..base
@@ -1336,7 +1336,7 @@ fn coordination_handover_within_this_process_does_not_toast() {
     assert!(
         toast
             .text
-            .starts_with("Another CodeWhale session in this workspace"),
+            .starts_with("Another GhostyCode session in this workspace"),
         "the toast must lead with the fact that explains the state: {}",
         toast.text
     );
@@ -1601,7 +1601,7 @@ fn workflow_panel_uses_non_text_keys_for_controls() {
 }
 
 struct ConfigPathEnvGuard {
-    _codewhale_config_path: crate::test_support::EnvVarGuard,
+    _ghosty_config_path: crate::test_support::EnvVarGuard,
     _deepseek_config_path: crate::test_support::EnvVarGuard,
     _tmp: TempDir,
     _lock: crate::test_support::TestEnvLock,
@@ -1613,12 +1613,12 @@ impl ConfigPathEnvGuard {
         let tmp = TempDir::new().expect("config tempdir");
         let config_path = tmp.path().join(".deepseek").join("config.toml");
         std::fs::create_dir_all(config_path.parent().expect("config parent")).expect("config dir");
-        let codewhale_config_path =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_CONFIG_PATH", &config_path);
+        let ghosty_config_path =
+            crate::test_support::EnvVarGuard::set("GHOSTY_CONFIG_PATH", &config_path);
         let deepseek_config_path =
             crate::test_support::EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
         Self {
-            _codewhale_config_path: codewhale_config_path,
+            _ghosty_config_path: ghosty_config_path,
             _deepseek_config_path: deepseek_config_path,
             _tmp: tmp,
             _lock: lock,
@@ -1626,7 +1626,7 @@ impl ConfigPathEnvGuard {
     }
 
     fn config_path(&self) -> PathBuf {
-        std::env::var_os("CODEWHALE_CONFIG_PATH")
+        std::env::var_os("GHOSTY_CONFIG_PATH")
             .map(PathBuf::from)
             .expect("config path set")
     }
@@ -1636,10 +1636,10 @@ struct SettingsHomeGuard {
     _tmp: TempDir,
     _home: crate::test_support::EnvVarGuard,
     _userprofile: crate::test_support::EnvVarGuard,
-    _codewhale_home: crate::test_support::EnvVarGuard,
-    _codewhale_config_path: crate::test_support::EnvVarGuard,
+    _ghosty_home: crate::test_support::EnvVarGuard,
+    _ghosty_config_path: crate::test_support::EnvVarGuard,
     _deepseek_config_path: crate::test_support::EnvVarGuard,
-    _codewhale_provider: crate::test_support::EnvVarGuard,
+    _ghosty_provider: crate::test_support::EnvVarGuard,
     _deepseek_provider: crate::test_support::EnvVarGuard,
     _xdg_config_home: crate::test_support::EnvVarGuard,
     _appdata: crate::test_support::EnvVarGuard,
@@ -1651,22 +1651,17 @@ impl SettingsHomeGuard {
     fn new() -> Self {
         let lock = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("settings tempdir");
-        let codewhale_home = tmp.path().join(".codewhale");
+        let ghosty_home = tmp.path().join(".ghosty");
         Self {
             _home: crate::test_support::EnvVarGuard::set("HOME", tmp.path()),
             _userprofile: crate::test_support::EnvVarGuard::set("USERPROFILE", tmp.path()),
-            _codewhale_home: crate::test_support::EnvVarGuard::set(
-                "CODEWHALE_HOME",
-                &codewhale_home,
-            ),
-            _codewhale_config_path: crate::test_support::EnvVarGuard::remove(
-                "CODEWHALE_CONFIG_PATH",
-            ),
+            _ghosty_home: crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home),
+            _ghosty_config_path: crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH"),
             _deepseek_config_path: crate::test_support::EnvVarGuard::set(
                 "DEEPSEEK_CONFIG_PATH",
-                codewhale_home.join("config.toml"),
+                ghosty_home.join("config.toml"),
             ),
-            _codewhale_provider: crate::test_support::EnvVarGuard::remove("CODEWHALE_PROVIDER"),
+            _ghosty_provider: crate::test_support::EnvVarGuard::remove("GHOSTY_PROVIDER"),
             _deepseek_provider: crate::test_support::EnvVarGuard::remove("DEEPSEEK_PROVIDER"),
             _xdg_config_home: crate::test_support::EnvVarGuard::set(
                 "XDG_CONFIG_HOME",
@@ -1687,7 +1682,7 @@ impl SettingsHomeGuard {
 fn resume_hint_uses_canonical_resume_command() {
     assert_eq!(
         resume_hint_text(),
-        "To continue this session, execute codewhale run --continue"
+        "To continue this session, execute ghosty run --continue"
     );
     assert!(should_show_resume_hint(Some(
         "019dd9d6-4f44-7c83-9863-59674a12b827"
@@ -3607,7 +3602,7 @@ fn runtime_chat_short_circuits_inline_voice_and_cache_actions_before_ui_mutation
     assert!(app.status_message.is_none());
     let toast = app.status_toasts.back().expect("blocked action toast");
     assert_eq!(toast.level, crate::tui::app::StatusToastLevel::Info);
-    assert!(toast.text.contains("Codewhale Runtime"));
+    assert!(toast.text.contains("Ghosty Runtime"));
     assert_eq!(toast.ttl_ms, Some(6_000));
 
     let cache = crate::commands::CommandResult::with_message_and_action(
@@ -3715,10 +3710,10 @@ fn credential_paste_content_never_enters_traces_or_rendered_status() {
     let _env = crate::test_support::lock_test_env();
     let temp = TempDir::new().expect("isolated paste safety home");
     let _home = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_HOME",
+        "GHOSTY_HOME",
         temp.path().to_string_lossy().as_ref(),
     );
-    let _secret_backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+    let _secret_backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
     let _anthropic_key = crate::test_support::EnvVarGuard::remove("ANTHROPIC_API_KEY");
     let config = Config::default();
     let secret = credential_paste_sentinel();
@@ -3781,10 +3776,10 @@ fn ordinary_clipboard_text_routes_to_provider_picker_without_typing_shortcut_or_
     let _env = crate::test_support::lock_test_env();
     let home = TempDir::new().expect("isolated ordinary-paste home");
     let _home = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_HOME",
+        "GHOSTY_HOME",
         home.path().to_string_lossy().as_ref(),
     );
-    let _secret_backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+    let _secret_backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
     let _openrouter_key = crate::test_support::EnvVarGuard::remove("OPENROUTER_API_KEY");
     let config = Config::default();
     let secret = credential_paste_sentinel();
@@ -3943,7 +3938,7 @@ api_key = "test-key"
     let mut app = create_test_app();
     app.config_path = Some(config_path.clone());
     let mut config = Config::load(Some(config_path.clone()), None).expect("load config");
-    let bindings = vec![codewhale_config::HotbarBindingToml {
+    let bindings = vec![ghosty_config::HotbarBindingToml {
         slot: 1,
         action: "mode.agent".to_string(),
         label: Some("Agent".to_string()),
@@ -3966,7 +3961,7 @@ api_key = "test-key"
         "provider section lost: {body}"
     );
     assert!(body.contains("[[hotbar]]"), "hotbar table missing: {body}");
-    let parsed: codewhale_config::ConfigToml =
+    let parsed: ghosty_config::ConfigToml =
         toml::from_str(&body).expect("saved config should parse");
     assert_eq!(parsed.hotbar, Some(bindings));
 }
@@ -3980,7 +3975,7 @@ fn hotbar_setup_save_error_leaves_live_config_and_file_unchanged() {
 
     let mut app = create_test_app();
     app.config_path = Some(config_path.clone());
-    let original_bindings = vec![codewhale_config::HotbarBindingToml {
+    let original_bindings = vec![ghosty_config::HotbarBindingToml {
         slot: 2,
         action: "mode.plan".to_string(),
         label: None,
@@ -3989,7 +3984,7 @@ fn hotbar_setup_save_error_leaves_live_config_and_file_unchanged() {
         hotbar: Some(original_bindings.clone()),
         ..Default::default()
     };
-    let attempted_bindings = vec![codewhale_config::HotbarBindingToml {
+    let attempted_bindings = vec![ghosty_config::HotbarBindingToml {
         slot: 1,
         action: "mode.agent".to_string(),
         label: None,
@@ -4965,7 +4960,7 @@ fn reasoning_hint_fits_representative_compact_frames() {
 #[tokio::test]
 async fn session_denied_cache_auto_deny_explains_the_cached_rejection() {
     let home = SettingsHomeGuard::new();
-    let audit_path = home._tmp.path().join(".codewhale").join("audit.log");
+    let audit_path = home._tmp.path().join(".ghosty").join("audit.log");
     let mut app = create_test_app();
     let mut engine = mock_engine_handle();
     let approval_key = "shell:exec_shell:git push secret-token";
@@ -4989,8 +4984,8 @@ async fn session_denied_cache_auto_deny_explains_the_cached_rejection() {
     assert_eq!(toast.level, StatusToastLevel::Warning);
     assert_eq!(toast.ttl_ms, Some(12_000));
     assert!(toast.text.contains("matching request was denied earlier"));
-    assert!(toast.text.contains("during this CodeWhale run"));
-    assert!(toast.text.contains("Restart CodeWhale"));
+    assert!(toast.text.contains("during this GhostyCode run"));
+    assert!(toast.text.contains("Restart GhostyCode"));
     assert!(toast.text.contains("exec_shell"));
     let history_notice = app
         .history
@@ -5016,7 +5011,7 @@ async fn session_denied_cache_auto_deny_explains_the_cached_rejection() {
     let rendered = render_underwater_test_app(&mut app, 40, 12);
     assert!(rendered.contains("Auto-denied"), "{rendered:?}");
     assert!(
-        rendered.contains("Restart") && rendered.contains("CodeWhale"),
+        rendered.contains("Restart") && rendered.contains("GhostyCode"),
         "{rendered:?}"
     );
 }
@@ -5243,7 +5238,7 @@ async fn session_denied_cache_notice_renders_host_scope_in_zh_hans() {
             _ => None,
         })
         .expect("localized persistent auto-deny explanation");
-    assert!(notice.contains("本次 CodeWhale 运行期间"));
+    assert!(notice.contains("本次 GhostyCode 运行期间"));
     assert!(notice.contains("匹配请求"));
     assert!(!notice.contains("example.com"));
 
@@ -5255,7 +5250,7 @@ async fn session_denied_cache_notice_renders_host_scope_in_zh_hans() {
     assert!(rendered_compact.contains("已自动拒绝"), "{rendered:?}");
     assert!(rendered_compact.contains("匹配请求"), "{rendered:?}");
     assert!(
-        rendered_compact.contains("重启") && rendered_compact.contains("CodeWhale"),
+        rendered_compact.contains("重启") && rendered_compact.contains("GhostyCode"),
         "{rendered:?}"
     );
 }
@@ -5267,8 +5262,8 @@ fn session_denied_notice_explains_cached_decision_and_recovery() {
 
     assert!(notice.contains("exec_shell"));
     assert!(notice.contains("matching request was denied earlier"));
-    assert!(notice.contains("during this CodeWhale run"));
-    assert!(notice.contains("Restart CodeWhale"));
+    assert!(notice.contains("during this GhostyCode run"));
+    assert!(notice.contains("Restart GhostyCode"));
 }
 
 #[tokio::test]
@@ -5337,7 +5332,7 @@ async fn cached_denial_explanation_survives_tool_completion_and_done_render() {
                 cell,
                 HistoryCell::System { content }
                     if content.contains("Auto-denied exec_shell")
-                        && content.contains("Restart CodeWhale")
+                        && content.contains("Restart GhostyCode")
             )
         })
         .expect("cached denial must leave a durable recovery receipt");
@@ -5374,7 +5369,7 @@ async fn cached_denial_explanation_survives_tool_completion_and_done_render() {
         "cached-decision explanation disappeared after completion:\n{rendered}"
     );
     assert!(
-        rendered.contains("Restart CodeWhale"),
+        rendered.contains("Restart GhostyCode"),
         "cached-denial recovery path disappeared after completion:\n{rendered}"
     );
     assert_eq!(
@@ -5611,7 +5606,7 @@ fn setup_checkpoint_waits_for_onboarding_and_skip_flag() {
     app.onboarding = OnboardingState::None;
     assert!(!open_setup_checkpoint_if_due(&mut app, &config, true));
     assert!(app.view_stack.is_empty());
-    let state = codewhale_config::SetupState::load()
+    let state = ghosty_config::SetupState::load()
         .expect("load setup state")
         .expect("setup state");
     assert_eq!(
@@ -5620,11 +5615,11 @@ fn setup_checkpoint_waits_for_onboarding_and_skip_flag() {
     );
     assert_eq!(
         state.constitution_choice,
-        codewhale_config::ConstitutionChoice::Deferred
+        ghosty_config::ConstitutionChoice::Deferred
     );
     assert_eq!(
-        state.status(codewhale_config::SetupStep::Constitution),
-        codewhale_config::StepStatus::Deferred
+        state.status(ghosty_config::SetupStep::Constitution),
+        ghosty_config::StepStatus::Deferred
     );
     assert!(
         !open_setup_checkpoint_if_due(&mut app, &config, false),
@@ -5648,14 +5643,14 @@ fn setup_runtime_preset_apply_persists_settings_config_and_state() {
     app.config_path = Some(config_path.clone());
     let mut config = Config::default();
     let preset = crate::tui::setup::SetupRuntimePreset::AskFirst;
-    let mut state = codewhale_config::SetupState {
-        runtime_posture_source: codewhale_config::RuntimePostureSource::Confirmed,
+    let mut state = ghosty_config::SetupState {
+        runtime_posture_source: ghosty_config::RuntimePostureSource::Confirmed,
         ..Default::default()
     };
     state.set_step(
-        codewhale_config::SetupStep::TrustSandbox,
-        codewhale_config::StepEntry::new(
-            codewhale_config::StepStatus::Verified,
+        ghosty_config::SetupStep::TrustSandbox,
+        ghosty_config::StepEntry::new(
+            ghosty_config::StepStatus::Verified,
             true,
             crate::tui::setup::CONSTITUTION_CHECKPOINT_VERSION,
         )
@@ -5686,16 +5681,16 @@ fn setup_runtime_preset_apply_persists_settings_config_and_state() {
     assert!(body.contains("allow_shell = false"));
     assert!(body.contains("sandbox_mode = \"read-only\""));
 
-    let saved_state = codewhale_config::SetupState::load()
+    let saved_state = ghosty_config::SetupState::load()
         .expect("load setup state")
         .expect("setup state exists");
     assert_eq!(
-        saved_state.status(codewhale_config::SetupStep::TrustSandbox),
-        codewhale_config::StepStatus::Verified
+        saved_state.status(ghosty_config::SetupStep::TrustSandbox),
+        ghosty_config::StepStatus::Verified
     );
     assert_eq!(
         saved_state.runtime_posture_source,
-        codewhale_config::RuntimePostureSource::Confirmed
+        ghosty_config::RuntimePostureSource::Confirmed
     );
 }
 
@@ -5746,13 +5741,13 @@ fn setup_runtime_preset_rolls_back_durable_and_live_state_when_state_save_fails(
 
     // SetupState::save is atomic; an existing directory at the destination
     // forces the final persist to fail after config and settings were staged.
-    let state_path = codewhale_config::SetupState::path().expect("state path");
+    let state_path = ghosty_config::SetupState::path().expect("state path");
     std::fs::create_dir_all(&state_path).expect("state path directory");
     let error = apply_setup_runtime_preset(
         &mut app,
         &mut config,
         crate::tui::setup::SetupRuntimePreset::AskFirst,
-        codewhale_config::SetupState::default(),
+        ghosty_config::SetupState::default(),
     )
     .expect_err("state persistence must fail");
 
@@ -5808,7 +5803,7 @@ fn setup_high_trust_persists_full_access_without_legacy_yolo_mode() {
         &mut app,
         &mut config,
         preset,
-        codewhale_config::SetupState::default(),
+        ghosty_config::SetupState::default(),
     )
     .expect("apply high trust");
 
@@ -5853,7 +5848,7 @@ fn setup_high_trust_cannot_override_project_approval_policy() {
         .and_then(std::path::Path::parent)
         .expect("temporary home")
         .join("project");
-    let project_dir = workspace.join(codewhale_config::CODEWHALE_APP_DIR);
+    let project_dir = workspace.join(ghosty_config::GHOSTY_APP_DIR);
     std::fs::create_dir_all(&project_dir).expect("project config dir");
     std::fs::write(
         project_dir.join("config.toml"),
@@ -5873,7 +5868,7 @@ fn setup_high_trust_cannot_override_project_approval_policy() {
         &mut app,
         &mut config,
         crate::tui::setup::SetupRuntimePreset::HighTrustLocal,
-        codewhale_config::SetupState::default(),
+        ghosty_config::SetupState::default(),
     )
     .expect_err("project policy must control the live session");
 
@@ -5901,11 +5896,11 @@ fn project_runtime_provenance_only_blocks_values_startup_would_accept() {
     let workspace = Settings::path()
         .expect("settings path")
         .parent()
-        .expect("Codewhale home")
+        .expect("Ghosty home")
         .parent()
         .expect("temporary home")
         .join("project");
-    let project_dir = workspace.join(codewhale_config::CODEWHALE_APP_DIR);
+    let project_dir = workspace.join(ghosty_config::GHOSTY_APP_DIR);
     std::fs::create_dir_all(&project_dir).expect("project config dir");
     let project_path = project_dir.join("config.toml");
     std::fs::write(
@@ -5965,11 +5960,11 @@ fn saved_full_access_baseline_allows_project_approval_tightening() {
     let workspace = Settings::path()
         .expect("settings path")
         .parent()
-        .expect("Codewhale home")
+        .expect("Ghosty home")
         .parent()
         .expect("temporary home")
         .join("project");
-    let project_dir = workspace.join(codewhale_config::CODEWHALE_APP_DIR);
+    let project_dir = workspace.join(ghosty_config::GHOSTY_APP_DIR);
     std::fs::create_dir_all(&project_dir).expect("project config dir");
     std::fs::write(
         project_dir.join("config.toml"),
@@ -6022,7 +6017,7 @@ fn setup_presets_cannot_override_managed_runtime_requirements() {
             &mut app,
             &mut config,
             preset,
-            codewhale_config::SetupState::default(),
+            ghosty_config::SetupState::default(),
         )
         .expect_err("managed requirements must win");
         assert!(
@@ -6253,12 +6248,12 @@ fn apply_loaded_session_never_restores_background_shell_event_as_composer_draft(
         content: vec![
             ContentBlock::Text {
                 text: concat!(
-                    "<codewhale:runtime_event kind=\"background_shell_completion\" ",
+                    "<ghosty:runtime_event kind=\"background_shell_completion\" ",
                     "visibility=\"internal\">\n",
                     "This is an internal runtime event, not user input.\n\n",
                     "{\"task_id\":\"shell_580e7816\",\"status\":\"Completed\",",
                     "\"exit_code\":0,\"stdout_tail\":\"EXIT=0\\n\"}\n",
-                    "</codewhale:runtime_event>",
+                    "</ghosty:runtime_event>",
                 )
                 .to_string(),
                 cache_control: None,
@@ -6364,9 +6359,9 @@ fn apply_loaded_session_projects_subagent_handoff_without_retry_draft_or_user_ce
     let mut app = create_test_app();
     let payload = concat!(
         "Implemented the resume projection.\nCheckpoint: focused tests pass.\n",
-        "<codewhale:subagent.done>{\"agent_id\":\"agent_resume\",\"name\":\"Tide\",",
+        "<ghosty:subagent.done>{\"agent_id\":\"agent_resume\",\"name\":\"Tide\",",
         "\"agent_type\":\"implementer\",\"status\":\"completed\",",
-        "\"summary_location\":\"previous_line\"}</codewhale:subagent.done>",
+        "\"summary_location\":\"previous_line\"}</ghosty:subagent.done>",
     );
     // Literal v0.9.0 persisted fixture: keep this independent from the current
     // producer so a producer/parser drift cannot make the regression test
@@ -6376,13 +6371,13 @@ fn apply_loaded_session_projects_subagent_handoff_without_retry_draft_or_user_ce
         content: vec![
             ContentBlock::Text {
                 text: format!(
-                    "<codewhale:runtime_event kind=\"subagent_completion\" visibility=\"internal\">\n\
+                    "<ghosty:runtime_event kind=\"subagent_completion\" visibility=\"internal\">\n\
 This is an internal runtime event, not user input. Use the sub-agent completion \
 data below to continue coordinating the current task. Do not tell the user they \
 pasted sentinels, do not explain the sentinel protocol, and do not quote the raw \
 XML unless the user explicitly asks to debug sub-agent internals.\n\n\
 {payload}\n\
-</codewhale:runtime_event>"
+</ghosty:runtime_event>"
                 ),
                 cache_control: None,
             },
@@ -7459,7 +7454,7 @@ fn provider_picker_reselecting_active_provider_preserves_current_model() {
 async fn provider_switch_clears_turn_cache_history() {
     // `switch_provider` persists the new provider to `Settings`, which
     // writes through settings path resolution. Without redirecting the
-    // CodeWhale/legacy config homes we would clobber the developer's real
+    // GhostyCode/legacy config homes we would clobber the developer's real
     // preferences and leave `default_provider = "ollama"` behind.
     let _home = SettingsHomeGuard::new();
 
@@ -7708,13 +7703,13 @@ async fn failed_custom_provider_activation_stays_in_onboarding_recovery() {
 #[tokio::test]
 async fn successful_native_xai_oauth_activation_completes_onboarding() {
     let config_env = ConfigPathEnvGuard::new();
-    let codewhale_home = config_env
+    let ghosty_home = config_env
         ._tmp
         .path()
         .canonicalize()
         .expect("canonical temp root")
         .join("xai-success-home");
-    let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let mut app = create_test_app();
     app.config_path = Some(config_env.config_path());
     app.onboarding = OnboardingState::Provider;
@@ -7726,7 +7721,7 @@ async fn successful_native_xai_oauth_activation_completes_onboarding() {
     let pending =
         crate::xai_oauth::pending_device_login_for_test("fixture-access", "fixture-refresh");
 
-    let switched = apply_codewhale_owned_xai_login(
+    let switched = apply_ghosty_owned_xai_login(
         &mut app,
         &mut engine.handle,
         &mut config,
@@ -7759,13 +7754,13 @@ async fn successful_native_xai_oauth_activation_completes_onboarding() {
 #[tokio::test]
 async fn failed_native_xai_oauth_activation_stays_in_onboarding_recovery() {
     let config_env = ConfigPathEnvGuard::new();
-    let codewhale_home = config_env
+    let ghosty_home = config_env
         ._tmp
         .path()
         .canonicalize()
         .expect("canonical temp root")
         .join("xai-failure-home");
-    let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let mut app = create_test_app();
     app.config_path = Some(config_env.config_path());
     app.onboarding = OnboardingState::Provider;
@@ -7774,7 +7769,7 @@ async fn failed_native_xai_oauth_activation_stays_in_onboarding_recovery() {
     let mut config = Config::default();
     let pending = crate::xai_oauth::pending_device_login_for_test("", "fixture-refresh");
 
-    let switched = apply_codewhale_owned_xai_login(
+    let switched = apply_ghosty_owned_xai_login(
         &mut app,
         &mut engine.handle,
         &mut config,
@@ -7792,9 +7787,9 @@ async fn failed_native_xai_oauth_activation_stays_in_onboarding_recovery() {
 #[tokio::test]
 async fn xai_api_key_confirmation_saves_only_the_selected_xai_slot() {
     let config_env = ConfigPathEnvGuard::new();
-    let codewhale_home = config_env._tmp.path().canonicalize().expect("temp home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
-    let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+    let ghosty_home = config_env._tmp.path().canonicalize().expect("temp home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
+    let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
     let mut app = create_test_app();
     app.config_path = Some(config_env.config_path());
     let mut engine = mock_engine_handle();
@@ -7837,7 +7832,7 @@ async fn xai_api_key_confirmation_saves_only_the_selected_xai_slot() {
 /// enough that the default 2 MiB libtest thread stack overflows; the product
 /// paths run on the 8 MiB main thread or the sheltered 16 MiB parse threads
 /// (see `parse_config_file_str` in `config.rs` and `parse_config_toml_str`
-/// in `codewhale-config`), so this test runs its runtime on an equivalently
+/// in `ghosty-config`), so this test runs its runtime on an equivalently
 /// sized stack instead of crashing.
 #[test]
 fn setup_confirm_toast_names_secret_store_and_global_scope() {
@@ -7855,11 +7850,11 @@ fn setup_confirm_toast_names_secret_store_and_global_scope() {
                     let _config = ConfigPathEnvGuard::new();
                     let home = TempDir::new().expect("isolated toast home");
                     let _home = crate::test_support::EnvVarGuard::set(
-                        "CODEWHALE_HOME",
+                        "GHOSTY_HOME",
                         home.path().to_string_lossy().as_ref(),
                     );
                     let _backend =
-                        crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+                        crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
                     let mut app = create_test_app();
                     let mut engine = mock_engine_handle();
                     let mut config = Config::default();
@@ -8023,12 +8018,12 @@ fn first_run_ollama_choice_survives_restart_without_rewriting_config() {
     // Selecting a keyless route is not a health check. Setup state must keep
     // that distinction so an unavailable local runtime still receives the
     // existing attention/doctor treatment instead of being called healthy.
-    let state = codewhale_config::SetupState::load()
+    let state = ghosty_config::SetupState::load()
         .expect("load setup state")
         .expect("provider setup state");
     let result = state
         .steps
-        .get(&codewhale_config::SetupStep::ProviderModel)
+        .get(&ghosty_config::SetupStep::ProviderModel)
         .and_then(|entry| entry.result.as_deref())
         .expect("provider/model setup result");
     assert!(result.contains("provider=ollama"), "{result}");
@@ -8056,15 +8051,14 @@ fn first_run_ollama_choice_survives_restart_without_rewriting_config() {
 fn failed_first_run_route_persistence_keeps_provider_setup_active() {
     let _lock = crate::test_support::lock_test_env();
     let tmp = TempDir::new().expect("settings tempdir");
-    let bad_home = tmp.path().join("codewhale-home-file");
+    let bad_home = tmp.path().join("ghosty-home-file");
     std::fs::write(&bad_home, "not a directory").expect("bad home file");
     let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path().as_os_str());
     let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", tmp.path().as_os_str());
-    let _codewhale_home =
-        crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", bad_home.as_os_str());
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", bad_home.as_os_str());
     let _deepseek_config_path = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-    let _codewhale_config_path = crate::test_support::EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
-    let _codewhale_provider = crate::test_support::EnvVarGuard::remove("CODEWHALE_PROVIDER");
+    let _ghosty_config_path = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
+    let _ghosty_provider = crate::test_support::EnvVarGuard::remove("GHOSTY_PROVIDER");
     let _deepseek_provider = crate::test_support::EnvVarGuard::remove("DEEPSEEK_PROVIDER");
 
     let mut app = Box::new(create_test_app());
@@ -8143,16 +8137,16 @@ async fn provider_switch_model_override_updates_target_provider_model_slot() {
         Some("mimo-v2.5-pro")
     );
 
-    let state = codewhale_config::SetupState::load()
+    let state = ghosty_config::SetupState::load()
         .expect("load setup state")
         .expect("setup state");
     assert_eq!(
-        state.status(codewhale_config::SetupStep::ProviderModel),
-        codewhale_config::StepStatus::Verified
+        state.status(ghosty_config::SetupStep::ProviderModel),
+        ghosty_config::StepStatus::Verified
     );
     let provider_model_result = state
         .steps
-        .get(&codewhale_config::SetupStep::ProviderModel)
+        .get(&ghosty_config::SetupStep::ProviderModel)
         .and_then(|entry| entry.result.as_deref())
         .expect("provider/model result");
     assert!(provider_model_result.contains("provider=deepseek"));
@@ -8211,12 +8205,12 @@ async fn provider_switch_succeeds_without_writing_when_config_is_unwritable() {
     assert_eq!(pending.model, "deepseek-v4-flash");
     // The on-screen setup-state receipt is still recorded (it is a local
     // receipt, not a config write) — with the target route, not a stale one.
-    let state = codewhale_config::SetupState::load()
+    let state = ghosty_config::SetupState::load()
         .expect("load setup state")
         .expect("setup state");
     let result = state
         .steps
-        .get(&codewhale_config::SetupStep::ProviderModel)
+        .get(&ghosty_config::SetupStep::ProviderModel)
         .and_then(|entry| entry.result.as_deref())
         .expect("provider/model result");
     assert!(result.contains("provider=deepseek"), "{result}");
@@ -8785,7 +8779,7 @@ async fn remote_preflight_failure_releases_the_account_owned_run() {
 async fn immediate_submit_custom_provider_missing_key_preflight_shows_auth_next_step() {
     let _lock = crate::test_support::lock_test_env();
     let _missing_key =
-        crate::test_support::EnvVarGuard::remove("CODEWHALE_TEST_MISSING_LM_STUDIO_KEY");
+        crate::test_support::EnvVarGuard::remove("GHOSTY_TEST_MISSING_LM_STUDIO_KEY");
     let mut config =
         named_custom_session_config("lm-studio", "http://127.0.0.1:1234/v1", "local-model");
     let provider = config
@@ -8796,7 +8790,7 @@ async fn immediate_submit_custom_provider_missing_key_preflight_shows_auth_next_
         .get_mut("lm-studio")
         .expect("lm-studio");
     provider.api_key = None;
-    provider.api_key_env = Some("CODEWHALE_TEST_MISSING_LM_STUDIO_KEY".to_string());
+    provider.api_key_env = Some("GHOSTY_TEST_MISSING_LM_STUDIO_KEY".to_string());
     let mut app = create_test_app();
     app.set_provider_identity(ApiProvider::Custom, "lm-studio");
     app.set_model_selection("local-model".to_string());
@@ -9057,7 +9051,7 @@ fn auto_routed_turn_compaction_uses_selected_route_not_stale_app_route() {
     app.auto_model = true;
     app.model = "auto".to_string();
     app.api_provider = ApiProvider::Deepseek;
-    app.active_route_limits = Some(codewhale_config::route::RouteLimits {
+    app.active_route_limits = Some(ghosty_config::route::RouteLimits {
         context_tokens: Some(32_000),
         ..Default::default()
     });
@@ -11116,7 +11110,7 @@ fn init_git_repo() -> TempDir {
     let commit = Command::new("git")
         .args([
             "-c",
-            "user.name=codewhale Tests",
+            "user.name=ghosty Tests",
             "-c",
             "user.email=tests@example.com",
             "-c",
@@ -11280,7 +11274,7 @@ fn hotbar_dispatches_bound_slot_and_ignores_empty_slot() {
     // #3807: a fresh config has no bindings, so opt in with the default slots
     // (slot 5 = mode.agent) to exercise dispatch of a bound slot.
     let config = Config {
-        hotbar: Some(codewhale_config::default_hotbar_bindings_toml()),
+        hotbar: Some(ghosty_config::default_hotbar_bindings_toml()),
         ..Config::default()
     };
     app.onboarding = OnboardingState::None;
@@ -11315,7 +11309,7 @@ fn hotbar_dispatches_slash_command_slot() {
     let mut app = create_test_app();
     app.onboarding = OnboardingState::None;
     let config = Config {
-        hotbar: Some(vec![codewhale_config::HotbarBindingToml {
+        hotbar: Some(vec![ghosty_config::HotbarBindingToml {
             slot: 1,
             label: Some("mode".to_string()),
             action: "slash.mode".to_string(),
@@ -11349,7 +11343,7 @@ fn hotbar_dispatches_route_switch_slot() {
     let provider = ApiProvider::parse(provider_key).expect("provider key parses");
     let model = model.to_string();
     let config = Config {
-        hotbar: Some(vec![codewhale_config::HotbarBindingToml {
+        hotbar: Some(vec![ghosty_config::HotbarBindingToml {
             slot: 1,
             label: Some(route_metadata.compact_label),
             action: route_id,
@@ -11374,7 +11368,7 @@ fn hotbar_bound_reasoning_action_updates_auto_model_preference() {
     app.reasoning_effort = ReasoningEffort::Off;
     app.needs_redraw = false;
     let config = Config {
-        hotbar: Some(vec![codewhale_config::HotbarBindingToml {
+        hotbar: Some(vec![ghosty_config::HotbarBindingToml {
             slot: 1,
             label: Some("reason".to_string()),
             action: "reasoning.cycle".to_string(),
@@ -11619,7 +11613,7 @@ fn subagent_hook_preview_is_bounded_on_char_boundaries() {
 #[test]
 fn subagent_completion_status_reads_done_sentinel() {
     let result = r#"done
-<codewhale:subagent.done>{"agent_id":"agent_x","status":"completed"}</codewhale:subagent.done>"#;
+<ghosty:subagent.done>{"agent_id":"agent_x","status":"completed"}</ghosty:subagent.done>"#;
 
     assert_eq!(
         subagent_completion_status(result).as_deref(),
@@ -11632,12 +11626,12 @@ fn subagent_completion_status_reads_done_sentinel() {
 fn subagent_failure_notice_surfaces_receipt_fields() {
     let result = concat!(
         "Failed: quota exhausted\n",
-        "<codewhale:subagent.done>{\"event\":\"subagent.failed\",",
+        "<ghosty:subagent.done>{\"event\":\"subagent.failed\",",
         "\"agent_id\":\"agent_x\",\"name\":\"Tide\",",
         "\"status\":\"failed\",\"failure_class\":\"auth_or_quota\",",
         "\"steps\":12,\"elapsed_ms\":3456,",
         "\"transcript_handle\":\"agent:agent_x/full_transcript\"}",
-        "</codewhale:subagent.done>",
+        "</ghosty:subagent.done>",
     );
 
     let notice = subagent_failure_notice(result).expect("failure notice");
@@ -11668,7 +11662,7 @@ fn subagent_completion_status_reads_summary_fallbacks() {
 #[test]
 fn subagent_status_from_completion_result_maps_terminal_sentinels() {
     let failed = r#"Tool timed out
-<codewhale:subagent.done>{"agent_id":"agent_x","status":"failed"}</codewhale:subagent.done>"#;
+<ghosty:subagent.done>{"agent_id":"agent_x","status":"failed"}</ghosty:subagent.done>"#;
     match subagent_status_from_completion_result(failed) {
         crate::tools::subagent::SubAgentStatus::Failed(reason) => {
             assert_eq!(reason, "Tool timed out")
@@ -11677,7 +11671,7 @@ fn subagent_status_from_completion_result_maps_terminal_sentinels() {
     }
 
     let interrupted = r#"Waiting for follow-up
-<codewhale:subagent.done>{"agent_id":"agent_x","status":"interrupted"}</codewhale:subagent.done>"#;
+<ghosty:subagent.done>{"agent_id":"agent_x","status":"interrupted"}</ghosty:subagent.done>"#;
     match subagent_status_from_completion_result(interrupted) {
         crate::tools::subagent::SubAgentStatus::Interrupted(reason) => {
             assert_eq!(reason, "Waiting for follow-up")
@@ -11686,14 +11680,14 @@ fn subagent_status_from_completion_result_maps_terminal_sentinels() {
     }
 
     let budget = r#"Token budget exhausted
-<codewhale:subagent.done>{"agent_id":"agent_x","status":"budget_exhausted"}</codewhale:subagent.done>"#;
+<ghosty:subagent.done>{"agent_id":"agent_x","status":"budget_exhausted"}</ghosty:subagent.done>"#;
     assert_eq!(
         subagent_status_from_completion_result(budget),
         crate::tools::subagent::SubAgentStatus::BudgetExhausted
     );
 
     let cancelled = r#"Cancelled
-<codewhale:subagent.done>{"agent_id":"agent_x","status":"cancelled"}</codewhale:subagent.done>"#;
+<ghosty:subagent.done>{"agent_id":"agent_x","status":"cancelled"}</ghosty:subagent.done>"#;
     assert_eq!(
         subagent_status_from_completion_result(cancelled),
         crate::tools::subagent::SubAgentStatus::Cancelled
@@ -11709,7 +11703,7 @@ fn subagent_status_from_completion_result_maps_terminal_sentinels() {
 fn agent_complete_terminal_verb_is_truthful_for_cancelled_workers() {
     let cancelled = subagent_status_from_completion_result(
         r#"Cancelled
-<codewhale:subagent.done>{"agent_id":"agent_x","status":"cancelled"}</codewhale:subagent.done>"#,
+<ghosty:subagent.done>{"agent_id":"agent_x","status":"cancelled"}</ghosty:subagent.done>"#,
     );
 
     assert_eq!(subagent_terminal_verb(&cancelled), "cancelled");
@@ -12317,40 +12311,33 @@ fn complete_release_json(tag: &str) -> serde_json::Value {
 #[test]
 fn startup_notice_accepts_the_v095_single_binary_release_inventory() {
     const V095_ASSETS: &[&str] = &[
-        "codewhale-linux-x64",
-        "codew-linux-x64",
-        "codewhale-linux-arm64",
-        "codew-linux-arm64",
-        "codewhale-android-arm64",
-        "codew-android-arm64",
-        "codewhale-macos-x64",
-        "codew-macos-x64",
-        "codewhale-macos-arm64",
-        "codew-macos-arm64",
-        "codewhale-windows-x64.exe",
-        "codew-windows-x64.exe",
-        "codewhale.bat",
-        "codewhale-windows-arm64.exe",
-        "codew-windows-arm64.exe",
-        "codewhale-linux-x64.tar.gz",
-        "codewhale-linux-arm64.tar.gz",
-        "codewhale-android-arm64.tar.gz",
-        "codewhale-macos-x64.tar.gz",
-        "codewhale-macos-arm64.tar.gz",
-        "codewhale-windows-x64.zip",
-        "codewhale-windows-x64-portable.zip",
-        "codewhale-windows-arm64.zip",
-        "codewhale-windows-arm64-portable.zip",
-        "CodeWhaleSetup.exe",
-        "codewhale-bundles-sha256.txt",
-        "codewhale-artifacts-sha256.txt",
+        "ghosty-linux-x64",
+        "ghosty-linux-arm64",
+        "ghosty-android-arm64",
+        "ghosty-macos-x64",
+        "ghosty-macos-arm64",
+        "ghosty-windows-x64.exe",
+        "ghosty.bat",
+        "ghosty-windows-arm64.exe",
+        "ghosty-linux-x64.tar.gz",
+        "ghosty-linux-arm64.tar.gz",
+        "ghosty-android-arm64.tar.gz",
+        "ghosty-macos-x64.tar.gz",
+        "ghosty-macos-arm64.tar.gz",
+        "ghosty-windows-x64.zip",
+        "ghosty-windows-x64-portable.zip",
+        "ghosty-windows-arm64.zip",
+        "ghosty-windows-arm64-portable.zip",
+        "GhostyCodeSetup.exe",
+        "ghosty-bundles-sha256.txt",
+        "ghosty-artifacts-sha256.txt",
     ];
 
     assert_eq!(REQUIRED_RELEASE_ASSETS, V095_ASSETS);
     assert!(
         REQUIRED_RELEASE_ASSETS
             .iter()
-            .all(|asset| !asset.starts_with("codewhale-tui-")),
+            .all(|asset| !asset.starts_with("ghosty-tui-")),
         "the single-binary release must not wait for removed TUI assets"
     );
 
@@ -12373,7 +12360,7 @@ fn version_hint_requires_complete_release_assets() {
     let complete = complete_release_json("v0.8.47");
     let hint = version_hint_from_release_json(&complete, "0.8.46").expect("newer complete release");
     assert!(
-        hint.toast_line(codewhale_release::InstallMethod::Binary)
+        hint.toast_line(ghosty_release::InstallMethod::Binary)
             .contains("v0.8.47 available")
     );
 
@@ -12385,7 +12372,7 @@ fn version_hint_requires_complete_release_assets() {
             .iter()
             .filter(|asset| {
                 asset.get("name").and_then(serde_json::Value::as_str)
-                    != Some("codewhale-artifacts-sha256.txt")
+                    != Some("ghosty-artifacts-sha256.txt")
             })
             .cloned()
             .collect(),
@@ -12466,8 +12453,8 @@ fn startup_version_check_is_disabled_in_ci_and_on_opt_out() {
     // A build agent has nobody to tell, so the check never reaches the
     // network there — even with the feature enabled and a mirror configured.
     for reason in [
-        codewhale_release::SuppressionReason::ContinuousIntegration("CI"),
-        codewhale_release::SuppressionReason::OptOut("CODEWHALE_NO_UPDATE_CHECK"),
+        ghosty_release::SuppressionReason::ContinuousIntegration("CI"),
+        ghosty_release::SuppressionReason::OptOut("GHOSTY_NO_UPDATE_CHECK"),
     ] {
         assert_eq!(
             resolve_version_check_source(
@@ -12488,8 +12475,8 @@ fn startup_version_check_is_disabled_in_ci_and_on_opt_out() {
 #[tokio::test]
 async fn a_fresh_cache_answers_the_update_check_without_the_network() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let cache = codewhale_release::check::cache_path_in(dir.path());
-    codewhale_release::UpdateCheckCache::now(Some("v9.9.9".to_string()))
+    let cache = ghosty_release::check::cache_path_in(dir.path());
+    ghosty_release::UpdateCheckCache::now(Some("v9.9.9".to_string()))
         .store(&cache)
         .expect("seed cache");
 
@@ -12509,8 +12496,8 @@ async fn a_fresh_cache_answers_the_update_check_without_the_network() {
 #[tokio::test]
 async fn a_cached_up_to_date_answer_produces_no_notice() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let cache = codewhale_release::check::cache_path_in(dir.path());
-    codewhale_release::UpdateCheckCache::now(Some("v0.9.4".to_string()))
+    let cache = ghosty_release::check::cache_path_in(dir.path());
+    ghosty_release::UpdateCheckCache::now(Some("v0.9.4".to_string()))
         .store(&cache)
         .expect("seed cache");
 
@@ -12529,7 +12516,7 @@ async fn a_cached_up_to_date_answer_produces_no_notice() {
 #[tokio::test]
 async fn a_failed_check_leaves_the_cache_untouched_so_the_next_launch_retries() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let cache = codewhale_release::check::cache_path_in(dir.path());
+    let cache = ghosty_release::check::cache_path_in(dir.path());
 
     let notice = cached_version_hint(
         StartupVersionCheckSource::ConfiguredUrl("http://127.0.0.1:1/nope".to_string()),
@@ -12553,24 +12540,24 @@ fn update_notice_names_the_command_for_the_actual_install_method() {
 
     // A package-managed install must not be told to self-replace: the manager
     // would silently revert it on the next upgrade.
-    let npm_block = notice.notice_block(codewhale_release::InstallMethod::Npm);
+    let npm_block = notice.notice_block(ghosty_release::InstallMethod::Npm);
     assert!(
-        npm_block.contains("npm install -g codewhale@latest"),
+        npm_block.contains("npm install -g ghosty@latest"),
         "names the npm command: {npm_block:?}"
     );
     assert!(
-        npm_block.contains("Do not use `codewhale update`"),
+        npm_block.contains("Do not use `ghosty update`"),
         "warns against self-update: {npm_block:?}"
     );
     assert!(
         notice
-            .toast_line(codewhale_release::InstallMethod::Homebrew)
-            .contains("brew upgrade codewhale"),
+            .toast_line(ghosty_release::InstallMethod::Homebrew)
+            .contains("brew upgrade ghosty"),
         "toast names the Homebrew command"
     );
     assert!(
         notice
-            .toast_line(codewhale_release::InstallMethod::Omarchy)
+            .toast_line(ghosty_release::InstallMethod::Omarchy)
             .contains("omarchy update"),
         "toast names the Omarchy update command"
     );
@@ -12578,8 +12565,8 @@ fn update_notice_names_the_command_for_the_actual_install_method() {
     // A plain release binary keeps the self-updater.
     assert!(
         notice
-            .toast_line(codewhale_release::InstallMethod::Binary)
-            .contains("codewhale update")
+            .toast_line(ghosty_release::InstallMethod::Binary)
+            .contains("ghosty update")
     );
 }
 
@@ -12594,7 +12581,7 @@ fn custom_update_uri_accepts_tag_only_release_json() {
     let hint = version_hint_from_custom_release_json(&json, "0.8.46")
         .expect("tag-only custom metadata should be enough for mirrors");
     assert!(
-        hint.toast_line(codewhale_release::InstallMethod::Binary)
+        hint.toast_line(ghosty_release::InstallMethod::Binary)
             .contains("v0.8.47 available")
     );
 }
@@ -12607,18 +12594,18 @@ fn update_notice_block_is_persistent_and_actionable() {
 
     // Durable notice carries current + latest versions, release-notes link,
     // the exact update command, and restart guidance (#3961 acceptance).
-    let block = notice.notice_block(codewhale_release::InstallMethod::Binary);
+    let block = notice.notice_block(ghosty_release::InstallMethod::Binary);
     assert!(
         block.contains("v0.8.46"),
         "shows current version: {block:?}"
     );
     assert!(block.contains("v0.8.47"), "shows latest version: {block:?}");
     assert!(
-        block.contains("https://github.com/Hmbown/CodeWhale/releases/tag/v0.8.47"),
+        block.contains("https://github.com/blissito/ghostycode/releases/tag/v0.8.47"),
         "includes release-notes link: {block:?}"
     );
     assert!(
-        block.contains("codewhale update"),
+        block.contains("ghosty update"),
         "includes the update command: {block:?}"
     );
     assert!(
@@ -13683,7 +13670,7 @@ fn visible_slash_menu_starts_with_six_tasks_and_keeps_long_tail_searchable() {
         ["/help", "/setup", "/model", "/settings", "/resume", "/rc"]
     );
     assert!(!entries.iter().any(|entry| entry.name == "/set"));
-    assert!(!entries.iter().any(|entry| entry.name == "/codewhale"));
+    assert!(!entries.iter().any(|entry| entry.name == "/ghosty"));
 
     app.input = "/conf".to_string();
     app.cursor_position = app.input.chars().count();
@@ -13775,7 +13762,7 @@ fn apply_slash_menu_selection_appends_space_for_arg_commands() {
 #[test]
 fn apply_slash_menu_selection_honors_user_argument_metadata_and_builtin_override() {
     let tmp = TempDir::new().expect("tempdir");
-    let commands_dir = tmp.path().join(".codewhale").join("commands");
+    let commands_dir = tmp.path().join(".ghosty").join("commands");
     std::fs::create_dir_all(&commands_dir).expect("create commands dir");
     std::fs::write(
         commands_dir.join("custom-model.md"),
@@ -15189,7 +15176,7 @@ fn visible_error_becomes_full_detail_target_ahead_of_adjacent_tool() {
             is_diff: false,
         })),
         HistoryCell::Error {
-            message: "Refusing insecure base URL.\nSet CODEWHALE_ALLOW_INSECURE_HTTP=1 only for a trusted LAN host."
+            message: "Refusing insecure base URL.\nSet GHOSTY_ALLOW_INSECURE_HTTP=1 only for a trusted LAN host."
                 .to_string(),
             severity: crate::error_taxonomy::ErrorSeverity::Error,
         },
@@ -15208,7 +15195,7 @@ fn visible_error_becomes_full_detail_target_ahead_of_adjacent_tool() {
     assert_eq!(detail_target_cell_index(&app), Some(1));
     assert!(open_tool_details_pager(&mut app));
     let body = pop_pager_body(&mut app);
-    assert!(body.contains("CODEWHALE_ALLOW_INSECURE_HTTP=1"), "{body}");
+    assert!(body.contains("GHOSTY_ALLOW_INSECURE_HTTP=1"), "{body}");
 }
 
 #[test]
@@ -17902,17 +17889,17 @@ async fn model_picker_apply_is_session_local_until_startup_default_is_requested(
     assert!(!app.auto_model);
     assert_eq!(app.reasoning_effort, ReasoningEffort::High);
 
-    let state = codewhale_config::SetupState::load()
+    let state = ghosty_config::SetupState::load()
         .expect("load setup state")
         .expect("setup state");
     assert_eq!(
-        state.status(codewhale_config::SetupStep::ProviderModel),
-        codewhale_config::StepStatus::Verified,
+        state.status(ghosty_config::SetupStep::ProviderModel),
+        ghosty_config::StepStatus::Verified,
         "the local setup receipt records a live selection, not a startup-default write"
     );
     let provider_model_result = state
         .steps
-        .get(&codewhale_config::SetupStep::ProviderModel)
+        .get(&ghosty_config::SetupStep::ProviderModel)
         .and_then(|entry| entry.result.as_deref())
         .expect("provider/model result");
     assert!(provider_model_result.contains("provider=deepseek"));
@@ -18138,10 +18125,7 @@ async fn reselecting_live_model_and_thinking_is_session_local() {
         ..Default::default()
     };
     assert!(
-        codewhale_config::SetupState::load()
-            .ok()
-            .flatten()
-            .is_none(),
+        ghosty_config::SetupState::load().ok().flatten().is_none(),
         "the test home must start with no recorded setup progress"
     );
 
@@ -18177,13 +18161,13 @@ async fn reselecting_live_model_and_thinking_is_session_local() {
             .as_deref()
             .is_some_and(|message| message.contains("Model unchanged"))
     );
-    let state = codewhale_config::SetupState::load()
+    let state = ghosty_config::SetupState::load()
         .expect("read setup state")
         .expect("a concrete live model selection must record setup progress");
     assert!(
         state
             .steps
-            .contains_key(&codewhale_config::SetupStep::ProviderModel),
+            .contains_key(&ghosty_config::SetupStep::ProviderModel),
         "the provider/model setup step must be recorded even when the model was already live"
     );
 }
@@ -18369,15 +18353,14 @@ fn dismissing_named_custom_model_picker_restores_app_owned_config_route() {
 async fn model_picker_startup_default_reports_settings_write_failure() {
     let _lock = crate::test_support::lock_test_env();
     let tmp = TempDir::new().expect("settings tempdir");
-    let bad_home = tmp.path().join("codewhale-home-file");
+    let bad_home = tmp.path().join("ghosty-home-file");
     std::fs::write(&bad_home, "not a directory").expect("bad home file");
     let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path().as_os_str());
     let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", tmp.path().as_os_str());
-    let _codewhale_home =
-        crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", bad_home.as_os_str());
+    let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", bad_home.as_os_str());
     let _deepseek_config_path = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-    let _codewhale_config_path = crate::test_support::EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
-    let _codewhale_provider = crate::test_support::EnvVarGuard::remove("CODEWHALE_PROVIDER");
+    let _ghosty_config_path = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
+    let _ghosty_provider = crate::test_support::EnvVarGuard::remove("GHOSTY_PROVIDER");
     let _deepseek_provider = crate::test_support::EnvVarGuard::remove("DEEPSEEK_PROVIDER");
 
     let mut app = create_test_app();
@@ -18416,11 +18399,11 @@ async fn model_picker_startup_default_reports_settings_write_failure() {
         crate::tui::views::route_save_prompt::RouteSaveChoice::SaveAsDefault,
     );
     assert!(saved.starts_with("Save failed:"), "{saved}");
-    // The fixture's CODEWHALE_HOME is a file, so no setup-state root can
+    // The fixture's GHOSTY_HOME is a file, so no setup-state root can
     // exist: the receipt is honestly absent, and the picker still applied
     // the live choice without claiming persistence.
     assert!(
-        codewhale_config::SetupState::load()
+        ghosty_config::SetupState::load()
             .expect("load setup state")
             .is_none(),
         "no setup-state root exists in this fixture"
@@ -19907,7 +19890,7 @@ fn approval_prompt_uses_event_input_after_message_complete_drain() {
     app.pending_tool_uses.clear();
 
     let event_input = serde_json::json!({
-        "command": "cargo test -p codewhale-tui approval",
+        "command": "cargo test -p ghosty-tui approval",
         "workdir": "/repo",
     });
     push_approval_request_view(
@@ -19934,7 +19917,7 @@ fn approval_prompt_uses_event_input_after_message_complete_drain() {
         panic!("expected approval params pager from Alt+V");
     };
 
-    assert!(content.contains("cargo test -p codewhale-tui approval"));
+    assert!(content.contains("cargo test -p ghosty-tui approval"));
     assert!(content.contains("/repo"));
     assert!(!content.contains("stale value from drained list"));
     assert_ne!(content.trim(), "{}");
@@ -20023,7 +20006,7 @@ async fn approval_decision_persists_ask_rules_to_permissions_file() {
     app.config_path = Some(config_path.clone());
     let mut config = Config::default();
     let mut engine = mock_engine_handle();
-    let rule = codewhale_config::ToolAskRule::exec_shell("cargo test");
+    let rule = ghosty_config::ToolAskRule::exec_shell("cargo test");
 
     apply_approval_decision(
         &mut app,
@@ -20047,7 +20030,7 @@ async fn approval_decision_persists_ask_rules_to_permissions_file() {
             id: "tool-1".to_string()
         })
     );
-    let store = codewhale_config::ConfigStore::load(Some(config_path)).expect("load config store");
+    let store = ghosty_config::ConfigStore::load(Some(config_path)).expect("load config store");
     assert_eq!(store.permissions().rules, vec![rule]);
     assert!(
         app.status_message
@@ -20057,12 +20040,12 @@ async fn approval_decision_persists_ask_rules_to_permissions_file() {
 
     let decision = config
         .exec_policy_engine
-        .check(codewhale_execpolicy::ExecPolicyContext {
+        .check(ghosty_execpolicy::ExecPolicyContext {
             command: "cargo test --workspace",
             cwd: tmp.path().to_string_lossy().as_ref(),
             tool: Some("exec_shell"),
             path: None,
-            ask_for_approval: codewhale_execpolicy::AskForApproval::OnFailure,
+            ask_for_approval: ghosty_execpolicy::AskForApproval::OnFailure,
             sandbox_mode: None,
         })
         .expect("check persisted runtime policy");
@@ -20078,7 +20061,7 @@ async fn approval_decision_persists_exact_workspace_allow_rule() {
     app.config_path = Some(config_path.clone());
     let mut config = Config::default();
     let mut engine = mock_engine_handle();
-    let rule = codewhale_config::ToolAskRule::exec_shell("cargo test")
+    let rule = ghosty_config::ToolAskRule::exec_shell("cargo test")
         .into_exact_workspace_allow(tmp.path().to_string_lossy());
 
     apply_approval_decision(
@@ -20103,7 +20086,7 @@ async fn approval_decision_persists_exact_workspace_allow_rule() {
             id: "tool-allow".to_string()
         })
     );
-    let store = codewhale_config::ConfigStore::load(Some(config_path)).expect("load config store");
+    let store = ghosty_config::ConfigStore::load(Some(config_path)).expect("load config store");
     assert_eq!(store.permissions().rules, vec![rule]);
     assert!(
         app.status_message
@@ -20113,29 +20096,29 @@ async fn approval_decision_persists_exact_workspace_allow_rule() {
 
     let exact = config
         .exec_policy_engine
-        .check(codewhale_execpolicy::ExecPolicyContext {
+        .check(ghosty_execpolicy::ExecPolicyContext {
             command: "cargo test",
             cwd: tmp.path().to_string_lossy().as_ref(),
             tool: Some("exec_shell"),
             path: None,
-            ask_for_approval: codewhale_execpolicy::AskForApproval::OnRequest,
+            ask_for_approval: ghosty_execpolicy::AskForApproval::OnRequest,
             sandbox_mode: None,
         })
         .expect("check persisted allow");
     assert_eq!(
         exact.matched_action,
-        Some(codewhale_execpolicy::PermissionAction::Allow)
+        Some(ghosty_execpolicy::PermissionAction::Allow)
     );
     assert!(!exact.requires_approval);
 
     let expanded = config
         .exec_policy_engine
-        .check(codewhale_execpolicy::ExecPolicyContext {
+        .check(ghosty_execpolicy::ExecPolicyContext {
             command: "cargo test --workspace",
             cwd: tmp.path().to_string_lossy().as_ref(),
             tool: Some("exec_shell"),
             path: None,
-            ask_for_approval: codewhale_execpolicy::AskForApproval::OnRequest,
+            ask_for_approval: ghosty_execpolicy::AskForApproval::OnRequest,
             sandbox_mode: None,
         })
         .expect("check expanded command");
@@ -20335,9 +20318,9 @@ fn recoverable_provider_error_advances_fallback_chain() {
 
     let mut app = create_test_app();
     app.api_provider = ApiProvider::Deepseek;
-    app.provider_chain = Some(codewhale_config::ProviderChain::new(
-        codewhale_config::ProviderKind::Deepseek,
-        &[codewhale_config::ProviderKind::Openrouter],
+    app.provider_chain = Some(ghosty_config::ProviderChain::new(
+        ghosty_config::ProviderKind::Deepseek,
+        &[ghosty_config::ProviderKind::Openrouter],
     ));
 
     apply_engine_error_to_app(
@@ -20381,9 +20364,9 @@ fn auth_error_does_not_trigger_provider_fallback() {
     // Not env-only, so we exercise the category gate rather than the env-key
     // onboarding early-return.
     app.api_key_env_only = false;
-    app.provider_chain = Some(codewhale_config::ProviderChain::new(
-        codewhale_config::ProviderKind::Deepseek,
-        &[codewhale_config::ProviderKind::Openrouter],
+    app.provider_chain = Some(ghosty_config::ProviderChain::new(
+        ghosty_config::ProviderKind::Deepseek,
+        &[ghosty_config::ProviderKind::Openrouter],
     ));
 
     apply_engine_error_to_app(
@@ -20421,9 +20404,9 @@ fn fallback_switch_status_shows_one_based_position_and_reason() {
 
     let mut app = create_test_app();
     app.api_provider = ApiProvider::Deepseek;
-    app.provider_chain = Some(codewhale_config::ProviderChain::new(
-        codewhale_config::ProviderKind::Deepseek,
-        &[codewhale_config::ProviderKind::Openrouter],
+    app.provider_chain = Some(ghosty_config::ProviderChain::new(
+        ghosty_config::ProviderKind::Deepseek,
+        &[ghosty_config::ProviderKind::Openrouter],
     ));
 
     apply_engine_error_to_app(
@@ -20597,16 +20580,16 @@ async fn provider_switch_auth_error_restores_previous_provider_and_model() {
     );
     assert_eq!(settings.provider_models, None);
     assert_eq!(settings.default_model.as_deref(), None);
-    let state = codewhale_config::SetupState::load()
+    let state = ghosty_config::SetupState::load()
         .expect("load setup state")
         .expect("setup state");
     assert_eq!(
-        state.status(codewhale_config::SetupStep::ProviderModel),
-        codewhale_config::StepStatus::Verified
+        state.status(ghosty_config::SetupStep::ProviderModel),
+        ghosty_config::StepStatus::Verified
     );
     let provider_model_result = state
         .steps
-        .get(&codewhale_config::SetupStep::ProviderModel)
+        .get(&ghosty_config::SetupStep::ProviderModel)
         .and_then(|entry| entry.result.as_deref())
         .expect("provider/model result");
     assert!(provider_model_result.contains("provider=deepseek"));
@@ -20667,12 +20650,12 @@ async fn provider_switch_rollback_corrects_setup_receipt_when_persistence_fails(
         Some("kimi-k2.6".to_string()),
     )
     .await;
-    let target_state = codewhale_config::SetupState::load()
+    let target_state = ghosty_config::SetupState::load()
         .expect("load target setup state")
         .expect("target setup state");
     let target_result = target_state
         .steps
-        .get(&codewhale_config::SetupStep::ProviderModel)
+        .get(&ghosty_config::SetupStep::ProviderModel)
         .and_then(|entry| entry.result.as_deref())
         .expect("target provider/model result");
     assert!(target_result.contains("provider=moonshot"));
@@ -20695,12 +20678,12 @@ async fn provider_switch_rollback_corrects_setup_receipt_when_persistence_fails(
         "{rollback_status}"
     );
     assert!(app.pending_route_save.is_none());
-    let state = codewhale_config::SetupState::load()
+    let state = ghosty_config::SetupState::load()
         .expect("load setup state")
         .expect("setup state");
     let provider_model_result = state
         .steps
-        .get(&codewhale_config::SetupStep::ProviderModel)
+        .get(&ghosty_config::SetupStep::ProviderModel)
         .and_then(|entry| entry.result.as_deref())
         .expect("provider/model result");
     assert!(provider_model_result.contains("provider=deepseek"));
@@ -20782,7 +20765,7 @@ fn env_only_auth_failure_reopens_provider_onboarding() {
     use crate::error_taxonomy::ErrorEnvelope;
     let mut app = create_test_app();
     app.api_provider = crate::config::ApiProvider::Anthropic;
-    app.config_path = Some(std::path::PathBuf::from("/tmp/codewhale-phase2.toml"));
+    app.config_path = Some(std::path::PathBuf::from("/tmp/ghosty-phase2.toml"));
     app.api_key_env_only = true;
     app.onboarding = crate::tui::app::OnboardingState::None;
     app.onboarding_needs_api_key = false;
@@ -20807,7 +20790,7 @@ fn env_only_auth_failure_reopens_provider_onboarding() {
     assert!(
         status.contains("anthropic")
             && status.contains("ANTHROPIC_API_KEY")
-            && status.contains("/tmp/codewhale-phase2.toml"),
+            && status.contains("/tmp/ghosty-phase2.toml"),
         "expected active-provider/env/path recovery hint, got {status:?}"
     );
     assert!(!status.contains("DEEPSEEK_API_KEY"), "{status}");
@@ -21743,7 +21726,7 @@ fn subagent_completion_notification_uses_summary_line_not_sentinel() {
     let payload = crate::tui::notifications::subagent_terminal_payload(
         crate::localization::Locale::En,
         "agent_live",
-        "Finished the docs audit.\n<codewhale:subagent.done>{}</codewhale:subagent.done>",
+        "Finished the docs audit.\n<ghosty:subagent.done>{}</ghosty:subagent.done>",
         &crate::tools::subagent::SubAgentStatus::Completed,
         false,
         Duration::from_secs(42),
@@ -21752,7 +21735,7 @@ fn subagent_completion_notification_uses_summary_line_not_sentinel() {
     assert_eq!(payload.headline(), "Sub-agent complete");
     assert_eq!(payload.detail(), Some("agent_live"));
     assert_eq!(payload.preview(), Some("Finished the docs audit."));
-    assert!(!payload.render_inline().contains("codewhale:subagent.done"));
+    assert!(!payload.render_inline().contains("ghosty:subagent.done"));
 }
 
 #[test]
@@ -21776,7 +21759,7 @@ fn subagent_cancelled_notification_never_claims_completion() {
     let payload = crate::tui::notifications::subagent_terminal_payload(
         crate::localization::Locale::En,
         "agent_stopped",
-        "Cancelled\n<codewhale:subagent.done>{\"status\":\"cancelled\"}</codewhale:subagent.done>",
+        "Cancelled\n<ghosty:subagent.done>{\"status\":\"cancelled\"}</ghosty:subagent.done>",
         &crate::tools::subagent::SubAgentStatus::Cancelled,
         false,
         Duration::from_secs(2),
@@ -22213,10 +22196,8 @@ mod work_sidebar_projection_tests {
         // Verify that killing a shell job via ShellManager removes it from
         // the list of running jobs, so the task panel refresh picks up the
         // correct state.
-        let temp_dir = std::env::temp_dir().join(format!(
-            "codewhale-test-shell-cancel-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("ghosty-test-shell-cancel-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&temp_dir);
         let mut manager = crate::tools::shell::ShellManager::new(temp_dir.clone());
 
@@ -22679,7 +22660,7 @@ fn six_worker_progress_storm_keeps_input_render_and_cancel_live() {
 }
 
 #[test]
-fn terminal_input_child_pause_drains_codewhale_events_before_editor_handoff() {
+fn terminal_input_child_pause_drains_ghosty_events_before_editor_handoff() {
     let (tx, rx) = std::sync::mpsc::channel();
     tx.send(TerminalInputMessage::Event(Event::Key(KeyEvent::new(
         KeyCode::Char('x'),
@@ -22717,7 +22698,7 @@ fn terminal_input_child_pause_drains_codewhale_events_before_editor_handoff() {
 
     assert!(
         pending_terminal_events.is_empty(),
-        "pending CodeWhale terminal events must not leak into the editor handoff"
+        "pending GhostyCode terminal events must not leak into the editor handoff"
     );
     assert!(
         input.try_recv().expect("drained channel").is_none(),
@@ -23051,9 +23032,10 @@ mod work_surface {
         app
     }
 
-    /// The whale's belly: a run of upper-block glyphs no other chrome draws.
+    /// La marca idle es el fantasma de GhostyCode (upstream dibuja una ballena
+    /// aquí). Su fila inferior no la pinta ningún otro chrome.
     fn has_idle_whale(rendered: &str) -> bool {
-        rendered.contains("▀▀▀▀▀▀▀▀")
+        rendered.contains(crate::tui::underwater::GHOST_BOTTOM.trim())
     }
 
     /// The strip height for this frame, measured the way the shell measures it:

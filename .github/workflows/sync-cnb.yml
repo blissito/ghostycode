@@ -1,6 +1,6 @@
 name: Sync to CNB
 
-# Mirror commits and release tags to cnb.cool/codewhale.net/codewhale
+# Mirror commits and release tags to cnb.cool/ghosty.net/ghosty
 # so users behind GitHub-blocking networks can fetch the source and tagged
 # releases from the Tencent-hosted mirror.
 #
@@ -69,7 +69,7 @@ jobs:
           # special characters. CNB tokens are typically alphanumeric so
           # this is belt-and-suspenders.
           ENCODED_TOKEN="$(printf '%s' "${CNB_TOKEN}" | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))')"
-          REMOTE_URL="https://cnb:${ENCODED_TOKEN}@cnb.cool/codewhale.net/codewhale.git"
+          REMOTE_URL="https://cnb:${ENCODED_TOKEN}@cnb.cool/ghosty.net/ghosty.git"
           # Use a masked alias so the token never appears in log lines.
           git remote add cnb "${REMOTE_URL}"
 

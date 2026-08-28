@@ -3,8 +3,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use codewhale_workflow_js::testing::{FakeDriver, FakeReply};
-use codewhale_workflow_js::{
+use ghosty_workflow_js::testing::{FakeDriver, FakeReply};
+use ghosty_workflow_js::{
     ProgressEvent, WORKFLOW_LIFETIME_CAP, WorkflowJsError, WorkflowRunCancel, WorkflowVm,
 };
 use serde_json::json;
@@ -18,7 +18,7 @@ async fn run(
         .run_script(
             source,
             args,
-            driver.clone() as Arc<dyn codewhale_workflow_js::WorkflowDriver>,
+            driver.clone() as Arc<dyn ghosty_workflow_js::WorkflowDriver>,
         )
         .await
 }
@@ -649,7 +649,7 @@ async fn parallel_partial_mode_still_fails_the_run_on_cancellation() {
                 ], { mode: "partial" });
                 "#,
                 json!(null),
-                run_driver as Arc<dyn codewhale_workflow_js::WorkflowDriver>,
+                run_driver as Arc<dyn ghosty_workflow_js::WorkflowDriver>,
                 run_cancel,
             )
             .await
@@ -946,7 +946,7 @@ async fn cancellation_during_repair_terminates_cleanly() {
                 });
                 "#,
                 json!(null),
-                run_driver as Arc<dyn codewhale_workflow_js::WorkflowDriver>,
+                run_driver as Arc<dyn ghosty_workflow_js::WorkflowDriver>,
                 run_cancel,
             )
             .await
@@ -1605,7 +1605,7 @@ async fn dropping_the_run_future_cancels_outstanding_tasks() {
         let fut = vm.run_script(
             "await task({ description: 'hang forever' }); return 'unreachable';",
             json!(null),
-            driver.clone() as Arc<dyn codewhale_workflow_js::WorkflowDriver>,
+            driver.clone() as Arc<dyn ghosty_workflow_js::WorkflowDriver>,
         );
         let outcome = tokio::time::timeout(Duration::from_millis(400), fut).await;
         assert!(outcome.is_err(), "run should still be pending at timeout");
@@ -1634,7 +1634,7 @@ async fn parallel_does_not_continue_after_external_run_cancellation() {
                 return "wrong";
                 "#,
                 json!(null),
-                run_driver as Arc<dyn codewhale_workflow_js::WorkflowDriver>,
+                run_driver as Arc<dyn ghosty_workflow_js::WorkflowDriver>,
                 run_cancel,
             )
             .await

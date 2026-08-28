@@ -906,7 +906,7 @@ mod tests {
         let mut app = test_app();
         app.runtime_turn_status = Some("completed".to_string());
         app.push_status_toast(
-            "Auto-denied exec_shell: denied earlier; restart Codewhale",
+            "Auto-denied exec_shell: denied earlier; restart Ghosty",
             crate::tui::app::StatusToastLevel::Warning,
             Some(12_000),
         );
@@ -1162,7 +1162,7 @@ mod tests {
     #[test]
     fn a_clause_less_warning_sheds_at_inner_joints_rather_than_vanishing() {
         const WARNING: &str =
-            "Auto-denied exec_shell: denied earlier; restart Codewhale to re-enable it.";
+            "Auto-denied exec_shell: denied earlier; restart Ghosty to re-enable it.";
         assert_eq!(fit_notice(WARNING, 120).as_deref(), Some(WARNING));
         assert_eq!(
             fit_notice(WARNING, 60).as_deref(),
@@ -1225,7 +1225,7 @@ mod tests {
         // only the semantic label — notices included.)
         let mut urgent = running_tool_app("cargo build -p tui");
         urgent.push_status_toast(
-            "Auto-denied exec_shell: denied earlier; restart Codewhale to re-enable it.",
+            "Auto-denied exec_shell: denied earlier; restart Ghosty to re-enable it.",
             crate::tui::app::StatusToastLevel::Warning,
             None,
         );

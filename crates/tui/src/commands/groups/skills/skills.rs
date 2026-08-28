@@ -24,7 +24,7 @@ fn discover_visible_skills(app: &App) -> SkillRegistry {
     crate::skills::discover_for_workspace_and_dir_with_mode_and_plugins(
         &app.workspace,
         &app.skills_dir,
-        crate::skills::SkillDiscoveryMode::from_codewhale_only(app.skills_scan_codewhale_only),
+        crate::skills::SkillDiscoveryMode::from_ghosty_only(app.skills_scan_ghosty_only),
         Some(app.plugin_registry.as_ref()),
     )
     .into_enabled()
@@ -32,8 +32,7 @@ fn discover_visible_skills(app: &App) -> SkillRegistry {
 
 #[cfg(test)]
 fn discover_visible_skills(app: &App) -> SkillRegistry {
-    let mode =
-        crate::skills::SkillDiscoveryMode::from_codewhale_only(app.skills_scan_codewhale_only);
+    let mode = crate::skills::SkillDiscoveryMode::from_ghosty_only(app.skills_scan_ghosty_only);
     TEST_HOME_DIR
         .with(|home| {
             if let Some(home) = home.borrow().as_deref() {
@@ -70,13 +69,13 @@ fn render_skill_warnings(registry: &SkillRegistry) -> String {
 }
 
 fn skill_discovery_mode(app: &App) -> crate::skills::SkillDiscoveryMode {
-    crate::skills::SkillDiscoveryMode::from_codewhale_only(app.skills_scan_codewhale_only)
+    crate::skills::SkillDiscoveryMode::from_ghosty_only(app.skills_scan_ghosty_only)
 }
 
 fn skill_discovery_mode_label(mode: crate::skills::SkillDiscoveryMode) -> &'static str {
     match mode {
         crate::skills::SkillDiscoveryMode::Compatible => "compatible",
-        crate::skills::SkillDiscoveryMode::CodeWhaleOnly => "codewhale-only",
+        crate::skills::SkillDiscoveryMode::GhostyCodeOnly => "ghosty-only",
     }
 }
 
@@ -154,7 +153,7 @@ fn inspect_skills(app: &mut App) -> CommandResult {
 /// `suggest <task>` to rank remote catalog entries for a task without
 /// installing anything.
 /// Pass `sync` to pull the registry index and download all skills to the
-/// local cache (`~/.codewhale/cache/skills/`). Pass `inspect` to show local
+/// local cache (`~/.ghosty/cache/skills/`). Pass `inspect` to show local
 /// discovery mode, searched directories, and skill source paths.
 fn list_skills(app: &mut App, arg: Option<&str>) -> CommandResult {
     let mut prefix: Option<String> = None;
@@ -520,7 +519,7 @@ fn install_skill(app: &mut App, args: &str) -> CommandResult {
         Ok(s) => s,
         Err(err) => return CommandResult::error(format!("Invalid install source: {err}")),
     };
-    // Legacy no-scope install maps to the CodeWhale global owned root.
+    // Legacy no-scope install maps to the GhostyCode global owned root.
     let target = scope.unwrap_or(SkillTargetScope::Global);
     let workspace = app.workspace.clone();
     let home = crate::config::effective_home_dir();
@@ -789,7 +788,7 @@ fn suggest_remote_skills(app: &mut App, task: &str) -> CommandResult {
 // ─── /skills sync ──────────────────────────────────────────────────────────
 
 /// Fetch the remote registry index and download every listed skill into the
-/// local cache (`~/.codewhale/cache/skills/<name>/`).
+/// local cache (`~/.ghosty/cache/skills/<name>/`).
 ///
 /// For each skill the sync checks the cached ETag / SHA-256 before
 /// downloading so unchanged skills are skipped in O(1) network round-trips.
@@ -891,14 +890,14 @@ where
 fn needs_approval_message(host: &str) -> String {
     format!(
         "Network policy requires approval for {host}.\n\
-         Add it to your allow list with `/network allow {host}` (or set [network].default = \"allow\" in ~/.codewhale/config.toml), then retry."
+         Add it to your allow list with `/network allow {host}` (or set [network].default = \"allow\" in ~/.ghosty/config.toml), then retry."
     )
 }
 
 fn network_denied_message(host: &str) -> String {
     format!(
         "Network policy denied access to {host}.\n\
-         Remove the deny entry from ~/.codewhale/config.toml under [network] or contact your administrator."
+         Remove the deny entry from ~/.ghosty/config.toml under [network] or contact your administrator."
     )
 }
 
@@ -915,7 +914,7 @@ fn registry_fetch_error_hint(err: &anyhow::Error) -> Option<&'static str> {
         || msg.contains("nodename nor servname")
     {
         Some(
-            "Hint: DNS lookup failed. Check internet/DNS connectivity, or override the registry URL in [skills] of ~/.codewhale/config.toml.",
+            "Hint: DNS lookup failed. Check internet/DNS connectivity, or override the registry URL in [skills] of ~/.ghosty/config.toml.",
         )
     } else if msg.contains("connection refused")
         || msg.contains("connection reset")
@@ -934,7 +933,7 @@ fn registry_fetch_error_hint(err: &anyhow::Error) -> Option<&'static str> {
         )
     } else if msg.contains(" 404") || msg.contains("not found") {
         Some(
-            "Hint: registry URL returned 404. Verify the registry URL in [skills] of ~/.codewhale/config.toml.",
+            "Hint: registry URL returned 404. Verify the registry URL in [skills] of ~/.ghosty/config.toml.",
         )
     } else if msg.contains(" 401") || msg.contains(" 403") || msg.contains("forbidden") {
         Some(
@@ -1435,7 +1434,7 @@ mod tests {
     }
 
     #[test]
-    fn test_list_skills_respects_codewhale_only_scan() {
+    fn test_list_skills_respects_ghosty_only_scan() {
         let tmpdir = TempDir::new().unwrap();
         let _home = IsolatedHome::new(&tmpdir);
         let claude_skill_dir = tmpdir
@@ -1449,30 +1448,30 @@ mod tests {
             "---\nname: claude-skill\ndescription: Claude skill\n---\nbody",
         )
         .unwrap();
-        let codewhale_skill_dir = tmpdir
+        let ghosty_skill_dir = tmpdir
             .path()
-            .join(".codewhale")
+            .join(".ghosty")
             .join("skills")
-            .join("codewhale-skill");
-        std::fs::create_dir_all(&codewhale_skill_dir).unwrap();
+            .join("ghosty-skill");
+        std::fs::create_dir_all(&ghosty_skill_dir).unwrap();
         std::fs::write(
-            codewhale_skill_dir.join("SKILL.md"),
-            "---\nname: codewhale-skill\ndescription: CodeWhale skill\n---\nbody",
+            ghosty_skill_dir.join("SKILL.md"),
+            "---\nname: ghosty-skill\ndescription: GhostyCode skill\n---\nbody",
         )
         .unwrap();
 
         let mut app = create_test_app_with_tmpdir(&tmpdir);
-        app.skills_dir = tmpdir.path().join(".codewhale").join("skills");
-        app.skills_scan_codewhale_only = true;
+        app.skills_dir = tmpdir.path().join(".ghosty").join("skills");
+        app.skills_scan_ghosty_only = true;
         let result = list_skills(&mut app, Some(""));
         let msg = result.message.unwrap();
 
-        assert!(msg.contains("/codewhale-skill"), "got: {msg}");
+        assert!(msg.contains("/ghosty-skill"), "got: {msg}");
         assert!(!msg.contains("/claude-skill"), "got: {msg}");
     }
 
     #[test]
-    fn test_skills_inspect_reports_codewhale_only_scan_mode() {
+    fn test_skills_inspect_reports_ghosty_only_scan_mode() {
         let tmpdir = TempDir::new().unwrap();
         let _home = IsolatedHome::new(&tmpdir);
         let claude_skill_dir = tmpdir
@@ -1486,30 +1485,30 @@ mod tests {
             "---\nname: claude-skill\ndescription: Claude skill\n---\nbody",
         )
         .unwrap();
-        let codewhale_skill_dir = tmpdir
+        let ghosty_skill_dir = tmpdir
             .path()
-            .join(".codewhale")
+            .join(".ghosty")
             .join("skills")
-            .join("codewhale-skill");
-        std::fs::create_dir_all(&codewhale_skill_dir).unwrap();
+            .join("ghosty-skill");
+        std::fs::create_dir_all(&ghosty_skill_dir).unwrap();
         std::fs::write(
-            codewhale_skill_dir.join("SKILL.md"),
-            "---\nname: codewhale-skill\ndescription: CodeWhale skill\n---\nbody",
+            ghosty_skill_dir.join("SKILL.md"),
+            "---\nname: ghosty-skill\ndescription: GhostyCode skill\n---\nbody",
         )
         .unwrap();
 
         let mut app = create_test_app_with_tmpdir(&tmpdir);
-        app.skills_dir = tmpdir.path().join(".codewhale").join("skills");
-        app.skills_scan_codewhale_only = true;
+        app.skills_dir = tmpdir.path().join(".ghosty").join("skills");
+        app.skills_scan_ghosty_only = true;
         let result = list_skills(&mut app, Some("--inspect"));
         let msg = result.message.expect("inspect should return a message");
 
         let normalized = msg.replace('\\', "/");
         assert!(
-            normalized.contains("Discovery mode: codewhale-only"),
+            normalized.contains("Discovery mode: ghosty-only"),
             "got: {msg}"
         );
-        assert!(normalized.contains("codewhale-skill"), "got: {msg}");
+        assert!(normalized.contains("ghosty-skill"), "got: {msg}");
         assert!(!normalized.contains("claude-skill"), "got: {msg}");
         assert!(!normalized.contains(".claude/skills"), "got: {msg}");
     }
@@ -1542,10 +1541,10 @@ mod tests {
     fn test_skill_trust_message_marks_marker_advisory() {
         let tmpdir = TempDir::new().unwrap();
         let _home = IsolatedHome::new(&tmpdir);
-        // Mutations only touch CodeWhale-owned roots; place under project scope.
+        // Mutations only touch GhostyCode-owned roots; place under project scope.
         let skill_dir = tmpdir
             .path()
-            .join(".codewhale")
+            .join(".ghosty")
             .join("skills")
             .join("trusted-skill");
         std::fs::create_dir_all(&skill_dir).unwrap();
@@ -1579,7 +1578,7 @@ mod tests {
         let (scope, rest) = parse_scope_args("github:o/r").unwrap();
         assert_eq!(scope, None);
         assert_eq!(rest, "github:o/r");
-        // Bare install (no --project/--global) maps to the CodeWhale global root.
+        // Bare install (no --project/--global) maps to the GhostyCode global root.
         assert_eq!(
             scope.unwrap_or(SkillTargetScope::Global),
             SkillTargetScope::Global

@@ -2,5 +2,5 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() -> std::process::ExitCode {
-    codewhale_tui::run(std::env::args().collect())
+    ghosty_tui::run(std::env::args().collect())
 }

@@ -33,7 +33,7 @@
 //!   command writes a `.trusted` marker; tool-execution gating is a separate
 //!   concern that lives next to the tool registry.
 //! * Claude Code plugin archives that contain multiple skills are rejected with
-//!   an explicit migration message. Codewhale can install individual
+//!   an explicit migration message. Ghosty can install individual
 //!   `SKILL.md` bundles, including `.claude/skills/<name>/SKILL.md`, but it
 //!   does not execute `plugin.json` plugin runtimes or custom command bundles.
 
@@ -51,26 +51,26 @@ use thiserror::Error;
 use crate::network_policy::{Decision, NetworkPolicy, host_from_url};
 
 fn reqwest_client() -> reqwest::Client {
-    codewhale_release::platform_http_client_builder()
+    ghosty_release::platform_http_client_builder()
         .build()
         .expect("build platform HTTP client")
 }
 
 /// Cache directory for registry-synced skills.
 ///
-/// Lives at `~/.codewhale/cache/skills/` so it's separate from user-installed
+/// Lives at `~/.ghosty/cache/skills/` so it's separate from user-installed
 /// skills and can be blown away without losing anything irreplaceable.
 pub fn default_cache_skills_dir() -> PathBuf {
     crate::config::effective_home_dir().map_or_else(
-        || PathBuf::from("/tmp/codewhale/cache/skills"),
-        |p| p.join(".codewhale").join("cache").join("skills"),
+        || PathBuf::from("/tmp/ghosty/cache/skills"),
+        |p| p.join(".ghosty").join("cache").join("skills"),
     )
 }
 
 /// Default registry. Falls back to a community-curated `index.json` hosted on
 /// GitHub raw; users can override via `[skills] registry_url` in config.toml.
 pub const DEFAULT_REGISTRY_URL: &str =
-    "https://raw.githubusercontent.com/Hmbown/deepseek-skills/main/index.json";
+    "https://raw.githubusercontent.com/blissito/ghostycode/main/index.json";
 
 /// Default per-skill size cap (5 MiB). Honored at unpack time so a malicious
 /// gzip bomb can't blow up RAM.
@@ -234,7 +234,7 @@ pub enum InstallError {
     #[error("symlinks are not allowed in skill tarballs")]
     SymlinkRejected,
     #[error(
-        "Claude Code plugin archive contains multiple SKILL.md entries; Codewhale installs one SKILL.md bundle at a time and does not run plugin.json/custom-command runtimes. Install or migrate an individual skills/<name> directory instead"
+        "Claude Code plugin archive contains multiple SKILL.md entries; Ghosty installs one SKILL.md bundle at a time and does not run plugin.json/custom-command runtimes. Install or migrate an individual skills/<name> directory instead"
     )]
     ClaudePluginBundle,
     #[error("skill '{0}' is already installed; use update or remove it first")]
@@ -1667,10 +1667,10 @@ mod tests {
 
     #[test]
     fn parse_github_source() {
-        let s = InstallSource::parse("github:Hmbown/test-skill").unwrap();
+        let s = InstallSource::parse("github:blissito/ghostycode").unwrap();
         assert_eq!(
             s,
-            InstallSource::GitHubRepo("Hmbown/test-skill".to_string())
+            InstallSource::GitHubRepo("blissito/ghostycode".to_string())
         );
     }
 

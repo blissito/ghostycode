@@ -157,7 +157,7 @@ pub fn find_file_mention_completions(
     // Never-mentioned candidates fall back to the workspace ranker's order.
     let entries = super::file_frecency::rerank_by_frecency(entries);
     tracing::debug!(
-        target: "codewhale_tui::file_mention",
+        target: "ghosty_tui::file_mention",
         partial = %partial,
         workspace = %workspace.root.display(),
         cwd = ?std::env::current_dir().ok(),
@@ -808,7 +808,7 @@ const SCREENCAPTURE_TEMP_DIR_MARKERS: [&str; 2] = ["Temporary Items", "screencap
 /// the same home-first convention as `clipboard.rs`'s clipboard-images dir.
 pub(crate) fn screenshot_stabilization_dir(workspace: &Path) -> PathBuf {
     match crate::config::effective_home_dir() {
-        Some(home) => home.join(".codewhale").join("attachments"),
+        Some(home) => home.join(".ghosty").join("attachments"),
         None => workspace.join("attachments"),
     }
 }
@@ -1108,7 +1108,7 @@ fn local_context_from_file_mentions(
             }
         }
         tracing::debug!(
-            target: "codewhale_tui::file_mention",
+            target: "ghosty_tui::file_mention",
             raw_typed = %mention,
             workspace = %workspace.display(),
             cwd = ?std::env::current_dir().ok(),

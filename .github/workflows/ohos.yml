@@ -60,7 +60,7 @@ jobs:
           components: native
           cache: true
           mirror: true
-      - name: Check Codewhale TUI with the real SDK/sysroot
+      - name: Check Ghosty TUI with the real SDK/sysroot
         shell: bash
         env:
           OHOS_NATIVE_SDK: ${{ steps.ohos-sdk.outputs.ohos_sdk_native }}
@@ -69,4 +69,4 @@ jobs:
           test -x "${OHOS_NATIVE_SDK}/llvm/bin/clang"
           test -d "${OHOS_NATIVE_SDK}/sysroot"
           . ./scripts/ohos-env.sh
-          cargo check --target aarch64-unknown-linux-ohos -p codewhale-tui --locked
+          cargo check --target aarch64-unknown-linux-ohos -p ghosty-tui --locked

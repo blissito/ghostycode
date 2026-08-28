@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 use crate::config::ApiProvider;
 use crate::error_taxonomy::{ErrorCategory, ErrorEnvelope};
-use codewhale_config::route::{LogicalModelRef, RouteRequest, RouteResolver};
+use ghosty_config::route::{LogicalModelRef, RouteRequest, RouteResolver};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CredentialState {
@@ -250,7 +250,7 @@ pub(crate) fn credential_state_for_provider(
             .as_deref()
             .is_some_and(crate::config::auth_mode_uses_kimi_imported_token);
     if uses_kimi_imported_token {
-        // Kimi remains API-key-only until Codewhale has its own registered
+        // Kimi remains API-key-only until Ghosty has its own registered
         // OAuth client identity. Never inspect Kimi CLI storage here.
         return CredentialState::MissingKey;
     }
@@ -260,7 +260,7 @@ pub(crate) fn credential_state_for_provider(
         } else if provider != config.api_provider()
             && config.external_credential_read_consent_configured(
                 provider,
-                codewhale_config::ExternalCredentialSource::CodexCli,
+                ghosty_config::ExternalCredentialSource::CodexCli,
             )
         {
             CredentialState::ExternalConsent
@@ -281,7 +281,7 @@ pub(crate) fn credential_state_for_provider(
         } else if provider != config.api_provider()
             && config.external_credential_read_consent_configured(
                 provider,
-                codewhale_config::ExternalCredentialSource::GrokCli,
+                ghosty_config::ExternalCredentialSource::GrokCli,
             )
         {
             CredentialState::ExternalConsent
@@ -303,7 +303,7 @@ pub(crate) fn credential_state_for_provider(
         if provider != config.api_provider()
             && config.external_credential_read_consent_configured(
                 provider,
-                codewhale_config::ExternalCredentialSource::AgyCli,
+                ghosty_config::ExternalCredentialSource::AgyCli,
             )
         {
             return CredentialState::ExternalConsent;
@@ -320,7 +320,7 @@ pub(crate) fn credential_state_for_provider(
         && provider != config.api_provider()
         && config.external_credential_read_consent_configured(
             provider,
-            codewhale_config::ExternalCredentialSource::DshCli,
+            ghosty_config::ExternalCredentialSource::DshCli,
         )
     {
         CredentialState::ExternalConsent
@@ -364,7 +364,7 @@ pub(crate) fn route_is_valid_for_model(
     model: Option<&str>,
 ) -> bool {
     let compatibility_kind =
-        (provider == ApiProvider::DeepseekCN).then_some(codewhale_config::ProviderKind::Deepseek);
+        (provider == ApiProvider::DeepseekCN).then_some(ghosty_config::ProviderKind::Deepseek);
     let Some(kind) = provider.kind().or(compatibility_kind) else {
         return true;
     };
@@ -1232,7 +1232,7 @@ mod tests {
     fn disabled_external_imports_are_not_probed_by_readiness() {
         let _lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().expect("oauth fixture root");
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
         let kimi_home = temp.path().join("kimi");
         std::fs::create_dir_all(kimi_home.join("credentials")).expect("kimi credentials dir");
         std::fs::write(kimi_home.join("credentials/kimi-code.json"), "{not-json")
@@ -1321,7 +1321,7 @@ mod tests {
 
         let _cli_source = crate::test_support::EnvVarGuard::set("DEEPSEEK_API_KEY_SOURCE", "cli");
         let _cli_key =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_CLI_API_KEY", "explicit-cli-key");
+            crate::test_support::EnvVarGuard::set("GHOSTY_CLI_API_KEY", "explicit-cli-key");
         let cli_config = crate::config::Config {
             provider: Some("xai".to_string()),
             ..Default::default()
@@ -1448,12 +1448,12 @@ mod tests {
     fn ollama_readiness_distinguishes_local_from_cloud_credentials() {
         let _lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().expect("isolated credential home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _ollama_cloud_key = crate::test_support::EnvVarGuard::remove("OLLAMA_CLOUD_API_KEY");
         let _ollama_key = crate::test_support::EnvVarGuard::remove("OLLAMA_API_KEY");
         let _cli_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
 
         let local = crate::config::Config {
             provider: Some("ollama".to_string()),
@@ -1472,7 +1472,7 @@ mod tests {
             provider: Some("ollama".to_string()),
             providers: Some(crate::config::ProvidersConfig {
                 ollama: crate::config::ProviderConfig {
-                    base_url: Some(codewhale_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
+                    base_url: Some(ghosty_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -1501,11 +1501,11 @@ mod tests {
     fn explicit_api_key_mode_on_loopback_requires_a_real_credential() {
         let _lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().expect("isolated credential home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _vllm_key = crate::test_support::EnvVarGuard::remove("VLLM_API_KEY");
         let _cli_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
 
         let missing = crate::config::Config {
             provider: Some("vllm".to_string()),
@@ -1570,19 +1570,19 @@ mod tests {
     fn provider_auth_metadata_is_not_a_runtime_credential() {
         let _lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().expect("isolated credential home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _openai_key = crate::test_support::EnvVarGuard::remove("OPENAI_API_KEY");
         let _xai_key = crate::test_support::EnvVarGuard::remove("XAI_API_KEY");
         let _cli_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
 
         let command = crate::config::Config {
             provider: Some("openai".to_string()),
             providers: Some(crate::config::ProvidersConfig {
                 openai: crate::config::ProviderConfig {
-                    auth: Some(codewhale_config::ProviderAuthSourceToml {
-                        source: codewhale_config::AuthSourceKind::Command,
+                    auth: Some(ghosty_config::ProviderAuthSourceToml {
+                        source: ghosty_config::AuthSourceKind::Command,
                         command: vec!["secret-tool".to_string(), "lookup".to_string()],
                         timeout_ms: Some(2_000),
                         secret_id: None,
@@ -1602,11 +1602,11 @@ mod tests {
             provider: Some("xai".to_string()),
             providers: Some(crate::config::ProvidersConfig {
                 xai: crate::config::ProviderConfig {
-                    auth: Some(codewhale_config::ProviderAuthSourceToml {
-                        source: codewhale_config::AuthSourceKind::Secret,
+                    auth: Some(ghosty_config::ProviderAuthSourceToml {
+                        source: ghosty_config::AuthSourceKind::Secret,
                         command: Vec::new(),
                         timeout_ms: None,
-                        secret_id: Some("codewhale/xai".to_string()),
+                        secret_id: Some("ghosty/xai".to_string()),
                     }),
                     ..Default::default()
                 },
@@ -1697,7 +1697,7 @@ mod tests {
     fn xai_custom_endpoint_does_not_count_ambient_official_key() {
         let _lock = crate::test_support::lock_test_env();
         let _source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
         let _ambient = crate::test_support::EnvVarGuard::set("XAI_API_KEY", "ambient-xai-key");
         let config = crate::config::Config {
             provider: Some("xai".to_string()),
@@ -1761,19 +1761,19 @@ default_text_model = "deepseek-chat"
 "#,
         )
         .expect("write config");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-        let _provider = crate::test_support::EnvVarGuard::set("CODEWHALE_PROVIDER", "deepseek");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
+        let _provider = crate::test_support::EnvVarGuard::set("GHOSTY_PROVIDER", "deepseek");
         let _legacy_provider = crate::test_support::EnvVarGuard::remove("DEEPSEEK_PROVIDER");
         let _base = crate::test_support::EnvVarGuard::set(
-            "CODEWHALE_BASE_URL",
+            "GHOSTY_BASE_URL",
             "https://tenant-gateway.example.test/v1",
         );
         let _legacy_base = crate::test_support::EnvVarGuard::remove("DEEPSEEK_BASE_URL");
         let _model =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_MODEL", "anthropic/private-model");
+            crate::test_support::EnvVarGuard::set("GHOSTY_MODEL", "anthropic/private-model");
         let _source = crate::test_support::EnvVarGuard::set("DEEPSEEK_API_KEY_SOURCE", "cli");
         let _cli_key =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_CLI_API_KEY", "explicit-cli-key");
+            crate::test_support::EnvVarGuard::set("GHOSTY_CLI_API_KEY", "explicit-cli-key");
 
         let config = crate::config::Config::load(Some(config_path), None).expect("load config");
         assert_eq!(config.default_model(), "anthropic/private-model");
@@ -1793,7 +1793,7 @@ default_text_model = "deepseek-chat"
         let _lock = crate::test_support::lock_test_env();
         let _openai_key = crate::test_support::EnvVarGuard::remove("OPENAI_API_KEY");
         let _source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-        let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+        let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
         let local = crate::config::Config {
             provider: Some("openai".to_string()),
             providers: Some(crate::config::ProvidersConfig {

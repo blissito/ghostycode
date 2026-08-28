@@ -1,7 +1,7 @@
 # Issue Triage
 
 Triage aims issues at the agent-ready standard defined in
-the agent-ready issue standard (`codewhale-ops`): bodies that a fresh agent
+the agent-ready issue standard (`ghosty-ops`): bodies that a fresh agent
 can execute without extra context. This page covers the stale/`needs-info`
 lifecycle that runs alongside that standard.
 
@@ -38,17 +38,17 @@ Run these before changing stale policy or doing a manual cleanup pass:
 STALE_CUTOFF=$(python3 -c 'from datetime import date, timedelta; print(date.today() - timedelta(days=45))')
 NEEDS_INFO_CUTOFF=$(python3 -c 'from datetime import date, timedelta; print(date.today() - timedelta(days=30))')
 
-gh issue list --repo Hmbown/CodeWhale --state open \
+gh issue list --repo blissito/ghostycode --state open \
   --search "updated:<${STALE_CUTOFF}" \
   --limit 100 \
   --json number,title,updatedAt,labels,url
 
-gh issue list --repo Hmbown/CodeWhale --state open \
+gh issue list --repo blissito/ghostycode --state open \
   --search "label:needs-info updated:<${NEEDS_INFO_CUTOFF}" \
   --limit 100 \
   --json number,title,updatedAt,labels,url
 
-gh issue list --repo Hmbown/CodeWhale --state open \
+gh issue list --repo blissito/ghostycode --state open \
   --search "created:<${STALE_CUTOFF} comments:0 -label:keep-open -label:release-blocker -label:security" \
   --limit 100 \
   --json number,title,createdAt,updatedAt,labels,url
@@ -65,7 +65,7 @@ Before relying on automation, perform one manual pass:
   current-version reproduction details.
 - Close obvious GUI, VS Code, and web UI duplicates with links to canonical
   desktop/runtime issues.
-- Close old brand-discussion issues as superseded when the CodeWhale rebrand
+- Close old brand-discussion issues as superseded when the GhostyCode rebrand
   and README/history work already covers them.
 - Protect intentional v0.9.0 roadmap shards with `keep-open` or close them as
   superseded by a canonical epic.

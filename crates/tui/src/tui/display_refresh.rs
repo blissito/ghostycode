@@ -184,7 +184,7 @@ fn probe_inner() -> (Option<u32>, DisplayRefreshSource, &'static str) {
 }
 
 fn env_override_hz() -> Option<u32> {
-    let raw = std::env::var("CODEWHALE_DISPLAY_HZ").ok()?;
+    let raw = std::env::var("GHOSTY_DISPLAY_HZ").ok()?;
     raw.trim().parse().ok()
 }
 

@@ -1,7 +1,7 @@
-//! Self-update for the `codewhale` binary.
+//! Self-update for the `ghosty` binary.
 //!
 //! The `update` subcommand fetches the latest release from
-//! `github.com/Hmbown/CodeWhale/releases/latest`, downloads the
+//! `github.com/blissito/ghostycode/releases/latest`, downloads the
 //! platform-correct binary, verifies its SHA256 checksum, and atomically
 //! replaces the currently running binary.
 
@@ -14,7 +14,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
-use codewhale_release::{
+use ghosty_release::{
     CHECKSUM_MANIFEST_ASSET, InstallMethod, ReleaseChannel, ReleaseQuery, UPDATE_USER_AGENT,
     cnb_mirror_override_active, cnb_mirror_supports_target, cnb_release_base_url,
     compare_release_versions, is_beta_tag, mirror_asset_url, resolve_release_query,
@@ -27,9 +27,10 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-const GITHUB_LATEST_RELEASE_PAGE_URL: &str = "https://github.com/Hmbown/CodeWhale/releases/latest";
+const GITHUB_LATEST_RELEASE_PAGE_URL: &str =
+    "https://github.com/blissito/ghostycode/releases/latest";
 const GITHUB_RELEASE_DOWNLOAD_BASE_URL: &str =
-    "https://github.com/Hmbown/CodeWhale/releases/download";
+    "https://github.com/blissito/ghostycode/releases/download";
 const UPDATE_HTTP_ATTEMPTS: usize = 3;
 const UPDATE_HTTP_RETRY_DELAY_MS: u64 = 100;
 /// Ceiling for one asset download. Generous, because release binaries are tens
@@ -78,7 +79,7 @@ pub fn run_update(beta: bool, check_only: bool, proxy_arg: Option<String>) -> Re
         let latest_tag = &fetched.release.tag_name;
         println!("Latest {} release: {latest_tag}", channel.label());
         if update_is_needed(channel, current_version, latest_tag)? {
-            println!("Update available. Run `codewhale update` to install {latest_tag}.");
+            println!("Update available. Run `ghosty update` to install {latest_tag}.");
             println!(
                 "Release source: {}",
                 describe_release_source_for_check(&fetched, &plan.asset_stem, proxy.as_ref())
@@ -122,7 +123,7 @@ pub fn run_update(beta: bool, check_only: bool, proxy_arg: Option<String>) -> Re
     println!("Release source: {}", download.source.describe());
 
     // Step 3: Download and verify the sole implementation binary once. The
-    // installed `codew` and pre-0.9.5 `codewhale-tui` command paths are
+    // installed `ghosty-tui` and pre-0.9.5 `ghosty-tui` command paths are
     // compatibility names for these exact bytes, not separate release assets.
     println!("Downloading {}...", download.binary_name);
     let bytes = download_url(&download.binary_url, proxy.as_ref()).with_context(|| {
@@ -606,7 +607,7 @@ enum UpdateReleaseSource {
     GitHub,
     /// The first-party CNB mirror release for this exact tag (Linux x64 only).
     Cnb { base_url: String },
-    /// An operator-supplied asset directory (`CODEWHALE_RELEASE_BASE_URL`).
+    /// An operator-supplied asset directory (`GHOSTY_RELEASE_BASE_URL`).
     Mirror { base_url: String },
 }
 
@@ -732,7 +733,7 @@ fn github_source_candidate(release: &Release, asset_stem: &str) -> Option<Releas
 /// binary have to be taken from the same source.
 fn cnb_source_candidate(tag_name: &str, os: &str, rust_arch: &str) -> ReleaseSourceCandidate {
     let base_url = cnb_release_base_url(tag_name);
-    let binary_name = release_asset_name_for_prefix("codewhale", os, rust_arch);
+    let binary_name = release_asset_name_for_prefix("ghosty", os, rust_arch);
     ReleaseSourceCandidate {
         manifest_url: mirror_asset_url(&base_url, CHECKSUM_MANIFEST_ASSET),
         binary_url: mirror_asset_url(&base_url, &binary_name),
@@ -981,9 +982,9 @@ fn legacy_binary_message(current_exe: &Path) -> String {
         "\
 this binary ({exe}) is using the legacy deepseek/deepseek-tui command name.
 
-The package has been renamed to `codewhale`. This update will install the
-canonical `codewhale` command and refresh any existing `codew` or
-`codewhale-tui` compatibility command from the same binary beside the legacy
+The package has been renamed to `ghosty`. This update will install the
+canonical `ghosty` command and refresh any existing `ghosty_tui` or
+`ghosty_tui` compatibility command from the same binary beside the legacy
 command when the install directory is writable.
 DeepSeek provider support is unchanged.
 
@@ -992,23 +993,23 @@ original install method:
 
   npm:
     npm uninstall -g deepseek-tui
-    npm install -g codewhale
+    npm install -g ghosty
 
   Cargo:
     cargo uninstall deepseek-tui-cli 2>/dev/null || true
     cargo uninstall deepseek-tui 2>/dev/null || true
-    cargo install codewhale-cli --locked
+    cargo install ghosty-cli --locked
 
   Homebrew:
-    brew upgrade codewhale
+    brew upgrade ghosty
     # existing Cellar/deepseek-tui installs can still:
     brew upgrade deepseek-tui
 
   Manual binary:
-    download the matched codewhale asset from
-    https://github.com/Hmbown/CodeWhale/releases/latest
+    download the matched ghosty asset from
+    https://github.com/blissito/ghostycode/releases/latest
 
-Once `codewhale` is on your PATH, run `codewhale update` for future updates.",
+Once `ghosty` is on your PATH, run `ghosty update` for future updates.",
         exe = current_exe.display(),
     )
 }
@@ -1017,7 +1018,7 @@ fn command_name_for_exe(current_exe: &Path) -> String {
     let exe_name = current_exe
         .file_name()
         .and_then(|name| name.to_str())
-        .unwrap_or("codewhale")
+        .unwrap_or("ghosty")
         .to_ascii_lowercase();
     exe_name
         .strip_suffix(".exe")
@@ -1065,23 +1066,23 @@ fn update_plan_for_exe(current_exe: &Path) -> UpdatePlan {
         push_unique_path(&mut target_paths, current_exe.to_path_buf());
     }
 
-    let primary = installed_command_path(current_exe, "codewhale");
+    let primary = installed_command_path(current_exe, "ghosty");
     push_unique_path(&mut target_paths, primary);
 
-    for alias in ["codew", "codewhale-tui"] {
-        let alias_path = installed_command_path(current_exe, alias);
-        let migrate_legacy_tui = alias == "codewhale-tui"
-            && is_legacy_binary(current_exe)
-            && legacy_tui_command_exists_beside(current_exe);
-        if alias_path.exists() || command_name_for_exe(current_exe) == alias || migrate_legacy_tui {
-            push_unique_path(&mut target_paths, alias_path);
-        }
+    // Upstream refresca dos alias (`codew` y `codewhale-tui`); GhostyCode solo
+    // tuvo `ghosty-tui`, que ya no se publica pero se refresca si sigue ahí.
+    let alias = "ghosty-tui";
+    let alias_path = installed_command_path(current_exe, alias);
+    let migrate_legacy_tui =
+        is_legacy_binary(current_exe) && legacy_tui_command_exists_beside(current_exe);
+    if alias_path.exists() || command_name_for_exe(current_exe) == alias || migrate_legacy_tui {
+        push_unique_path(&mut target_paths, alias_path);
     }
 
     UpdatePlan {
         target_paths,
         asset_stem: release_asset_stem_for_prefix(
-            "codewhale",
+            "ghosty",
             std::env::consts::OS,
             std::env::consts::ARCH,
         ),
@@ -1105,7 +1106,7 @@ fn release_asset_name_for_prefix(prefix: &str, os: &str, rust_arch: &str) -> Str
 #[cfg(test)]
 fn release_asset_stem_for(current_exe: &Path, os: &str, rust_arch: &str) -> String {
     let _ = current_exe;
-    release_asset_stem_for_prefix("codewhale", os, rust_arch)
+    release_asset_stem_for_prefix("ghosty", os, rust_arch)
 }
 
 pub(crate) fn asset_matches_platform(asset_name: &str, binary_name: &str) -> bool {
@@ -1220,7 +1221,7 @@ fn update_http_client_with_timeout(
     proxy: Option<&Proxy>,
     timeout: Duration,
 ) -> Result<reqwest::blocking::Client> {
-    let mut builder = codewhale_release::platform_blocking_http_client_builder();
+    let mut builder = ghosty_release::platform_blocking_http_client_builder();
     if let Some(proxy) = proxy {
         builder = builder.proxy(proxy.clone());
     }
@@ -1269,7 +1270,7 @@ fn fetch_latest_release(channel: ReleaseChannel, proxy: Option<&Proxy>) -> Resul
 
 /// Name the source an environment override selected.
 ///
-/// `CODEWHALE_USE_CNB_MIRROR` and `CODEWHALE_RELEASE_BASE_URL` both resolve to
+/// `GHOSTY_USE_CNB_MIRROR` and `GHOSTY_RELEASE_BASE_URL` both resolve to
 /// a base URL, but only the first is the first-party mirror — reporting them
 /// alike would hide which one a user actually asked for.
 fn pinned_mirror_source(base_url: String) -> UpdateReleaseSource {
@@ -1307,7 +1308,7 @@ fn release_from_asset_base_url(
         browser_download_url: mirror_asset_url(base_url, CHECKSUM_MANIFEST_ASSET),
     }];
 
-    let name = release_asset_name_for_prefix("codewhale", os, rust_arch);
+    let name = release_asset_name_for_prefix("ghosty", os, rust_arch);
     assets.push(Asset {
         browser_download_url: mirror_asset_url(base_url, &name),
         name,
@@ -1450,8 +1451,8 @@ fn release_tag_from_github_release_url(url: &reqwest::Url) -> Option<String> {
 
 fn release_tag_from_github_release_html(body: &str) -> Option<String> {
     const MARKERS: &[&str] = &[
-        "/Hmbown/CodeWhale/releases/tag/",
-        "/hmbown/CodeWhale/releases/tag/",
+        "/blissito/ghostycode/releases/tag/",
+        "/hmbown/GhostyCode/releases/tag/",
         "/releases/tag/",
     ];
     for marker in MARKERS {
@@ -1471,7 +1472,7 @@ fn release_tag_from_github_release_html(body: &str) -> Option<String> {
 
 fn fetch_latest_beta_release_from_url(url: &str, proxy: Option<&Proxy>) -> Result<Release> {
     let body = fetch_release_json(url, "release list", proxy)?;
-    // GitHub caps this endpoint at 100 releases per page. Codewhale uses the
+    // GitHub caps this endpoint at 100 releases per page. Ghosty uses the
     // first page as the latest-beta search window, matching GitHub's ordering.
     let releases: Vec<Release> = serde_json::from_str(&body).with_context(|| {
         format!("failed to parse release list JSON from GitHub API. Response: {body}")
@@ -1626,7 +1627,7 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 
 fn glibc_check_disabled() -> bool {
     [
-        "CODEWHALE_SKIP_GLIBC_CHECK",
+        "GHOSTY_SKIP_GLIBC_CHECK",
         "DEEPSEEK_TUI_SKIP_GLIBC_CHECK",
         "DEEPSEEK_SKIP_GLIBC_CHECK",
     ]
@@ -1696,17 +1697,17 @@ fn glibc_compatibility_message(
     };
     format!(
         "\
-Prebuilt Codewhale asset `{asset_name}` requires GLIBC_{required}, but {host_line}
+Prebuilt Ghosty asset `{asset_name}` requires GLIBC_{required}, but {host_line}
 
 Official Linux release binaries are GNU libc builds. Ubuntu 22.04 ships glibc
 2.35, so it cannot run a binary that was built against Ubuntu 24.04/glibc 2.39.
 
 Install from source on this host instead:
 
-  cargo install codewhale-cli --locked
+  cargo install ghosty-cli --locked
 
 Release engineering follow-up: build Linux GNU assets against an older glibc
-baseline, or add a musl/static Linux asset. Set CODEWHALE_SKIP_GLIBC_CHECK=1 to
+baseline, or add a musl/static Linux asset. Set GHOSTY_SKIP_GLIBC_CHECK=1 to
 bypass this preflight at your own risk.",
         required = required.display(),
     )
@@ -1737,7 +1738,7 @@ where
         .unwrap_or_else(|| Path::new("."));
 
     let mut tmp = tempfile::Builder::new()
-        .prefix(".codewhale-update-")
+        .prefix(".ghosty-update-")
         .tempfile_in(parent)
         .with_context(|| format!("failed to create temp file in {}", parent.display()))?;
     tmp.write_all(new_bytes)
@@ -1827,12 +1828,12 @@ mod tests {
     /// exercise override precedence take this lock and restore what they found.
     static UPDATE_ENV_LOCK: Mutex<()> = Mutex::new(());
     const UPDATE_ENV_VARS: &[&str] = &[
-        codewhale_release::RELEASE_BASE_URL_ENV,
-        codewhale_release::LEGACY_RELEASE_BASE_URL_ENV,
-        codewhale_release::DEEPSEEK_RELEASE_BASE_URL_ENV,
-        codewhale_release::CNB_MIRROR_ENV,
-        codewhale_release::UPDATE_VERSION_ENV,
-        codewhale_release::LEGACY_UPDATE_VERSION_ENV,
+        ghosty_release::RELEASE_BASE_URL_ENV,
+        ghosty_release::LEGACY_RELEASE_BASE_URL_ENV,
+        ghosty_release::DEEPSEEK_RELEASE_BASE_URL_ENV,
+        ghosty_release::CNB_MIRROR_ENV,
+        ghosty_release::UPDATE_VERSION_ENV,
+        ghosty_release::LEGACY_UPDATE_VERSION_ENV,
     ];
 
     struct UpdateEnvGuard {
@@ -1938,7 +1939,7 @@ mod tests {
     #[test]
     fn android_loaded_image_resolves_agreed_mapping() {
         let dir = tempfile::TempDir::new().unwrap();
-        let executable = dir.path().join("codewhale");
+        let executable = dir.path().join("ghosty");
         write_test_executable(&executable);
         let maps = test_android_mapping_line(&executable, "r-xp");
 
@@ -1960,9 +1961,9 @@ mod tests {
         let install_dir = dir.path().join("install");
         std::fs::create_dir(&canonical_dir).unwrap();
         std::fs::create_dir(&install_dir).unwrap();
-        let canonical_dispatcher = canonical_dir.join("codewhale");
-        let canonical_tui = canonical_dir.join("codewhale-tui");
-        let invoked = install_dir.join("codewhale");
+        let canonical_dispatcher = canonical_dir.join("ghosty");
+        let canonical_tui = canonical_dir.join("ghosty-tui");
+        let invoked = install_dir.join("ghosty");
         write_test_executable(&canonical_dispatcher);
         write_test_executable(&canonical_tui);
         symlink(&canonical_dispatcher, &invoked).unwrap();
@@ -1986,7 +1987,7 @@ mod tests {
     #[test]
     fn android_loaded_image_requires_marker_mapping() {
         let dir = tempfile::TempDir::new().unwrap();
-        let executable = dir.path().join("codewhale");
+        let executable = dir.path().join("ghosty");
         write_test_executable(&executable);
         let maps = test_android_mapping_line(&executable, "r-xp");
 
@@ -2003,7 +2004,7 @@ mod tests {
     #[test]
     fn android_loaded_image_requires_executable_mapping() {
         let dir = tempfile::TempDir::new().unwrap();
-        let executable = dir.path().join("codewhale");
+        let executable = dir.path().join("ghosty");
         write_test_executable(&executable);
         let maps = test_android_mapping_line(&executable, "rw-p");
 
@@ -2023,7 +2024,7 @@ mod tests {
     #[test]
     fn android_loaded_image_rejects_anonymous_mapping() {
         let dir = tempfile::TempDir::new().unwrap();
-        let executable = dir.path().join("codewhale");
+        let executable = dir.path().join("ghosty");
         write_test_executable(&executable);
         let maps = "1000-2000 r-xp 00000000 00:00 0\n";
 
@@ -2041,13 +2042,13 @@ mod tests {
     #[test]
     fn android_loaded_image_rejects_relative_or_deleted_paths() {
         let dir = tempfile::TempDir::new().unwrap();
-        let executable = dir.path().join("codewhale");
+        let executable = dir.path().join("ghosty");
         write_test_executable(&executable);
         let metadata = std::fs::metadata(&executable).unwrap();
         use std::os::unix::fs::MetadataExt;
         let (device_major, device_minor) = android_device_parts(metadata.dev());
         let relative_maps = format!(
-            "1000-2000 r-xp 00000000 {:x}:{:x} {} codewhale\n",
+            "1000-2000 r-xp 00000000 {:x}:{:x} {} ghosty\n",
             device_major,
             device_minor,
             metadata.ino()
@@ -2078,7 +2079,7 @@ mod tests {
 
         let dir = tempfile::TempDir::new().unwrap();
         let runtime_linker = dir.path().join("linker64");
-        let invoked = dir.path().join("codewhale");
+        let invoked = dir.path().join("ghosty");
         write_test_executable(&runtime_linker);
         symlink(&runtime_linker, &invoked).unwrap();
         let maps = test_android_mapping_line(&invoked, "r-xp");
@@ -2125,15 +2126,15 @@ mod tests {
                 "{name} must never become an updater target"
             );
         }
-        assert!(!is_android_linker_name(Path::new("codewhale")));
+        assert!(!is_android_linker_name(Path::new("ghosty")));
     }
 
     #[cfg(unix)]
     #[test]
     fn android_loaded_image_rejects_authority_disagreement() {
         let dir = tempfile::TempDir::new().unwrap();
-        let mapped = dir.path().join("mapped-codewhale");
-        let dladdr = dir.path().join("dladdr-codewhale");
+        let mapped = dir.path().join("mapped-ghosty");
+        let dladdr = dir.path().join("dladdr-ghosty");
         write_test_executable(&mapped);
         write_test_executable(&dladdr);
         let maps = test_android_mapping_line(&mapped, "r-xp");
@@ -2151,7 +2152,7 @@ mod tests {
     #[test]
     fn android_loaded_image_rejects_non_executable_file() {
         let dir = tempfile::TempDir::new().unwrap();
-        let executable = dir.path().join("codewhale");
+        let executable = dir.path().join("ghosty");
         std::fs::write(&executable, b"not executable").unwrap();
         let maps = test_android_mapping_line(&executable, "r-xp");
 
@@ -2169,7 +2170,7 @@ mod tests {
     #[test]
     fn android_loaded_image_rejects_device_inode_mismatch() {
         let dir = tempfile::TempDir::new().unwrap();
-        let executable = dir.path().join("codewhale");
+        let executable = dir.path().join("ghosty");
         write_test_executable(&executable);
         let metadata = std::fs::metadata(&executable).unwrap();
         use std::os::unix::fs::MetadataExt;
@@ -2196,7 +2197,7 @@ mod tests {
     #[test]
     fn android_loaded_image_recheck_detects_pre_replace_swap() {
         let dir = tempfile::TempDir::new().unwrap();
-        let candidate = dir.path().join("codewhale");
+        let candidate = dir.path().join("ghosty");
         let replacement = dir.path().join("replacement");
         write_test_executable(&candidate);
         let maps = test_android_mapping_line(&candidate, "r-xp");
@@ -2217,8 +2218,8 @@ mod tests {
     #[test]
     fn android_identity_preflight_prevents_all_paired_replacements() {
         let dir = tempfile::TempDir::new().unwrap();
-        let primary = dir.path().join("codewhale");
-        let sibling = dir.path().join("codewhale-tui");
+        let primary = dir.path().join("ghosty");
+        let sibling = dir.path().join("ghosty-tui");
         let swapped_primary = dir.path().join("swapped-primary");
 
         write_test_executable(&primary);
@@ -2254,8 +2255,8 @@ mod tests {
         use std::cell::Cell;
 
         let dir = tempfile::TempDir::new().unwrap();
-        let primary = dir.path().join("codewhale");
-        let sibling = dir.path().join("codewhale-tui");
+        let primary = dir.path().join("ghosty");
+        let sibling = dir.path().join("ghosty-tui");
         let swapped_primary = dir.path().join("swapped-primary");
         write_test_executable(&primary);
         std::fs::write(&primary, b"original running primary").unwrap();
@@ -2297,7 +2298,7 @@ mod tests {
         use std::cell::Cell;
 
         let dir = tempfile::TempDir::new().unwrap();
-        let primary = dir.path().join("codewhale");
+        let primary = dir.path().join("ghosty");
         let swapped_primary = dir.path().join("swapped-primary");
         write_test_executable(&primary);
         std::fs::write(&primary, b"original running primary").unwrap();
@@ -2334,7 +2335,7 @@ mod tests {
                     .unwrap()
                     .file_name()
                     .to_string_lossy()
-                    .starts_with(".codewhale-update-")
+                    .starts_with(".ghosty-update-")
             }),
             "failed validation must clean the staged temp file"
         );
@@ -2342,21 +2343,21 @@ mod tests {
 
     /// Every command name resolves to the sole implementation asset.
     #[test]
-    fn every_invocation_name_uses_codewhale_release_asset() {
+    fn every_invocation_name_uses_ghosty_release_asset() {
         for command in [
-            "codewhale",
-            "codewhale.exe",
-            "codew",
-            "codew.exe",
-            "codewhale-tui",
-            "CodeWhale-TUI.exe",
+            "ghosty",
+            "ghosty.exe",
+            "ghosty-tui",
+            "ghosty-tui.exe",
+            "ghosty-tui",
+            "GhostyCode-TUI.exe",
             "deepseek",
             "deepseek-tui",
             "other-binary",
         ] {
             assert_eq!(
                 release_asset_stem_for(Path::new(command), "macos", "aarch64"),
-                "codewhale-macos-arm64"
+                "ghosty-macos-arm64"
             );
         }
     }
@@ -2369,20 +2370,20 @@ mod tests {
         assert!(is_legacy_binary(Path::new("/usr/local/bin/deepseek-tui")));
         assert!(is_legacy_binary(Path::new("DeepSeek.exe")));
         assert!(is_legacy_binary(Path::new("DeepSeek-TUI.exe")));
-        assert!(!is_legacy_binary(Path::new("codewhale")));
-        assert!(!is_legacy_binary(Path::new("codewhale-tui")));
-        assert!(!is_legacy_binary(Path::new("codew")));
+        assert!(!is_legacy_binary(Path::new("ghosty")));
+        assert!(!is_legacy_binary(Path::new("ghosty-tui")));
+        assert!(!is_legacy_binary(Path::new("ghosty-tui")));
     }
 
     #[test]
     fn managed_installs_are_warned_before_self_update_overwrites_them() {
         let npm = managed_install_warning(InstallMethod::Npm).expect("npm is package-managed");
-        assert!(npm.contains("npm install -g codewhale@latest"));
+        assert!(npm.contains("npm install -g ghosty@latest"));
         assert!(npm.contains("revert this update"));
 
         let brew =
             managed_install_warning(InstallMethod::Homebrew).expect("brew is package-managed");
-        assert!(brew.contains("brew upgrade codewhale"));
+        assert!(brew.contains("brew upgrade ghosty"));
 
         assert!(managed_install_warning(InstallMethod::Cargo).is_some());
 
@@ -2399,18 +2400,18 @@ mod tests {
         let message = legacy_binary_message(Path::new("/usr/local/bin/deepseek-tui"));
 
         assert!(message.contains("legacy deepseek/deepseek-tui command name"));
-        assert!(message.contains("canonical `codewhale` command"));
+        assert!(message.contains("canonical `ghosty` command"));
         assert!(message.contains("DeepSeek provider support"));
         assert!(message.contains("is unchanged"));
         assert!(message.contains("npm uninstall -g deepseek-tui"));
-        assert!(message.contains("npm install -g codewhale"));
+        assert!(message.contains("npm install -g ghosty"));
         assert!(message.contains("cargo uninstall deepseek-tui-cli 2>/dev/null || true"));
         assert!(message.contains("cargo uninstall deepseek-tui 2>/dev/null || true"));
-        assert!(message.contains("cargo install codewhale-cli --locked"));
-        assert!(!message.contains("cargo install codewhale-tui --locked"));
-        assert!(message.contains("brew upgrade codewhale"));
+        assert!(message.contains("cargo install ghosty-cli --locked"));
+        assert!(!message.contains("cargo install ghosty-tui --locked"));
+        assert!(message.contains("brew upgrade ghosty"));
         assert!(message.contains("brew upgrade deepseek-tui"));
-        assert!(message.contains("https://github.com/Hmbown/CodeWhale/releases/latest"));
+        assert!(message.contains("https://github.com/blissito/ghostycode/releases/latest"));
     }
 
     #[test]
@@ -2431,13 +2432,13 @@ mod tests {
             plan.target_paths,
             vec![
                 dir.path()
-                    .join(format!("codewhale{}", std::env::consts::EXE_SUFFIX)),
+                    .join(format!("ghosty{}", std::env::consts::EXE_SUFFIX)),
                 dir.path()
-                    .join(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX))
+                    .join(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX))
             ]
         );
-        assert!(plan.asset_stem.starts_with("codewhale-"));
-        assert!(!plan.asset_stem.starts_with("codewhale-tui-"));
+        assert!(plan.asset_stem.starts_with("ghosty-"));
+        assert!(!plan.asset_stem.starts_with("ghosty-tui-"));
     }
 
     #[test]
@@ -2458,25 +2459,25 @@ mod tests {
             plan.target_paths,
             vec![
                 dir.path()
-                    .join(format!("codewhale{}", std::env::consts::EXE_SUFFIX)),
+                    .join(format!("ghosty{}", std::env::consts::EXE_SUFFIX)),
                 dir.path()
-                    .join(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX))
+                    .join(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX))
             ]
         );
-        assert!(plan.asset_stem.starts_with("codewhale-"));
-        assert!(!plan.asset_stem.starts_with("codewhale-tui-"));
+        assert!(plan.asset_stem.starts_with("ghosty-"));
+        assert!(!plan.asset_stem.starts_with("ghosty-tui-"));
     }
 
     #[test]
     fn test_release_asset_stem_for_supported_platforms() {
         let cases = [
-            ("codewhale", "macos", "aarch64", "codewhale-macos-arm64"),
-            ("codewhale", "macos", "x86_64", "codewhale-macos-x64"),
-            ("codewhale", "linux", "x86_64", "codewhale-linux-x64"),
-            ("codewhale", "windows", "x86_64", "codewhale-windows-x64"),
-            ("codewhale", "windows", "aarch64", "codewhale-windows-arm64"),
-            ("codew", "macos", "aarch64", "codewhale-macos-arm64"),
-            ("codewhale-tui", "linux", "x86_64", "codewhale-linux-x64"),
+            ("ghosty", "macos", "aarch64", "ghosty-macos-arm64"),
+            ("ghosty", "macos", "x86_64", "ghosty-macos-x64"),
+            ("ghosty", "linux", "x86_64", "ghosty-linux-x64"),
+            ("ghosty", "windows", "x86_64", "ghosty-windows-x64"),
+            ("ghosty", "windows", "aarch64", "ghosty-windows-arm64"),
+            ("ghosty-tui", "macos", "aarch64", "ghosty-macos-arm64"),
+            ("ghosty-tui", "linux", "x86_64", "ghosty-linux-x64"),
         ];
 
         for (exe, os, arch, expected) in cases {
@@ -2489,10 +2490,10 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let dispatcher = dir
             .path()
-            .join(format!("codewhale{}", std::env::consts::EXE_SUFFIX));
+            .join(format!("ghosty{}", std::env::consts::EXE_SUFFIX));
         let tui = dir
             .path()
-            .join(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+            .join(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
         std::fs::write(&dispatcher, b"dispatcher").unwrap();
         std::fs::write(&tui, b"tui").unwrap();
 
@@ -2504,8 +2505,8 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(paths, vec![dispatcher.as_path(), tui.as_path()]);
-        assert!(plan.asset_stem.starts_with("codewhale-"));
-        assert!(!plan.asset_stem.starts_with("codewhale-tui-"));
+        assert!(plan.asset_stem.starts_with("ghosty-"));
+        assert!(!plan.asset_stem.starts_with("ghosty-tui-"));
     }
 
     #[test]
@@ -2513,13 +2514,13 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let dispatcher = dir
             .path()
-            .join(format!("codewhale{}", std::env::consts::EXE_SUFFIX));
+            .join(format!("ghosty{}", std::env::consts::EXE_SUFFIX));
         std::fs::write(&dispatcher, b"dispatcher").unwrap();
 
         let plan = update_plan_for_exe(&dispatcher);
 
         assert_eq!(plan.target_paths, vec![dispatcher]);
-        assert!(plan.asset_stem.starts_with("codewhale-"));
+        assert!(plan.asset_stem.starts_with("ghosty-"));
     }
 
     #[test]
@@ -2527,31 +2528,25 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let primary = dir
             .path()
-            .join(format!("codewhale{}", std::env::consts::EXE_SUFFIX));
-        let codew = dir
+            .join(format!("ghosty{}", std::env::consts::EXE_SUFFIX));
+        let ghosty_tui = dir
             .path()
-            .join(format!("codew{}", std::env::consts::EXE_SUFFIX));
-        let legacy_tui = dir
-            .path()
-            .join(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
-        for path in [&primary, &codew, &legacy_tui] {
+            .join(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
+        for path in [&primary, &ghosty_tui] {
             std::fs::write(path, b"v0.9.4 old bytes").unwrap();
         }
 
         let plan = update_plan_for_exe(&primary);
-        assert_eq!(
-            plan.target_paths,
-            vec![primary.clone(), codew.clone(), legacy_tui.clone()]
-        );
-        assert!(plan.asset_stem.starts_with("codewhale-"));
-        assert!(!plan.asset_stem.contains("codewhale-tui"));
+        assert_eq!(plan.target_paths, vec![primary.clone(), ghosty_tui.clone()]);
+        assert!(plan.asset_stem.starts_with("ghosty-"));
+        assert!(!plan.asset_stem.contains("ghosty-tui"));
 
         replace_verified_downloads(&plan.target_paths, b"v0.9.5 primary bytes", || Ok(())).unwrap();
 
-        for path in [&primary, &codew, &legacy_tui] {
+        for path in [&primary, &ghosty_tui] {
             assert_eq!(std::fs::read(path).unwrap(), b"v0.9.5 primary bytes");
         }
-        assert_ne!(std::fs::read(codew).unwrap(), b"v0.9.4 old bytes");
+        assert_ne!(std::fs::read(ghosty_tui).unwrap(), b"v0.9.4 old bytes");
     }
 
     #[test]
@@ -2559,28 +2554,28 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let primary = dir
             .path()
-            .join(format!("codewhale{}", std::env::consts::EXE_SUFFIX));
-        let codew = dir
+            .join(format!("ghosty{}", std::env::consts::EXE_SUFFIX));
+        let ghosty_tui = dir
             .path()
-            .join(format!("codew{}", std::env::consts::EXE_SUFFIX));
+            .join(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
         let legacy_tui = dir
             .path()
-            .join(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
-        for invoked in [&codew, &legacy_tui] {
-            for path in [&primary, &codew, &legacy_tui] {
+            .join(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
+        for invoked in [&ghosty_tui, &legacy_tui] {
+            for path in [&primary, &ghosty_tui, &legacy_tui] {
                 std::fs::write(path, b"old").unwrap();
             }
             let plan = update_plan_for_exe(invoked);
             assert_eq!(plan.target_paths.first(), Some(invoked));
             assert!(plan.target_paths.contains(&primary));
-            assert!(plan.target_paths.contains(&codew));
+            assert!(plan.target_paths.contains(&ghosty_tui));
             assert!(plan.target_paths.contains(&legacy_tui));
-            assert!(plan.asset_stem.starts_with("codewhale-"));
-            assert!(!plan.asset_stem.starts_with("codewhale-tui-"));
+            assert!(plan.asset_stem.starts_with("ghosty-"));
+            assert!(!plan.asset_stem.starts_with("ghosty-tui-"));
 
             replace_verified_downloads(&plan.target_paths, b"new primary bytes", || Ok(()))
                 .unwrap();
-            for path in [&primary, &codew, &legacy_tui] {
+            for path in [&primary, &ghosty_tui, &legacy_tui] {
                 assert_eq!(std::fs::read(path).unwrap(), b"new primary bytes");
             }
         }
@@ -2589,24 +2584,24 @@ mod tests {
     #[test]
     fn test_asset_matching_accepts_binary_assets_and_rejects_checksums() {
         assert!(asset_matches_platform(
-            "codewhale-macos-arm64",
-            "codewhale-macos-arm64"
+            "ghosty-macos-arm64",
+            "ghosty-macos-arm64"
         ));
         assert!(asset_matches_platform(
-            "codewhale-macos-arm64.tar.gz",
-            "codewhale-macos-arm64"
+            "ghosty-macos-arm64.tar.gz",
+            "ghosty-macos-arm64"
         ));
         assert!(asset_matches_platform(
-            "codewhale-tui-windows-x64.exe",
-            "codewhale-tui-windows-x64"
+            "ghosty-tui-windows-x64.exe",
+            "ghosty-tui-windows-x64"
         ));
         assert!(!asset_matches_platform(
-            "codewhale-tui-windows-x64.exe.sha256",
-            "codewhale-tui-windows-x64"
+            "ghosty-tui-windows-x64.exe.sha256",
+            "ghosty-tui-windows-x64"
         ));
         assert!(!asset_matches_platform(
-            "codewhale-macos-aarch64.tar.gz",
-            "codewhale-macos-arm64"
+            "ghosty-macos-aarch64.tar.gz",
+            "ghosty-macos-arm64"
         ));
     }
 
@@ -2617,22 +2612,20 @@ mod tests {
             prerelease: false,
             assets: vec![
                 Asset {
-                    name: "codewhale-macos-arm64.tar.gz".to_string(),
-                    browser_download_url: "https://example.invalid/codewhale-macos-arm64.tar.gz"
+                    name: "ghosty-macos-arm64.tar.gz".to_string(),
+                    browser_download_url: "https://example.invalid/ghosty-macos-arm64.tar.gz"
                         .to_string(),
                 },
                 Asset {
-                    name: "codewhale-macos-arm64".to_string(),
-                    browser_download_url: "https://example.invalid/codewhale-macos-arm64"
-                        .to_string(),
+                    name: "ghosty-macos-arm64".to_string(),
+                    browser_download_url: "https://example.invalid/ghosty-macos-arm64".to_string(),
                 },
             ],
         };
 
-        let asset =
-            select_platform_asset(&release, "codewhale-macos-arm64").expect("platform asset");
+        let asset = select_platform_asset(&release, "ghosty-macos-arm64").expect("platform asset");
 
-        assert_eq!(asset.name, "codewhale-macos-arm64");
+        assert_eq!(asset.name, "ghosty-macos-arm64");
     }
 
     #[test]
@@ -2641,16 +2634,15 @@ mod tests {
             tag_name: "v0.8.8".to_string(),
             prerelease: false,
             assets: vec![Asset {
-                name: "codewhale-macos-arm64.tar.gz".to_string(),
-                browser_download_url: "https://example.invalid/codewhale-macos-arm64.tar.gz"
+                name: "ghosty-macos-arm64.tar.gz".to_string(),
+                browser_download_url: "https://example.invalid/ghosty-macos-arm64.tar.gz"
                     .to_string(),
             }],
         };
 
-        let asset =
-            select_platform_asset(&release, "codewhale-macos-arm64").expect("platform asset");
+        let asset = select_platform_asset(&release, "ghosty-macos-arm64").expect("platform asset");
 
-        assert_eq!(asset.name, "codewhale-macos-arm64.tar.gz");
+        assert_eq!(asset.name, "ghosty-macos-arm64.tar.gz");
     }
 
     #[test]
@@ -2696,43 +2688,41 @@ mod tests {
     }
 
     #[test]
-    fn glibc_compatibility_message_is_codewhale_branded_and_actionable() {
+    fn glibc_compatibility_message_is_ghosty_branded_and_actionable() {
         let message = glibc_compatibility_message(
-            "codewhale-linux-x64",
+            "ghosty-linux-x64",
             GlibcVersion::new(2, 39, 0),
             Some(GlibcVersion::new(2, 35, 0)),
         );
 
-        assert!(message.contains("Prebuilt Codewhale asset `codewhale-linux-x64`"));
+        assert!(message.contains("Prebuilt Ghosty asset `ghosty-linux-x64`"));
         assert!(message.contains("requires GLIBC_2.39"));
         assert!(message.contains("this system has glibc 2.35"));
-        assert!(message.contains("cargo install codewhale-cli --locked"));
+        assert!(message.contains("cargo install ghosty-cli --locked"));
         assert!(message.contains("build Linux GNU assets against an older glibc"));
     }
 
     #[test]
     fn parse_checksum_manifest_accepts_sha256sum_format() {
         let manifest = "\
-2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824  codewhale-macos-arm64
-E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-windows-x64.exe
+2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824  ghosty-macos-arm64
+E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *ghosty-windows-x64.exe
 ";
         let checksums = parse_checksum_manifest(manifest).expect("valid manifest");
 
         assert_eq!(
-            checksums.get("codewhale-macos-arm64").map(String::as_str),
+            checksums.get("ghosty-macos-arm64").map(String::as_str),
             Some("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
         );
         assert_eq!(
-            checksums
-                .get("codewhale-windows-x64.exe")
-                .map(String::as_str),
+            checksums.get("ghosty-windows-x64.exe").map(String::as_str),
             Some("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
         );
     }
 
     #[test]
     fn parse_checksum_manifest_rejects_malformed_lines() {
-        let err = parse_checksum_manifest("not-a-hash  codewhale-macos-arm64")
+        let err = parse_checksum_manifest("not-a-hash  ghosty-macos-arm64")
             .expect_err("invalid manifest line should fail");
         assert!(
             err.to_string().contains("invalid SHA256 manifest line"),
@@ -2744,11 +2734,11 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     fn expected_sha256_from_manifest_requires_matching_asset() {
         let manifest =
             "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824  other-asset\n";
-        let err = expected_sha256_from_manifest(manifest, "codewhale-macos-arm64")
+        let err = expected_sha256_from_manifest(manifest, "ghosty-macos-arm64")
             .expect_err("missing asset should fail");
         assert!(
             err.to_string()
-                .contains("checksum manifest is missing codewhale-macos-arm64"),
+                .contains("checksum manifest is missing ghosty-macos-arm64"),
             "unexpected error: {err:#}"
         );
     }
@@ -2756,7 +2746,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     #[test]
     fn test_replace_binary_creates_and_replaces() {
         let dir = tempfile::TempDir::new().unwrap();
-        let target = dir.path().join("codewhale-test");
+        let target = dir.path().join("ghosty-test");
         // Write initial content
         std::fs::write(&target, b"old binary").unwrap();
 
@@ -2768,7 +2758,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     #[test]
     fn test_replace_binary_creates_new_file() {
         let dir = tempfile::TempDir::new().unwrap();
-        let target = dir.path().join("codewhale-new-test");
+        let target = dir.path().join("ghosty-new-test");
 
         replace_binary(&target, b"fresh binary").unwrap();
         let content = std::fs::read_to_string(&target).unwrap();
@@ -2782,12 +2772,12 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         let json = r#"{
           "tag_name": "v0.8.8",
           "assets": [
-            { "name": "codewhale-linux-x64",          "browser_download_url": "https://example.invalid/codewhale-linux-x64" },
-            { "name": "codewhale-macos-x64",          "browser_download_url": "https://example.invalid/codewhale-macos-x64" },
-            { "name": "codewhale-macos-arm64",        "browser_download_url": "https://example.invalid/codewhale-macos-arm64" },
-            { "name": "codewhale-windows-x64.exe",    "browser_download_url": "https://example.invalid/codewhale-windows-x64.exe" },
-            { "name": "codewhale-windows-x64.exe.sha256", "browser_download_url": "https://example.invalid/codewhale-windows-x64.exe.sha256" },
-            { "name": "codewhale-windows-arm64.exe",  "browser_download_url": "https://example.invalid/codewhale-windows-arm64.exe" }
+            { "name": "ghosty-linux-x64",          "browser_download_url": "https://example.invalid/ghosty-linux-x64" },
+            { "name": "ghosty-macos-x64",          "browser_download_url": "https://example.invalid/ghosty-macos-x64" },
+            { "name": "ghosty-macos-arm64",        "browser_download_url": "https://example.invalid/ghosty-macos-arm64" },
+            { "name": "ghosty-windows-x64.exe",    "browser_download_url": "https://example.invalid/ghosty-windows-x64.exe" },
+            { "name": "ghosty-windows-x64.exe.sha256", "browser_download_url": "https://example.invalid/ghosty-windows-x64.exe.sha256" },
+            { "name": "ghosty-windows-arm64.exe",  "browser_download_url": "https://example.invalid/ghosty-windows-arm64.exe" }
           ]
         }"#;
         serde_json::from_str(json).expect("mock release JSON")
@@ -2797,15 +2787,15 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     fn mocked_release_selects_dispatcher_asset_for_supported_platforms() {
         let release = mocked_release();
         let cases = [
-            ("macos", "aarch64", "codewhale-macos-arm64"),
-            ("macos", "x86_64", "codewhale-macos-x64"),
-            ("linux", "x86_64", "codewhale-linux-x64"),
-            ("windows", "x86_64", "codewhale-windows-x64.exe"),
-            ("windows", "aarch64", "codewhale-windows-arm64.exe"),
+            ("macos", "aarch64", "ghosty-macos-arm64"),
+            ("macos", "x86_64", "ghosty-macos-x64"),
+            ("linux", "x86_64", "ghosty-linux-x64"),
+            ("windows", "x86_64", "ghosty-windows-x64.exe"),
+            ("windows", "aarch64", "ghosty-windows-arm64.exe"),
         ];
 
         for (os, arch, expected) in cases {
-            let stem = release_asset_stem_for(Path::new("/usr/local/bin/codewhale"), os, arch);
+            let stem = release_asset_stem_for(Path::new("/usr/local/bin/ghosty"), os, arch);
             let asset = select_platform_asset(&release, &stem)
                 .unwrap_or_else(|| panic!("no asset for {os}/{arch} (stem {stem})"));
             assert_eq!(asset.name, expected, "{os}/{arch}");
@@ -2815,18 +2805,16 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     #[test]
     fn mocked_release_selects_primary_asset_when_compatibility_alias_invokes_update() {
         let release = mocked_release();
-        let stem = release_asset_stem_for(
-            Path::new("/usr/local/bin/codewhale-tui"),
-            "macos",
-            "aarch64",
-        );
+        let stem =
+            release_asset_stem_for(Path::new("/usr/local/bin/ghosty-tui"), "macos", "aarch64");
         let asset = select_platform_asset(&release, &stem).expect("primary platform asset");
-        assert_eq!(asset.name, "codewhale-macos-arm64");
+        assert_eq!(asset.name, "ghosty-macos-arm64");
 
-        let windows_stem = release_asset_stem_for(Path::new("C:\\codew.exe"), "windows", "aarch64");
+        let windows_stem =
+            release_asset_stem_for(Path::new("C:\\ghosty-tui.exe"), "windows", "aarch64");
         let windows_asset =
             select_platform_asset(&release, &windows_stem).expect("Windows ARM64 primary asset");
-        assert_eq!(windows_asset.name, "codewhale-windows-arm64.exe");
+        assert_eq!(windows_asset.name, "ghosty-windows-arm64.exe");
     }
 
     #[test]
@@ -2835,16 +2823,16 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         // Android asset stems. Verify every supported command name resolves to
         // the primary Android asset, never Linux or a removed TUI asset (#4241).
         assert_eq!(
-            release_asset_stem_for_prefix("codewhale", "android", "aarch64"),
-            "codewhale-android-arm64"
+            release_asset_stem_for_prefix("ghosty", "android", "aarch64"),
+            "ghosty-android-arm64"
         );
         assert_eq!(
-            release_asset_stem_for(Path::new("codewhale-tui"), "android", "aarch64"),
-            "codewhale-android-arm64"
+            release_asset_stem_for(Path::new("ghosty-tui"), "android", "aarch64"),
+            "ghosty-android-arm64"
         );
         assert_eq!(
-            release_asset_stem_for(Path::new("codew"), "android", "aarch64"),
-            "codewhale-android-arm64"
+            release_asset_stem_for(Path::new("ghosty-tui"), "android", "aarch64"),
+            "ghosty-android-arm64"
         );
     }
 
@@ -2857,7 +2845,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     #[test]
     fn android_release_assets_never_select_linux_arm64() {
         // Sanity: the stem formatter must never produce a linux-* stem for android.
-        let stem = release_asset_stem_for_prefix("codewhale", "android", "aarch64");
+        let stem = release_asset_stem_for_prefix("ghosty", "android", "aarch64");
         assert!(
             !stem.contains("linux"),
             "android stem must not contain linux: {stem}"
@@ -2877,18 +2865,18 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         assert_eq!(release.assets[0].name, CHECKSUM_MANIFEST_ASSET);
         assert_eq!(
             release.assets[0].browser_download_url,
-            "https://mirror.example/releases/v0.8.36/codewhale-artifacts-sha256.txt"
+            "https://mirror.example/releases/v0.8.36/ghosty-artifacts-sha256.txt"
         );
 
         let dispatcher =
-            select_platform_asset(&release, "codewhale-linux-x64").expect("dispatcher asset");
+            select_platform_asset(&release, "ghosty-linux-x64").expect("dispatcher asset");
         assert_eq!(
             dispatcher.browser_download_url,
-            "https://mirror.example/releases/v0.8.36/codewhale-linux-x64"
+            "https://mirror.example/releases/v0.8.36/ghosty-linux-x64"
         );
         assert_eq!(release.assets.len(), 2);
         assert!(
-            select_platform_asset(&release, "codewhale-tui-linux-x64").is_none(),
+            select_platform_asset(&release, "ghosty-tui-linux-x64").is_none(),
             "mirror fallback must not synthesize a removed TUI asset"
         );
     }
@@ -2904,10 +2892,10 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
 
         assert_eq!(release.tag_name, "v0.8.36");
         assert!(
-            select_platform_asset(&release, "codewhale-windows-x64")
-                .is_some_and(|asset| asset.name == "codewhale-windows-x64.exe")
+            select_platform_asset(&release, "ghosty-windows-x64")
+                .is_some_and(|asset| asset.name == "ghosty-windows-x64.exe")
         );
-        assert!(select_platform_asset(&release, "codewhale-tui-windows-x64").is_none());
+        assert!(select_platform_asset(&release, "ghosty-tui-windows-x64").is_none());
 
         let arm_release = release_from_mirror_base_url(
             "https://mirror.example/releases/v0.9.1",
@@ -2916,15 +2904,16 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
             "aarch64",
         );
         assert!(
-            select_platform_asset(&arm_release, "codewhale-windows-arm64")
-                .is_some_and(|asset| asset.name == "codewhale-windows-arm64.exe")
+            select_platform_asset(&arm_release, "ghosty-windows-arm64")
+                .is_some_and(|asset| asset.name == "ghosty-windows-arm64.exe")
         );
     }
 
     #[test]
     fn github_release_url_parser_extracts_tag() {
-        let url = reqwest::Url::parse("https://github.com/Hmbown/CodeWhale/releases/tag/v0.8.61")
-            .unwrap();
+        let url =
+            reqwest::Url::parse("https://github.com/blissito/ghostycode/releases/tag/v0.8.61")
+                .unwrap();
 
         assert_eq!(
             release_tag_from_github_release_url(&url).as_deref(),
@@ -2939,22 +2928,22 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         assert_eq!(release.tag_name, "v0.8.61");
         assert_eq!(
             release.assets[0].browser_download_url,
-            "https://github.com/Hmbown/CodeWhale/releases/download/v0.8.61/codewhale-artifacts-sha256.txt"
+            "https://github.com/blissito/ghostycode/releases/download/v0.8.61/ghosty-artifacts-sha256.txt"
         );
         let dispatcher =
-            select_platform_asset(&release, "codewhale-macos-arm64").expect("dispatcher asset");
+            select_platform_asset(&release, "ghosty-macos-arm64").expect("dispatcher asset");
         assert_eq!(
             dispatcher.browser_download_url,
-            "https://github.com/Hmbown/CodeWhale/releases/download/v0.8.61/codewhale-macos-arm64"
+            "https://github.com/blissito/ghostycode/releases/download/v0.8.61/ghosty-macos-arm64"
         );
         assert_eq!(release.assets.len(), 2);
-        assert!(select_platform_asset(&release, "codewhale-tui-macos-arm64").is_none());
+        assert!(select_platform_asset(&release, "ghosty-tui-macos-arm64").is_none());
     }
 
     #[test]
     fn latest_stable_redirect_fallback_reads_tag_url() {
         let (url, request_rx, handle) = serve_http_once("200 OK", "text/html", b"<html></html>");
-        let tag_url = url.replace("/release", "/Hmbown/CodeWhale/releases/tag/v9.9.9");
+        let tag_url = url.replace("/release", "/blissito/ghostycode/releases/tag/v9.9.9");
 
         let tag = fetch_latest_stable_tag_from_redirect_url(&tag_url, None)
             .expect("tag should parse from final URL");
@@ -2962,7 +2951,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         assert_eq!(tag, "v9.9.9");
         let request = request_rx.recv().expect("captured request");
         assert!(
-            request.starts_with("GET /Hmbown/CodeWhale/releases/tag/v9.9.9 "),
+            request.starts_with("GET /blissito/ghostycode/releases/tag/v9.9.9 "),
             "got {request:?}"
         );
         handle.join().expect("test server thread");
@@ -2971,8 +2960,8 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     #[test]
     fn github_release_html_parser_skips_empty_first_marker() {
         let body = r#"
-            <a href="/Hmbown/CodeWhale/releases/tag/?expanded=true">generic</a>
-            <a href="/Hmbown/CodeWhale/releases/tag/v9.9.9">latest</a>
+            <a href="/blissito/ghostycode/releases/tag/?expanded=true">generic</a>
+            <a href="/blissito/ghostycode/releases/tag/v9.9.9">latest</a>
         "#;
 
         assert_eq!(
@@ -2984,12 +2973,12 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     #[test]
     fn cnb_release_base_url_includes_tag_directory() {
         assert_eq!(
-            codewhale_release::cnb_release_base_url("0.8.47"),
-            "https://cnb.cool/codewhale.net/codewhale/-/releases/download/v0.8.47"
+            ghosty_release::cnb_release_base_url("0.8.47"),
+            "https://cnb.cool/ghosty.net/ghosty/-/releases/download/v0.8.47"
         );
         assert_eq!(
-            codewhale_release::cnb_release_base_url("v0.8.47"),
-            "https://cnb.cool/codewhale.net/codewhale/-/releases/download/v0.8.47"
+            ghosty_release::cnb_release_base_url("v0.8.47"),
+            "https://cnb.cool/ghosty.net/ghosty/-/releases/download/v0.8.47"
         );
     }
 
@@ -3017,11 +3006,11 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     #[test]
     fn parse_release_version_accepts_tags_and_build_suffixes() {
         assert_eq!(
-            codewhale_release::parse_release_version("v0.9.0-beta.1").unwrap(),
+            ghosty_release::parse_release_version("v0.9.0-beta.1").unwrap(),
             semver::Version::parse("0.9.0-beta.1").unwrap()
         );
         assert_eq!(
-            codewhale_release::parse_release_version("0.8.45 (abcdef123456)").unwrap(),
+            ghosty_release::parse_release_version("0.8.45 (abcdef123456)").unwrap(),
             semver::Version::parse("0.8.45").unwrap()
         );
     }
@@ -3053,17 +3042,14 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     fn update_fallback_hint_points_china_users_to_cnb_and_asset_mirrors() {
         let hint = update_network_fallback_hint();
 
-        assert!(hint.contains(codewhale_release::CNB_REPO_URL), "{hint}");
+        assert!(hint.contains(ghosty_release::CNB_REPO_URL), "{hint}");
         assert!(
-            hint.contains(codewhale_release::RELEASE_BASE_URL_ENV),
+            hint.contains(ghosty_release::RELEASE_BASE_URL_ENV),
             "{hint}"
         );
-        assert!(
-            hint.contains(codewhale_release::UPDATE_VERSION_ENV),
-            "{hint}"
-        );
-        assert!(hint.contains("codewhale-cli"), "{hint}");
-        assert!(!hint.contains("codewhale-tui --locked"), "{hint}");
+        assert!(hint.contains(ghosty_release::UPDATE_VERSION_ENV), "{hint}");
+        assert!(hint.contains("ghosty-cli"), "{hint}");
+        assert!(!hint.contains("ghosty-tui --locked"), "{hint}");
     }
 
     fn serve_http_responses(
@@ -3203,14 +3189,14 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
 
     fn manifest_covering_linux_x64() -> String {
         format!(
-            "{}  codewhale-linux-x64\n{}  codew-linux-x64\n",
+            "{}  ghosty-linux-x64\n{}  ghosty-tui-linux-x64\n",
             "a".repeat(64),
             "b".repeat(64)
         )
     }
 
     fn manifest_missing_linux_x64() -> String {
-        format!("{}  codewhale-macos-arm64\n", "c".repeat(64))
+        format!("{}  ghosty-macos-arm64\n", "c".repeat(64))
     }
 
     fn github_fetched_release(tag_name: &str) -> FetchedRelease {
@@ -3220,15 +3206,15 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
                 prerelease: is_beta_tag(tag_name),
                 assets: vec![
                     Asset {
-                        name: "codewhale-linux-x64".to_string(),
+                        name: "ghosty-linux-x64".to_string(),
                         browser_download_url: format!(
-                            "https://github.com/Hmbown/CodeWhale/releases/download/{tag_name}/codewhale-linux-x64"
+                            "https://github.com/blissito/ghostycode/releases/download/{tag_name}/ghosty-linux-x64"
                         ),
                     },
                     Asset {
                         name: CHECKSUM_MANIFEST_ASSET.to_string(),
                         browser_download_url: format!(
-                            "https://github.com/Hmbown/CodeWhale/releases/download/{tag_name}/{CHECKSUM_MANIFEST_ASSET}"
+                            "https://github.com/blissito/ghostycode/releases/download/{tag_name}/{CHECKSUM_MANIFEST_ASSET}"
                         ),
                     },
                 ],
@@ -3242,7 +3228,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         os: &str,
         arch: &str,
     ) -> Option<Vec<ReleaseSourceCandidate>> {
-        proactive_source_candidates(fetched, "codewhale-linux-x64", os, arch)
+        proactive_source_candidates(fetched, "ghosty-linux-x64", os, arch)
     }
 
     fn linux_x64_candidates(tag_name: &str) -> Vec<ReleaseSourceCandidate> {
@@ -3276,12 +3262,12 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         );
         assert_eq!(
             plan.binary_url,
-            "https://cnb.cool/codewhale.net/codewhale/-/releases/download/v9.9.9/codewhale-linux-x64",
+            "https://cnb.cool/ghosty.net/ghosty/-/releases/download/v9.9.9/ghosty-linux-x64",
             "the binary must come from the source whose manifest won"
         );
-        assert_eq!(plan.binary_name, "codewhale-linux-x64");
+        assert_eq!(plan.binary_name, "ghosty-linux-x64");
         assert!(
-            plan.checksums.contains_key("codewhale-linux-x64"),
+            plan.checksums.contains_key("ghosty-linux-x64"),
             "the winning manifest must be carried forward, not refetched"
         );
     }
@@ -3311,7 +3297,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         assert_eq!(plan.source, UpdateReleaseSource::GitHub);
         assert_eq!(
             plan.binary_url,
-            "https://github.com/Hmbown/CodeWhale/releases/download/v9.9.9/codewhale-linux-x64"
+            "https://github.com/blissito/ghostycode/releases/download/v9.9.9/ghosty-linux-x64"
         );
     }
 
@@ -3377,7 +3363,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
             "unexpected error: {message}"
         );
         assert!(
-            message.contains("does not list codewhale-linux-x64"),
+            message.contains("does not list ghosty-linux-x64"),
             "the unusable manifest must be reported as unusable: {message}"
         );
         assert!(
@@ -3420,13 +3406,13 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         );
         assert_eq!(
             candidate.manifest_url,
-            "https://cnb.cool/codewhale.net/codewhale/-/releases/download/v0.9.0-beta.2/codewhale-artifacts-sha256.txt"
+            "https://cnb.cool/ghosty.net/ghosty/-/releases/download/v0.9.0-beta.2/ghosty-artifacts-sha256.txt"
         );
         assert_eq!(
             candidate.binary_url,
-            "https://cnb.cool/codewhale.net/codewhale/-/releases/download/v0.9.0-beta.2/codewhale-linux-x64"
+            "https://cnb.cool/ghosty.net/ghosty/-/releases/download/v0.9.0-beta.2/ghosty-linux-x64"
         );
-        assert_eq!(candidate.binary_name, "codewhale-linux-x64");
+        assert_eq!(candidate.binary_name, "ghosty-linux-x64");
     }
 
     #[test]
@@ -3435,22 +3421,19 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
             tag_name: "0.9.9".to_string(),
             prerelease: false,
             assets: vec![Asset {
-                name: "codewhale-linux-x64".to_string(),
-                browser_download_url: "https://cdn.example/codewhale-linux-x64".to_string(),
+                name: "ghosty-linux-x64".to_string(),
+                browser_download_url: "https://cdn.example/ghosty-linux-x64".to_string(),
             }],
         };
 
         let candidate =
-            github_source_candidate(&release, "codewhale-linux-x64").expect("github candidate");
+            github_source_candidate(&release, "ghosty-linux-x64").expect("github candidate");
 
         assert_eq!(
             candidate.manifest_url,
-            "https://github.com/Hmbown/CodeWhale/releases/download/v0.9.9/codewhale-artifacts-sha256.txt"
+            "https://github.com/blissito/ghostycode/releases/download/v0.9.9/ghosty-artifacts-sha256.txt"
         );
-        assert_eq!(
-            candidate.binary_url,
-            "https://cdn.example/codewhale-linux-x64"
-        );
+        assert_eq!(candidate.binary_url, "https://cdn.example/ghosty-linux-x64");
     }
 
     #[test]
@@ -3464,8 +3447,8 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
             ("windows", "aarch64"),
             ("android", "aarch64"),
         ] {
-            let asset_stem = release_asset_stem_for_prefix("codewhale", os, arch);
-            let asset_name = release_asset_name_for_prefix("codewhale", os, arch);
+            let asset_stem = release_asset_stem_for_prefix("ghosty", os, arch);
+            let asset_name = release_asset_name_for_prefix("ghosty", os, arch);
             let fetched = FetchedRelease {
                 release: Release {
                     tag_name: "v9.9.9".to_string(),
@@ -3482,7 +3465,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
                 .expect_err("a missing manifest must fail before the binary download");
             let message = format!("{err:#}");
             assert!(
-                message.contains("does not publish required codewhale-artifacts-sha256.txt"),
+                message.contains("does not publish required ghosty-artifacts-sha256.txt"),
                 "{os}/{arch} unexpectedly allowed an unverifiable plan: {message}"
             );
             assert!(message.contains(&asset_name), "{os}/{arch}: {message}");
@@ -3503,7 +3486,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
                         browser_download_url: manifest_url,
                     },
                     Asset {
-                        name: "codewhale-macos-arm64".to_string(),
+                        name: "ghosty-macos-arm64".to_string(),
                         browser_download_url: "https://cdn.example/should-not-download".to_string(),
                     },
                 ],
@@ -3511,7 +3494,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
             source: UpdateReleaseSource::GitHub,
         };
 
-        let err = single_source_download_plan(&fetched, "codewhale-macos-arm64", None)
+        let err = single_source_download_plan(&fetched, "ghosty-macos-arm64", None)
             .expect_err("a malformed manifest must fail closed");
         let message = format!("{err:#}");
         assert!(message.contains("failed to parse"), "{message}");
@@ -3526,7 +3509,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
 
     #[test]
     fn a_single_source_manifest_must_cover_the_exact_platform_binary() {
-        let manifest = format!("{}  codewhale-linux-x64\n", "a".repeat(64));
+        let manifest = format!("{}  ghosty-linux-x64\n", "a".repeat(64));
         let (manifest_url, request_rx, handle) =
             serve_http_owned_responses(vec![("200 OK", "text/plain", manifest.into_bytes())]);
         let fetched = FetchedRelease {
@@ -3539,7 +3522,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
                         browser_download_url: manifest_url,
                     },
                     Asset {
-                        name: "codewhale-windows-x64.exe".to_string(),
+                        name: "ghosty-windows-x64.exe".to_string(),
                         browser_download_url: "https://cdn.example/should-not-download.exe"
                             .to_string(),
                     },
@@ -3548,11 +3531,11 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
             source: UpdateReleaseSource::GitHub,
         };
 
-        let err = single_source_download_plan(&fetched, "codewhale-windows-x64", None)
+        let err = single_source_download_plan(&fetched, "ghosty-windows-x64", None)
             .expect_err("a manifest for another platform must fail closed");
         let message = format!("{err:#}");
         assert!(
-            message.contains("does not list codewhale-windows-x64.exe"),
+            message.contains("does not list ghosty-windows-x64.exe"),
             "{message}"
         );
         let request = request_rx.recv().expect("manifest request");
@@ -3563,7 +3546,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
     #[test]
     fn an_explicit_mirror_remains_pinned_and_verified_from_that_mirror() {
         let bytes = b"verified mirror bytes";
-        let manifest = format!("{}  codewhale-macos-arm64\n", sha256_hex(bytes));
+        let manifest = format!("{}  ghosty-macos-arm64\n", sha256_hex(bytes));
         let (url, request_rx, handle) =
             serve_http_owned_responses(vec![("200 OK", "text/plain", manifest.into_bytes())]);
         let base_url = url.trim_end_matches("/release").to_string();
@@ -3574,7 +3557,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
             },
         };
 
-        let plan = single_source_download_plan(&fetched, "codewhale-macos-arm64", None)
+        let plan = single_source_download_plan(&fetched, "ghosty-macos-arm64", None)
             .expect("the explicit mirror's valid manifest should produce a plan");
         assert_eq!(
             plan.source,
@@ -3584,13 +3567,13 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         );
         assert_eq!(
             plan.binary_url,
-            mirror_asset_url(&base_url, "codewhale-macos-arm64")
+            mirror_asset_url(&base_url, "ghosty-macos-arm64")
         );
         verify_downloaded_asset(&plan, bytes)
             .expect("the pinned mirror's checksum must verify its bytes");
         let request = request_rx.recv().expect("manifest request");
         assert!(
-            request.starts_with("GET /codewhale-artifacts-sha256.txt "),
+            request.starts_with("GET /ghosty-artifacts-sha256.txt "),
             "got {request:?}"
         );
         handle.join().expect("test server thread");
@@ -3603,8 +3586,8 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
                 tag_name: "v9.9.9".to_string(),
                 prerelease: false,
                 assets: vec![Asset {
-                    name: "codewhale-macos-arm64".to_string(),
-                    browser_download_url: "https://cdn.example/codewhale-macos-arm64".to_string(),
+                    name: "ghosty-macos-arm64".to_string(),
+                    browser_download_url: "https://cdn.example/ghosty-macos-arm64".to_string(),
                 }],
             },
             source: UpdateReleaseSource::GitHub,
@@ -3638,10 +3621,10 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         {
             let _env = UpdateEnvGuard::clear();
             set_update_env(
-                codewhale_release::RELEASE_BASE_URL_ENV,
+                ghosty_release::RELEASE_BASE_URL_ENV,
                 "https://mirror.example/assets",
             );
-            set_update_env(codewhale_release::UPDATE_VERSION_ENV, "9.9.9");
+            set_update_env(ghosty_release::UPDATE_VERSION_ENV, "9.9.9");
 
             let fetched = fetch_latest_release(ReleaseChannel::Stable, None)
                 .expect("a pinned mirror resolves without a network");
@@ -3658,15 +3641,15 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
                 "an explicit base URL must never be raced against CNB"
             );
             assert_eq!(
-                describe_release_source_for_check(&fetched, "codewhale-linux-x64", None),
+                describe_release_source_for_check(&fetched, "ghosty-linux-x64", None),
                 "release mirror (https://mirror.example/assets)"
             );
         }
 
         {
             let _env = UpdateEnvGuard::clear();
-            set_update_env(codewhale_release::CNB_MIRROR_ENV, "1");
-            set_update_env(codewhale_release::UPDATE_VERSION_ENV, "9.9.9");
+            set_update_env(ghosty_release::CNB_MIRROR_ENV, "1");
+            set_update_env(ghosty_release::UPDATE_VERSION_ENV, "9.9.9");
 
             let fetched = fetch_latest_release(ReleaseChannel::Stable, None)
                 .expect("the CNB override resolves without a network");
@@ -3686,9 +3669,9 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
 
         {
             let _env = UpdateEnvGuard::clear();
-            set_update_env(codewhale_release::CNB_MIRROR_ENV, "1");
+            set_update_env(ghosty_release::CNB_MIRROR_ENV, "1");
             set_update_env(
-                codewhale_release::RELEASE_BASE_URL_ENV,
+                ghosty_release::RELEASE_BASE_URL_ENV,
                 "https://mirror.example/assets",
             );
 
@@ -3707,8 +3690,8 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
 
     #[test]
     fn a_locked_source_serves_both_the_manifest_and_the_binary() {
-        const BINARY: &[u8] = b"\x7fELF codewhale linux x64 payload";
-        let manifest = format!("{}  codewhale-linux-x64\n", sha256_hex(BINARY));
+        const BINARY: &[u8] = b"\x7fELF ghosty linux x64 payload";
+        let manifest = format!("{}  ghosty-linux-x64\n", sha256_hex(BINARY));
         let (url, request_rx, handle) = serve_http_owned_responses(vec![
             ("200 OK", "text/plain", manifest.into_bytes()),
             ("200 OK", "application/octet-stream", BINARY.to_vec()),
@@ -3719,8 +3702,8 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
                 base_url: origin.clone(),
             },
             manifest_url: mirror_asset_url(&origin, CHECKSUM_MANIFEST_ASSET),
-            binary_name: "codewhale-linux-x64".to_string(),
-            binary_url: mirror_asset_url(&origin, "codewhale-linux-x64"),
+            binary_name: "ghosty-linux-x64".to_string(),
+            binary_url: mirror_asset_url(&origin, "ghosty-linux-x64"),
         };
 
         let plan = select_release_source(vec![candidate], manifest_probe_fetcher(None))
@@ -3733,11 +3716,11 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         let manifest_request = request_rx.recv().expect("manifest request");
         let binary_request = request_rx.recv().expect("binary request");
         assert!(
-            manifest_request.starts_with("GET /codewhale-artifacts-sha256.txt "),
+            manifest_request.starts_with("GET /ghosty-artifacts-sha256.txt "),
             "got {manifest_request:?}"
         );
         assert!(
-            binary_request.starts_with("GET /codewhale-linux-x64 "),
+            binary_request.starts_with("GET /ghosty-linux-x64 "),
             "got {binary_request:?}"
         );
         handle.join().expect("test server thread");
@@ -3749,9 +3732,9 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
             source: UpdateReleaseSource::Cnb {
                 base_url: cnb_release_base_url("v9.9.9"),
             },
-            binary_name: "codewhale-linux-x64".to_string(),
-            binary_url: "https://cnb.example/codewhale-linux-x64".to_string(),
-            checksums: HashMap::from([("codewhale-linux-x64".to_string(), "a".repeat(64))]),
+            binary_name: "ghosty-linux-x64".to_string(),
+            binary_url: "https://cnb.example/ghosty-linux-x64".to_string(),
+            checksums: HashMap::from([("ghosty-linux-x64".to_string(), "a".repeat(64))]),
         };
 
         let err = verify_downloaded_asset(&plan, b"tampered bytes")
@@ -3760,14 +3743,11 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         assert!(message.contains("SHA256 mismatch"), "{message}");
         assert!(message.contains("CNB mirror"), "{message}");
 
-        plan.checksums = HashMap::from([("codew-linux-x64".to_string(), "a".repeat(64))]);
+        plan.checksums = HashMap::from([("ghosty-tui-linux-x64".to_string(), "a".repeat(64))]);
         let err = verify_downloaded_asset(&plan, b"bytes")
             .expect_err("an uncovered asset must never install");
         let message = format!("{err:#}");
-        assert!(
-            message.contains("is missing codewhale-linux-x64"),
-            "{message}"
-        );
+        assert!(message.contains("is missing ghosty-linux-x64"), "{message}");
     }
 
     #[test]
@@ -3780,7 +3760,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         };
         assert_eq!(
             cnb.describe(),
-            "CNB mirror (https://cnb.cool/codewhale.net/codewhale/-/releases/download/v9.9.9)"
+            "CNB mirror (https://cnb.cool/ghosty.net/ghosty/-/releases/download/v9.9.9)"
         );
         assert!(cnb.is_pinned_mirror());
 
@@ -3812,8 +3792,8 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         let body = br#"{
           "tag_name": "v9.9.9",
           "assets": [
-            { "name": "codewhale-linux-x64", "browser_download_url": "http://example.invalid/codewhale-linux-x64" },
-            { "name": "codewhale-artifacts-sha256.txt", "browser_download_url": "http://example.invalid/codewhale-artifacts-sha256.txt" }
+            { "name": "ghosty-linux-x64", "browser_download_url": "http://example.invalid/ghosty-linux-x64" },
+            { "name": "ghosty-artifacts-sha256.txt", "browser_download_url": "http://example.invalid/ghosty-artifacts-sha256.txt" }
           ]
         }"#;
         let (url, request_rx, handle) = serve_http_once("200 OK", "application/json", body);
@@ -3830,7 +3810,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
             "got {request:?}"
         );
         assert!(
-            request_lower.contains("user-agent: codewhale-updater"),
+            request_lower.contains("user-agent: ghosty-updater"),
             "got {request:?}"
         );
         handle.join().expect("test server thread");
@@ -3841,7 +3821,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         let body = br#"{
           "tag_name": "v9.9.9",
           "assets": [
-            { "name": "codewhale-linux-x64", "browser_download_url": "http://example.invalid/codewhale-linux-x64" }
+            { "name": "ghosty-linux-x64", "browser_download_url": "http://example.invalid/ghosty-linux-x64" }
           ]
         }"#;
         let (url, request_rx, handle) = serve_http_responses(vec![
@@ -3881,7 +3861,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
           { "tag_name": "v0.9.0", "prerelease": false, "assets": [] },
           { "tag_name": "v0.9.0-rc.1", "prerelease": true, "assets": [] },
           { "tag_name": "v0.9.0-beta.2", "prerelease": true, "assets": [
-            { "name": "codewhale-linux-x64", "browser_download_url": "http://example.invalid/codewhale-linux-x64" }
+            { "name": "ghosty-linux-x64", "browser_download_url": "http://example.invalid/ghosty-linux-x64" }
           ] },
           { "tag_name": "v0.9.0-beta.1", "prerelease": true, "assets": [] }
         ]"#;
@@ -3946,7 +3926,7 @@ E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855  *codewhale-win
         let request_lower = request.to_ascii_lowercase();
         assert!(request.starts_with("GET /release "), "got {request:?}");
         assert!(
-            request_lower.contains("user-agent: codewhale-updater"),
+            request_lower.contains("user-agent: ghosty-updater"),
             "got {request:?}"
         );
         handle.join().expect("test server thread");

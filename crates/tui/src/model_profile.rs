@@ -10,10 +10,10 @@
 
 use crate::config::{ApiProvider, RequestPayloadMode, provider_capability};
 use crate::model_registry::{self, ModelProvider};
-use codewhale_config::route::{RouteCapabilities, RouteLimits};
+use ghosty_config::route::{RouteCapabilities, RouteLimits};
 
 /// Compatibility name for the canonical config-layer three-state fact.
-pub use codewhale_config::route::CapabilityState as SupportState;
+pub use ghosty_config::route::CapabilityState as SupportState;
 
 /// Coarse tool-catalog budget for the selected route.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

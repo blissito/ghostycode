@@ -439,7 +439,7 @@ mod tests {
     fn matched_vision_route_uses_bound_client_window_cap() {
         let _lock = crate::test_support::lock_test_env();
         let _canonical =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", "384000");
+            crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", "384000");
         let base_url = "http://127.0.0.1:18080/v1".to_string();
         let model = "DeepSeek-V4-Flash".to_string();
         let client = DeepSeekClient::new(&crate::config::Config {

@@ -1,6 +1,6 @@
 //! Gherkin binary health and eval harness smoke test for command extraction.
 //!
-//! This runs the binary through `codewhale-tui eval` and verifies that the
+//! This runs the binary through `ghosty-tui eval` and verifies that the
 //! executable still loads and reports a successful JSON evaluation after the
 //! core/session command modules are extracted.
 
@@ -24,8 +24,8 @@ struct CoreSessionExtractionWorld {
     report: Option<Value>,
 }
 
-#[given("a clean CodeWhale evaluation workspace")]
-fn clean_codewhale_evaluation_workspace(world: &mut CoreSessionExtractionWorld) {
+#[given("a clean GhostyCode evaluation workspace")]
+fn clean_ghosty_evaluation_workspace(world: &mut CoreSessionExtractionWorld) {
     world.record_dir = Some(TempDir::new().expect("evaluation TempDir"));
 }
 
@@ -36,7 +36,7 @@ fn eval_harness_runs_shell_command(world: &mut CoreSessionExtractionWorld) {
         .as_ref()
         .expect("evaluation workspace should exist");
 
-    let output = Command::new(codewhale_tui_binary())
+    let output = Command::new(ghosty_tui_binary())
         .args([
             "eval",
             "--json",
@@ -46,11 +46,11 @@ fn eval_harness_runs_shell_command(world: &mut CoreSessionExtractionWorld) {
         ])
         .arg(record_dir.path())
         .output()
-        .expect("codewhale-tui eval should start");
+        .expect("ghosty-tui eval should start");
 
     assert!(
         output.status.success(),
-        "codewhale-tui eval failed\nstderr:\n{}",
+        "ghosty-tui eval failed\nstderr:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
@@ -124,7 +124,7 @@ fn json_report_contains_step_with_expected_kind(world: &mut CoreSessionExtractio
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn codewhale_eval_runs_after_extraction() {
+async fn ghosty_eval_runs_after_extraction() {
     let writer = CoreSessionExtractionWorld::cucumber()
         .fail_on_skipped()
         .with_default_cli()
@@ -145,11 +145,11 @@ async fn codewhale_eval_runs_after_extraction() {
     );
 }
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
 
@@ -158,6 +158,6 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }

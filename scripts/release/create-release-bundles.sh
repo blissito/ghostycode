@@ -57,7 +57,7 @@ fi
 mkdir -p "${bundle_dir}"
 bundle_dir="$(cd "${bundle_dir}" && pwd)"
 
-manifest="${bundle_dir}/codewhale-bundles-sha256.txt"
+manifest="${bundle_dir}/ghosty-bundles-sha256.txt"
 : > "${manifest}"
 
 # Windows archives must contain CRLF batch files regardless of the builder's
@@ -79,12 +79,12 @@ bundle() {
   local ext="$4"
   local variant="$5"
 
-  local stem="codewhale-${platform}${variant:+-}${variant}"
-  local cli_dst="codewhale"
-  local shim_dst="codew"
+  local stem="ghosty-${platform}${variant:+-}${variant}"
+  local cli_dst="ghosty"
+  local shim_dst="ghosty-tui"
   if [[ "${platform}" == windows-* ]]; then
-    cli_dst="codewhale.exe"
-    shim_dst="codew.exe"
+    cli_dst="ghosty.exe"
+    shim_dst="ghosty-tui.exe"
   fi
 
   local cli_path="${artifact_dir}/${cli_src}/${cli_src}"
@@ -115,12 +115,12 @@ bundle() {
   fi
 
   # Regular and portable Windows zips ship the Terminal-aware launcher (#1854).
-  # The GitHub flat asset `codewhale.bat` still targets the x64 release filename;
-  # archives rename the binary to codewhale.exe, so they reuse the NSIS launcher.
+  # The GitHub flat asset `ghosty.bat` still targets the x64 release filename;
+  # archives rename the binary to ghosty.exe, so they reuse the NSIS launcher.
   if [[ "${platform}" == windows-* ]]; then
     write_crlf_file \
-      scripts/installer/codewhale.bat \
-      "${stage_dir}/codewhale.bat"
+      scripts/installer/ghosty.bat \
+      "${stage_dir}/ghosty.bat"
   fi
 
   if [[ "${variant}" != "portable" ]]; then
@@ -164,23 +164,23 @@ bundle() {
 }
 
 bundle linux-x64 \
-  codewhale-linux-x64 codew-linux-x64 tar.gz ""
+  ghosty-linux-x64 ghosty-tui-linux-x64 tar.gz ""
 bundle linux-arm64 \
-  codewhale-linux-arm64 codew-linux-arm64 tar.gz ""
+  ghosty-linux-arm64 ghosty-tui-linux-arm64 tar.gz ""
 bundle android-arm64 \
-  codewhale-android-arm64 codew-android-arm64 tar.gz ""
+  ghosty-android-arm64 ghosty-tui-android-arm64 tar.gz ""
 bundle macos-x64 \
-  codewhale-macos-x64 codew-macos-x64 tar.gz ""
+  ghosty-macos-x64 ghosty-tui-macos-x64 tar.gz ""
 bundle macos-arm64 \
-  codewhale-macos-arm64 codew-macos-arm64 tar.gz ""
+  ghosty-macos-arm64 ghosty-tui-macos-arm64 tar.gz ""
 bundle windows-x64 \
-  codewhale-windows-x64.exe codew-windows-x64.exe zip ""
+  ghosty-windows-x64.exe ghosty-tui-windows-x64.exe zip ""
 bundle windows-x64 \
-  codewhale-windows-x64.exe codew-windows-x64.exe zip portable
+  ghosty-windows-x64.exe ghosty-tui-windows-x64.exe zip portable
 bundle windows-arm64 \
-  codewhale-windows-arm64.exe codew-windows-arm64.exe zip ""
+  ghosty-windows-arm64.exe ghosty-tui-windows-arm64.exe zip ""
 bundle windows-arm64 \
-  codewhale-windows-arm64.exe codew-windows-arm64.exe zip portable
+  ghosty-windows-arm64.exe ghosty-tui-windows-arm64.exe zip portable
 
 sort -o "${manifest}" "${manifest}"
 echo "Bundle checksum manifest:"

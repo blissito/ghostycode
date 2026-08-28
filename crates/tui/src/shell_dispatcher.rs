@@ -1,7 +1,7 @@
-//! Shell abstraction layer for Codewhale.
+//! Shell abstraction layer for Ghosty.
 //!
 //! Detects the user's shell at startup and provides a single entry point for
-//! all command execution. Codewhale never calls `Command::new("cmd")` (or
+//! all command execution. Ghosty never calls `Command::new("cmd")` (or
 //! `"sh"`, `"pwsh"`, ...) directly — it asks the [`ShellDispatcher`] to build
 //! a correctly configured [`std::process::Command`].
 //!
@@ -150,10 +150,10 @@ fn powershell_exit_aware_command(shell_command: &str) -> String {
 /// remove the script itself (PowerShell reads the whole file before running,
 /// so self-deletion is safe), then propagate the exit code.
 const TEMP_PS1_TAIL: &str = concat!(
-    "$__codewhaleExit = if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 }\n",
+    "$__ghostyExit = if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 }\n",
     "Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force ",
     "-ErrorAction SilentlyContinue\n",
-    "if ($__codewhaleExit -ne 0) { exit $__codewhaleExit }\n",
+    "if ($__ghostyExit -ne 0) { exit $__ghostyExit }\n",
 );
 
 fn write_temp_ps1(shell_command: &str) -> std::io::Result<String> {
@@ -161,7 +161,7 @@ fn write_temp_ps1(shell_command: &str) -> std::io::Result<String> {
     let dir = std::env::temp_dir();
     sweep_stale_temp_ps1(&dir);
     let name = format!(
-        "codewhale-shell-{}-{}.ps1",
+        "ghosty-shell-{}-{}.ps1",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -181,7 +181,7 @@ fn write_temp_ps1(shell_command: &str) -> std::io::Result<String> {
     Ok(path.to_string_lossy().into_owned())
 }
 
-/// Best-effort removal of leftover `codewhale-shell-*.ps1` scripts (for
+/// Best-effort removal of leftover `ghosty-shell-*.ps1` scripts (for
 /// example after a killed process, which skips the in-script self-delete).
 /// Only files older than one hour are touched so a concurrently starting
 /// invocation is never raced.
@@ -195,7 +195,7 @@ fn sweep_stale_temp_ps1(dir: &std::path::Path) {
         let Some(name) = name.to_str() else {
             continue;
         };
-        if !name.starts_with("codewhale-shell-") || !name.ends_with(".ps1") {
+        if !name.starts_with("ghosty-shell-") || !name.ends_with(".ps1") {
             continue;
         }
         let stale = entry
@@ -655,7 +655,7 @@ mod tests {
             .find("Remove-Item -LiteralPath $MyInvocation.MyCommand.Path")
             .expect("self-delete line present");
         let exit_at = contents
-            .find("if ($__codewhaleExit -ne 0) { exit $__codewhaleExit }")
+            .find("if ($__ghostyExit -ne 0) { exit $__ghostyExit }")
             .expect("exit propagation present");
         assert!(remove_at < exit_at, "self-delete must precede exit");
         // Cleanup temp script created by the builder (the test never runs it).
@@ -682,7 +682,7 @@ mod tests {
     #[test]
     fn stale_temp_ps1_scripts_are_swept() {
         let dir = std::env::temp_dir();
-        let stale = dir.join("codewhale-shell-0-stale-test.ps1");
+        let stale = dir.join("ghosty-shell-0-stale-test.ps1");
         std::fs::write(&stale, "Write-Output 'stale'\n").expect("write stale script");
         // Backdate the file beyond the sweep horizon.
         let old = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 60 * 60);

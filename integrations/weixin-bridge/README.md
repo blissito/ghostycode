@@ -1,6 +1,6 @@
 # Weixin Bot Bridge
 
-此 bridge 让微信个人账号通过扫码登录控制本地 `codewhale serve --http` runtime。
+此 bridge 让微信个人账号通过扫码登录控制本地 `ghosty serve --http` runtime。
 使用腾讯 iLink Bot 协议（参考 `@tencent-weixin/openclaw-weixin`），
 无需公众号注册即可工作。
 
@@ -9,8 +9,8 @@
 
 ## 安全模型
 
-- `codewhale serve --http` 绑定于 `127.0.0.1`。
-- `/v1/*` runtime 调用使用 `CODEWHALE_RUNTIME_TOKEN`。
+- `ghosty serve --http` 绑定于 `127.0.0.1`。
+- `/v1/*` runtime 调用使用 `GHOSTY_RUNTIME_TOKEN`。
 - 微信用户必须加入白名单，除非首次配对时设置 `WEIXIN_ALLOW_UNLISTED=true`。
 - 仅支持私聊；暂不支持群聊。
 - 工具审批通过文本命令：`/allow <approval_id>` 或 `/deny <approval_id>`。
@@ -19,10 +19,10 @@
 ## 设置
 
 ```bash
-cd /opt/codewhale/weixin-bot-bridge
+cd /opt/ghosty/weixin-bot-bridge
 npm install --omit=dev
-cp .env.example /etc/codewhale/weixin-bot-bridge.env
-sudoedit /etc/codewhale/weixin-bot-bridge.env
+cp .env.example /etc/ghosty/weixin-bot-bridge.env
+sudoedit /etc/ghosty/weixin-bot-bridge.env
 node src/index.mjs
 ```
 
@@ -41,7 +41,7 @@ node src/index.mjs
 - `/allow <approval_id> [remember]`
 - `/deny <approval_id>`
 
-其他所有内容均作为 Codewhale 提示发送。
+其他所有内容均作为 Ghosty 提示发送。
 
 ## 首次配对
 
@@ -55,17 +55,17 @@ node src/index.mjs
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `CODEWHALE_RUNTIME_URL` | 否 | Runtime HTTP 地址（默认 `http://127.0.0.1:7878`） |
-| `CODEWHALE_RUNTIME_TOKEN` | **是** | Runtime Bearer 令牌 |
-| `CODEWHALE_WORKSPACE` | 否 | 工作区路径（默认 cwd） |
-| `CODEWHALE_MODEL` | 否 | 模型名称（默认 `auto`） |
-| `CODEWHALE_MODE` | 否 | 运行模式（默认 `agent`） |
+| `GHOSTY_RUNTIME_URL` | 否 | Runtime HTTP 地址（默认 `http://127.0.0.1:7878`） |
+| `GHOSTY_RUNTIME_TOKEN` | **是** | Runtime Bearer 令牌 |
+| `GHOSTY_WORKSPACE` | 否 | 工作区路径（默认 cwd） |
+| `GHOSTY_MODEL` | 否 | 模型名称（默认 `auto`） |
+| `GHOSTY_MODE` | 否 | 运行模式（默认 `agent`） |
 | `WEIXIN_CHAT_ALLOWLIST` | 否 | 逗号分隔的允许用户 ID |
 | `WEIXIN_ALLOW_UNLISTED` | 否 | 首次配对模式（默认 `false`） |
 | `WEIXIN_STATE_DIR` | 否 | 状态持久化目录 |
 | `WEIXIN_THREAD_MAP_PATH` | 否 | 线程映射文件路径 |
 | `WEIXIN_MAX_REPLY_CHARS` | 否 | 单条回复最大字符数（默认 `3500`） |
-| `CODEWHALE_TURN_TIMEOUT_MS` | 否 | Turn 超时（默认 `900000`） |
+| `GHOSTY_TURN_TIMEOUT_MS` | 否 | Turn 超时（默认 `900000`） |
 | `WEIXIN_LONGPOLL_TIMEOUT_MS` | 否 | 长轮询超时（默认 `35000`） |
 
 旧的 `WEXIN_*`（拼写错误）变量名仍作为已弃用别名被识别，启动时会打印一次弃用警告。
@@ -73,7 +73,7 @@ node src/index.mjs
 ## 架构
 
 ```
-微信客户端 ──getUpdates 长轮询──▶ Weixin Bot Bridge ──HTTP──▶ codewhale serve --http
+微信客户端 ──getUpdates 长轮询──▶ Weixin Bot Bridge ──HTTP──▶ ghosty serve --http
                   ◀──sendMessage──                                  (127.0.0.1:7878)
 ```
 

@@ -61,7 +61,7 @@ pub(crate) fn windows_file_identity(file: &std::fs::File) -> std::io::Result<Win
 /// framing below also prevents a future platform/domain change from silently
 /// reusing an existing trust receipt.
 pub(crate) fn hash_os_path(hasher: &mut impl Digest, domain: &'static [u8], path: &Path) {
-    hasher.update(b"codewhale-os-path-v1\0");
+    hasher.update(b"ghosty-os-path-v1\0");
     hasher.update((domain.len() as u64).to_le_bytes());
     hasher.update(domain);
 

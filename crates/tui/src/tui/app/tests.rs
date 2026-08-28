@@ -1767,7 +1767,7 @@ fn explicit_launch_provider_overrides_saved_startup_provider() {
     )
     .expect("settings");
     let _config_path = EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
-    let _provider = EnvVarGuard::set("CODEWHALE_PROVIDER", "xiaomi-mimo");
+    let _provider = EnvVarGuard::set("GHOSTY_PROVIDER", "xiaomi-mimo");
 
     let config = Config {
         provider: Some("xiaomi-mimo".to_string()),
@@ -2080,8 +2080,8 @@ fn bang_shell_prefix_parses_compact_and_spaced_forms() {
     assert_eq!(shell_command_from_bang_input("!pwd"), Ok(Some("pwd")));
     assert_eq!(shell_command_from_bang_input("! pwd"), Ok(Some("pwd")));
     assert_eq!(
-        shell_command_from_bang_input("  !  cargo test -p codewhale-tui sidebar"),
-        Ok(Some("cargo test -p codewhale-tui sidebar"))
+        shell_command_from_bang_input("  !  cargo test -p ghosty-tui sidebar"),
+        Ok(Some("cargo test -p ghosty-tui sidebar"))
     );
     assert_eq!(shell_command_from_bang_input("normal message"), Ok(None));
 }
@@ -2465,7 +2465,7 @@ fn app_new_detects_missing_api_key_with_default_config() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
     let config_path = tmp.path().join("config.toml");
     let _config_path = EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
-    let _provider_env = EnvVarGuard::remove("CODEWHALE_PROVIDER");
+    let _provider_env = EnvVarGuard::remove("GHOSTY_PROVIDER");
     let _legacy_provider_env = EnvVarGuard::remove("DEEPSEEK_PROVIDER");
     let _api_key_envs: Vec<_> = [
         "DEEPSEEK_API_KEY",
@@ -2503,10 +2503,10 @@ fn app_new_detects_missing_api_key_with_default_config() {
 fn first_run_app_starts_on_welcome_when_a_key_is_missing() {
     let _lock = lock_test_env();
     let home = tempfile::TempDir::new().expect("isolated first-run home");
-    let _home = EnvVarGuard::set("CODEWHALE_HOME", home.path().to_string_lossy().as_ref());
+    let _home = EnvVarGuard::set("GHOSTY_HOME", home.path().to_string_lossy().as_ref());
     let config_path = home.path().join("config.toml");
     let _config_path = EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
-    let _provider_env = EnvVarGuard::remove("CODEWHALE_PROVIDER");
+    let _provider_env = EnvVarGuard::remove("GHOSTY_PROVIDER");
     let _legacy_provider_env = EnvVarGuard::remove("DEEPSEEK_PROVIDER");
     let _api_key_envs: Vec<_> = [
         "DEEPSEEK_API_KEY",
@@ -2543,7 +2543,7 @@ fn app_new_with_explicit_api_key_does_not_trigger_onboarding() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
     let config_path = tmp.path().join("config.toml");
     let _config_path = EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
-    let _provider_env = EnvVarGuard::remove("CODEWHALE_PROVIDER");
+    let _provider_env = EnvVarGuard::remove("GHOSTY_PROVIDER");
     let _legacy_provider_env = EnvVarGuard::remove("DEEPSEEK_PROVIDER");
 
     let config = Config {
@@ -2615,7 +2615,7 @@ fn cached_skills_merges_across_candidate_directories() {
 }
 
 #[test]
-fn cached_skills_respect_codewhale_only_scan_config() {
+fn cached_skills_respect_ghosty_only_scan_config() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
     let workspace = tmp.path().join("workspace");
 
@@ -2630,16 +2630,16 @@ fn cached_skills_respect_codewhale_only_scan_config() {
     )
     .expect("write claude skill");
 
-    let codewhale_dir = workspace
-        .join(".codewhale")
+    let ghosty_dir = workspace
+        .join(".ghosty")
         .join("skills")
-        .join("codewhale-skill");
-    std::fs::create_dir_all(&codewhale_dir).expect("codewhale skill dir");
+        .join("ghosty-skill");
+    std::fs::create_dir_all(&ghosty_dir).expect("ghosty skill dir");
     std::fs::write(
-        codewhale_dir.join("SKILL.md"),
-        "---\nname: codewhale-skill\ndescription: CodeWhale skill\n---\nbody\n",
+        ghosty_dir.join("SKILL.md"),
+        "---\nname: ghosty-skill\ndescription: GhostyCode skill\n---\nbody\n",
     )
-    .expect("write codewhale skill");
+    .expect("write ghosty skill");
 
     let mut options = test_options(false);
     options.workspace = workspace.clone();
@@ -2648,19 +2648,19 @@ fn cached_skills_respect_codewhale_only_scan_config() {
         options,
         &Config {
             skills: Some(crate::config::SkillsConfig {
-                scan_codewhale_only: Some(true),
+                scan_ghosty_only: Some(true),
                 ..Default::default()
             }),
             ..Default::default()
         },
     );
 
-    assert_eq!(app.skills_dir, workspace.join(".codewhale").join("skills"));
+    assert_eq!(app.skills_dir, workspace.join(".ghosty").join("skills"));
     assert!(
         app.cached_skills
             .iter()
-            .any(|(name, _)| name == "codewhale-skill"),
-        "CodeWhale skill should be cached: {:?}",
+            .any(|(name, _)| name == "ghosty-skill"),
+        "GhostyCode skill should be cached: {:?}",
         app.cached_skills
     );
     assert!(
@@ -2673,20 +2673,17 @@ fn cached_skills_respect_codewhale_only_scan_config() {
 }
 
 #[test]
-fn resolve_skills_dir_requires_codewhale_skills_to_be_directory() {
+fn resolve_skills_dir_requires_ghosty_skills_to_be_directory() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
     let workspace = tmp.path().join("workspace");
-    std::fs::create_dir_all(workspace.join(".codewhale")).expect("codewhale dir");
-    std::fs::write(
-        workspace.join(".codewhale").join("skills"),
-        "not a directory",
-    )
-    .expect("skills file");
+    std::fs::create_dir_all(workspace.join(".ghosty")).expect("ghosty dir");
+    std::fs::write(workspace.join(".ghosty").join("skills"), "not a directory")
+        .expect("skills file");
 
     let global_skills_dir = tmp.path().join("global-skills");
     let config = Config {
         skills: Some(crate::config::SkillsConfig {
-            scan_codewhale_only: Some(true),
+            scan_ghosty_only: Some(true),
             ..Default::default()
         }),
         ..Default::default()
@@ -2731,20 +2728,20 @@ fn cached_skills_include_configured_directory() {
 }
 
 #[test]
-fn cached_skills_preserve_configured_directory_in_codewhale_only_scan() {
+fn cached_skills_preserve_configured_directory_in_ghosty_only_scan() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
     let workspace = tmp.path().join("workspace");
 
-    let codewhale_skill_dir = workspace
-        .join(".codewhale")
+    let ghosty_skill_dir = workspace
+        .join(".ghosty")
         .join("skills")
-        .join("workspace-codewhale");
-    std::fs::create_dir_all(&codewhale_skill_dir).expect("workspace codewhale skill dir");
+        .join("workspace-ghosty");
+    std::fs::create_dir_all(&ghosty_skill_dir).expect("workspace ghosty skill dir");
     std::fs::write(
-        codewhale_skill_dir.join("SKILL.md"),
-        "---\nname: workspace-codewhale\ndescription: Workspace CodeWhale skill\n---\nbody\n",
+        ghosty_skill_dir.join("SKILL.md"),
+        "---\nname: workspace-ghosty\ndescription: Workspace GhostyCode skill\n---\nbody\n",
     )
-    .expect("write workspace codewhale skill");
+    .expect("write workspace ghosty skill");
 
     let configured_dir = tmp.path().join("configured-skills");
     let configured_skill_dir = configured_dir.join("configured-skill");
@@ -2761,7 +2758,7 @@ fn cached_skills_preserve_configured_directory_in_codewhale_only_scan() {
     let config = Config {
         skills_dir: Some(configured_dir.to_string_lossy().into_owned()),
         skills: Some(crate::config::SkillsConfig {
-            scan_codewhale_only: Some(true),
+            scan_ghosty_only: Some(true),
             ..Default::default()
         }),
         ..Default::default()
@@ -2772,8 +2769,8 @@ fn cached_skills_preserve_configured_directory_in_codewhale_only_scan() {
     assert!(
         app.cached_skills
             .iter()
-            .any(|(name, _)| name == "workspace-codewhale"),
-        "workspace CodeWhale skill should still be cached: {:?}",
+            .any(|(name, _)| name == "workspace-ghosty"),
+        "workspace GhostyCode skill should still be cached: {:?}",
         app.cached_skills
     );
     assert!(
@@ -2786,12 +2783,12 @@ fn cached_skills_preserve_configured_directory_in_codewhale_only_scan() {
 }
 
 #[test]
-fn cached_skills_reject_codewhale_only_workspace_symlink_escape() {
+fn cached_skills_reject_ghosty_only_workspace_symlink_escape() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
     let workspace = tmp.path().join("workspace");
     let escape_target = tmp.path().join("escape-target");
     let escaped_skill_dir = escape_target.join("escaped-skill");
-    std::fs::create_dir_all(workspace.join(".codewhale")).expect("codewhale dir");
+    std::fs::create_dir_all(workspace.join(".ghosty")).expect("ghosty dir");
     std::fs::create_dir_all(&escaped_skill_dir).expect("escaped skill dir");
     std::fs::write(
         escaped_skill_dir.join("SKILL.md"),
@@ -2799,7 +2796,7 @@ fn cached_skills_reject_codewhale_only_workspace_symlink_escape() {
     )
     .expect("write escaped skill");
 
-    let link_path = workspace.join(".codewhale").join("skills");
+    let link_path = workspace.join(".ghosty").join("skills");
     if create_dir_symlink(&escape_target, &link_path).is_err() {
         return;
     }
@@ -2810,7 +2807,7 @@ fn cached_skills_reject_codewhale_only_workspace_symlink_escape() {
     options.skills_dir = global_skills_dir.clone();
     let config = Config {
         skills: Some(crate::config::SkillsConfig {
-            scan_codewhale_only: Some(true),
+            scan_ghosty_only: Some(true),
             ..Default::default()
         }),
         ..Default::default()
@@ -2822,7 +2819,7 @@ fn cached_skills_reject_codewhale_only_workspace_symlink_escape() {
         !app.cached_skills
             .iter()
             .any(|(name, _)| name == "escaped-skill"),
-        "strict app cache must not follow escaped workspace CodeWhale symlinks: {:?}",
+        "strict app cache must not follow escaped workspace GhostyCode symlinks: {:?}",
         app.cached_skills
     );
 }
@@ -2843,7 +2840,7 @@ fn paste_defers_oversized_text_consolidation_until_submit() {
 
     assert_eq!(app.input, full_content);
     assert_eq!(app.cursor_position, app.input.chars().count());
-    let pastes_dir = tmp.path().join(".codewhale/pastes");
+    let pastes_dir = tmp.path().join(".ghosty/pastes");
     assert!(
         !pastes_dir.exists() || std::fs::read_dir(&pastes_dir).unwrap().next().is_none(),
         "paste file should not be written before submit"
@@ -2865,7 +2862,7 @@ fn paste_defers_oversized_text_consolidation_until_submit() {
         &submitted[..submitted.len().min(80)]
     );
     assert!(
-        submitted.contains("\n@.codewhale/pastes/paste-"),
+        submitted.contains("\n@.ghosty/pastes/paste-"),
         "the @-mention must survive verbatim for file-mention resolution"
     );
     assert!(
@@ -2874,7 +2871,7 @@ fn paste_defers_oversized_text_consolidation_until_submit() {
     );
     let mention_line = submitted
         .lines()
-        .find(|line| line.starts_with("@.codewhale/pastes/"))
+        .find(|line| line.starts_with("@.ghosty/pastes/"))
         .expect("mention line");
     let mention = &mention_line[1..]; // strip leading '@'
     assert!(mention.ends_with(".md"), "expected .md extension");
@@ -2893,7 +2890,7 @@ fn paste_defers_oversized_text_consolidation_until_submit() {
 #[test]
 fn oversized_paste_submission_never_renders_as_a_bare_path() {
     // The reported incident: a large paste became a transcript row that
-    // showed only `@.codewhale/pastes/paste-….md` — a mysterious path where
+    // showed only `@.ghosty/pastes/paste-….md` — a mysterious path where
     // the user's message should be. The submission must carry a visible
     // size header and content preview around the mention so the user can
     // always see what they sent.
@@ -2939,9 +2936,9 @@ fn paste_under_threshold_does_not_consolidate() {
     app.insert_paste_text(&small);
 
     assert_eq!(app.input, small);
-    assert!(!app.input.starts_with("@.codewhale/pastes/"));
+    assert!(!app.input.starts_with("@.ghosty/pastes/"));
     // No paste file gets written for under-cap pastes.
-    let pastes_dir = tmp.path().join(".codewhale/pastes");
+    let pastes_dir = tmp.path().join(".ghosty/pastes");
     assert!(
         !pastes_dir.exists() || std::fs::read_dir(&pastes_dir).unwrap().next().is_none(),
         "no paste file should be written for under-cap content"
@@ -2951,7 +2948,7 @@ fn paste_under_threshold_does_not_consolidate() {
 #[test]
 fn large_multiline_paste_preserves_exact_bytes_through_submit() {
     // #4719: large multi-line pastes must not byte-corrupt before submission.
-    // Real dogfood saw paths like `codewhale-v091-exact-88a158-ci` arrive as
+    // Real dogfood saw paths like `ghosty-v091-exact-88a158-ci` arrive as
     // `work-88a158-ci` — assert exact fidelity for a representative payload.
     let tmp = tempfile::TempDir::new().expect("tempdir");
     let mut opts = test_options(false);
@@ -2959,10 +2956,10 @@ fn large_multiline_paste_preserves_exact_bytes_through_submit() {
     let mut app = App::new(opts, &Config::default());
 
     let payload = format!(
-        "Mission path: /Volumes/VIXinSSD/CW/worktrees/codewhale-v091-exact-88a158-ci\n\
+        "Mission path: /Volumes/VIXinSSD/CW/worktrees/ghosty-v091-exact-88a158-ci\n\
          SHA: 0dfe9170a10e081fe48b23239f22d33260f4fa24\n\
          Branch: codex/v091-local-candidate-20260722\n\
-         Paths that must not truncate: codewhale-v091-exact-88a158-ci worktrees/codewhale-v091-exact-88a158-ci\n\
+         Paths that must not truncate: ghosty-v091-exact-88a158-ci worktrees/ghosty-v091-exact-88a158-ci\n\
          Mixed punctuation: a;b:c[m]<n> digits 0123456789 and hyphens-ok\n\
          Unicode: 你好世界 café — keep every codepoint.\n\
          {}",
@@ -3010,7 +3007,7 @@ fn submit_input_consolidates_oversized_input_into_paste_file() {
     );
     let mention_line = submitted
         .lines()
-        .find(|line| line.starts_with("@.codewhale/pastes/paste-"))
+        .find(|line| line.starts_with("@.ghosty/pastes/paste-"))
         .expect("mention line");
     assert!(
         mention_line.ends_with(".md"),
@@ -3135,8 +3132,8 @@ fn work_restore_reconciles_fleet_from_the_restored_workspace() {
     let ledger = crate::fleet::ledger::FleetLedger::open(restored_workspace.path())
         .expect("open restored Fleet ledger");
     ledger
-        .enqueue(codewhale_protocol::fleet::FleetInboxEntry {
-            run_id: codewhale_protocol::fleet::FleetRunId::from("run-restore"),
+        .enqueue(ghosty_protocol::fleet::FleetInboxEntry {
+            run_id: ghosty_protocol::fleet::FleetRunId::from("run-restore"),
             task_id: "task-restore".to_string(),
             priority: 0,
             enqueued_at: "2026-07-18T00:00:00Z".to_string(),
@@ -3206,8 +3203,8 @@ fn failed_workspace_owner_reconcile_leaves_previous_work_state_intact() {
     let ledger = crate::fleet::ledger::FleetLedger::open(restored_workspace.path())
         .expect("open restored Fleet ledger");
     ledger
-        .enqueue(codewhale_protocol::fleet::FleetInboxEntry {
-            run_id: codewhale_protocol::fleet::FleetRunId::from("run-regress"),
+        .enqueue(ghosty_protocol::fleet::FleetInboxEntry {
+            run_id: ghosty_protocol::fleet::FleetRunId::from("run-regress"),
             task_id: "task-regress".to_string(),
             priority: 0,
             enqueued_at: "2026-07-18T00:00:00Z".to_string(),
@@ -3858,7 +3855,7 @@ fn legacy_yolo_honors_a_missing_explicit_config_path_without_home_fallback() {
     let _env_lock = lock_test_env();
     let tmp = tempfile::tempdir().expect("tempdir");
     let home = tmp.path().join("home");
-    let home_config_dir = home.join(codewhale_config::CODEWHALE_APP_DIR);
+    let home_config_dir = home.join(ghosty_config::GHOSTY_APP_DIR);
     let override_dir = tmp.path().join("missing-override");
     let missing_override = override_dir.join("config.toml");
     let workspace = tmp.path().join("workspace");
@@ -3876,8 +3873,8 @@ fn legacy_yolo_honors_a_missing_explicit_config_path_without_home_fallback() {
 
     let _home = EnvVarGuard::set("HOME", &home);
     let _user_profile = EnvVarGuard::set("USERPROFILE", &home);
-    let _codewhale_home = EnvVarGuard::remove("CODEWHALE_HOME");
-    let _codewhale_config = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+    let _ghosty_home = EnvVarGuard::remove("GHOSTY_HOME");
+    let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
     let _deepseek_config = EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &missing_override);
     let _approval_env = EnvVarGuard::remove("DEEPSEEK_APPROVAL_POLICY");
 
@@ -5792,16 +5789,15 @@ fn word_selection_extends_by_word_and_replaces_on_type() {
 /// test or a developer's real profile must not replace the chain primary.
 fn app_with_fallback_chain(
     active: ApiProvider,
-    fallbacks: &[codewhale_config::ProviderKind],
+    fallbacks: &[ghosty_config::ProviderKind],
     keyed: &[ApiProvider],
 ) -> App {
     let settings_home = tempfile::tempdir().expect("isolated fallback settings home");
     let _home = EnvVarGuard::set("HOME", settings_home.path());
     let _user_profile = EnvVarGuard::set("USERPROFILE", settings_home.path());
-    let _codewhale_home =
-        EnvVarGuard::set("CODEWHALE_HOME", settings_home.path().join(".codewhale"));
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", settings_home.path().join(".ghosty"));
     let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-    let _codewhale_config = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+    let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
     let mut providers = ProvidersConfig::default();
     for provider in keyed {
         let entry = ProviderConfig {
@@ -5842,8 +5838,8 @@ fn advance_fallback_skips_unauthed_middle_provider_and_lands_on_next_ready() {
     let mut app = app_with_fallback_chain(
         ApiProvider::Openai,
         &[
-            codewhale_config::ProviderKind::Openrouter,
-            codewhale_config::ProviderKind::Together,
+            ghosty_config::ProviderKind::Openrouter,
+            ghosty_config::ProviderKind::Together,
         ],
         &[ApiProvider::Openai, ApiProvider::Together],
     );
@@ -5874,7 +5870,7 @@ fn advance_fallback_local_provider_is_eligible_without_a_key() {
     // Chain: Openai (active, keyed) -> Ollama (local, no key needed).
     let mut app = app_with_fallback_chain(
         ApiProvider::Openai,
-        &[codewhale_config::ProviderKind::Ollama],
+        &[ghosty_config::ProviderKind::Ollama],
         &[ApiProvider::Openai],
     );
 
@@ -5905,8 +5901,8 @@ fn advance_fallback_all_unready_exhausts_with_clear_reason() {
     let mut app = app_with_fallback_chain(
         ApiProvider::Openai,
         &[
-            codewhale_config::ProviderKind::Openrouter,
-            codewhale_config::ProviderKind::Together,
+            ghosty_config::ProviderKind::Openrouter,
+            ghosty_config::ProviderKind::Together,
         ],
         &[ApiProvider::Openai],
     );
@@ -5938,29 +5934,29 @@ fn startup_and_fallback_skip_inactive_external_only_routes_without_io() {
     let grok_raw = "inactive Grok bytes must not be read";
     std::fs::write(&codex_path, codex_raw).expect("write Codex trap");
     std::fs::write(&grok_path, grok_raw).expect("write Grok trap");
-    let _home = EnvVarGuard::set("CODEWHALE_HOME", temp.path().join("owned-home"));
+    let _home = EnvVarGuard::set("GHOSTY_HOME", temp.path().join("owned-home"));
     let _codex_path = EnvVarGuard::set("OPENAI_CODEX_AUTH_FILE", &codex_path);
     let _grok_path = EnvVarGuard::set("GROK_AUTH_PATH", &grok_path);
     let _codex_access = EnvVarGuard::remove("OPENAI_CODEX_ACCESS_TOKEN");
     let _legacy_codex_access = EnvVarGuard::remove("CODEX_ACCESS_TOKEN");
     let _xai_key = EnvVarGuard::remove("XAI_API_KEY");
-    let _cli_key = EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+    let _cli_key = EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
     let _cli_source = EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
 
     let config = Config {
         provider: Some(ApiProvider::Deepseek.as_str().to_string()),
         api_key: Some("active-deepseek-key".to_string()),
         fallback_providers: vec![
-            codewhale_config::ProviderKind::OpenaiCodex,
-            codewhale_config::ProviderKind::Xai,
+            ghosty_config::ProviderKind::OpenaiCodex,
+            ghosty_config::ProviderKind::Xai,
         ],
         providers: Some(ProvidersConfig {
             openai_codex: ProviderConfig {
                 auth_mode: Some("oauth".to_string()),
                 external_credentials: Some(
-                    codewhale_config::ExternalCredentialConsentToml::read_only(
-                        codewhale_config::ProviderKind::OpenaiCodex,
-                        codewhale_config::ExternalCredentialSource::CodexCli,
+                    ghosty_config::ExternalCredentialConsentToml::read_only(
+                        ghosty_config::ProviderKind::OpenaiCodex,
+                        ghosty_config::ExternalCredentialSource::CodexCli,
                         codex_path.clone(),
                     ),
                 ),
@@ -5969,9 +5965,9 @@ fn startup_and_fallback_skip_inactive_external_only_routes_without_io() {
             xai: ProviderConfig {
                 auth_mode: Some("oauth".to_string()),
                 external_credentials: Some(
-                    codewhale_config::ExternalCredentialConsentToml::read_only(
-                        codewhale_config::ProviderKind::Xai,
-                        codewhale_config::ExternalCredentialSource::GrokCli,
+                    ghosty_config::ExternalCredentialConsentToml::read_only(
+                        ghosty_config::ProviderKind::Xai,
+                        ghosty_config::ExternalCredentialSource::GrokCli,
                         grok_path.clone(),
                     ),
                 ),
@@ -6024,7 +6020,7 @@ fn advance_fallback_local_primary_does_not_fall_back_to_cloud() {
     // chain exhausts rather than leaking a local/private route out to cloud.
     let mut app = app_with_fallback_chain(
         ApiProvider::Ollama,
-        &[codewhale_config::ProviderKind::Deepseek],
+        &[ghosty_config::ProviderKind::Deepseek],
         &[ApiProvider::Deepseek],
     );
 
@@ -6051,7 +6047,7 @@ fn advance_fallback_local_primary_may_fall_back_to_local_sibling() {
     // the local/private posture is preserved and the fallback is allowed.
     let mut app = app_with_fallback_chain(
         ApiProvider::Ollama,
-        &[codewhale_config::ProviderKind::Vllm],
+        &[ghosty_config::ProviderKind::Vllm],
         &[],
     );
 
@@ -6079,8 +6075,8 @@ fn advance_fallback_cloud_primary_can_hop_cloud_to_local_to_cloud() {
     let mut app = app_with_fallback_chain(
         ApiProvider::Openai,
         &[
-            codewhale_config::ProviderKind::Ollama,
-            codewhale_config::ProviderKind::Deepseek,
+            ghosty_config::ProviderKind::Ollama,
+            ghosty_config::ProviderKind::Deepseek,
         ],
         &[ApiProvider::Openai, ApiProvider::Deepseek],
     );
@@ -6185,15 +6181,15 @@ fn agent_current_activity_bounds_redacts_and_strips_control_sequences() {
 // persisted, but only through the model/effort picker, so Ctrl+T and the
 // hotbar `reasoning.cycle` action were equally lossy.
 
-/// Seal `HOME`/`CODEWHALE_HOME` onto a temp dir so these tests can assert the
+/// Seal `HOME`/`GHOSTY_HOME` onto a temp dir so these tests can assert the
 /// real write/reload round trip without touching the developer's settings.
 fn sealed_settings_home(tmp: &std::path::Path) -> Vec<EnvVarGuard> {
     vec![
         EnvVarGuard::set("HOME", tmp),
         EnvVarGuard::set("USERPROFILE", tmp),
-        EnvVarGuard::set("CODEWHALE_HOME", tmp.join(".codewhale")),
+        EnvVarGuard::set("GHOSTY_HOME", tmp.join(".ghosty")),
         EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH"),
-        EnvVarGuard::remove("CODEWHALE_CONFIG_PATH"),
+        EnvVarGuard::remove("GHOSTY_CONFIG_PATH"),
     ]
 }
 
@@ -6351,13 +6347,13 @@ fn failed_startup_default_write_is_reported_not_swallowed() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
     // A regular file where the home directory must be: every settings write
     // below it fails.
-    let blocked_home = tmp.path().join("codewhale-home-file");
+    let blocked_home = tmp.path().join("ghosty-home-file");
     std::fs::write(&blocked_home, "not a directory").expect("blocking file");
     let _home = EnvVarGuard::set("HOME", tmp.path());
     let _user_profile = EnvVarGuard::set("USERPROFILE", tmp.path());
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &blocked_home);
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &blocked_home);
     let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-    let _codewhale_config = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+    let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
     let _writes = crate::tui::startup_defaults::allow_writes_in_tests();
 
     let mut app = App::new(test_options(false), &Config::default());
@@ -6380,7 +6376,7 @@ fn failed_startup_default_write_is_reported_not_swallowed() {
         toast.text
     );
     assert!(
-        !toast.text.contains(".codewhale"),
+        !toast.text.contains(".ghosty"),
         "a failure toast must not carry the settings path, got {:?}",
         toast.text
     );
@@ -6586,7 +6582,7 @@ fn sealed_settings_with_root_config(
     let config_path = tmp.join("config.toml");
     let guards = vec![
         EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path),
-        EnvVarGuard::remove("CODEWHALE_CONFIG_PATH"),
+        EnvVarGuard::remove("GHOSTY_CONFIG_PATH"),
         EnvVarGuard::remove("DEEPSEEK_APPROVAL_POLICY"),
     ];
     (config_path, guards)
@@ -6769,7 +6765,7 @@ async fn rapid_mixed_writes_settle_on_the_last_value_for_every_field() {
 /// Almost every `App` test cycles modes without sealing `HOME`. Those calls have
 /// to be inert: not "usually inert because no other test happens to have opted
 /// in", but inert by construction, because the alternative is rewriting the
-/// developer's real `~/.codewhale/settings.toml` during `cargo test`.
+/// developer's real `~/.ghosty/settings.toml` during `cargo test`.
 #[test]
 fn mode_cycling_in_an_unsealed_test_writes_nothing() {
     let mut app = App::new(test_options(false), &Config::default());
@@ -6894,7 +6890,7 @@ fn slash_config_and_set_refuse_every_live_route_key_while_a_turn_runs() {
         "nothing may land after the queue is drained either"
     );
     assert!(
-        !codewhale_config::SetupState::path()
+        !ghosty_config::SetupState::path()
             .expect("setup state path")
             .exists(),
         "a refused route change must not record provider/model setup progress"
@@ -6971,13 +6967,13 @@ async fn a_late_startup_default_failure_is_returned_not_only_logged() {
     let tmp = tempfile::TempDir::new().expect("tempdir");
     // A regular file where the home directory must be: every settings write
     // below it fails.
-    let blocked_home = tmp.path().join("codewhale-home-file");
+    let blocked_home = tmp.path().join("ghosty-home-file");
     std::fs::write(&blocked_home, "not a directory").expect("blocking file");
     let _home = EnvVarGuard::set("HOME", tmp.path());
     let _user_profile = EnvVarGuard::set("USERPROFILE", tmp.path());
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &blocked_home);
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &blocked_home);
     let _deepseek_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-    let _codewhale_config = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+    let _ghosty_config = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
     let _writes = crate::tui::startup_defaults::allow_writes_in_tests();
 
     let mut app = App::new(test_options(false), &Config::default());
@@ -6998,7 +6994,7 @@ async fn a_late_startup_default_failure_is_returned_not_only_logged() {
         "the shutdown notice must name what was lost, got {message:?}"
     );
     assert!(
-        !message.contains(".codewhale") && !message.contains(tmp.path().to_str().unwrap()),
+        !message.contains(".ghosty") && !message.contains(tmp.path().to_str().unwrap()),
         "the shutdown notice must not print the settings path, got {message:?}"
     );
 }
@@ -7117,7 +7113,7 @@ fn hotbar_mode_row_for_the_live_mode_still_shows_the_saved_receipt() {
 
 /// v0.9.1 kimi-k3 dogfood report: `settings.toml`'s `[provider_models]` is a memory of the last
 /// `/model` pick, so it must not override a model the user named for *this*
-/// launch. A dogfood user ran `codewhale --provider moonshot --model kimi-k3`
+/// launch. A dogfood user ran `ghosty --provider moonshot --model kimi-k3`
 /// and the session header kept showing the remembered `kimi-k2.7-code` while
 /// `doctor` reported `kimi-k3`; header and route have to agree.
 #[test]
@@ -7136,13 +7132,13 @@ fn an_explicit_launch_model_outranks_the_remembered_provider_model() {
     )
     .expect("seed settings");
     let _config_path_guard = EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
-    let _codewhale_config_path = EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+    let _ghosty_config_path = EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
 
     let config = Config::load(Some(config_path.clone()), None).expect("load sealed config");
 
     // Without an explicit request this launch, the remembered pick still wins:
     // that stickiness is what `/model` exists for.
-    let _no_flag = EnvVarGuard::remove("CODEWHALE_MODEL");
+    let _no_flag = EnvVarGuard::remove("GHOSTY_MODEL");
     let _no_legacy_flag = EnvVarGuard::remove("DEEPSEEK_MODEL");
     let remembered = App::new(
         TuiOptions {
@@ -7156,8 +7152,8 @@ fn an_explicit_launch_model_outranks_the_remembered_provider_model() {
         "the remembered /model pick remains the default when nothing was named"
     );
 
-    // `--model` reaches this binary as CODEWHALE_MODEL. It must win.
-    let _model_flag = EnvVarGuard::set("CODEWHALE_MODEL", "kimi-k3");
+    // `--model` reaches this binary as GHOSTY_MODEL. It must win.
+    let _model_flag = EnvVarGuard::set("GHOSTY_MODEL", "kimi-k3");
     let requested = App::new(
         TuiOptions {
             model: config.default_model(),

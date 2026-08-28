@@ -30,18 +30,18 @@ pub(crate) struct DoctorPathReport {
 
 impl DoctorPathReport {
     pub(crate) fn resolve(config_override: Option<&Path>) -> Result<Self> {
-        let home = codewhale_paths::codewhale_home()
+        let home = ghosty_paths::ghosty_home()
             .map_err(anyhow::Error::new)?
-            .context("could not resolve the canonical Codewhale state root")?;
+            .context("could not resolve the canonical Ghosty state root")?;
         let config = match config_override {
-            Some(path) => codewhale_config::resolve_config_path(Some(path.to_path_buf()))
+            Some(path) => ghosty_config::resolve_config_path(Some(path.to_path_buf()))
                 .context("could not normalize the explicit config path")?,
-            None => codewhale_config::resolve_config_path(None)
-                .unwrap_or_else(|_| home.join(codewhale_config::CONFIG_FILE_NAME)),
+            None => ghosty_config::resolve_config_path(None)
+                .unwrap_or_else(|_| home.join(ghosty_config::CONFIG_FILE_NAME)),
         };
         let settings = crate::settings::Settings::path()
             .context("could not resolve the canonical settings path")?;
-        let sessions = codewhale_config::resolve_state_dir("sessions")
+        let sessions = ghosty_config::resolve_state_dir("sessions")
             .context("could not resolve the sessions path")?;
         let logs = crate::runtime_log::log_directory()
             .context("could not resolve the runtime log directory")?;
@@ -58,7 +58,7 @@ impl DoctorPathReport {
             .context("could not resolve the personal Fleet definitions directory")?;
         let personal_fleet_agents = crate::fleet::profile::personal_agent_profile_dir()
             .context("could not resolve the personal Fleet agent directory")?;
-        let (secrets, _) = codewhale_secrets::FileKeyringStore::default_paths_read_only()
+        let (secrets, _) = ghosty_secrets::FileKeyringStore::default_paths_read_only()
             .context("could not resolve the file secret backend path")?;
         Ok(Self {
             home,
@@ -112,9 +112,9 @@ impl DoctorPathReport {
 /// The input type cannot carry secret values, keeping this renderer safe by
 /// construction.
 pub(crate) fn secret_backend_human_lines(
-    diagnostic: &codewhale_secrets::SecretBackendDiagnostic,
+    diagnostic: &ghosty_secrets::SecretBackendDiagnostic,
 ) -> Vec<String> {
-    use codewhale_secrets::{
+    use ghosty_secrets::{
         SecretBackendDiagnosticKind, SecretBackendInspection, SecretBackendPresence,
     };
 
@@ -371,7 +371,7 @@ pub(crate) async fn doctor_search_probe(
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(SEARCH_PROBE_TIMEOUT)
         .timeout(SEARCH_PROBE_TIMEOUT)
-        .user_agent(concat!("codewhale-doctor/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("ghosty-doctor/", env!("CARGO_PKG_VERSION")))
         .build()
     {
         Ok(client) => client,
@@ -408,7 +408,7 @@ pub(crate) fn doctor_search_probe_lines(report: &DoctorSearchProbeReport) -> Vec
     match report {
         DoctorSearchProbeReport::NotChecked => vec![
             "· not checked (offline default)".to_string(),
-            "Run `codewhale doctor --probe-search` to test the selected provider authority."
+            "Run `ghosty doctor --probe-search` to test the selected provider authority."
                 .to_string(),
         ],
         DoctorSearchProbeReport::FeatureDisabled => vec![
@@ -477,7 +477,7 @@ fn doctor_update_report<E>(
     let Some(latest) = doctor_safe_release_tag(&raw_latest) else {
         return DoctorUpdateReport::ReleaseMetadataInvalid;
     };
-    match codewhale_release::compare_release_versions(current_version, &latest) {
+    match ghosty_release::compare_release_versions(current_version, &latest) {
         Ok(std::cmp::Ordering::Less) => DoctorUpdateReport::UpdateAvailable { latest },
         Ok(std::cmp::Ordering::Equal) => DoctorUpdateReport::UpToDate { latest },
         Ok(std::cmp::Ordering::Greater) => DoctorUpdateReport::CurrentNewer { latest },
@@ -500,11 +500,11 @@ fn doctor_update_report_lines(report: &DoctorUpdateReport) -> Vec<String> {
     match report {
         DoctorUpdateReport::NotChecked => vec![
             "latest: unknown (not checked; offline default)".to_string(),
-            "Run `codewhale doctor --check-updates` to opt in.".to_string(),
+            "Run `ghosty doctor --check-updates` to opt in.".to_string(),
         ],
         DoctorUpdateReport::UpdateAvailable { latest } => vec![
             format!("latest: {latest}"),
-            "Update available. Run `codewhale update` to install.".to_string(),
+            "Update available. Run `ghosty update` to install.".to_string(),
         ],
         DoctorUpdateReport::UpToDate { latest } => {
             vec![
@@ -518,11 +518,11 @@ fn doctor_update_report_lines(report: &DoctorUpdateReport) -> Vec<String> {
         ],
         DoctorUpdateReport::ReleaseMetadataInvalid => vec![
             "latest: unknown (release metadata invalid; details omitted)".to_string(),
-            "Run `codewhale update --check` to retry.".to_string(),
+            "Run `ghosty update --check` to retry.".to_string(),
         ],
         DoctorUpdateReport::ReleaseCheckFailed => vec![
             "latest: unknown (release check failed; details omitted)".to_string(),
-            "Run `codewhale update --check` to retry.".to_string(),
+            "Run `ghosty update --check` to retry.".to_string(),
         ],
     }
 }
@@ -539,8 +539,7 @@ pub(crate) async fn print_update_report(probes: DoctorProbeRequest) {
     let report = if probes.should_check_updates() {
         doctor_update_report(
             current_version,
-            codewhale_release::latest_release_tag_async(codewhale_release::ReleaseChannel::Stable)
-                .await,
+            ghosty_release::latest_release_tag_async(ghosty_release::ReleaseChannel::Stable).await,
         )
     } else {
         DoctorUpdateReport::NotChecked

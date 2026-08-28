@@ -2,7 +2,7 @@
 //!
 //! PDF parsing is intentionally delegated to the optional `pdftotext`
 //! executable. Keeping the adapter here gives file and web tools one error
-//! contract without carrying a second parser and font stack in Codewhale.
+//! contract without carrying a second parser and font stack in Ghosty.
 
 use std::ffi::OsStr;
 use std::fmt;

@@ -1,13 +1,13 @@
 //! xAI / Grok OAuth credential loading, refresh, and device-code login.
 //!
-//! Two paths, matching [#4257](https://github.com/Hmbown/CodeWhale/issues/4257):
+//! Two paths, matching [#4257](https://github.com/blissito/ghostycode/issues/4257):
 //!
 //! 1. **Read-only external login** — reuse one exact official Grok CLI token
 //!    file only after provider-scoped consent. External tokens are never
 //!    refreshed or rewritten.
 //! 2. **Native device-code** — request a code from `auth.x.ai`, print the
 //!    verification URL + user code, poll the token endpoint, and write tokens
-//!    to Codewhale-owned storage.
+//!    to Ghosty-owned storage.
 //!
 //! Access tokens are sent as `Authorization: Bearer` on the OpenAI-compatible
 //! xAI Chat Completions route (`https://api.x.ai/v1`). Token values are never
@@ -26,7 +26,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use codewhale_config::device_code::DevicePollOutcome;
+use ghosty_config::device_code::DevicePollOutcome;
 
 use crate::config::{ApiProvider, Config};
 
@@ -163,7 +163,7 @@ pub(crate) fn pending_device_login_for_test(
     }
 }
 
-/// Receipt for the committed Codewhale-owned xAI OAuth generation.
+/// Receipt for the committed Ghosty-owned xAI OAuth generation.
 #[derive(Debug)]
 pub struct XaiDeviceActivation {
     #[allow(dead_code)]
@@ -284,7 +284,7 @@ pub fn auth_file_path() -> PathBuf {
         if let Ok(path) = std::env::var(key) {
             let p = PathBuf::from(path.trim());
             if !p.as_os_str().is_empty() {
-                return codewhale_config::resolve_external_credential_path(&p).unwrap_or(p);
+                return ghosty_config::resolve_external_credential_path(&p).unwrap_or(p);
             }
         }
     }
@@ -292,20 +292,20 @@ pub fn auth_file_path() -> PathBuf {
         let p = PathBuf::from(home.trim());
         if !p.as_os_str().is_empty() {
             let path = p.join("auth.json");
-            return codewhale_config::resolve_external_credential_path(&path).unwrap_or(path);
+            return ghosty_config::resolve_external_credential_path(&path).unwrap_or(path);
         }
     }
     let path = crate::config::effective_home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".grok")
         .join("auth.json");
-    codewhale_config::resolve_external_credential_path(&path).unwrap_or(path)
+    ghosty_config::resolve_external_credential_path(&path).unwrap_or(path)
 }
 
-/// Codewhale-owned xAI token file. Native login and refresh never target the
+/// Ghosty-owned xAI token file. Native login and refresh never target the
 /// Grok CLI's file.
-pub fn codewhale_auth_file_path() -> Result<PathBuf> {
-    codewhale_config::legacy_xai_oauth_path()
+pub fn ghosty_auth_file_path() -> Result<PathBuf> {
+    ghosty_config::legacy_xai_oauth_path()
 }
 
 /// #5243: validate an external Grok CLI credential file *before* consent is
@@ -340,13 +340,13 @@ fn configured_owned_auth_file_path(config: &Config) -> Result<Option<PathBuf>> {
         .provider_config_for(ApiProvider::Xai)
         .and_then(|entry| entry.oauth_credential_generation.as_deref());
     match generation {
-        Some(generation) => codewhale_config::xai_oauth_generation_path(generation).map(Some),
+        Some(generation) => ghosty_config::xai_oauth_generation_path(generation).map(Some),
         None => Ok(None),
     }
 }
 
 /// Detect the [#5032] bricked-launch state: `[providers.xai]` selects OAuth and
-/// points `oauth_credential_generation` at a Codewhale-owned credential file
+/// points `oauth_credential_generation` at a Ghosty-owned credential file
 /// that no longer exists. This is a distinct, more specific failure than
 /// "unconfigured" — the pointer is present and authoritative, so
 /// [`credentials_valid`] returns false and cannot fall through to a legacy or
@@ -356,7 +356,7 @@ fn configured_owned_auth_file_path(config: &Config) -> Result<Option<PathBuf>> {
 /// configured, a malformed generation pointer (a different, already-fail-closed
 /// failure), or a generation whose owned file is present.
 ///
-/// [#5032]: https://github.com/Hmbown/CodeWhale/issues/5032
+/// [#5032]: https://github.com/blissito/ghostycode/issues/5032
 #[must_use]
 pub fn owned_generation_is_dangling(config: &Config) -> bool {
     if !config
@@ -385,7 +385,7 @@ pub fn credentials_present(config: &Config) -> bool {
 /// exact read-only consent has been validated.
 #[must_use]
 pub fn credentials_valid(config: &Config) -> bool {
-    // Codewhale-owned OAuth bytes are inert until the xAI provider explicitly
+    // Ghosty-owned OAuth bytes are inert until the xAI provider explicitly
     // selects OAuth. A failed post-login config finalization can therefore
     // never make a newly written token silently ready on the next launch.
     if !config
@@ -415,7 +415,7 @@ pub fn credentials_valid(config: &Config) -> bool {
         // or malformed owned storage must not fall through to an external CLI.
         return false;
     }
-    if let Ok(path) = codewhale_auth_file_path()
+    if let Ok(path) = ghosty_auth_file_path()
         && let Ok(Some(mut file)) = load_owned_auth_file(&path)
         && let Some((_, entry)) = select_entry(&mut file)
         && (entry_access_token_is_fresh(&entry)
@@ -430,7 +430,7 @@ pub fn credentials_valid(config: &Config) -> bool {
     let path = auth_file_path();
     let Ok(grant) = config.external_credential_read_grant(
         ApiProvider::Xai,
-        codewhale_config::ExternalCredentialSource::GrokCli,
+        ghosty_config::ExternalCredentialSource::GrokCli,
         &path,
     ) else {
         return false;
@@ -441,8 +441,8 @@ pub fn credentials_valid(config: &Config) -> bool {
     select_entry(&mut file).is_some_and(|(_, entry)| entry_access_token_is_fresh(&entry))
 }
 
-/// Load xAI OAuth credentials. Codewhale-owned credentials may refresh and
-/// rewrite Codewhale-owned storage. External credentials are read-only.
+/// Load xAI OAuth credentials. Ghosty-owned credentials may refresh and
+/// rewrite Ghosty-owned storage. External credentials are read-only.
 pub fn get_access_token(config: &Config) -> Result<String> {
     Ok(get_credentials(config)?.access_token)
 }
@@ -454,12 +454,12 @@ pub fn get_credentials(config: &Config) -> Result<XaiOAuthCredentials> {
                 .provider_config_for(ApiProvider::Xai)
                 .and_then(|entry| entry.auth_mode.as_deref())
                 .is_some_and(auth_mode_uses_xai_oauth),
-        "Codewhale-owned xAI OAuth credentials are inactive until the xAI route explicitly selects OAuth"
+        "Ghosty-owned xAI OAuth credentials are inactive until the xAI route explicitly selects OAuth"
     );
     if let Some(owned_path) = configured_owned_auth_file_path(config)? {
         return get_owned_credentials(&owned_path);
     }
-    let owned_path = codewhale_auth_file_path()?;
+    let owned_path = ghosty_auth_file_path()?;
     if load_owned_auth_file(&owned_path)?.is_some() {
         return get_owned_credentials(&owned_path);
     }
@@ -467,20 +467,20 @@ pub fn get_credentials(config: &Config) -> Result<XaiOAuthCredentials> {
     let external_path = auth_file_path();
     let grant = config.external_credential_read_grant(
         ApiProvider::Xai,
-        codewhale_config::ExternalCredentialSource::GrokCli,
+        ghosty_config::ExternalCredentialSource::GrokCli,
         &external_path,
     )?;
     let mut file = load_external_auth_file(&grant)?;
     let (scope, entry) = select_entry(&mut file).ok_or_else(|| {
         anyhow::anyhow!(
-            "xAI OAuth credentials at {} have no usable entry. Run `grok login` again or use `codewhale auth xai-device` for Codewhale-owned storage.",
-            codewhale_config::quote_os_path(grant.path())
+            "xAI OAuth credentials at {} have no usable entry. Run `grok login` again or use `ghosty auth xai-device` for Ghosty-owned storage.",
+            ghosty_config::quote_os_path(grant.path())
         )
     })?;
     if !entry_access_token_is_fresh(&entry) {
         bail!(
-            "xAI OAuth access token in {} is expired. Read-only consent never refreshes or rewrites another CLI's credentials. Run `grok login` again or use `codewhale auth xai-device`.",
-            codewhale_config::quote_os_path(grant.path())
+            "xAI OAuth access token in {} is expired. Read-only consent never refreshes or rewrites another CLI's credentials. Run `grok login` again or use `ghosty auth xai-device`.",
+            ghosty_config::quote_os_path(grant.path())
         );
     }
     let token = entry
@@ -492,27 +492,27 @@ pub fn get_credentials(config: &Config) -> Result<XaiOAuthCredentials> {
 }
 
 fn get_owned_credentials(path: &Path) -> Result<XaiOAuthCredentials> {
-    let directory = codewhale_config::xai_oauth_credentials_dir()?;
+    let directory = ghosty_config::xai_oauth_credentials_dir()?;
     anyhow::ensure!(
         path.parent() == Some(directory.as_path()),
-        "Codewhale-owned xAI OAuth path escaped the credentials directory"
+        "Ghosty-owned xAI OAuth path escaped the credentials directory"
     );
     let name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .context("Codewhale-owned xAI OAuth path must have a UTF-8 basename")?;
+        .context("Ghosty-owned xAI OAuth path must have a UTF-8 basename")?;
     anyhow::ensure!(
-        name == codewhale_config::LEGACY_XAI_OAUTH_FILE_NAME
-            || codewhale_config::is_valid_xai_oauth_generation(name),
-        "Codewhale-owned xAI OAuth path has an invalid basename"
+        name == ghosty_config::LEGACY_XAI_OAUTH_FILE_NAME
+            || ghosty_config::is_valid_xai_oauth_generation(name),
+        "Ghosty-owned xAI OAuth path has an invalid basename"
     );
-    codewhale_config::with_xai_oauth_lifecycle_lock(|store| {
+    ghosty_config::with_xai_oauth_lifecycle_lock(|store| {
         get_owned_credentials_locked(store, name, refresh_access_token)
     })
 }
 
 fn get_owned_credentials_locked<F>(
-    store: &codewhale_config::XaiOAuthCredentialStore,
+    store: &ghosty_config::XaiOAuthCredentialStore,
     name: &str,
     refresh_access: F,
 ) -> Result<XaiOAuthCredentials>
@@ -522,14 +522,14 @@ where
     let path = store.path_for(name)?;
     let mut file = load_owned_auth_file_from_store(store, name)?.ok_or_else(|| {
         anyhow::anyhow!(
-            "Codewhale-owned xAI OAuth credentials were not found at {}. Run `codewhale auth xai-device` again.",
-            codewhale_config::quote_os_path(&path)
+            "Ghosty-owned xAI OAuth credentials were not found at {}. Run `ghosty auth xai-device` again.",
+            ghosty_config::quote_os_path(&path)
         )
     })?;
     let (scope, mut entry) = select_entry(&mut file).ok_or_else(|| {
         anyhow::anyhow!(
-            "Codewhale-owned xAI OAuth credentials at {} have no usable entry. Run `codewhale auth xai-device` again.",
-            codewhale_config::quote_os_path(&path)
+            "Ghosty-owned xAI OAuth credentials at {} have no usable entry. Run `ghosty auth xai-device` again.",
+            ghosty_config::quote_os_path(&path)
         )
     })?;
 
@@ -548,7 +548,7 @@ where
         .filter(|t| !t.trim().is_empty())
         .context(
             "xAI OAuth access token expired and no refresh_token is stored. \
-             Run `grok login` or `codewhale auth xai-device` again.",
+             Run `grok login` or `ghosty auth xai-device` again.",
         )?;
     let issuer = entry
         .oidc_issuer
@@ -579,7 +579,7 @@ where
 /// pending in memory until [`activate_device_login`] commits an owned
 /// generation and its config pointer.
 ///
-/// Public residual entry point for CLI/TUI wiring (`codewhale auth` /
+/// Public residual entry point for CLI/TUI wiring (`ghosty auth` /
 /// slash command). Call from a headless or TUI surface that can print the
 /// verification URL.
 pub async fn device_code_login() -> Result<PendingXaiDeviceLogin> {
@@ -592,7 +592,7 @@ pub async fn device_code_login() -> Result<PendingXaiDeviceLogin> {
     let scopes = std::env::var("GROK_OIDC_SCOPES")
         .or_else(|_| std::env::var("XAI_OIDC_SCOPES"))
         .unwrap_or_else(|_| DEFAULT_SCOPES.to_string());
-    let open_browser = std::env::var_os("CODEWHALE_XAI_OAUTH_NO_BROWSER").is_none();
+    let open_browser = std::env::var_os("GHOSTY_XAI_OAUTH_NO_BROWSER").is_none();
 
     device_code_login_on_blocking_thread(issuer, client_id, scopes, open_browser).await
 }
@@ -626,7 +626,7 @@ fn device_code_login_with(
     // This string comes off the wire and is handed to `webbrowser::open`, so a
     // malicious device-code response must not be able to launch something
     // other than a browser navigation.
-    let verify = codewhale_config::device_code::validate_browser_verification_uri(
+    let verify = ghosty_config::device_code::validate_browser_verification_uri(
         &verify,
         "xAI device-code request",
     )?;
@@ -640,7 +640,7 @@ fn device_code_login_with(
     }
 
     let lifetime = Duration::from_secs(device.expires_in.unwrap_or(DEVICE_POLL_MAX_SECS).max(30));
-    let token = codewhale_config::device_code::DeviceCodePoll::new(
+    let token = ghosty_config::device_code::DeviceCodePoll::new(
         lifetime,
         "xAI device-code authorization timed out. Re-run device login \
          and approve the code before it expires.",
@@ -675,7 +675,7 @@ pub fn activate_device_login(
     config_path: Option<&Path>,
     live_config: Option<&mut Config>,
 ) -> Result<XaiDeviceActivation> {
-    codewhale_config::with_xai_oauth_lifecycle_lock(move |store| {
+    ghosty_config::with_xai_oauth_lifecycle_lock(move |store| {
         activate_device_login_locked(pending, config_path, live_config, store)
     })
 }
@@ -684,22 +684,22 @@ fn activate_device_login_locked(
     pending: PendingXaiDeviceLogin,
     config_path: Option<&Path>,
     live_config: Option<&mut Config>,
-    store: &codewhale_config::XaiOAuthCredentialStore,
+    store: &ghosty_config::XaiOAuthCredentialStore,
 ) -> Result<XaiDeviceActivation> {
     let config_path = crate::config_persistence::config_toml_path(config_path)?;
     let generation = format!(
         "{}{}{}",
-        codewhale_config::XAI_OAUTH_GENERATION_PREFIX,
+        ghosty_config::XAI_OAUTH_GENERATION_PREFIX,
         uuid::Uuid::new_v4().simple(),
-        codewhale_config::XAI_OAUTH_GENERATION_SUFFIX
+        ghosty_config::XAI_OAUTH_GENERATION_SUFFIX
     );
-    codewhale_config::validate_xai_oauth_generation(&generation)?;
+    ghosty_config::validate_xai_oauth_generation(&generation)?;
     let auth_path = store.path_for(&generation)?;
     let key_inside =
         crate::config::provider_config_key(ApiProvider::Xai).context("xAI auth mode key")?;
     let mut stage_written = false;
 
-    let activation = codewhale_config::mutate_config_document(&config_path, |document| {
+    let activation = ghosty_config::mutate_config_document(&config_path, |document| {
         let previous_generation_item = document
             .get("providers")
             .and_then(toml_edit::Item::as_table_like)
@@ -716,7 +716,7 @@ fn activate_device_login_locked(
             })
             .transpose()?;
         if let Some(previous) = previous_generation.as_deref() {
-            codewhale_config::validate_xai_oauth_generation(previous).with_context(|| {
+            ghosty_config::validate_xai_oauth_generation(previous).with_context(|| {
                 "refusing xAI login because the existing credential generation pointer is invalid"
             })?;
         }
@@ -724,10 +724,10 @@ fn activate_device_login_locked(
         let previous_owned_name = match previous_generation.as_deref() {
             Some(previous) => Some(previous.to_string()),
             None if store
-                .read_to_string(codewhale_config::LEGACY_XAI_OAUTH_FILE_NAME)?
+                .read_to_string(ghosty_config::LEGACY_XAI_OAUTH_FILE_NAME)?
                 .is_some() =>
             {
-                Some(codewhale_config::LEGACY_XAI_OAUTH_FILE_NAME.to_string())
+                Some(ghosty_config::LEGACY_XAI_OAUTH_FILE_NAME.to_string())
             }
             None => None,
         };
@@ -738,7 +738,7 @@ fn activate_device_login_locked(
             // generation like a fresh start instead of failing (#5032).
             Some(name) => load_owned_auth_file_from_store(store, name)?.unwrap_or_else(|| {
                 tracing::warn!(
-                    target: "codewhale::xai_oauth",
+                    target: "ghosty::xai_oauth",
                     generation = name,
                     "config pointed at a missing owned xAI OAuth generation; starting a fresh credential file"
                 );
@@ -771,17 +771,17 @@ fn activate_device_login_locked(
         write_auth_file_to_store(store, &generation, &file, false)?;
         stage_written = true;
 
-        codewhale_config::set_config_document_value(
+        ghosty_config::set_config_document_value(
             document,
             &["providers", key_inside, "auth_mode"],
             "oauth",
         )?;
-        codewhale_config::set_config_document_value(
+        ghosty_config::set_config_document_value(
             document,
             &["providers", key_inside, "oauth_credential_generation"],
             generation.clone(),
         )?;
-        codewhale_config::unset_config_document_value(
+        ghosty_config::unset_config_document_value(
             document,
             &["providers", key_inside, "external_credentials"],
         )?;
@@ -797,7 +797,7 @@ fn activate_device_login_locked(
             if stage_written && let Err(cleanup_error) = store.remove(&generation) {
                 return Err(error).context(format!(
                     "xAI login was not activated; also failed to remove unreferenced staged credentials at {}: {cleanup_error}",
-                    codewhale_config::quote_os_path(&auth_path)
+                    ghosty_config::quote_os_path(&auth_path)
                 ));
             }
             return Err(error)
@@ -806,21 +806,21 @@ fn activate_device_login_locked(
     };
 
     if let Some(config) = live_config {
-        config.mark_codewhale_owned_xai_oauth(generation.clone());
+        config.mark_ghosty_owned_xai_oauth(generation.clone());
     }
     if let Some(previous) = previous_owned_name
         && previous != generation
         && let Err(error) = store.remove(&previous)
     {
         tracing::warn!(
-            target: "codewhale::xai_oauth",
+            target: "ghosty::xai_oauth",
             error = %error,
             "new xAI OAuth generation committed but superseded generation cleanup failed"
         );
     }
     eprintln!(
-        "Signed in. Codewhale-owned credentials activated at {}.",
-        codewhale_config::quote_os_path(&auth_path)
+        "Signed in. Ghosty-owned credentials activated at {}.",
+        ghosty_config::quote_os_path(&auth_path)
     );
     Ok(XaiDeviceActivation {
         credentials,
@@ -840,13 +840,13 @@ fn activate_device_login_locked(
 /// non-fatal — log a warning and continue. Returns `Ok(())` when the stale
 /// pointer was removed (or was already absent).
 ///
-/// [#5032]: https://github.com/Hmbown/CodeWhale/issues/5032
+/// [#5032]: https://github.com/blissito/ghostycode/issues/5032
 pub fn clear_dangling_xai_oauth_generation(config_path: Option<&Path>) -> Result<()> {
     let config_path = crate::config_persistence::config_toml_path(config_path)?;
     let key_inside =
         crate::config::provider_config_key(ApiProvider::Xai).context("xAI provider config key")?;
-    codewhale_config::mutate_config_document(&config_path, |document| {
-        codewhale_config::unset_config_document_value(
+    ghosty_config::mutate_config_document(&config_path, |document| {
+        ghosty_config::unset_config_document_value(
             document,
             &["providers", key_inside, "oauth_credential_generation"],
         )?;
@@ -859,12 +859,12 @@ pub fn missing_auth_message() -> String {
     format!(
         "xAI OAuth credentials not found.\n\
          Options:\n\
-         1. Run `codewhale auth xai-device` for Codewhale-owned OAuth storage\n\
+         1. Run `ghosty auth xai-device` for Ghosty-owned OAuth storage\n\
          2. To read an existing Grok CLI login without changing it, run \
-         `codewhale auth external-consent --provider xai --mode read-only --path {}`\n\
+         `ghosty auth external-consent --provider xai --mode read-only --path {}`\n\
          3. Or use API-key auth: export XAI_API_KEY=... / \
-         codewhale auth set --provider xai",
-        codewhale_config::quote_os_path(&auth_file_path())
+         ghosty auth set --provider xai",
+        ghosty_config::quote_os_path(&auth_file_path())
     )
 }
 
@@ -873,14 +873,14 @@ pub fn missing_auth_message() -> String {
 type AuthFile = BTreeMap<String, GrokAuthEntry>;
 
 fn load_owned_auth_file(path: &Path) -> Result<Option<AuthFile>> {
-    let Some(raw) = crate::external_credentials::read_codewhale_owned_to_string(path)? else {
+    let Some(raw) = crate::external_credentials::read_ghosty_owned_to_string(path)? else {
         return Ok(None);
     };
     parse_auth_file(&raw, path).map(Some)
 }
 
 fn load_owned_auth_file_from_store(
-    store: &codewhale_config::XaiOAuthCredentialStore,
+    store: &ghosty_config::XaiOAuthCredentialStore,
     name: &str,
 ) -> Result<Option<AuthFile>> {
     let Some(raw) = store.read_to_string(name)? else {
@@ -889,13 +889,11 @@ fn load_owned_auth_file_from_store(
     parse_auth_file(&raw, &store.path_for(name)?).map(Some)
 }
 
-fn load_external_auth_file(
-    grant: &codewhale_config::ExternalCredentialReadGrant,
-) -> Result<AuthFile> {
+fn load_external_auth_file(grant: &ghosty_config::ExternalCredentialReadGrant) -> Result<AuthFile> {
     let Some(raw) = crate::external_credentials::read_to_string(grant)? else {
         bail!(
             "external xAI/Grok credential file not found at {}",
-            codewhale_config::quote_os_path(grant.path())
+            ghosty_config::quote_os_path(grant.path())
         );
     };
     parse_auth_file(&raw, grant.path())
@@ -905,13 +903,13 @@ fn parse_auth_file(raw: &str, path: &Path) -> Result<AuthFile> {
     let value: Value = serde_json::from_str(raw).map_err(|_| {
         anyhow::anyhow!(
             "xAI/Grok credential file {} is not valid credential JSON",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         )
     })?;
     let obj = value.as_object().ok_or_else(|| {
         anyhow::anyhow!(
             "xAI/Grok credential file {} must be a JSON object of entries",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         )
     })?;
     let mut out = BTreeMap::new();
@@ -922,7 +920,7 @@ fn parse_auth_file(raw: &str, path: &Path) -> Result<AuthFile> {
             }
             Err(_) => {
                 tracing::warn!(
-                    target: "codewhale::xai_oauth",
+                    target: "ghosty::xai_oauth",
                     "skipping unreadable xAI auth entry"
                 );
             }
@@ -932,7 +930,7 @@ fn parse_auth_file(raw: &str, path: &Path) -> Result<AuthFile> {
 }
 
 fn write_auth_file_to_store(
-    store: &codewhale_config::XaiOAuthCredentialStore,
+    store: &ghosty_config::XaiOAuthCredentialStore,
     name: &str,
     file: &AuthFile,
     allow_replace: bool,
@@ -944,7 +942,7 @@ fn write_auth_file_to_store(
         .with_context(|| {
             format!(
                 "writing xAI OAuth credentials to {}",
-                codewhale_config::quote_os_path(&store.directory().join(name))
+                ghosty_config::quote_os_path(&store.directory().join(name))
             )
         })?;
     #[cfg(test)]
@@ -1071,7 +1069,7 @@ fn resolve_device_oauth_endpoints(issuer: &str) -> DeviceOauthEndpoints {
         Err(err) => {
             let fallback = fallback_device_oauth_endpoints(issuer);
             tracing::warn!(
-                target: "codewhale::xai_oauth",
+                target: "ghosty::xai_oauth",
                 error = %err,
                 device_authorization_endpoint = %fallback.device_authorization_endpoint,
                 token_endpoint = %fallback.token_endpoint,
@@ -1468,7 +1466,7 @@ mod tests {
             }
         });
         fs::write(&path, serde_json::to_vec_pretty(&file).unwrap()).unwrap();
-        let _home_guard = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &root);
+        let _home_guard = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &root);
         let _path_guard = crate::test_support::EnvVarGuard::set("GROK_AUTH_PATH", &path);
         let config = Config {
             provider: Some(ApiProvider::Xai.as_str().to_string()),
@@ -1476,9 +1474,9 @@ mod tests {
                 xai: crate::config::ProviderConfig {
                     auth_mode: Some("oauth".to_string()),
                     external_credentials: Some(
-                        codewhale_config::ExternalCredentialConsentToml::read_only(
-                            codewhale_config::ProviderKind::Xai,
-                            codewhale_config::ExternalCredentialSource::GrokCli,
+                        ghosty_config::ExternalCredentialConsentToml::read_only(
+                            ghosty_config::ProviderKind::Xai,
+                            ghosty_config::ExternalCredentialSource::GrokCli,
                             path.clone(),
                         ),
                     ),
@@ -1515,8 +1513,8 @@ mod tests {
         })
         .to_string();
         fs::write(&path, &raw).unwrap();
-        let owned_home = root.join("codewhale-owned");
-        let _home_guard = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &owned_home);
+        let owned_home = root.join("ghosty-owned");
+        let _home_guard = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &owned_home);
         let _path_guard = crate::test_support::EnvVarGuard::set("GROK_AUTH_PATH", &path);
         let config = Config {
             provider: Some(ApiProvider::Xai.as_str().to_string()),
@@ -1566,8 +1564,8 @@ mod tests {
         })
         .to_string();
         fs::write(&path, &raw).unwrap();
-        let owned_home = root.join("codewhale-owned");
-        let _home_guard = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &owned_home);
+        let owned_home = root.join("ghosty-owned");
+        let _home_guard = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &owned_home);
         let _path_guard = crate::test_support::EnvVarGuard::set("GROK_AUTH_PATH", &path);
         let config = Config {
             provider: Some(ApiProvider::Xai.as_str().to_string()),
@@ -1575,9 +1573,9 @@ mod tests {
                 xai: crate::config::ProviderConfig {
                     auth_mode: Some("oauth".to_string()),
                     external_credentials: Some(
-                        codewhale_config::ExternalCredentialConsentToml::read_only(
-                            codewhale_config::ProviderKind::Xai,
-                            codewhale_config::ExternalCredentialSource::GrokCli,
+                        ghosty_config::ExternalCredentialConsentToml::read_only(
+                            ghosty_config::ProviderKind::Xai,
+                            ghosty_config::ExternalCredentialSource::GrokCli,
                             path.clone(),
                         ),
                     ),
@@ -1646,7 +1644,7 @@ mod tests {
         )
         .unwrap();
         let _home_guard =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", root.join("codewhale-owned"));
+            crate::test_support::EnvVarGuard::set("GHOSTY_HOME", root.join("ghosty-owned"));
         let _path_guard = crate::test_support::EnvVarGuard::set("GROK_AUTH_PATH", &path);
         let _key_guard = crate::test_support::EnvVarGuard::remove("XAI_API_KEY");
         let config = Config {
@@ -1655,9 +1653,9 @@ mod tests {
                 xai: crate::config::ProviderConfig {
                     auth_mode: Some("oauth".to_string()),
                     external_credentials: Some(
-                        codewhale_config::ExternalCredentialConsentToml::read_only(
-                            codewhale_config::ProviderKind::Xai,
-                            codewhale_config::ExternalCredentialSource::GrokCli,
+                        ghosty_config::ExternalCredentialConsentToml::read_only(
+                            ghosty_config::ProviderKind::Xai,
+                            ghosty_config::ExternalCredentialSource::GrokCli,
                             path.clone(),
                         ),
                     ),
@@ -1697,14 +1695,14 @@ mod tests {
     }
 
     #[test]
-    fn native_login_storage_is_codewhale_owned() {
+    fn native_login_storage_is_ghosty_owned() {
         let _guard = crate::test_support::lock_test_env();
         let dir = TempDir::new().unwrap();
         let grok_path = dir.path().join("external-grok-auth.json");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", dir.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", dir.path());
         let _grok = crate::test_support::EnvVarGuard::set("GROK_AUTH_PATH", &grok_path);
 
-        let owned = codewhale_auth_file_path().expect("Codewhale-owned auth path");
+        let owned = ghosty_auth_file_path().expect("Ghosty-owned auth path");
         assert_eq!(owned, dir.path().join("credentials/xai-auth.json"));
         assert_ne!(owned, auth_file_path());
     }
@@ -1724,7 +1722,7 @@ mod tests {
             .expect("canonical temp root")
             .join("owned-home");
         fs::create_dir_all(&home).unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
 
         let generation = "xai-auth-fedcba9876543210fedcba9876543210.json";
         let expires_at = rfc3339_from_now(3600);
@@ -1742,7 +1740,7 @@ mod tests {
 }}"#
         );
 
-        let credentials = codewhale_config::with_xai_oauth_lifecycle_lock(|store| {
+        let credentials = ghosty_config::with_xai_oauth_lifecycle_lock(|store| {
             store.write(generation, stored.as_bytes(), false)?;
             // A fresh stored token must be used as-is: refreshing here would
             // mean an existing login stopped working offline.
@@ -1762,8 +1760,8 @@ mod tests {
     }
 
     /// The verification URI is handed to `webbrowser::open`. Before this was
-    /// consolidated onto the shared primitive, Codewhale opened whatever the
-    /// device-code response said — pi validated it, Codewhale did not.
+    /// consolidated onto the shared primitive, Ghosty opened whatever the
+    /// device-code response said — pi validated it, Ghosty did not.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn device_login_refuses_a_verification_uri_that_is_not_a_web_page() {
         let server = MockServer::start().await;
@@ -1856,7 +1854,7 @@ mod tests {
 
     fn seed_expired_owned_generation() -> String {
         let generation = "xai-auth-0123456789abcdef0123456789abcdef.json".to_string();
-        codewhale_config::with_xai_oauth_lifecycle_lock(|store| {
+        ghosty_config::with_xai_oauth_lifecycle_lock(|store| {
             let scope = format!("{}::{}", XAI_OIDC_ISSUER, GROK_OIDC_CLIENT_ID);
             let mut file = AuthFile::new();
             file.insert(
@@ -1878,7 +1876,7 @@ mod tests {
     }
 
     fn seed_legacy_owned_credentials() -> PathBuf {
-        codewhale_config::with_xai_oauth_lifecycle_lock(|store| {
+        ghosty_config::with_xai_oauth_lifecycle_lock(|store| {
             let scope = format!("{}::{}", XAI_OIDC_ISSUER, GROK_OIDC_CLIENT_ID);
             let mut legacy = AuthFile::new();
             legacy.insert(
@@ -1895,11 +1893,11 @@ mod tests {
             );
             write_auth_file_to_store(
                 store,
-                codewhale_config::LEGACY_XAI_OAUTH_FILE_NAME,
+                ghosty_config::LEGACY_XAI_OAUTH_FILE_NAME,
                 &legacy,
                 false,
             )?;
-            store.path_for(codewhale_config::LEGACY_XAI_OAUTH_FILE_NAME)
+            store.path_for(ghosty_config::LEGACY_XAI_OAUTH_FILE_NAME)
         })
         .expect("seed legacy credentials")
     }
@@ -1913,7 +1911,7 @@ mod tests {
             .canonicalize()
             .expect("canonical temp root")
             .join("owned-home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
         let generation = seed_expired_owned_generation();
         let refreshes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let (entered_tx, entered_rx) = std::sync::mpsc::channel();
@@ -1922,7 +1920,7 @@ mod tests {
         let first_generation = generation.clone();
         let first_refreshes = refreshes.clone();
         let first = std::thread::spawn(move || {
-            codewhale_config::with_xai_oauth_lifecycle_lock(|store| {
+            ghosty_config::with_xai_oauth_lifecycle_lock(|store| {
                 get_owned_credentials_locked(store, &first_generation, |_, _, refresh| {
                     assert_eq!(refresh, "initial-refresh");
                     first_refreshes.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -1945,7 +1943,7 @@ mod tests {
         let (attempt_tx, attempt_rx) = std::sync::mpsc::channel();
         let second = std::thread::spawn(move || {
             attempt_tx.send(()).unwrap();
-            codewhale_config::with_xai_oauth_lifecycle_lock(|store| {
+            ghosty_config::with_xai_oauth_lifecycle_lock(|store| {
                 get_owned_credentials_locked(store, &second_generation, |_, _, _| {
                     second_refreshes.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     bail!("second refresh must observe the first thread's committed token")
@@ -1960,7 +1958,7 @@ mod tests {
         assert_eq!(first.access_token, "rotated-access");
         assert_eq!(second.access_token, "rotated-access");
         assert_eq!(refreshes.load(std::sync::atomic::Ordering::SeqCst), 1);
-        codewhale_config::with_xai_oauth_lifecycle_lock(|store| {
+        ghosty_config::with_xai_oauth_lifecycle_lock(|store| {
             let mut file = load_owned_auth_file_from_store(store, &generation)?
                 .context("generation must remain active")?;
             let (_, entry) = select_entry(&mut file).context("stored entry")?;
@@ -1980,7 +1978,7 @@ mod tests {
             .expect("canonical temp root")
             .join("owned-home");
         fs::create_dir_all(&home).unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
         let generation = seed_expired_owned_generation();
         fs::write(
             home.join("config.toml"),
@@ -1994,7 +1992,7 @@ mod tests {
 
         let refresh_generation = generation.clone();
         let refresh = std::thread::spawn(move || {
-            codewhale_config::with_xai_oauth_lifecycle_lock(|store| {
+            ghosty_config::with_xai_oauth_lifecycle_lock(|store| {
                 get_owned_credentials_locked(store, &refresh_generation, |_, _, _| {
                     entered_tx.send(()).unwrap();
                     release_rx.recv().unwrap();
@@ -2014,13 +2012,13 @@ mod tests {
         let config_path = home.join("config.toml");
         let logout = std::thread::spawn(move || {
             attempt_tx.send(()).unwrap();
-            codewhale_config::with_xai_oauth_revocation_transaction(|| {
-                codewhale_config::mutate_config_document(&config_path, |document| {
-                    codewhale_config::unset_config_document_value(
+            ghosty_config::with_xai_oauth_revocation_transaction(|| {
+                ghosty_config::mutate_config_document(&config_path, |document| {
+                    ghosty_config::unset_config_document_value(
                         document,
                         &["providers", "xai", "oauth_credential_generation"],
                     )?;
-                    codewhale_config::unset_config_document_value(
+                    ghosty_config::unset_config_document_value(
                         document,
                         &["providers", "xai", "auth_mode"],
                     )?;
@@ -2077,10 +2075,10 @@ consent_version = 1
             ),
         )
         .unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
-        let consent = codewhale_config::ExternalCredentialConsentToml::read_only(
-            codewhale_config::ProviderKind::Xai,
-            codewhale_config::ExternalCredentialSource::GrokCli,
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
+        let consent = ghosty_config::ExternalCredentialConsentToml::read_only(
+            ghosty_config::ProviderKind::Xai,
+            ghosty_config::ExternalCredentialSource::GrokCli,
             external_path.clone(),
         );
         let mut live = Config {
@@ -2109,7 +2107,7 @@ consent_version = 1
             .file_name()
             .and_then(|name| name.to_str())
             .expect("generation basename");
-        assert!(codewhale_config::is_valid_xai_oauth_generation(generation));
+        assert!(ghosty_config::is_valid_xai_oauth_generation(generation));
         let persisted = fs::read_to_string(&config_path).unwrap();
         assert!(persisted.contains("# operator note"));
         assert!(persisted.contains("model = \"grok-code-fast-1\" # model note"));
@@ -2158,7 +2156,7 @@ consent_version = 1
             .join("owned-home");
         let config_path = dir.path().join("config.toml");
         fs::write(&config_path, "[providers.xai]\nmodel = \"grok-4.5\"\n").unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
         let legacy_path = seed_legacy_owned_credentials();
         assert!(legacy_path.exists());
 
@@ -2189,7 +2187,7 @@ consent_version = 1
             .join("owned-home");
         let config_path = dir.path().join("config.toml");
         fs::write(&config_path, "[providers.xai]\nmodel = \"grok-4.5\"\n").unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
         let mut live = Config::default();
 
         let first = activate_device_login(
@@ -2249,7 +2247,7 @@ consent_version = 1
             ),
         )
         .unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
         let mut live = Config::default();
 
         let activation = activate_device_login(
@@ -2293,7 +2291,7 @@ consent_version = 1
             ),
         )
         .unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
 
         let config = Config {
             provider: Some(ApiProvider::Xai.as_str().to_string()),
@@ -2356,7 +2354,7 @@ consent_version = 1
         let config_path = dir.path().join("config.toml");
         let original = "[providers.xai]\noauth_credential_generation = { path = \"attacker\" }\n";
         fs::write(&config_path, original).unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
 
         let error = activate_device_login(
             pending_login("must-not-stage", "must-not-persist"),
@@ -2371,8 +2369,8 @@ consent_version = 1
         assert!(fs::read_dir(credentials).unwrap().all(|entry| {
             let name = entry.unwrap().file_name();
             let name = name.to_string_lossy();
-            name != codewhale_config::LEGACY_XAI_OAUTH_FILE_NAME
-                && !codewhale_config::is_valid_xai_oauth_generation(&name)
+            name != ghosty_config::LEGACY_XAI_OAUTH_FILE_NAME
+                && !ghosty_config::is_valid_xai_oauth_generation(&name)
         }));
     }
 
@@ -2391,7 +2389,7 @@ consent_version = 1
         let config_path = config_dir.join("config.toml");
         fs::write(&config_path, "[providers.xai]\nauth_mode = \"api_key\"\n").unwrap();
         fs::create_dir(config_dir.join("config.toml.bak")).unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
         let legacy_path = seed_legacy_owned_credentials();
         let legacy_before = fs::read(&legacy_path).unwrap();
         let mut live = Config {
@@ -2427,8 +2425,8 @@ consent_version = 1
                 fs::read_dir(credentials).unwrap().all(|entry| {
                     let name = entry.unwrap().file_name();
                     let name = name.to_string_lossy();
-                    name == codewhale_config::LEGACY_XAI_OAUTH_FILE_NAME
-                        || !codewhale_config::is_valid_xai_oauth_generation(&name)
+                    name == ghosty_config::LEGACY_XAI_OAUTH_FILE_NAME
+                        || !ghosty_config::is_valid_xai_oauth_generation(&name)
                 }),
                 "failed activation must remove every unreferenced generation but retain legacy"
             );
@@ -2446,7 +2444,7 @@ consent_version = 1
         let msg = missing_auth_message();
         assert!(msg.contains("xAI OAuth credentials not found"), "{msg}");
         assert!(msg.contains("external-consent"), "{msg}");
-        assert!(msg.contains("Codewhale-owned OAuth storage"), "{msg}");
+        assert!(msg.contains("Ghosty-owned OAuth storage"), "{msg}");
         assert!(msg.contains("XAI_API_KEY"), "{msg}");
     }
 
@@ -2850,7 +2848,7 @@ consent_version = 1
             ),
         )
         .unwrap();
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &home);
 
         let pending = tokio::task::block_in_place(|| {
             device_code_login_with(&server.uri(), GROK_OIDC_CLIENT_ID, DEFAULT_SCOPES, false)
@@ -2878,7 +2876,7 @@ consent_version = 1
     /// internal shape: a stringly-typed backoff helper that decided whether to
     /// keep polling by substring-matching the poll error message. The same
     /// RFC 8628 behaviours are now pinned in two places — the interval
-    /// arithmetic in `codewhale_config::device_code`, and the classification of
+    /// arithmetic in `ghosty_config::device_code`, and the classification of
     /// a real token-endpoint response here.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn poll_device_token_classifies_rfc8628_poll_states() {

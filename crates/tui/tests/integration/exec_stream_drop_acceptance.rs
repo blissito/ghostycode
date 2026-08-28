@@ -1,9 +1,9 @@
 //! Process-level acceptance for the v0.9.4 Terminal-Bench P0 exit-path fix.
 //!
-//! Benchmark evidence (Terminal-Bench 2.1, codewhale 0.9.4): five tasks were
+//! Benchmark evidence (Terminal-Bench 2.1, ghosty 0.9.4): five tasks were
 //! forfeited when the DeepSeek stream dropped mid-response ("error decoding
 //! response body" after partial content). The engine surfaced the warning
-//! and `codewhale exec` exited 1, and Harbor raised
+//! and `ghosty exec` exited 1, and Harbor raised
 //! `NonZeroAgentExitCodeError`. The fix: headless turns re-issue the request
 //! after a mid-stream network drop (bounded by MAX_STREAM_RETRIES), and a
 //! turn that still fails exits `EX_TEMPFAIL` (75) — a retryable
@@ -251,10 +251,10 @@ fn sse_chunk(value: Value) -> String {
 }
 
 fn run_exec(workspace: &Path, home: &Path, base_url: &str) -> std::process::Output {
-    std::fs::create_dir_all(home.join(".codewhale")).expect("config directory");
+    std::fs::create_dir_all(home.join(".ghosty")).expect("config directory");
     std::fs::create_dir_all(home.join(".deepseek")).expect("legacy config directory");
     std::fs::write(
-        home.join(".codewhale/config.toml"),
+        home.join(".ghosty/config.toml"),
         "allow_shell = true\n\n[retry]\nenabled = false\n",
     )
     .expect("headless test config");
@@ -278,13 +278,13 @@ fn run_exec(workspace: &Path, home: &Path, base_url: &str) -> std::process::Outp
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("XDG_DATA_HOME", home.join(".local/share"))
         .env("XDG_CACHE_HOME", home.join(".cache"))
-        .env("CODEWHALE_CONFIG_PATH", home.join(".codewhale/config.toml"))
+        .env("GHOSTY_CONFIG_PATH", home.join(".ghosty/config.toml"))
         .env("DEEPSEEK_CONFIG_PATH", home.join(".deepseek/config.toml"))
         .env("DEEPSEEK_API_KEY", "ci-test-key-not-real")
         .env("DEEPSEEK_BASE_URL", base_url)
-        .env("CODEWHALE_BASE_URL", base_url)
+        .env("GHOSTY_BASE_URL", base_url)
         .env("DEEPSEEK_MODEL", MODEL)
-        .env("CODEWHALE_MODEL", MODEL)
+        .env("GHOSTY_MODEL", MODEL)
         .env("RUST_LOG", "warn")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -292,10 +292,10 @@ fn run_exec(workspace: &Path, home: &Path, base_url: &str) -> std::process::Outp
 }
 
 fn binary() -> PathBuf {
-    std::env::var_os("CARGO_BIN_EXE_codewhale-tui")
+    std::env::var_os("CARGO_BIN_EXE_ghosty-tui")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/codewhale-tui")
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/ghosty-tui")
         })
 }
 
@@ -321,7 +321,7 @@ fn preserve_host_env(command: &mut Command) {
 }
 
 fn run_with_timeout(mut command: Command, timeout: Duration) -> std::process::Output {
-    let mut child = command.spawn().expect("spawn codewhale exec");
+    let mut child = command.spawn().expect("spawn ghosty exec");
     let stdout = read_in_background(child.stdout.take().expect("stdout"));
     let stderr = read_in_background(child.stderr.take().expect("stderr"));
     let status = child
@@ -330,7 +330,7 @@ fn run_with_timeout(mut command: Command, timeout: Duration) -> std::process::Ou
         .unwrap_or_else(|| {
             let _ = child.kill();
             let _ = child.wait();
-            panic!("codewhale exec timed out")
+            panic!("ghosty exec timed out")
         });
     std::process::Output {
         status,

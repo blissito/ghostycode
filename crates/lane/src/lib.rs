@@ -3,8 +3,8 @@
 //! A **Lane** is a running workflow instance (one issue/goal). **Runtime** owns
 //! where/how it executes (tmux, inline, vm, ci) — never Fleet.
 //!
-//! Persistence: `$CODEWHALE_HOME/lanes/<lane-id>.json` plus stream-json logs
-//! under `$CODEWHALE_HOME/lanes/logs/<lane-id>.ndjson`.
+//! Persistence: `$GHOSTY_HOME/lanes/<lane-id>.json` plus stream-json logs
+//! under `$GHOSTY_HOME/lanes/logs/<lane-id>.ndjson`.
 
 pub mod control;
 mod registry;

@@ -6,13 +6,13 @@ import type { DocsRuntimeApiDict } from "../types";
  * belongs in its own commit, never mixed into a structural move.
  */
 export const docsRuntimeApi: DocsRuntimeApiDict = {
-  metaTitle: "Runtime API · Codewhale Docs",
+  metaTitle: "Runtime API · Ghosty Docs",
   metaDescription:
     "Local HTTP/SSE, JSON-RPC stdio, and ACP entrypoints for integrations, bridges, and automation.",
   bodyClassName: "text-ink-soft leading-relaxed",
   overviewTitle: "Runtime API",
   overviewLead:
-    "codewhale app-server is the canonical local runtime API and control plane. Local SDKs, mobile/remote-control clients, and editor integrations talk to it instead of screen-scraping terminal output. The engine runs as a local-only process: every API binds to localhost by default — no hosted relay, no provider-token custody, no secret leakage. codewhale serve --http / --mobile remain compatibility aliases for app-server --http / --mobile and launch the identical server; new integrations should target app-server.",
+    "ghosty app-server is the canonical local runtime API and control plane. Local SDKs, mobile/remote-control clients, and editor integrations talk to it instead of screen-scraping terminal output. The engine runs as a local-only process: every API binds to localhost by default — no hosted relay, no provider-token custody, no secret leakage. ghosty serve --http / --mobile remain compatibility aliases for app-server --http / --mobile and launch the identical server; new integrations should target app-server.",
   entries: [
     ["http", "The full /v1/* HTTP/SSE runtime API (canonical entry), default 127.0.0.1:7878."],
     ["mobile", "The runtime API plus the /mobile phone control page."],

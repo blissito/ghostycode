@@ -38,7 +38,7 @@ pub enum SandboxPolicy {
 
     /// Indicates the process is already running in an external sandbox.
     ///
-    /// Use this when CodeWhale is itself running inside a container,
+    /// Use this when GhostyCode is itself running inside a container,
     /// VM, or other sandboxed environment. This avoids double-sandboxing
     /// which can cause issues.
     #[serde(rename = "external-sandbox")]
@@ -212,7 +212,7 @@ impl SandboxPolicy {
                 SandboxPolicy::WorkspaceWrite { .. } => "workspace-write",
             };
             return format!(
-                "{requested_policy} policy (external execution backend configured; filesystem/network isolation unverified by Codewhale)"
+                "{requested_policy} policy (external execution backend configured; filesystem/network isolation unverified by Ghosty)"
             );
         }
 
@@ -289,10 +289,10 @@ impl SandboxPolicy {
                     .map(|root| {
                         let mut read_only_subpaths = Vec::new();
 
-                        // Protect .codewhale/ and .deepseek/ directories from modification
-                        let codewhale_dir = root.join(".codewhale");
-                        if codewhale_dir.is_dir() {
-                            read_only_subpaths.push(codewhale_dir);
+                        // Protect .ghosty/ and .deepseek/ directories from modification
+                        let ghosty_dir = root.join(".ghosty");
+                        if ghosty_dir.is_dir() {
+                            read_only_subpaths.push(ghosty_dir);
                         }
                         let deepseek_dir = root.join(".deepseek");
                         if deepseek_dir.is_dir() {
@@ -577,7 +577,7 @@ mod tests {
             "{external}"
         );
         assert!(
-            external.contains("isolation unverified by Codewhale"),
+            external.contains("isolation unverified by Ghosty"),
             "{external}"
         );
         assert!(

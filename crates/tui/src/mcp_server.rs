@@ -1,4 +1,4 @@
-//! MCP server implementation for exposing Codewhale tools over stdio.
+//! MCP server implementation for exposing Ghosty tools over stdio.
 
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, Write};
@@ -178,13 +178,13 @@ impl McpServer {
                 "deepseek" => {
                     tools.push(json!({
                         "name": "deepseek",
-                        "description": "Send a prompt to Codewhale and get a response. Creates a new conversation thread.",
+                        "description": "Send a prompt to Ghosty and get a response. Creates a new conversation thread.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
                                 "prompt": {
                                     "type": "string",
-                                    "description": "The user prompt to send to Codewhale"
+                                    "description": "The user prompt to send to Ghosty"
                                 },
                                 "model": {
                                     "type": "string",
@@ -202,7 +202,7 @@ impl McpServer {
                 "deepseek-reply" => {
                     tools.push(json!({
                         "name": "deepseek-reply",
-                        "description": "Continue an existing conversation thread with Codewhale. Requires a thread_id from a previous deepseek call.",
+                        "description": "Continue an existing conversation thread with Ghosty. Requires a thread_id from a previous deepseek call.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -585,7 +585,7 @@ fn initialize_response() -> Value {
     json!({
         "protocolVersion": "2024-11-05",
         "serverInfo": {
-            "name": "codewhale-mcp-server",
+            "name": "ghosty-mcp-server",
             "version": env!("CARGO_PKG_VERSION"),
         },
         "capabilities": {
@@ -618,7 +618,7 @@ struct RpcError {
 fn model_client_init_error(error: impl std::fmt::Display) -> RpcError {
     RpcError {
         code: -32000,
-        message: format!("Failed to create Codewhale model client: {error}"),
+        message: format!("Failed to create Ghosty model client: {error}"),
     }
 }
 
@@ -694,21 +694,21 @@ mod tests {
     }
 
     #[test]
-    fn initialize_uses_standard_mcp_shape_and_codewhale_identity() {
+    fn initialize_uses_standard_mcp_shape_and_ghosty_identity() {
         let response = initialize_response();
         assert_eq!(response["protocolVersion"], "2024-11-05");
-        assert_eq!(response["serverInfo"]["name"], "codewhale-mcp-server");
+        assert_eq!(response["serverInfo"]["name"], "ghosty-mcp-server");
         assert_eq!(response["serverInfo"]["version"], env!("CARGO_PKG_VERSION"));
         assert!(response["capabilities"]["tools"].is_object());
     }
 
     #[test]
-    fn model_failures_use_codewhale_provider_neutral_language() {
+    fn model_failures_use_ghosty_provider_neutral_language() {
         let init = model_client_init_error("missing credential");
         assert_eq!(init.code, -32000);
         assert_eq!(
             init.message,
-            "Failed to create Codewhale model client: missing credential"
+            "Failed to create Ghosty model client: missing credential"
         );
 
         let request = model_provider_call_error("route unavailable");

@@ -34,7 +34,7 @@ pub const AUDIT_MAX_DEPTH: usize = package_digest::PACKAGE_DIGEST_MAX_DEPTH;
 /// Which roots the auditor visits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkillAuditMode {
-    /// CodeWhale-owned project/global roots only.
+    /// GhostyCode-owned project/global roots only.
     OwnedOnly,
     /// Owned + compatible roots (including `.codex/skills`). Does not change runtime.
     Compatible,
@@ -50,8 +50,8 @@ pub struct AuditedSkillId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SkillSourceKind {
-    CodeWhaleManaged,
-    CodeWhaleManual,
+    GhostyCodeManaged,
+    GhostyCodeManual,
     CompatibleExternal,
     BuiltIn,
     ReviewedPluginSnapshot,
@@ -325,7 +325,7 @@ pub fn action_policy(skill: &AuditedSkill) -> Vec<SkillActionKind> {
     }
 
     match skill.source_kind {
-        SkillSourceKind::CodeWhaleManaged => {
+        SkillSourceKind::GhostyCodeManaged => {
             let mut actions = Vec::new();
             if matches!(skill.parser, ParserState::Valid | ParserState::Warning(_))
                 && !matches!(skill.integrity, IntegrityState::BrokenManagedInstall)
@@ -343,7 +343,7 @@ pub fn action_policy(skill: &AuditedSkill) -> Vec<SkillActionKind> {
             }
             actions
         }
-        SkillSourceKind::CodeWhaleManual => Vec::new(),
+        SkillSourceKind::GhostyCodeManual => Vec::new(),
         SkillSourceKind::CompatibleExternal => {
             // Import is offered for fresh candidates and for same-name owned
             // peers (exact duplicate → AlreadyPresent, conflict → replace confirm).
@@ -853,12 +853,12 @@ fn classify_source(
 
     match marker {
         MarkerParse::Absent => (
-            SkillSourceKind::CodeWhaleManual,
+            SkillSourceKind::GhostyCodeManual,
             ProvenanceState::Manual,
             IntegrityState::Unknown,
         ),
         MarkerParse::Broken(_) => (
-            SkillSourceKind::CodeWhaleManaged,
+            SkillSourceKind::GhostyCodeManaged,
             ProvenanceState::Managed {
                 spec: None,
                 safe_url: None,
@@ -867,7 +867,7 @@ fn classify_source(
             IntegrityState::BrokenManagedInstall,
         ),
         MarkerParse::V1(m) => (
-            SkillSourceKind::CodeWhaleManaged,
+            SkillSourceKind::GhostyCodeManaged,
             ProvenanceState::Managed {
                 spec: m.spec.clone(),
                 safe_url: m.url.as_deref().map(sanitize_url_for_display),
@@ -885,7 +885,7 @@ fn classify_source(
                 (_, DigestState::Unknown(_)) => IntegrityState::Unknown,
             };
             (
-                SkillSourceKind::CodeWhaleManaged,
+                SkillSourceKind::GhostyCodeManaged,
                 ProvenanceState::Managed {
                     spec: m.spec.clone(),
                     safe_url: m.url.as_deref().map(sanitize_url_for_display),
@@ -1015,7 +1015,7 @@ mod tests {
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
         write_skill(
-            &workspace.join(".codewhale").join("skills"),
+            &workspace.join(".ghosty").join("skills"),
             "owned",
             "owned skill",
             "body",
@@ -1048,7 +1048,7 @@ mod tests {
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
         write_skill(
-            &workspace.join(".codewhale").join("skills"),
+            &workspace.join(".ghosty").join("skills"),
             "shared",
             "owned",
             "owned-body",
@@ -1078,7 +1078,7 @@ mod tests {
         let owned = snap
             .skills
             .iter()
-            .find(|s| s.root.kind == SkillRootKind::CodeWhaleProject)
+            .find(|s| s.root.kind == SkillRootKind::GhostyCodeProject)
             .expect("owned");
         assert_eq!(owned.precedence, PrecedenceState::Active);
     }
@@ -1089,7 +1089,7 @@ mod tests {
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
         write_skill(
-            &workspace.join(".codewhale").join("skills"),
+            &workspace.join(".ghosty").join("skills"),
             "shared",
             "owned",
             "owned-body",
@@ -1175,7 +1175,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        fs::create_dir_all(workspace.join(".codewhale").join("skills")).unwrap();
+        fs::create_dir_all(workspace.join(".ghosty").join("skills")).unwrap();
         write_skill(
             &workspace.join(".claude").join("skills"),
             "from-claude",
@@ -1200,7 +1200,7 @@ mod tests {
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
         write_skill(
-            &workspace.join(".codewhale").join("skills"),
+            &workspace.join(".ghosty").join("skills"),
             "shared",
             "desc",
             "owned-body",
@@ -1228,7 +1228,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         write_skill(&root, "managed", "desc", "body");
         fs::write(
             root.join("managed").join(INSTALLED_FROM_MARKER),
@@ -1238,7 +1238,7 @@ mod tests {
 
         let snap = scan(&workspace, Some(&home), SkillAuditMode::OwnedOnly, None);
         let skill = &snap.skills[0];
-        assert_eq!(skill.source_kind, SkillSourceKind::CodeWhaleManaged);
+        assert_eq!(skill.source_kind, SkillSourceKind::GhostyCodeManaged);
         assert_eq!(skill.integrity, IntegrityState::LegacyMetadataUnknown);
         assert!(skill.available_actions.contains(&SkillActionKind::Update));
         assert!(skill.available_actions.contains(&SkillActionKind::Remove));
@@ -1257,7 +1257,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         write_skill(&root, "managed", "desc", "body");
 
         // First scan to learn digest, then write matching v2 marker.
@@ -1287,7 +1287,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         write_skill(&root, "managed", "desc", "body");
         fs::write(
             root.join("managed").join(INSTALLED_FROM_MARKER),
@@ -1327,7 +1327,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        let skill_dir = workspace.join(".codewhale").join("skills").join("big");
+        let skill_dir = workspace.join(".ghosty").join("skills").join("big");
         fs::create_dir_all(&skill_dir).unwrap();
         let huge = format!(
             "---\nname: big\ndescription: x\n---\n{}",
@@ -1345,7 +1345,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        write_skill(&workspace.join(".codewhale").join("skills"), "a", "d", "b");
+        write_skill(&workspace.join(".ghosty").join("skills"), "a", "d", "b");
         let snap = scan(&workspace, Some(&home), SkillAuditMode::OwnedOnly, None);
         assert_eq!(snap.skills[0].readiness, ReadinessState::Unknown);
     }
@@ -1357,13 +1357,16 @@ mod tests {
         let home = tmp.path().join("home");
         // `pdf` is a bundled name, but custom body must not classify as BuiltIn.
         write_skill(
-            &workspace.join(".codewhale").join("skills"),
+            &workspace.join(".ghosty").join("skills"),
             "pdf",
             "user override",
             "not-the-bundled-body",
         );
         let snap = scan(&workspace, Some(&home), SkillAuditMode::OwnedOnly, None);
-        assert_eq!(snap.skills[0].source_kind, SkillSourceKind::CodeWhaleManual);
+        assert_eq!(
+            snap.skills[0].source_kind,
+            SkillSourceKind::GhostyCodeManual
+        );
         assert!(snap.skills[0].available_actions.is_empty());
     }
 
@@ -1372,7 +1375,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         // Bundled command name + different body + install marker → managed.
         write_skill(&root, "pdf", "registry pdf", "community-body");
         fs::write(
@@ -1384,7 +1387,7 @@ mod tests {
         let snap = scan(&workspace, Some(&home), SkillAuditMode::OwnedOnly, None);
         assert_eq!(
             snap.skills[0].source_kind,
-            SkillSourceKind::CodeWhaleManaged
+            SkillSourceKind::GhostyCodeManaged
         );
         assert!(
             snap.skills[0]
@@ -1408,7 +1411,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         fs::create_dir_all(root.join("pdf")).unwrap();
         fs::write(
             root.join("pdf").join("SKILL.md"),
@@ -1427,7 +1430,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        let root = workspace.join(".codewhale").join("skills");
+        let root = workspace.join(".ghosty").join("skills");
         write_skill(&root, "managed", "desc", "body");
         let outside = tmp.path().join("outside-marker.json");
         fs::write(&outside, r#"{"spec":"github:o/r","checksum":"x"}"#).unwrap();
@@ -1467,7 +1470,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        write_skill(&workspace.join(".codewhale").join("skills"), "a", "d", "b");
+        write_skill(&workspace.join(".ghosty").join("skills"), "a", "d", "b");
         let snap = scan(
             &workspace,
             Some(&home),

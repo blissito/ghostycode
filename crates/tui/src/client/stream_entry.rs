@@ -21,12 +21,12 @@ use crate::llm_client::LlmError;
 /// return only, never model thinking time after streaming has started.
 pub(crate) const DEFAULT_STREAM_OPEN_TIMEOUT: Duration = Duration::from_secs(45);
 
-/// Env override (`CODEWHALE_STREAM_OPEN_TIMEOUT_SECS`, legacy
+/// Env override (`GHOSTY_STREAM_OPEN_TIMEOUT_SECS`, legacy
 /// `DEEPSEEK_STREAM_OPEN_TIMEOUT_SECS`) for the response-header wait,
 /// shared by every streaming adapter.
 pub(crate) fn stream_open_timeout() -> Duration {
     stream_open_timeout_from_env(
-        std::env::var("CODEWHALE_STREAM_OPEN_TIMEOUT_SECS")
+        std::env::var("GHOSTY_STREAM_OPEN_TIMEOUT_SECS")
             .or_else(|_| std::env::var("DEEPSEEK_STREAM_OPEN_TIMEOUT_SECS"))
             .ok()
             .as_deref(),
@@ -143,8 +143,8 @@ fn h1_fallback_error(err: anyhow::Error) -> anyhow::Error {
 
     anyhow::Error::new(LlmError::NetworkError(format!(
         "SSE stream request failed after HTTP/1.1 fallback: {err}. \
-         `codewhale doctor` can still pass when non-streaming requests work; \
-         on Windows or proxy networks, try `CODEWHALE_FORCE_HTTP1=1` and rerun `codewhale`."
+         `ghosty doctor` can still pass when non-streaming requests work; \
+         on Windows or proxy networks, try `GHOSTY_FORCE_HTTP1=1` and rerun `ghosty`."
     )))
 }
 
@@ -185,8 +185,8 @@ where
             if open_req.policy == StreamHttpPolicy::Http1Only {
                 return Err(anyhow::Error::new(LlmError::NetworkError(format!(
                     "SSE stream request did not receive response headers after {}s. \
-                         `codewhale doctor` can still pass when non-streaming requests work; \
-                         on Windows or proxy networks, try `CODEWHALE_FORCE_HTTP1=1` and rerun `codewhale`.",
+                         `ghosty doctor` can still pass when non-streaming requests work; \
+                         on Windows or proxy networks, try `GHOSTY_FORCE_HTTP1=1` and rerun `ghosty`.",
                     open_req.open_timeout.as_secs()
                 ))));
             }
@@ -209,9 +209,9 @@ where
         // error this killed the whole turn outright.
         Err(_elapsed) => Err(anyhow::Error::new(LlmError::NetworkError(format!(
             "SSE stream request did not receive response headers after {}s \
-             (HTTP/2 and HTTP/1.1). `codewhale doctor` can still pass when \
-             non-streaming requests work; try `CODEWHALE_FORCE_HTTP1=1` and \
-             rerun `codewhale`.",
+             (HTTP/2 and HTTP/1.1). `ghosty doctor` can still pass when \
+             non-streaming requests work; try `GHOSTY_FORCE_HTTP1=1` and \
+             rerun `ghosty`.",
             open_req.open_timeout.as_secs()
         )))),
     }
@@ -391,7 +391,7 @@ mod tests {
             classified.is_retryable(),
             "header stall must be retryable: {classified:?}"
         );
-        assert!(text.contains("CODEWHALE_FORCE_HTTP1=1"), "{text}");
+        assert!(text.contains("GHOSTY_FORCE_HTTP1=1"), "{text}");
         assert!(
             !text.contains("HTTP/2 and HTTP/1.1"),
             "single-protocol stall must not claim a dual-protocol attempt: {text}"

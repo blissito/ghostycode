@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for app-server-smoke.sh: drive it against a fake `codewhale` binary so
+# Tests for app-server-smoke.sh: drive it against a fake `ghosty` binary so
 # the stdio-probe assertions, auth-list matrix parser, cheap-model mapping, and
 # secret redaction are all exercised without a real build or any model tokens.
 
@@ -13,7 +13,7 @@ FAILED=0
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-FAKE="$WORK/codewhale"
+FAKE="$WORK/ghosty"
 cat >"$FAKE" <<'FAKE_EOF'
 #!/usr/bin/env bash
 set -euo pipefail

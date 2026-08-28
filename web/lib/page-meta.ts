@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import { canonicalLocaleForPath, contentLocalesForPath } from "./i18n/content-locales";
 
 /** Canonical origin for the production site (no trailing slash). */
-export const SITE_URL = "https://codewhale.net";
+export const SITE_URL = "https://ghosty.net";
 
-export const SITE_NAME = "Codewhale";
+export const SITE_NAME = "Ghosty";
 
 /** The one-line product identity, used as the default OG image alt text. */
-export const IDENTITY_PHRASE = "Codewhale dives into the deep so you don't have to.";
+export const IDENTITY_PHRASE = "Ghosty dives into the deep so you don't have to.";
 
 /** Accessible text for the shared Open Graph card. */
 export const OG_ALT = IDENTITY_PHRASE;
@@ -65,7 +65,7 @@ const OG_LOCALE: Record<string, string> = {
  *   return buildPageMetadata({
  *     path: "/install",
  *     locale,
- *     title: isZh ? "安装 · Codewhale" : "Install · Codewhale",
+ *     title: isZh ? "安装 · Ghosty" : "Install · Ghosty",
  *     description: isZh ? "…" : "…",
  *   });
  * }

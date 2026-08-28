@@ -858,7 +858,7 @@ mod tests {
             "#receipt",
             "mailto:maintainer@example.com",
             "data:text/plain,proof",
-            "codewhale:session/123",
+            "ghosty:session/123",
             "https://other.example/proof",
             "http://[::1",
             "",

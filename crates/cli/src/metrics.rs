@@ -1,4 +1,4 @@
-//! `codewhale metrics` — reads the audit log and session/task stores and prints
+//! `ghosty metrics` — reads the audit log and session/task stores and prints
 //! a human-readable usage rollup.
 //!
 //! Data sources:
@@ -17,7 +17,7 @@ use serde_json::Value;
 // Public entry-point
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Arguments accepted by `codewhale metrics`.
+/// Arguments accepted by `ghosty metrics`.
 #[derive(Debug, Default)]
 pub struct MetricsArgs {
     /// Emit machine-readable JSON instead of human text.
@@ -826,12 +826,12 @@ fn deepseek_home() -> PathBuf {
     // This reader preserves the legacy DEEPSEEK_HOME/default-root precedence,
     // but delegates every environment and platform-home decision to the shared
     // runtime path authority.
-    codewhale_paths::codewhale_home_override()
+    ghosty_paths::ghosty_home_override()
         .ok()
         .flatten()
-        .or_else(codewhale_paths::legacy_deepseek_home_override)
-        .or_else(codewhale_paths::legacy_deepseek_home)
-        .unwrap_or_else(|| PathBuf::from(codewhale_paths::LEGACY_APP_DIR))
+        .or_else(ghosty_paths::legacy_deepseek_home_override)
+        .or_else(ghosty_paths::legacy_deepseek_home)
+        .unwrap_or_else(|| PathBuf::from(ghosty_paths::LEGACY_APP_DIR))
 }
 
 /// Parse a timestamp from a JSON value field (tries RFC3339).

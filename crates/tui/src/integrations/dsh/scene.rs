@@ -1,4 +1,4 @@
-//! Ambient ocean scene for the DSH bundle: whales and Codewhale glyph fish
+//! Ambient ocean scene for the DSH bundle: whales and Ghosty glyph fish
 //! painted on a canvas behind the DSH web UI.
 //!
 //! dsh-client-modules serves exactly one file per client plugin
@@ -18,17 +18,17 @@ use super::skin::SkinTokens;
 use crate::palette::{LIGHT_UI_THEME, UI_THEME, UiTheme};
 
 /// `localStorage` key that turns the scene off in the browser (`"off"`).
-pub(crate) const OCEAN_STORAGE_KEY: &str = "codewhale.ocean";
+pub(crate) const OCEAN_STORAGE_KEY: &str = "ghosty.ocean";
 /// Body class that turns the scene off in the browser.
-pub(crate) const OCEAN_OFF_CLASS: &str = "codewhale-ocean-off";
+pub(crate) const OCEAN_OFF_CLASS: &str = "ghosty-ocean-off";
 /// `window` handle the scene exposes (`start`, `stop`, `setIntensity`, `setScheme`).
-pub(crate) const OCEAN_WINDOW_HANDLE: &str = "__codewhaleOcean";
+pub(crate) const OCEAN_WINDOW_HANDLE: &str = "__ghostyOcean";
 
 /// Alpha of `--dsw-alias-bg-base` while the scene is on. The frame and the
 /// centre column both paint this token, so the effective veil over the main
 /// area is `1 - (1 - a)^2` (~0.66 at 0.42); dialogs that paint it once sit
 /// at 0.42 over an opaque canvas that is itself the same base colour. This
-/// keeps text surfaces calm while letting the Codewhale scene read clearly.
+/// keeps text surfaces calm while letting the Ghosty scene read clearly.
 const BASE_VEIL_ALPHA: &str = "0.42";
 /// Alpha of `--dsw-specific-sidebar-fill` (stacked over the frame).
 const SIDEBAR_VEIL_ALPHA: &str = "0.78";

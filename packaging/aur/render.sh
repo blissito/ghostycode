@@ -46,8 +46,8 @@ if [[ ! "${pkgrel}" =~ ^[1-9][0-9]*(\.[1-9][0-9]*)?$ ]]; then
   exit 2
 fi
 
-artifact_manifest="${assets_dir}/codewhale-artifacts-sha256.txt"
-bundle_manifest="${assets_dir}/codewhale-bundles-sha256.txt"
+artifact_manifest="${assets_dir}/ghosty-artifacts-sha256.txt"
+bundle_manifest="${assets_dir}/ghosty-bundles-sha256.txt"
 for manifest in "${artifact_manifest}" "${bundle_manifest}"; do
   if [[ ! -f "${manifest}" ]]; then
     echo "release assets are missing checksum manifest: ${manifest}" >&2
@@ -106,13 +106,13 @@ verified_archive_sha() {
     return 1
   fi
 
-  local release_arch="${asset#codewhale-linux-}"
+  local release_arch="${asset#ghosty-linux-}"
   release_arch="${release_arch%.tar.gz}"
   local listing
   listing="$(tar -tzf "${archive}")"
   for entry in \
-    "codewhale-linux-${release_arch}/codewhale" \
-    "codewhale-linux-${release_arch}/codew"; do
+    "ghosty-linux-${release_arch}/ghosty" \
+    "ghosty-linux-${release_arch}/ghosty-tui"; do
     if ! grep -Fqx "${entry}" <<<"${listing}"; then
       echo "${asset} is missing required archive entry: ${entry}" >&2
       return 1
@@ -122,8 +122,8 @@ verified_archive_sha() {
   printf '%s' "${actual_sha}"
 }
 
-x86_64_sha="$(verified_archive_sha 'codewhale-linux-x64.tar.gz')"
-aarch64_sha="$(verified_archive_sha 'codewhale-linux-arm64.tar.gz')"
+x86_64_sha="$(verified_archive_sha 'ghosty-linux-x64.tar.gz')"
+aarch64_sha="$(verified_archive_sha 'ghosty-linux-arm64.tar.gz')"
 license_sha="$(sha256_file "${repo_root}/LICENSE")"
 
 render_template() {
@@ -161,6 +161,6 @@ if command -v makepkg >/dev/null 2>&1; then
   fi
 fi
 
-echo "Rendered codewhale-bin ${workspace_version}-${pkgrel} from verified release archives:"
+echo "Rendered ghosty-bin ${workspace_version}-${pkgrel} from verified release archives:"
 echo "  ${output_dir}/PKGBUILD"
 echo "  ${output_dir}/.SRCINFO"

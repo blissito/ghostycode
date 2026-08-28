@@ -2,7 +2,7 @@
 //!
 //! Cucumber (`cucumber = "0.23"`) registers steps per `World` type via
 //! inventory. Each `World` is scoped to its own `mod`, so merging the six
-//! feature runners into one binary keeps `cargo test -p codewhale-tui
+//! feature runners into one binary keeps `cargo test -p ghosty-tui
 //! tool_lifecycle` etc. filtering via the module path while cutting six link
 //! jobs to one. See `crates/tui/tests/README.md`.
 

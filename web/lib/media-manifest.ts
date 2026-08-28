@@ -1,5 +1,5 @@
 /**
- * media-manifest.ts — the real-session media surface for codewhale.net.
+ * media-manifest.ts — the real-session media surface for ghosty.net.
  *
  * Every real-session asset the site may show is declared here, with its
  * poster, captions, transcript, GIF fallback, and budgets. The manifest is
@@ -92,8 +92,8 @@ export const MEDIA_ASSETS: MediaAsset[] = [
   {
     id: "first-fleet-session",
     title: {
-      en: "A real Codewhale session, end to end",
-      zh: "一次真实的 Codewhale 端到端会话",
+      en: "A real Ghosty session, end to end",
+      zh: "一次真实的 Ghosty 端到端会话",
     },
     description: {
       en: "Install, a first session with no key, connecting a provider, and one Fleet workflow on a local model. To be recorded from a release build.",

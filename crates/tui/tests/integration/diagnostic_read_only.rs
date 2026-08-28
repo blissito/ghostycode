@@ -11,14 +11,14 @@ use axum::body::Bytes;
 use axum::http::HeaderMap;
 use axum::routing::post;
 use axum::{Json, Router};
-use codewhale_secrets::{FileKeyringStore, KeyringStore};
+use ghosty_secrets::{FileKeyringStore, KeyringStore};
 use tempfile::TempDir;
 
 #[test]
 fn doctor_text_leaves_a_sealed_home_untouched() {
     let output = run_sealed_diagnostic(["doctor"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("codewhale Doctor"), "stdout:\n{stdout}");
+    assert!(stdout.contains("ghosty Doctor"), "stdout:\n{stdout}");
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn doctor_json_rejects_kimi_code_claude_alias_with_machine_readable_guidance() {
     let fixture = TempDir::new().expect("fixture root");
     let workspace = fixture.path().join("workspace");
     let home = fixture.path().join("home");
-    let codewhale_home = fixture.path().join("isolated-codewhale-home");
+    let ghosty_home = fixture.path().join("isolated-ghosty-home");
     fs::create_dir_all(&workspace).expect("workspace");
     let config = workspace.join("kimi-invalid.toml");
     let config_bytes = br#"provider = "moonshot"
@@ -60,7 +60,7 @@ model = "k3[1m]"
             "doctor",
             "--json",
         ])
-        .env("CODEWHALE_HOME", &codewhale_home);
+        .env("GHOSTY_HOME", &ghosty_home);
     let output = command.output().expect("run invalid Kimi doctor json");
 
     assert!(
@@ -105,8 +105,8 @@ model = "k3[1m]"
     );
     assert!(!home.exists(), "doctor must not create HOME state");
     assert!(
-        !codewhale_home.exists(),
-        "doctor must not create CODEWHALE_HOME state"
+        !ghosty_home.exists(),
+        "doctor must not create GHOSTY_HOME state"
     );
 }
 
@@ -115,7 +115,7 @@ fn doctor_json_omits_untrusted_config_validation_details() {
     let fixture = TempDir::new().expect("fixture root");
     let workspace = fixture.path().join("workspace");
     let home = fixture.path().join("home");
-    let codewhale_home = fixture.path().join("isolated-codewhale-home");
+    let ghosty_home = fixture.path().join("isolated-ghosty-home");
     fs::create_dir_all(&workspace).expect("workspace");
     let config = workspace.join("untrusted-invalid.toml");
     let config_bytes = br#"provider = "doctor-untrusted-provider-secret"
@@ -131,7 +131,7 @@ api_key = "doctor-json-arbitrary-secret"
             "doctor",
             "--json",
         ])
-        .env("CODEWHALE_HOME", &codewhale_home);
+        .env("GHOSTY_HOME", &ghosty_home);
     let output = command.output().expect("run invalid doctor json");
 
     assert!(!output.status.success());
@@ -154,7 +154,7 @@ api_key = "doctor-json-arbitrary-secret"
         config_bytes
     );
     assert!(!home.exists());
-    assert!(!codewhale_home.exists());
+    assert!(!ghosty_home.exists());
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn doctor_json_reports_valid_kimi_code_k3_context_override_from_runtime_route() 
     let fixture = TempDir::new().expect("fixture root");
     let workspace = fixture.path().join("workspace");
     let home = fixture.path().join("home");
-    let codewhale_home = fixture.path().join("isolated-codewhale-home");
+    let ghosty_home = fixture.path().join("isolated-ghosty-home");
     fs::create_dir_all(&workspace).expect("workspace");
     let config = workspace.join("kimi-valid.toml");
     let config_bytes = br#"provider = "moonshot"
@@ -183,7 +183,7 @@ context_window = 1048576
             "doctor",
             "--json",
         ])
-        .env("CODEWHALE_HOME", &codewhale_home);
+        .env("GHOSTY_HOME", &ghosty_home);
     let output = command.output().expect("run valid Kimi doctor json");
 
     assert!(
@@ -216,8 +216,8 @@ context_window = 1048576
     );
     assert!(!home.exists(), "doctor must not create HOME state");
     assert!(
-        !codewhale_home.exists(),
-        "doctor must not create CODEWHALE_HOME state"
+        !ghosty_home.exists(),
+        "doctor must not create GHOSTY_HOME state"
     );
 }
 
@@ -243,7 +243,7 @@ fn doctor_context_json_leaves_a_sealed_home_untouched() {
 fn setup_status_leaves_a_sealed_home_untouched() {
     let output = run_sealed_diagnostic(["setup", "--status"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Codewhale Status"), "stdout:\n{stdout}");
+    assert!(stdout.contains("Ghosty Status"), "stdout:\n{stdout}");
 }
 
 #[test]
@@ -257,7 +257,7 @@ fn diagnostics_read_home_legacy_settings_without_migrating_them() {
         let workspace = fixture.path().join("workspace");
         let home = fixture.path().join("home");
         let legacy = home.join(".deepseek").join("settings.toml");
-        let primary_home = home.join(".codewhale");
+        let primary_home = home.join(".ghosty");
         let legacy_bytes = b"default_mode = \"plan\"\nprefer_external_pdftotext = true\n";
         fs::create_dir_all(&workspace).expect("workspace");
         fs::create_dir_all(legacy.parent().expect("legacy parent")).expect("legacy directory");
@@ -315,7 +315,7 @@ fn diagnostics_read_home_legacy_settings_without_migrating_them() {
         );
         assert!(
             !primary_home.exists(),
-            "diagnostic {args:?} must not create a primary Codewhale home"
+            "diagnostic {args:?} must not create a primary Ghosty home"
         );
     }
 }
@@ -325,7 +325,7 @@ fn doctor_json_does_not_inherit_an_ambient_legacy_secret_from_an_explicit_home()
     let fixture = TempDir::new().expect("fixture root");
     let workspace = fixture.path().join("workspace");
     let home = fixture.path().join("home");
-    let codewhale_home = fixture.path().join("isolated-codewhale-home");
+    let ghosty_home = fixture.path().join("isolated-ghosty-home");
     fs::create_dir_all(&workspace).expect("workspace");
     let legacy = home.join(".deepseek").join("secrets").join("secrets.json");
     FileKeyringStore::new(&legacy)
@@ -333,7 +333,7 @@ fn doctor_json_does_not_inherit_an_ambient_legacy_secret_from_an_explicit_home()
         .expect("seed ambient legacy secret");
     let legacy_before = fs::read(&legacy).expect("read legacy secret before doctor");
 
-    let mut command = Command::new(codewhale_tui_binary());
+    let mut command = Command::new(ghosty_tui_binary());
     command
         .current_dir(&workspace)
         .args(["doctor", "--json"])
@@ -341,10 +341,10 @@ fn doctor_json_does_not_inherit_an_ambient_legacy_secret_from_an_explicit_home()
         .env("PATH", std::env::var_os("PATH").expect("PATH"))
         .env("HOME", &home)
         .env("USERPROFILE", &home)
-        .env("CODEWHALE_HOME", &codewhale_home)
-        .env("CODEWHALE_SECRET_BACKEND", "file")
+        .env("GHOSTY_HOME", &ghosty_home)
+        .env("GHOSTY_SECRET_BACKEND", "file")
         .env(
-            "CODEWHALE_RELEASE_BASE_URL",
+            "GHOSTY_RELEASE_BASE_URL",
             "https://example.invalid/releases",
         )
         .env("DEEPSEEK_TUI_VERSION", env!("CARGO_PKG_VERSION"));
@@ -371,8 +371,8 @@ fn doctor_json_does_not_inherit_an_ambient_legacy_secret_from_an_explicit_home()
         "doctor must not rewrite the ambient legacy secret"
     );
     assert!(
-        !codewhale_home.exists(),
-        "doctor must not create an isolated Codewhale home or secret store"
+        !ghosty_home.exists(),
+        "doctor must not create an isolated Ghosty home or secret store"
     );
 }
 
@@ -383,7 +383,7 @@ fn doctor_text_probe_uses_a_legacy_key_without_migrating_it() {
     let home = fixture.path().join("home");
     fs::create_dir_all(&workspace).expect("workspace");
     let legacy = home.join(".deepseek").join("secrets").join("secrets.json");
-    let primary = home.join(".codewhale").join("secrets").join("secrets.json");
+    let primary = home.join(".ghosty").join("secrets").join("secrets.json");
     FileKeyringStore::new(&legacy)
         .set("deepseek", "diagnostic-legacy-key")
         .expect("seed legacy secret");
@@ -451,7 +451,7 @@ fn doctor_json_reports_a_legacy_store_without_reading_or_migrating_it() {
     let home = fixture.path().join("home");
     fs::create_dir_all(&workspace).expect("workspace");
     let legacy = home.join(".deepseek").join("secrets").join("secrets.json");
-    let primary = home.join(".codewhale").join("secrets").join("secrets.json");
+    let primary = home.join(".ghosty").join("secrets").join("secrets.json");
     FileKeyringStore::new(&legacy)
         .set("xiaomi-mimo", "tp-diagnostic-legacy-key")
         .expect("seed legacy Xiaomi secret");
@@ -506,7 +506,7 @@ fn setup_status_reports_a_legacy_store_without_reading_or_migrating_it() {
     let home = fixture.path().join("home");
     fs::create_dir_all(&workspace).expect("workspace");
     let legacy = home.join(".deepseek").join("secrets").join("secrets.json");
-    let primary = home.join(".codewhale").join("secrets").join("secrets.json");
+    let primary = home.join(".ghosty").join("secrets").join("secrets.json");
     FileKeyringStore::new(&legacy)
         .set("deepseek", "setup-status-legacy-key")
         .expect("seed legacy secret");
@@ -543,13 +543,13 @@ fn setup_status_reports_a_legacy_store_without_reading_or_migrating_it() {
 }
 
 #[test]
-fn doctor_json_stash_honors_an_explicit_codewhale_home() {
+fn doctor_json_stash_honors_an_explicit_ghosty_home() {
     let fixture = TempDir::new().expect("fixture root");
     let workspace = fixture.path().join("workspace");
     let home = fixture.path().join("home");
-    let codewhale_home = fixture.path().join("isolated-codewhale-home");
+    let ghosty_home = fixture.path().join("isolated-ghosty-home");
     fs::create_dir_all(&workspace).expect("workspace");
-    let ambient_stash = home.join(".codewhale").join("composer_stash.jsonl");
+    let ambient_stash = home.join(".ghosty").join("composer_stash.jsonl");
     fs::create_dir_all(ambient_stash.parent().expect("ambient stash parent"))
         .expect("ambient stash parent");
     fs::write(
@@ -562,7 +562,7 @@ fn doctor_json_stash_honors_an_explicit_codewhale_home() {
     let mut command = diagnostic_command(&workspace, &home);
     command
         .args(["doctor", "--json"])
-        .env("CODEWHALE_HOME", &codewhale_home);
+        .env("GHOSTY_HOME", &ghosty_home);
     let output = command.output().expect("run isolated doctor json");
     assert!(
         output.status.success(),
@@ -574,7 +574,7 @@ fn doctor_json_stash_honors_an_explicit_codewhale_home() {
         serde_json::from_slice(&output.stdout).expect("machine-readable doctor report");
     assert_eq!(
         report["storage"]["stash"]["path"],
-        codewhale_home
+        ghosty_home
             .join("composer_stash.jsonl")
             .display()
             .to_string()
@@ -584,7 +584,7 @@ fn doctor_json_stash_honors_an_explicit_codewhale_home() {
     assert!(report["storage"]["stash"]["error"].is_null());
     assert!(
         !String::from_utf8_lossy(&output.stdout).contains("ambient draft must not be inspected"),
-        "doctor must not inspect an ambient stash outside explicit CODEWHALE_HOME"
+        "doctor must not inspect an ambient stash outside explicit GHOSTY_HOME"
     );
     assert_eq!(
         fs::read(&ambient_stash).expect("read ambient stash after doctor"),
@@ -592,7 +592,7 @@ fn doctor_json_stash_honors_an_explicit_codewhale_home() {
         "doctor must not rewrite the ambient stash"
     );
     assert!(
-        !codewhale_home.exists(),
+        !ghosty_home.exists(),
         "a diagnostic must not create an explicit stash home"
     );
 }
@@ -601,10 +601,10 @@ fn run_sealed_diagnostic<const N: usize>(args: [&str; N]) -> Output {
     let fixture = TempDir::new().expect("fixture root");
     let workspace = fixture.path().join("workspace");
     let sealed_home = fixture.path().join("sealed-home");
-    let codewhale_home = fixture.path().join("sealed-codewhale-home");
+    let ghosty_home = fixture.path().join("sealed-ghosty-home");
     std::fs::create_dir_all(&workspace).expect("workspace");
 
-    let mut command = Command::new(codewhale_tui_binary());
+    let mut command = Command::new(ghosty_tui_binary());
     command
         .current_dir(&workspace)
         .args(args)
@@ -612,12 +612,12 @@ fn run_sealed_diagnostic<const N: usize>(args: [&str; N]) -> Output {
         .env("PATH", std::env::var_os("PATH").expect("PATH"))
         .env("HOME", &sealed_home)
         .env("USERPROFILE", &sealed_home)
-        .env("CODEWHALE_HOME", &codewhale_home)
-        .env("CODEWHALE_SECRET_BACKEND", "file")
+        .env("GHOSTY_HOME", &ghosty_home)
+        .env("GHOSTY_SECRET_BACKEND", "file")
         // Keep the text doctor command offline: the release crate treats this
         // as a pinned mirror version and does not issue a metadata request.
         .env(
-            "CODEWHALE_RELEASE_BASE_URL",
+            "GHOSTY_RELEASE_BASE_URL",
             "https://example.invalid/releases",
         )
         .env("DEEPSEEK_TUI_VERSION", env!("CARGO_PKG_VERSION"));
@@ -637,24 +637,24 @@ fn run_sealed_diagnostic<const N: usize>(args: [&str; N]) -> Output {
         sealed_home.display()
     );
     assert!(
-        !codewhale_home.exists(),
-        "diagnostic {args:?} must not create CODEWHALE_HOME or a secrets store at {}",
-        codewhale_home.display()
+        !ghosty_home.exists(),
+        "diagnostic {args:?} must not create GHOSTY_HOME or a secrets store at {}",
+        ghosty_home.display()
     );
     output
 }
 
 fn diagnostic_command(workspace: &std::path::Path, home: &std::path::Path) -> Command {
-    let mut command = Command::new(codewhale_tui_binary());
+    let mut command = Command::new(ghosty_tui_binary());
     command
         .current_dir(workspace)
         .env_clear()
         .env("PATH", std::env::var_os("PATH").expect("PATH"))
         .env("HOME", home)
         .env("USERPROFILE", home)
-        .env("CODEWHALE_SECRET_BACKEND", "file")
+        .env("GHOSTY_SECRET_BACKEND", "file")
         .env(
-            "CODEWHALE_RELEASE_BASE_URL",
+            "GHOSTY_RELEASE_BASE_URL",
             "https://example.invalid/releases",
         )
         .env("DEEPSEEK_TUI_VERSION", env!("CARGO_PKG_VERSION"));
@@ -768,7 +768,7 @@ impl Drop for CompletionServer {
 
 /// A rustup shim may initialize its own toolchain state below `$HOME` when
 /// `doctor` asks `rustc --version`. Preserve an already-configured toolchain
-/// root so this test isolates Codewhale's own state contract.
+/// root so this test isolates Ghosty's own state contract.
 fn preserve_host_rustup_home(command: &mut Command) {
     let rustup_home = std::env::var_os("RUSTUP_HOME")
         .map(PathBuf::from)
@@ -796,11 +796,11 @@ fn preserve_host_platform_runtime(_command: &mut Command) {
     }
 }
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
 
@@ -809,6 +809,6 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }

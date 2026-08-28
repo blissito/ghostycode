@@ -10,7 +10,7 @@ use crate::route_runtime::ResolvedRuntimeRoute;
 use crate::tools::goal::GoalStatus;
 use crate::tui::app::AppMode;
 use crate::tui::approval::ApprovalMode;
-use codewhale_protocol::runtime::DynamicToolSpec;
+use ghosty_protocol::runtime::DynamicToolSpec;
 use std::path::PathBuf;
 
 /// Prefix used for tool-call ids created by local composer shell shortcuts.
@@ -234,7 +234,7 @@ pub enum Op {
     SetModel {
         model: String,
         mode: AppMode,
-        route_limits: Option<codewhale_config::route::RouteLimits>,
+        route_limits: Option<ghosty_config::route::RouteLimits>,
     },
 
     /// Update auto-compaction settings
@@ -242,9 +242,7 @@ pub enum Op {
 
     /// Replace the live user permission rules without clearing session-only
     /// approvals.
-    SetPermissionRuleset {
-        ruleset: codewhale_execpolicy::Ruleset,
-    },
+    SetPermissionRuleset { ruleset: ghosty_execpolicy::Ruleset },
 
     /// Update the SSE idle timeout used for subsequent streamed turns.
     SetStreamChunkTimeout { timeout_secs: u64 },

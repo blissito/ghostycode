@@ -1,8 +1,8 @@
 //! In-TUI MCP manager command parser.
 
-use codewhale_command_contract::facets::CommandPresentationContext;
-use codewhale_command_contract::handler::{CommandContexts, CommandHandler};
-use codewhale_command_contract::metadata::{CommandInfo, RegisterCommand};
+use ghosty_command_contract::facets::CommandPresentationContext;
+use ghosty_command_contract::handler::{CommandContexts, CommandHandler};
+use ghosty_command_contract::metadata::{CommandInfo, RegisterCommand};
 
 use crate::commands::CommandResult;
 use crate::tui::app::{AppAction, McpUiAction};
@@ -247,7 +247,7 @@ fn recommended_mcp_text(presentation: &mut dyn CommandPresentationContext) -> St
     let heading = presentation
         .translate("mcp_recommendations_heading", &[])
         .unwrap_or_else(|_| {
-            "Suggested Codewhale plugins (MCP components; nothing is installed automatically)"
+            "Suggested Ghosty plugins (MCP components; nothing is installed automatically)"
                 .to_string()
         });
     let safety = presentation
@@ -322,7 +322,7 @@ fn recommended_mcp_text(presentation: &mut dyn CommandPresentationContext) -> St
          {safety}\n\
          \n\
          • hugging-face — remote Hugging Face MCP endpoint\n\
-           provenance: bundled Codewhale recommendation\n\
+           provenance: bundled Ghosty recommendation\n\
            add explicitly: /mcp add recommended hugging-face\n\
            then inspect: /mcp doctor · reload all configured servers: /mcp restart\n\
          \n\
@@ -396,7 +396,7 @@ mod tests {
                     "Unknown recommended MCP ID. Run {recommendations_command} to inspect the curated list.".to_string()
                 }
                 "mcp_recommendations_heading" => {
-                    "Suggested Codewhale plugins (MCP components; nothing is installed automatically)"
+                    "Suggested Ghosty plugins (MCP components; nothing is installed automatically)"
                         .to_string()
                 }
                 "mcp_recommendations_safety" => {
@@ -413,10 +413,10 @@ mod tests {
                     "• playwright — Microsoft's official Playwright MCP via pinned npm package\n  package: {package} ({launcher})\n  source: {source}\n  --isolated starts a fresh browser profile. It can browse/control pages and read authenticated pages.\n  add: {add_command}".to_string()
                 }
                 "mcp_recommendation_cua" => {
-                    "• cua — Cua Driver computer-use plugin (MCP server component)\n  command: cua-driver mcp\n  source: {source}\n  preview: install and verify Cua Driver separately; Codewhale never downloads it. It can control the desktop and requires operating-system permissions.\n  add: {add_command}".to_string()
+                    "• cua — Cua Driver computer-use plugin (MCP server component)\n  command: cua-driver mcp\n  source: {source}\n  preview: install and verify Cua Driver separately; Ghosty never downloads it. It can control the desktop and requires operating-system permissions.\n  add: {add_command}".to_string()
                 }
                 "mcp_recommendation_container_use" => {
-                    "• container-use — Dagger's experimental container-use MCP\n  command: container-use stdio\n  source: {source}\n  requires the separately installed container-use binary; Codewhale never downloads or installs this binary.\n  add: {add_command}".to_string()
+                    "• container-use — Dagger's experimental container-use MCP\n  command: container-use stdio\n  source: {source}\n  requires the separately installed container-use binary; Ghosty never downloads or installs this binary.\n  add: {add_command}".to_string()
                 }
                 _ => return Err("unknown translation key".to_string()),
             };
@@ -600,7 +600,7 @@ mod tests {
     fn recommendations_state_execution_and_install_boundaries() {
         let text = recommended_mcp_text(&mut FakePresentation);
         assert!(text.contains("nothing is installed automatically"));
-        assert!(text.contains("Suggested Codewhale plugins"));
+        assert!(text.contains("Suggested Ghosty plugins"));
         assert!(text.contains("never downloads or"));
         assert!(text.contains("installs this binary"));
         assert!(text.contains("experimental"));

@@ -1,5 +1,5 @@
 name: Agent task
-description: Create a self-contained task that a headless Codewhale agent can execute end-to-end without human context.
+description: Create a self-contained task that a headless Ghosty agent can execute end-to-end without human context.
 labels: ["agent-ready"]
 body:
   - type: markdown
@@ -7,11 +7,11 @@ body:
       value: |
         ## Instructions for authors
 
-        This issue will be executed by an autonomous agent running `codewhale exec --auto`
+        This issue will be executed by an autonomous agent running `ghosty exec --auto`
         on a headless VM.  The body must be **self-sufficient** — every file path, command,
         and acceptance criterion must be explicit.  The agent has:
 
-        - A fresh clone of `Hmbown/CodeWhale` at `main`
+        - A fresh clone of `blissito/ghostycode` at `main`
         - Shell, read, write, and git tools with auto-approvals
         - No conversation context — this issue body is all it knows
 
@@ -41,7 +41,7 @@ body:
       placeholder: |
         1. crates/tui/src/tui/ui.rs — add throttle in AgentProgress handler (line ~2308)
         2. crates/tui/src/tui/app.rs — add `last_agent_progress_redraw` field
-        3. cargo test -p codewhale-tui — verify no regressions
+        3. cargo test -p ghosty-tui — verify no regressions
     validations:
       required: true
 
@@ -75,9 +75,9 @@ body:
       label: "Verification"
       description: "Exact shell commands the agent must run to prove the fix works."
       placeholder: |
-        cargo check -p codewhale-tui
-        cargo test -p codewhale-tui -- subagent
-        cargo clippy -p codewhale-tui -- -D warnings
+        cargo check -p ghosty-tui
+        cargo test -p ghosty-tui -- subagent
+        cargo clippy -p ghosty-tui -- -D warnings
     validations:
       required: true
 

@@ -8,7 +8,7 @@
 // remains independent and the five role caps still total 360k.
 export default workflow({
   "id": "stopship-release-acceptance",
-  "goal": "Verify the current Codewhale Fleet, Workflow, Lane, Runtime, and gate receipt path without changing the workspace",
+  "goal": "Verify the current Ghosty Fleet, Workflow, Lane, Runtime, and gate receipt path without changing the workspace",
   "description": "Version-neutral, read-only release acceptance fixture. Every Fleet role inspects checked-in runtime evidence; no step creates branches, edits files, installs dependencies, or publishes anything.",
   "gates": [
     {

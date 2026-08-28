@@ -1,4 +1,4 @@
-//! Configuration loading and defaults for codewhale.
+//! Configuration loading and defaults for ghosty.
 
 use std::collections::HashMap;
 use std::fs;
@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::SystemTime;
 
 use anyhow::{Context, Result};
-use codewhale_execpolicy::ExecPolicyEngine;
+use ghosty_execpolicy::ExecPolicyEngine;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 #[cfg(unix)]
@@ -41,8 +41,8 @@ mod models;
 pub use models::*;
 
 #[cfg(test)]
-pub(crate) use codewhale_config::API_KEYRING_SENTINEL;
-pub(crate) use codewhale_config::{ConfigApiKeyValueKind, classify_config_api_key_value};
+pub(crate) use ghosty_config::API_KEYRING_SENTINEL;
+pub(crate) use ghosty_config::{ConfigApiKeyValueKind, classify_config_api_key_value};
 
 pub const DEFAULT_ZAI_PROVIDER_MAX_CONCURRENCY: usize = 3;
 pub const MAX_PROVIDER_REQUEST_CONCURRENCY: usize = 64;
@@ -85,6 +85,7 @@ pub enum ApiProvider {
     Anthropic,
     Openmodel,
     Zai,
+    Easybits,
     Stepfun,
     Minimax,
     MinimaxAnthropic,
@@ -122,7 +123,7 @@ pub enum ApiProvider {
     ///
     /// Selected when `provider = "<name>"` names a `[providers.<name>]
     /// kind="openai-compatible"` table. A single dynamic identity that maps to
-    /// [`codewhale_config::ProviderKind::Custom`] and routes via the OpenAI Chat
+    /// [`ghosty_config::ProviderKind::Custom`] and routes via the OpenAI Chat
     /// Completions wire protocol; the concrete endpoint/model/auth come from the
     /// named config table, not from this variant.
     Custom,
@@ -206,7 +207,7 @@ impl ApiProvider {
         {
             return Some(Self::MinimaxAnthropic);
         }
-        codewhale_config::ProviderKind::parse(value).map(Self::from_kind)
+        ghosty_config::ProviderKind::parse(value).map(Self::from_kind)
     }
 
     #[must_use]
@@ -231,7 +232,7 @@ impl ApiProvider {
     /// Returns `None` only for the TUI-only legacy `DeepseekCN` variant, which
     /// intentionally keeps its own config table while sharing DeepSeek auth envs.
     #[must_use]
-    pub fn metadata(self) -> Option<&'static dyn codewhale_config::provider::Provider> {
+    pub fn metadata(self) -> Option<&'static dyn ghosty_config::provider::Provider> {
         self.kind().map(|kind| kind.provider())
     }
 
@@ -239,9 +240,7 @@ impl ApiProvider {
     #[must_use]
     pub fn env_vars(self) -> &'static [&'static str] {
         self.metadata().map_or(
-            codewhale_config::ProviderKind::Deepseek
-                .provider()
-                .env_vars(),
+            ghosty_config::ProviderKind::Deepseek.provider().env_vars(),
             |provider| provider.env_vars(),
         )
     }
@@ -255,7 +254,7 @@ impl ApiProvider {
     /// Providers ordered for picker/browsing surfaces.
     #[must_use]
     pub fn sorted_for_display() -> Vec<Self> {
-        codewhale_config::provider::providers_sorted_for_display()
+        ghosty_config::provider::providers_sorted_for_display()
             .iter()
             .map(|provider| Self::from_kind(provider.kind()))
             .collect()
@@ -272,7 +271,7 @@ impl ApiProvider {
             // all_provider_variants_have_metadata test guards the table.
             _ => self.metadata().map_or_else(
                 || {
-                    codewhale_config::ProviderKind::Deepseek
+                    ghosty_config::ProviderKind::Deepseek
                         .provider()
                         .default_base_url()
                 },
@@ -283,15 +282,13 @@ impl ApiProvider {
 
     /// Canonical credential acquisition metadata shared by provider surfaces.
     #[must_use]
-    pub fn credential_help(self) -> codewhale_config::provider::CredentialHelp {
+    pub fn credential_help(self) -> ghosty_config::provider::CredentialHelp {
         self.metadata().map_or_else(
             || {
-                codewhale_config::provider::provider_for_kind(
-                    codewhale_config::ProviderKind::Deepseek,
-                )
-                .credential_help()
+                ghosty_config::provider::provider_for_kind(ghosty_config::ProviderKind::Deepseek)
+                    .credential_help()
             },
-            codewhale_config::provider::Provider::credential_help,
+            ghosty_config::provider::Provider::credential_help,
         )
     }
 
@@ -318,7 +315,7 @@ impl ApiProvider {
         static CATALOG: std::sync::OnceLock<Vec<ApiProvider>> = std::sync::OnceLock::new();
         CATALOG
             .get_or_init(|| {
-                codewhale_config::ProviderKind::ALL
+                ghosty_config::ProviderKind::ALL
                     .iter()
                     .copied()
                     .map(Self::from_kind)
@@ -342,59 +339,60 @@ impl ApiProvider {
 
     /// `ApiProvider` discriminant → `ProviderKind` lookup.
     /// Index 1 is `None` for the legacy `DeepseekCN` variant.
-    const KIND_LOOKUP: [Option<codewhale_config::ProviderKind>; 48] = [
-        Some(codewhale_config::ProviderKind::Deepseek),
+    const KIND_LOOKUP: [Option<ghosty_config::ProviderKind>; 49] = [
+        Some(ghosty_config::ProviderKind::Deepseek),
         None, // DeepseekCN
-        Some(codewhale_config::ProviderKind::DeepseekAnthropic),
-        Some(codewhale_config::ProviderKind::NvidiaNim),
-        Some(codewhale_config::ProviderKind::Openai),
-        Some(codewhale_config::ProviderKind::Atlascloud),
-        Some(codewhale_config::ProviderKind::WanjieArk),
-        Some(codewhale_config::ProviderKind::Volcengine),
-        Some(codewhale_config::ProviderKind::Openrouter),
-        Some(codewhale_config::ProviderKind::Orcarouter),
-        Some(codewhale_config::ProviderKind::XiaomiMimo),
-        Some(codewhale_config::ProviderKind::Novita),
-        Some(codewhale_config::ProviderKind::Fireworks),
-        Some(codewhale_config::ProviderKind::Siliconflow),
-        Some(codewhale_config::ProviderKind::SiliconflowCN),
-        Some(codewhale_config::ProviderKind::Arcee),
-        Some(codewhale_config::ProviderKind::Moonshot),
-        Some(codewhale_config::ProviderKind::Sglang),
-        Some(codewhale_config::ProviderKind::Vllm),
-        Some(codewhale_config::ProviderKind::Ollama),
-        Some(codewhale_config::ProviderKind::OllamaCloud),
-        Some(codewhale_config::ProviderKind::Huggingface),
-        Some(codewhale_config::ProviderKind::Together),
-        Some(codewhale_config::ProviderKind::Qianfan),
-        Some(codewhale_config::ProviderKind::OpenaiCodex),
-        Some(codewhale_config::ProviderKind::Anthropic),
-        Some(codewhale_config::ProviderKind::Openmodel),
-        Some(codewhale_config::ProviderKind::Zai),
-        Some(codewhale_config::ProviderKind::Stepfun),
-        Some(codewhale_config::ProviderKind::Minimax),
-        Some(codewhale_config::ProviderKind::MinimaxAnthropic),
-        Some(codewhale_config::ProviderKind::Deepinfra),
-        Some(codewhale_config::ProviderKind::Sakana),
-        Some(codewhale_config::ProviderKind::LongCat),
-        Some(codewhale_config::ProviderKind::OpencodeGo),
-        Some(codewhale_config::ProviderKind::OpencodeZen),
-        Some(codewhale_config::ProviderKind::Meta),
-        Some(codewhale_config::ProviderKind::Xai),
-        Some(codewhale_config::ProviderKind::Mistral),
-        Some(codewhale_config::ProviderKind::Google),
-        Some(codewhale_config::ProviderKind::Antigravity),
-        Some(codewhale_config::ProviderKind::Telecomjs),
-        Some(codewhale_config::ProviderKind::Edenai),
-        Some(codewhale_config::ProviderKind::ModelstudioTokenPlan),
-        Some(codewhale_config::ProviderKind::ModelstudioTokenPlanAnthropic),
-        Some(codewhale_config::ProviderKind::ModelstudioCodingPlan),
-        Some(codewhale_config::ProviderKind::ModelstudioCodingPlanAnthropic),
-        Some(codewhale_config::ProviderKind::Custom),
+        Some(ghosty_config::ProviderKind::DeepseekAnthropic),
+        Some(ghosty_config::ProviderKind::NvidiaNim),
+        Some(ghosty_config::ProviderKind::Openai),
+        Some(ghosty_config::ProviderKind::Atlascloud),
+        Some(ghosty_config::ProviderKind::WanjieArk),
+        Some(ghosty_config::ProviderKind::Volcengine),
+        Some(ghosty_config::ProviderKind::Openrouter),
+        Some(ghosty_config::ProviderKind::Orcarouter),
+        Some(ghosty_config::ProviderKind::XiaomiMimo),
+        Some(ghosty_config::ProviderKind::Novita),
+        Some(ghosty_config::ProviderKind::Fireworks),
+        Some(ghosty_config::ProviderKind::Siliconflow),
+        Some(ghosty_config::ProviderKind::SiliconflowCN),
+        Some(ghosty_config::ProviderKind::Arcee),
+        Some(ghosty_config::ProviderKind::Moonshot),
+        Some(ghosty_config::ProviderKind::Sglang),
+        Some(ghosty_config::ProviderKind::Vllm),
+        Some(ghosty_config::ProviderKind::Ollama),
+        Some(ghosty_config::ProviderKind::OllamaCloud),
+        Some(ghosty_config::ProviderKind::Huggingface),
+        Some(ghosty_config::ProviderKind::Together),
+        Some(ghosty_config::ProviderKind::Qianfan),
+        Some(ghosty_config::ProviderKind::OpenaiCodex),
+        Some(ghosty_config::ProviderKind::Anthropic),
+        Some(ghosty_config::ProviderKind::Openmodel),
+        Some(ghosty_config::ProviderKind::Zai),
+        Some(ghosty_config::ProviderKind::Easybits),
+        Some(ghosty_config::ProviderKind::Stepfun),
+        Some(ghosty_config::ProviderKind::Minimax),
+        Some(ghosty_config::ProviderKind::MinimaxAnthropic),
+        Some(ghosty_config::ProviderKind::Deepinfra),
+        Some(ghosty_config::ProviderKind::Sakana),
+        Some(ghosty_config::ProviderKind::LongCat),
+        Some(ghosty_config::ProviderKind::OpencodeGo),
+        Some(ghosty_config::ProviderKind::OpencodeZen),
+        Some(ghosty_config::ProviderKind::Meta),
+        Some(ghosty_config::ProviderKind::Xai),
+        Some(ghosty_config::ProviderKind::Mistral),
+        Some(ghosty_config::ProviderKind::Google),
+        Some(ghosty_config::ProviderKind::Antigravity),
+        Some(ghosty_config::ProviderKind::Telecomjs),
+        Some(ghosty_config::ProviderKind::Edenai),
+        Some(ghosty_config::ProviderKind::ModelstudioTokenPlan),
+        Some(ghosty_config::ProviderKind::ModelstudioTokenPlanAnthropic),
+        Some(ghosty_config::ProviderKind::ModelstudioCodingPlan),
+        Some(ghosty_config::ProviderKind::ModelstudioCodingPlanAnthropic),
+        Some(ghosty_config::ProviderKind::Custom),
     ];
 
     /// `ProviderKind` discriminant → `ApiProvider` lookup.
-    const FROM_KIND_LOOKUP: [Self; 47] = [
+    const FROM_KIND_LOOKUP: [Self; 48] = [
         Self::Deepseek,
         Self::DeepseekAnthropic,
         Self::NvidiaNim,
@@ -422,6 +420,7 @@ impl ApiProvider {
         Self::Anthropic,
         Self::Openmodel,
         Self::Zai,
+        Self::Easybits,
         Self::Stepfun,
         Self::Minimax,
         Self::MinimaxAnthropic,
@@ -447,13 +446,13 @@ impl ApiProvider {
     /// Map to the config-level `ProviderKind`.
     /// Returns `None` for the legacy `DeepseekCN` variant.
     #[must_use]
-    pub fn kind(self) -> Option<codewhale_config::ProviderKind> {
+    pub fn kind(self) -> Option<ghosty_config::ProviderKind> {
         Self::KIND_LOOKUP[self as usize]
     }
 
     /// Construct from a config-level `ProviderKind`.
     #[must_use]
-    pub fn from_kind(kind: codewhale_config::ProviderKind) -> Self {
+    pub fn from_kind(kind: ghosty_config::ProviderKind) -> Self {
         Self::FROM_KIND_LOOKUP[kind as usize]
     }
 
@@ -713,7 +712,10 @@ pub fn provider_capability(provider: ApiProvider, resolved_model: &str) -> Provi
     let model_lower = resolved_model.to_ascii_lowercase();
     let alias_deprecation = if matches!(
         provider,
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic
+        ApiProvider::Deepseek
+            | ApiProvider::DeepseekCN
+            | ApiProvider::Easybits
+            | ApiProvider::DeepseekAnthropic
     ) {
         deepseek_alias_deprecation(&model_lower)
     } else {
@@ -873,9 +875,10 @@ pub(crate) fn normalize_custom_model_id(model: &str) -> Option<String> {
 #[must_use]
 pub fn requested_model_for_provider(provider: ApiProvider, model: &str) -> Option<String> {
     match provider {
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic => {
-            normalize_model_name(model)
-        }
+        ApiProvider::Deepseek
+        | ApiProvider::DeepseekCN
+        | ApiProvider::Easybits
+        | ApiProvider::DeepseekAnthropic => normalize_model_name(model),
         ApiProvider::OpencodeGo => opencode_go_chat_model_id(model).map(str::to_string),
         _ => normalize_custom_model_id(model),
     }
@@ -935,7 +938,10 @@ pub fn validate_route(provider: ApiProvider, model: &str) -> Result<(), String> 
         return Ok(());
     }
 
-    if matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN) {
+    if matches!(
+        provider,
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits
+    ) {
         if normalize_model_name(trimmed).is_some() {
             return Ok(());
         }
@@ -1113,7 +1119,7 @@ fn canonical_openrouter_recent_model_id(model: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn opencode_go_chat_model_id(model: &str) -> Option<&'static str> {
-    codewhale_config::opencode_go_chat_model_id(model)
+    ghosty_config::opencode_go_chat_model_id(model)
 }
 
 fn canonical_xiaomi_mimo_model_id(model: &str) -> Option<&'static str> {
@@ -1310,7 +1316,10 @@ pub fn canonical_model_id_for_provider(provider: ApiProvider, model: &str) -> Op
     // accepts-custom-model-ids path, so they never reach this gate.
     if matches!(
         provider,
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic
+        ApiProvider::Deepseek
+            | ApiProvider::DeepseekCN
+            | ApiProvider::Easybits
+            | ApiProvider::DeepseekAnthropic
     ) {
         let normalized = normalize_model_name(trimmed)?;
         if let Some(canonical) = canonical_direct_deepseek_model_id(&normalized) {
@@ -1448,7 +1457,10 @@ pub(crate) fn legacy_deepseek_alias_effort_for_route(
 ) -> Option<&'static str> {
     if !matches!(
         provider,
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic
+        ApiProvider::Deepseek
+            | ApiProvider::DeepseekCN
+            | ApiProvider::Easybits
+            | ApiProvider::DeepseekAnthropic
     ) {
         return None;
     }
@@ -1461,15 +1473,16 @@ pub(crate) fn legacy_deepseek_alias_effort_for_route(
 ///
 /// Preferred sources are the live Models.dev catalog and the offline bundled
 /// snapshot via [`crate::provider_lake`]. Call this directly only for
-/// Codewhale-only / local providers Models.dev does not represent, or when
+/// Ghosty-only / local providers Models.dev does not represent, or when
 /// probing the fallback table in tests. Picker, inventory, and subagent
 /// surfaces must go through the provider lake.
 #[must_use]
 pub fn model_completion_names_for_provider(provider: ApiProvider) -> Vec<&'static str> {
     match provider {
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic => {
-            OFFICIAL_DEEPSEEK_MODELS.to_vec()
-        }
+        ApiProvider::Deepseek
+        | ApiProvider::DeepseekCN
+        | ApiProvider::Easybits
+        | ApiProvider::DeepseekAnthropic => OFFICIAL_DEEPSEEK_MODELS.to_vec(),
         ApiProvider::NvidiaNim => vec![DEFAULT_NVIDIA_NIM_MODEL, DEFAULT_NVIDIA_NIM_FLASH_MODEL],
         ApiProvider::Openrouter => {
             let mut models = vec![DEFAULT_OPENROUTER_MODEL, DEFAULT_OPENROUTER_FLASH_MODEL];
@@ -1553,7 +1566,7 @@ pub fn model_completion_names_for_provider(provider: ApiProvider) -> Vec<&'stati
         ApiProvider::Sakana => vec![DEFAULT_SAKANA_MODEL, SAKANA_FUGU_ULTRA_MODEL],
         ApiProvider::LongCat => vec![DEFAULT_LONGCAT_MODEL],
         ApiProvider::OpencodeGo => OPENCODE_GO_CHAT_MODELS.to_vec(),
-        ApiProvider::OpencodeZen => codewhale_config::route::opencode_zen_picker_models(),
+        ApiProvider::OpencodeZen => ghosty_config::route::opencode_zen_picker_models(),
         ApiProvider::Meta => vec![
             DEFAULT_META_MODEL,
             "muse-spark-1.1",
@@ -1665,7 +1678,7 @@ where
 /// instead of failing with an "unknown variant" error.
 ///
 /// This keeps configuration files forward-compatible. For example, a newer
-/// CodeWhale build may write a header item that an older build does not yet
+/// GhostyCode build may write a header item that an older build does not yet
 /// understand; the older build will ignore that item while preserving the
 /// remaining supported entries.
 fn deser_header_items<'de, D>(deserializer: D) -> Result<Option<Vec<HeaderItem>>, D::Error>
@@ -1716,7 +1729,7 @@ pub struct TuiConfig {
     /// header and is not controlled by this list.
     ///
     /// Unknown items are ignored during deserialization so configurations written
-    /// by newer CodeWhale versions remain loadable by older versions.
+    /// by newer GhostyCode versions remain loadable by older versions.
     ///
     /// Persisted to `tui.header_items` in `~/.deepseek/config.toml`.
     #[serde(default, deserialize_with = "deser_header_items")]
@@ -2203,7 +2216,7 @@ pub struct ToolsConfig {
     /// frontmatter header (`# name:`, `# description:`, `# schema:`) are
     /// auto-discovered and registered as tools.
     ///
-    /// Defaults to `~/.codewhale/tools/` when `None`.
+    /// Defaults to `~/.ghosty/tools/` when `None`.
     #[serde(default)]
     pub plugin_dir: Option<String>,
 
@@ -2426,7 +2439,10 @@ impl StatusItem {
     pub fn is_available_for(self, provider: ApiProvider) -> bool {
         match self {
             StatusItem::Balance => {
-                matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN)
+                matches!(
+                    provider,
+                    ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits
+                )
             }
             _ => true,
         }
@@ -2546,8 +2562,8 @@ pub struct SubagentsConfig {
     /// spawn. `0` blocks the model-facing `agent` tool at this runtime depth;
     /// use `[subagents] enabled = false` for the clearer durable off switch.
     /// `1` allows one level, `2` two, and so on. When unset, defaults to
-    /// [`codewhale_config::DEFAULT_SPAWN_DEPTH`]; any value is clamped to
-    /// [`codewhale_config::MAX_SPAWN_DEPTH_CEILING`]. Fleet workers are
+    /// [`ghosty_config::DEFAULT_SPAWN_DEPTH`]; any value is clamped to
+    /// [`ghosty_config::MAX_SPAWN_DEPTH_CEILING`]. Fleet workers are
     /// governed separately by `[fleet.exec] max_spawn_depth`; both share the
     /// same default and ceiling so the limit cannot drift.
     #[serde(default)]
@@ -2694,7 +2710,7 @@ fn default_update_check_for_updates() -> bool {
 }
 
 fn default_update_check_interval_hours() -> u64 {
-    codewhale_release::check::DEFAULT_CHECK_INTERVAL_HOURS
+    ghosty_release::check::DEFAULT_CHECK_INTERVAL_HOURS
 }
 
 /// Startup update-check configuration (`[update]` table in config.toml).
@@ -2831,7 +2847,7 @@ pub struct Config {
     #[serde(alias = "httpHeaders")]
     pub http_headers: Option<HashMap<String, String>>,
     /// Optional user-facing tab/window title shown as `[title] …` in front of
-    /// the terminal window title (the `Codewhale` / `reasoning…` / `done.`
+    /// the terminal window title (the `Ghosty` / `reasoning…` / `done.`
     /// states). This is the default for every session in this config scope;
     /// the `/title` command overrides it per session, and `/config title …
     /// --save` persists a new default here. Multi-window setups can point each
@@ -2943,7 +2959,7 @@ pub struct Config {
     #[serde(default)]
     pub telemetry: Option<bool>,
     #[serde(default, alias = "fallbackProviders")]
-    pub fallback_providers: Vec<codewhale_config::ProviderKind>,
+    pub fallback_providers: Vec<ghosty_config::ProviderKind>,
     pub yolo: Option<bool>,
     pub verbosity: Option<String>,
     /// External sandbox backend: `"none"` or `"opensandbox"`.
@@ -3015,11 +3031,11 @@ pub struct Config {
 
     /// Lifecycle event outbox (`[lifecycle_outbox]`). Opt-in: an unset or
     /// empty `path` disables the feature and leaves behavior unchanged.
-    /// Fires for interactive TUI sessions and headless `codewhale exec` runs.
+    /// Fires for interactive TUI sessions and headless `ghosty exec` runs.
     #[serde(default)]
-    pub lifecycle_outbox: Option<codewhale_config::LifecycleOutboxToml>,
+    pub lifecycle_outbox: Option<ghosty_config::LifecycleOutboxToml>,
 
-    /// Provider-specific credentials and defaults shared with the `codewhale` facade.
+    /// Provider-specific credentials and defaults shared with the `ghosty` facade.
     #[serde(default)]
     pub providers: Option<ProvidersConfig>,
 
@@ -3040,12 +3056,12 @@ pub struct Config {
     /// Verifier-preview behavior (#2093). When absent, automatic verifier
     /// preview stays off and verifier verdicts use the hunt policy.
     #[serde(default)]
-    pub verifier: Option<codewhale_config::VerifierConfigToml>,
+    pub verifier: Option<ghosty_config::VerifierConfigToml>,
 
     /// Background advisor watcher (#3982). When absent, the advisor is off
     /// by default. Enable with `[advisor] enabled = true` or `/advisor on`.
     #[serde(default)]
-    pub advisor: Option<codewhale_config::AdvisorConfigToml>,
+    pub advisor: Option<ghosty_config::AdvisorConfigToml>,
 
     /// Community skill installer settings (#140). When absent, installer
     /// commands fall back to the bundled defaults
@@ -3088,9 +3104,9 @@ pub struct Config {
     pub auto: Option<AutoConfig>,
 
     /// Optional 1-8 hotbar slot bindings (#2064). When absent, hotbar UI and
-    /// dispatch layers use the built-in defaults from `codewhale_config`.
+    /// dispatch layers use the built-in defaults from `ghosty_config`.
     #[serde(default)]
-    pub hotbar: Option<Vec<codewhale_config::HotbarBindingToml>>,
+    pub hotbar: Option<Vec<ghosty_config::HotbarBindingToml>>,
 
     /// Startup update-check behavior. When absent, the TUI keeps the default
     /// fire-and-forget latest-release check.
@@ -3109,20 +3125,20 @@ pub struct Config {
 
     /// Agent Fleet trust/security/role/exec config.
     #[serde(default)]
-    pub fleet: Option<codewhale_config::FleetConfigToml>,
+    pub fleet: Option<ghosty_config::FleetConfigToml>,
 
     /// Workflow automatic-launch, approval, isolation, and activity
     /// persistence knobs (#4128). When absent, consumers use
-    /// [`codewhale_config::WorkflowConfigToml::default`] via
+    /// [`ghosty_config::WorkflowConfigToml::default`] via
     /// [`Self::workflow_config`].
     #[serde(default)]
-    pub workflow: Option<codewhale_config::WorkflowConfigToml>,
+    pub workflow: Option<ghosty_config::WorkflowConfigToml>,
 
     /// Sub-agent model overrides.
     #[serde(default)]
     pub subagents: Option<SubagentsConfig>,
 
-    /// Runtime API server tuning (`codewhale serve --http`). Currently only
+    /// Runtime API server tuning (`ghosty serve --http`). Currently only
     /// hosts the CORS allow-list extension (whalescale#255 / #561). When the
     /// table is absent, the daemon ships with localhost:3000 / localhost:1420
     /// / tauri://localhost as the only allowed dev origins.
@@ -3162,7 +3178,7 @@ pub struct Config {
     /// `Deepseek` and `DeepseekCN` are two identities that share one legacy
     /// root field, so the field alone cannot say whether it is a user's
     /// file-owned endpoint (shared by both, as it always has been) or a
-    /// `CODEWHALE_BASE_URL`/`DEEPSEEK_BASE_URL` value that
+    /// `GHOSTY_BASE_URL`/`DEEPSEEK_BASE_URL` value that
     /// [`apply_env_overrides`] addressed to exactly one of them.
     ///
     /// [`BaseUrlEnvReceipt::Unrecorded`] is the file-owned case and keeps the
@@ -3222,7 +3238,7 @@ fn mini_default_keep_input() -> bool {
 }
 
 /// What the environment layer decided about the generic
-/// `CODEWHALE_BASE_URL` / `DEEPSEEK_BASE_URL` override.
+/// `GHOSTY_BASE_URL` / `DEEPSEEK_BASE_URL` override.
 ///
 /// The distinction that matters is between "no receipt" and "a receipt saying
 /// nobody owns it". They are not the same state and must not collapse: a
@@ -3434,7 +3450,7 @@ pub enum ToolOverride {
     /// Run a local script file. The script receives the tool's JSON input
     /// on stdin and must return a JSON `ToolResult` on stdout.
     Script {
-        /// Path to the script (absolute, or relative to `~/.codewhale/tools/`).
+        /// Path to the script (absolute, or relative to `~/.ghosty/tools/`).
         path: String,
         /// Optional static arguments prepended before the tool's JSON input.
         #[serde(default)]
@@ -3493,23 +3509,23 @@ pub struct SkillsConfig {
     /// this limit are rejected during validation. Defaults to 5 MiB.
     #[serde(default)]
     pub max_install_size_bytes: Option<u64>,
-    /// When true, skill discovery scans only Codewhale-owned skill roots
+    /// When true, skill discovery scans only Ghosty-owned skill roots
     /// (plus any explicit `skills_dir`) instead of importing compatible
     /// directories from other AI tools such as Claude, OpenCode, or Cursor.
-    #[serde(default, alias = "scanCodewhaleOnly")]
-    pub scan_codewhale_only: Option<bool>,
+    #[serde(default, alias = "scanGhostyOnly")]
+    pub scan_ghosty_only: Option<bool>,
 }
 
 impl SkillsConfig {
     /// Resolve whether session-time discovery should ignore cross-tool skill
     /// directories. Defaults to the compatibility-preserving broad scan.
     #[must_use]
-    pub fn scan_codewhale_only(&self) -> bool {
-        self.scan_codewhale_only.unwrap_or(false)
+    pub fn scan_ghosty_only(&self) -> bool {
+        self.scan_ghosty_only.unwrap_or(false)
     }
 }
 
-/// `[network]` table — mirrors `codewhale_config::NetworkPolicyToml` so the live
+/// `[network]` table — mirrors `ghosty_config::NetworkPolicyToml` so the live
 /// TUI runtime can construct a [`crate::network_policy::NetworkPolicy`]
 /// without reaching into the workspace config crate. See `config.example.toml`
 /// for documentation.
@@ -3657,8 +3673,8 @@ pub struct ProviderConfig {
     pub wire: Option<String>,
     #[serde(alias = "authMode")]
     pub auth_mode: Option<String>,
-    /// Validated basename of the active Codewhale-owned xAI OAuth generation.
-    /// The file always lives below Codewhale's private credentials directory.
+    /// Validated basename of the active Ghosty-owned xAI OAuth generation.
+    /// The file always lives below Ghosty's private credentials directory.
     #[serde(default, alias = "oauthCredentialGeneration")]
     pub oauth_credential_generation: Option<String>,
     #[serde(alias = "insecureSkipTlsVerify")]
@@ -3676,11 +3692,11 @@ pub struct ProviderConfig {
         alias = "concurrency"
     )]
     pub max_concurrency: Option<usize>,
-    pub auth: Option<codewhale_config::ProviderAuthSourceToml>,
+    pub auth: Option<ghosty_config::ProviderAuthSourceToml>,
     /// Explicit, provider-scoped consent for one credential file owned by
     /// another CLI. Absence is the disabled default.
     #[serde(default, alias = "externalCredentials")]
-    pub external_credentials: Option<codewhale_config::ExternalCredentialConsentToml>,
+    pub external_credentials: Option<ghosty_config::ExternalCredentialConsentToml>,
     /// Wire-protocol selector for a custom `[providers.<name>]` entry (#1519).
     ///
     /// Only `"openai-compatible"` is accepted for now; any other value is
@@ -3804,6 +3820,8 @@ pub struct ProvidersConfig {
         alias = "big-model"
     )]
     pub zai: ProviderConfig,
+    #[serde(default, alias = "easy-bits", alias = "easy_bits", alias = "eb")]
+    pub easybits: ProviderConfig,
     #[serde(default)]
     pub stepfun: ProviderConfig,
     #[serde(default)]
@@ -4053,7 +4071,7 @@ impl ShellAccessControl {
 
 fn approval_policy_env_is_set() -> bool {
     let read = || {
-        std::env::var_os("CODEWHALE_APPROVAL_POLICY").is_some()
+        std::env::var_os("GHOSTY_APPROVAL_POLICY").is_some()
             || std::env::var_os("DEEPSEEK_APPROVAL_POLICY").is_some()
     };
     #[cfg(test)]
@@ -4068,7 +4086,7 @@ fn approval_policy_env_is_set() -> bool {
 
 fn allow_shell_env_is_set() -> bool {
     let read = || {
-        std::env::var_os("CODEWHALE_ALLOW_SHELL").is_some()
+        std::env::var_os("GHOSTY_ALLOW_SHELL").is_some()
             || std::env::var_os("DEEPSEEK_ALLOW_SHELL").is_some()
     };
     #[cfg(test)]
@@ -4084,10 +4102,10 @@ fn allow_shell_env_is_set() -> bool {
 fn project_config_root_bool(workspace: &Path, key: &str) -> Option<bool> {
     [
         workspace
-            .join(codewhale_config::CODEWHALE_APP_DIR)
+            .join(ghosty_config::GHOSTY_APP_DIR)
             .join("config.toml"),
         workspace
-            .join(codewhale_config::LEGACY_APP_DIR)
+            .join(ghosty_config::LEGACY_APP_DIR)
             .join("config.toml"),
     ]
     .into_iter()
@@ -4128,38 +4146,38 @@ impl Config {
     pub(crate) fn external_credential_consent_status(
         &self,
         provider: ApiProvider,
-    ) -> Option<codewhale_config::ExternalCredentialConsentStatus> {
+    ) -> Option<ghosty_config::ExternalCredentialConsentStatus> {
         let (kind, source, path) = match provider {
             ApiProvider::OpenaiCodex => (
-                codewhale_config::ProviderKind::OpenaiCodex,
-                codewhale_config::ExternalCredentialSource::CodexCli,
+                ghosty_config::ProviderKind::OpenaiCodex,
+                ghosty_config::ExternalCredentialSource::CodexCli,
                 crate::oauth::auth_file_path(),
             ),
             ApiProvider::Xai => (
-                codewhale_config::ProviderKind::Xai,
-                codewhale_config::ExternalCredentialSource::GrokCli,
+                ghosty_config::ProviderKind::Xai,
+                ghosty_config::ExternalCredentialSource::GrokCli,
                 crate::xai_oauth::auth_file_path(),
             ),
             ApiProvider::Deepseek => (
-                codewhale_config::ProviderKind::Deepseek,
-                codewhale_config::ExternalCredentialSource::DshCli,
-                codewhale_config::default_dsh_credentials_path(),
+                ghosty_config::ProviderKind::Deepseek,
+                ghosty_config::ExternalCredentialSource::DshCli,
+                ghosty_config::default_dsh_credentials_path(),
             ),
             ApiProvider::DeepseekAnthropic => (
-                codewhale_config::ProviderKind::DeepseekAnthropic,
-                codewhale_config::ExternalCredentialSource::DshCli,
-                codewhale_config::default_dsh_credentials_path(),
+                ghosty_config::ProviderKind::DeepseekAnthropic,
+                ghosty_config::ExternalCredentialSource::DshCli,
+                ghosty_config::default_dsh_credentials_path(),
             ),
             _ => return None,
         };
         let active_kind = self
             .api_provider()
             .kind()
-            .unwrap_or(codewhale_config::ProviderKind::Deepseek);
+            .unwrap_or(ghosty_config::ProviderKind::Deepseek);
         let consent = self
             .provider_config_for(provider)
             .and_then(|entry| entry.external_credentials.as_ref());
-        Some(codewhale_config::external_credential_consent_status(
+        Some(ghosty_config::external_credential_consent_status(
             consent,
             kind,
             source,
@@ -4215,14 +4233,11 @@ impl Config {
                 });
             let approval_baseline = self.approval_policy.as_deref().or(saved_approval_baseline);
             let parsed_controls =
-                codewhale_config::load_project_config(workspace).is_some_and(|project| {
+                ghosty_config::load_project_config(workspace).is_some_and(|project| {
                     project.approval_policy.as_deref().is_some_and(|policy| {
-                        codewhale_config::project_approval_policy_is_allowed(
-                            approval_baseline,
-                            policy,
-                        )
+                        ghosty_config::project_approval_policy_is_allowed(approval_baseline, policy)
                     }) || project.sandbox_mode.as_deref().is_some_and(|sandbox| {
-                        codewhale_config::project_sandbox_mode_is_allowed(
+                        ghosty_config::project_sandbox_mode_is_allowed(
                             self.sandbox_mode.as_deref(),
                             sandbox,
                         )
@@ -4325,10 +4340,10 @@ impl Config {
                     approval_policy_baseline_from_permission_posture(Some(&posture))
                 });
             let approval_baseline = self.approval_policy.as_deref().or(saved_approval_baseline);
-            if codewhale_config::load_project_config(workspace)
+            if ghosty_config::load_project_config(workspace)
                 .and_then(|project| project.approval_policy)
                 .is_some_and(|policy| {
-                    codewhale_config::project_approval_policy_is_allowed(approval_baseline, &policy)
+                    ghosty_config::project_approval_policy_is_allowed(approval_baseline, &policy)
                 })
             {
                 return ApprovalPolicyControl::ProjectConfig;
@@ -4510,7 +4525,7 @@ impl Config {
 
     #[must_use]
     pub fn search_provider_resolution(&self) -> SearchProviderResolution {
-        if let Ok(raw) = std::env::var("CODEWHALE_SEARCH_PROVIDER")
+        if let Ok(raw) = std::env::var("GHOSTY_SEARCH_PROVIDER")
             .or_else(|_| std::env::var("DEEPSEEK_SEARCH_PROVIDER"))
             && let Some(provider) = SearchProvider::parse(&raw)
         {
@@ -4652,7 +4667,7 @@ impl Config {
                 let parsed: ConfigFile = toml::from_str(&contents).map_err(|_| {
                     anyhow::anyhow!(
                         "Failed to parse config file {}; file contents were omitted",
-                        codewhale_config::quote_os_path(path)
+                        ghosty_config::quote_os_path(path)
                     )
                 })?;
                 if let Some(msg) = warn_on_misplaced_top_level_keys(&contents) {
@@ -4915,8 +4930,8 @@ impl Config {
             .map(str::to_string)
             .or_else(|| first_nonempty_env(&["OLLAMA_BASE_URL"]));
         base_url.is_some_and(|base_url| {
-            codewhale_config::provider::migrates_legacy_ollama_cloud_route(
-                codewhale_config::ProviderKind::Ollama,
+            ghosty_config::provider::migrates_legacy_ollama_cloud_route(
+                ghosty_config::ProviderKind::Ollama,
                 &base_url,
             )
         })
@@ -5054,7 +5069,7 @@ impl Config {
                     return self.resolve_provider_identity(name);
                 }
                 return Err(format!(
-                    "legacy session records only the generic `custom` provider kind, but the live config does not select exactly one valid named custom route (selected '{}', valid named routes: {}). Restore the original single `[providers.<name>]` route or repair the saved provider identity; Codewhale will not guess or fall back",
+                    "legacy session records only the generic `custom` provider kind, but the live config does not select exactly one valid named custom route (selected '{}', valid named routes: {}). Restore the original single `[providers.<name>]` route or repair the saved provider identity; Ghosty will not guess or fall back",
                     if selected.is_empty() {
                         "<unset>"
                     } else {
@@ -5073,12 +5088,12 @@ impl Config {
             .and_then(|providers| providers.custom_provider_config(exact_key))
             .ok_or_else(|| {
                 format!(
-                    "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}]` is missing from the live config. Restore that exact table and retry; Codewhale will not fall back"
+                    "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}]` is missing from the live config. Restore that exact table and retry; Ghosty will not fall back"
                 )
             })?;
         if !entry.is_openai_compatible_custom() {
             return Err(format!(
-                "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}]` must set `kind = \"openai-compatible\"`. Fix the live config and retry; Codewhale will not fall back"
+                "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}]` must set `kind = \"openai-compatible\"`. Fix the live config and retry; Ghosty will not fall back"
             ));
         }
         let base_url = entry
@@ -5088,17 +5103,17 @@ impl Config {
             .filter(|base_url| !base_url.is_empty())
             .ok_or_else(|| {
                 format!(
-                    "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}]` has no `base_url`. Fix the live config and retry; Codewhale will not fall back"
+                    "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}]` has no `base_url`. Fix the live config and retry; Ghosty will not fall back"
                 )
             })?;
         let parsed = reqwest::Url::parse(base_url).map_err(|err| {
             format!(
-                "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}].base_url` is invalid: {err}. Fix the live config and retry; Codewhale will not fall back"
+                "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}].base_url` is invalid: {err}. Fix the live config and retry; Ghosty will not fall back"
             )
         })?;
         if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
             return Err(format!(
-                "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}].base_url` must be an http(s) URL with a host. Fix the live config and retry; Codewhale will not fall back"
+                "saved session requires custom provider '{exact_key}', but `[providers.{exact_key}].base_url` must be an http(s) URL with a host. Fix the live config and retry; Ghosty will not fall back"
             ));
         }
 
@@ -5142,7 +5157,7 @@ impl Config {
         let id = persisted.trim();
         if id.is_empty() {
             return Err(
-                "persisted provider route has an empty exact provider id; Codewhale will not guess or fall back"
+                "persisted provider route has an empty exact provider id; Ghosty will not guess or fall back"
                     .to_string(),
             );
         }
@@ -5153,14 +5168,14 @@ impl Config {
             .is_some();
         if id.eq_ignore_ascii_case(ApiProvider::Custom.as_str()) && !has_exact_custom_table {
             return Err(format!(
-                "persisted provider route requires exact custom provider '{id}', but `[providers.{id}]` is missing from the live config. Restore that exact table and retry; Codewhale will not fall back"
+                "persisted provider route requires exact custom provider '{id}', but `[providers.{id}]` is missing from the live config. Restore that exact table and retry; Ghosty will not fall back"
             ));
         }
 
         let identity = self.resolve_provider_identity(id)?;
         if identity.provider == ApiProvider::Custom && identity.persisted_id() != Some(id) {
             return Err(format!(
-                "persisted provider route requires exact custom provider '{id}', but the live config only provides the legacy root-level custom route. Restore `[providers.{id}]` and retry; Codewhale will not fall back"
+                "persisted provider route requires exact custom provider '{id}', but the live config only provides the legacy root-level custom route. Restore `[providers.{id}]` and retry; Ghosty will not fall back"
             ));
         }
         Ok(identity)
@@ -5194,7 +5209,7 @@ impl Config {
             return id.map_or_else(
                 || {
                     Err(
-                        "persisted provider route has neither a provider kind nor an exact provider id; Codewhale will not guess or fall back"
+                        "persisted provider route has neither a provider kind nor an exact provider id; Ghosty will not guess or fall back"
                             .to_string(),
                     )
                 },
@@ -5210,7 +5225,7 @@ impl Config {
                 && id != kind
             {
                 return Err(format!(
-                    "persisted provider route has legacy identity '{kind}' but exact provider id '{id}'; repair the mismatched fields because Codewhale will not guess or fall back"
+                    "persisted provider route has legacy identity '{kind}' but exact provider id '{id}'; repair the mismatched fields because Ghosty will not guess or fall back"
                 ));
             }
             return match id {
@@ -5232,7 +5247,7 @@ impl Config {
                 let identity = self.resolve_exact_provider_identity(id)?;
                 if identity.provider != ApiProvider::Custom {
                     return Err(format!(
-                        "persisted provider route declares generic kind 'custom' but exact provider id '{id}' resolves as built-in '{}'; use the matching built-in kind or restore `[providers.{id}]`. Codewhale will not guess or fall back",
+                        "persisted provider route declares generic kind 'custom' but exact provider id '{id}' resolves as built-in '{}'; use the matching built-in kind or restore `[providers.{id}]`. Ghosty will not guess or fall back",
                         identity.provider.as_str()
                     ));
                 }
@@ -5257,7 +5272,7 @@ impl Config {
                 && ApiProvider::parse(id) == Some(ApiProvider::Ollama))
         {
             return Err(format!(
-                "persisted provider route declares built-in kind '{}' but exact provider id '{id}' names a different route; repair the mismatched fields because Codewhale will not guess or fall back",
+                "persisted provider route declares built-in kind '{}' but exact provider id '{id}' names a different route; repair the mismatched fields because Ghosty will not guess or fall back",
                 provider.as_str()
             ));
         }
@@ -5274,7 +5289,7 @@ impl Config {
             .is_some()
         {
             return Err(format!(
-                "persisted provider route requires built-in '{}', but an exact `[providers.{}]` custom route shadows the same selector. Rename the custom route or update the saved provider kind/id pair; Codewhale will not guess or fall back",
+                "persisted provider route requires built-in '{}', but an exact `[providers.{}]` custom route shadows the same selector. Rename the custom route or update the saved provider kind/id pair; Ghosty will not guess or fall back",
                 provider.as_str(),
                 provider.as_str()
             ));
@@ -5315,7 +5330,7 @@ impl Config {
     fn validate_legacy_literal_custom_route(&self) -> std::result::Result<(), String> {
         if self.has_literal_custom_provider_table() {
             return Err(
-                "legacy `provider = \"custom\"` is ambiguous because `[providers.custom]` is also present. Move the route to one named `[providers.<name>]` table and update the saved provider identity; Codewhale will not guess or fall back"
+                "legacy `provider = \"custom\"` is ambiguous because `[providers.custom]` is also present. Move the route to one named `[providers.<name>]` table and update the saved provider identity; Ghosty will not guess or fall back"
                     .to_string(),
             );
         }
@@ -5327,7 +5342,7 @@ impl Config {
         let selected = self.provider.as_deref().map(str::trim).unwrap_or_default();
         if !self.selects_literal_custom_provider() {
             return Err(format!(
-                "legacy session records only the generic `custom` provider kind, but the live config selects '{}'. Only an unchanged legacy config with `provider = \"custom\"` and root-level `base_url`/`default_text_model` can load this session; Codewhale will not guess or fall back",
+                "legacy session records only the generic `custom` provider kind, but the live config selects '{}'. Only an unchanged legacy config with `provider = \"custom\"` and root-level `base_url`/`default_text_model` can load this session; Ghosty will not guess or fall back",
                 if selected.is_empty() {
                     "<unset>"
                 } else {
@@ -5342,17 +5357,17 @@ impl Config {
             .map(str::trim)
             .filter(|base_url| !base_url.is_empty())
             .ok_or_else(|| {
-                "legacy `provider = \"custom\"` requires a non-empty root-level `base_url` to load a saved session; Codewhale will not use the custom-provider placeholder or fall back"
+                "legacy `provider = \"custom\"` requires a non-empty root-level `base_url` to load a saved session; Ghosty will not use the custom-provider placeholder or fall back"
                     .to_string()
             })?;
         let parsed = reqwest::Url::parse(base_url).map_err(|err| {
             format!(
-                "legacy `provider = \"custom\"` has an invalid root-level `base_url`: {err}. Fix the live config and retry; Codewhale will not fall back"
+                "legacy `provider = \"custom\"` has an invalid root-level `base_url`: {err}. Fix the live config and retry; Ghosty will not fall back"
             )
         })?;
         if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
             return Err(
-                "legacy `provider = \"custom\"` requires a root-level `base_url` with an http(s) scheme and host; Codewhale will not fall back"
+                "legacy `provider = \"custom\"` requires a root-level `base_url` with an http(s) scheme and host; Ghosty will not fall back"
                     .to_string(),
             );
         }
@@ -5363,12 +5378,12 @@ impl Config {
             .map(str::trim)
             .filter(|model| !model.is_empty())
             .ok_or_else(|| {
-                "legacy `provider = \"custom\"` requires a non-empty root-level `default_text_model` to load a saved session; Codewhale will not guess or fall back"
+                "legacy `provider = \"custom\"` requires a non-empty root-level `default_text_model` to load a saved session; Ghosty will not guess or fall back"
                     .to_string()
             })?;
         if model.eq_ignore_ascii_case("auto") || normalize_custom_model_id(model).is_none() {
             return Err(
-                "legacy `provider = \"custom\"` requires one explicit, valid root-level `default_text_model` (not `auto`) to load a saved session; Codewhale will not guess or fall back"
+                "legacy `provider = \"custom\"` requires one explicit, valid root-level `default_text_model` (not `auto`) to load a saved session; Ghosty will not guess or fall back"
                     .to_string(),
             );
         }
@@ -5456,6 +5471,7 @@ impl Config {
             ApiProvider::Anthropic => &providers.anthropic,
             ApiProvider::Openmodel => &providers.openmodel,
             ApiProvider::Zai => &providers.zai,
+            ApiProvider::Easybits => &providers.easybits,
             ApiProvider::Stepfun => &providers.stepfun,
             ApiProvider::Minimax => &providers.minimax,
             ApiProvider::MinimaxAnthropic => &providers.minimax_anthropic,
@@ -5539,6 +5555,7 @@ impl Config {
             ApiProvider::Anthropic => &mut providers.anthropic,
             ApiProvider::Openmodel => &mut providers.openmodel,
             ApiProvider::Zai => &mut providers.zai,
+            ApiProvider::Easybits => &mut providers.easybits,
             ApiProvider::Stepfun => &mut providers.stepfun,
             ApiProvider::Minimax => &mut providers.minimax,
             ApiProvider::MinimaxAnthropic => &mut providers.minimax_anthropic,
@@ -5609,8 +5626,8 @@ impl Config {
     }
 
     /// Mirror a successful native xAI login into the live route config.
-    /// Codewhale-owned OAuth storage supersedes any dormant Grok CLI consent.
-    pub(crate) fn mark_codewhale_owned_xai_oauth(&mut self, generation: String) {
+    /// Ghosty-owned OAuth storage supersedes any dormant Grok CLI consent.
+    pub(crate) fn mark_ghosty_owned_xai_oauth(&mut self, generation: String) {
         let entry = self.provider_config_for_mut(ApiProvider::Xai);
         entry.auth_mode = Some("oauth".to_string());
         entry.oauth_credential_generation = Some(generation);
@@ -5726,7 +5743,7 @@ impl Config {
         }
         headers.retain(|name, value| !name.trim().is_empty() && !value.trim().is_empty());
         if auth_mode_disables_api_key(self.auth_mode_for_provider(provider).as_deref()) {
-            headers.retain(|name, _| !codewhale_config::is_upstream_auth_header(name));
+            headers.retain(|name, _| !ghosty_config::is_upstream_auth_header(name));
         }
         headers
     }
@@ -5751,7 +5768,10 @@ impl Config {
         let provider = self.api_provider();
         if !matches!(
             provider,
-            ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic
+            ApiProvider::Deepseek
+                | ApiProvider::DeepseekCN
+                | ApiProvider::Easybits
+                | ApiProvider::DeepseekAnthropic
         ) {
             return None;
         }
@@ -5790,8 +5810,10 @@ impl Config {
             // provider (e.g. `MiniMax-M2.7` on an OpenAI-compatible endpoint).
             // It must pass through verbatim rather than fall back to a
             // DeepSeek/provider default (issue #1714).
-            if !matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN)
-                && !model.is_empty()
+            if !matches!(
+                provider,
+                ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits
+            ) && !model.is_empty()
             {
                 return model.to_string();
             }
@@ -5867,7 +5889,9 @@ impl Config {
         }
 
         match provider {
-            ApiProvider::Deepseek | ApiProvider::DeepseekCN => DEFAULT_TEXT_MODEL,
+            ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits => {
+                DEFAULT_TEXT_MODEL
+            }
             ApiProvider::DeepseekAnthropic => DEFAULT_DEEPSEEK_ANTHROPIC_MODEL,
             ApiProvider::NvidiaNim => DEFAULT_NVIDIA_NIM_MODEL,
             ApiProvider::Openai => DEFAULT_OPENAI_MODEL,
@@ -5925,7 +5949,7 @@ impl Config {
             | ApiProvider::ModelstudioCodingPlanAnthropic => DEFAULT_MODELSTUDIO_TOKEN_PLAN_MODEL,
             // Custom endpoints have no built-in default model; pass through the
             // descriptor placeholder when nothing is configured (#1519).
-            ApiProvider::Custom => codewhale_config::ProviderKind::Custom
+            ApiProvider::Custom => ghosty_config::ProviderKind::Custom
                 .provider()
                 .default_model(),
         }
@@ -5947,12 +5971,12 @@ impl Config {
     /// 2. its provider-specific environment contract (`MOONSHOT_BASE_URL`,
     ///    `OPENAI_BASE_URL`, ...), which names exactly one provider and is
     ///    therefore sound to read for a route that is not the session's;
-    /// 3. the generic `CODEWHALE_BASE_URL` / `DEEPSEEK_BASE_URL` override, but
+    /// 3. the generic `GHOSTY_BASE_URL` / `DEEPSEEK_BASE_URL` override, but
     ///    only when this config is still the route that override selected;
     /// 4. the provider's canonical default endpoint.
     ///
     /// Step 3 is why this is identity-aware instead of a bare env read.
-    /// `CODEWHALE_BASE_URL` is documented as "base URL for the active
+    /// `GHOSTY_BASE_URL` is documented as "base URL for the active
     /// provider", and [`apply_env_overrides`] writes it onto exactly one
     /// provider entry. Every cross-provider construction seam — a pinned
     /// subagent/fleet child, the per-turn auto-router, tool routing, a picker
@@ -5996,6 +6020,9 @@ impl Config {
             ApiProvider::Deepseek | ApiProvider::DeepseekCN => {
                 self.route_owned_root_base_url(provider, identity)
             }
+            // EasyBits es proveedor propio: solo `[providers.easybits]`, nunca
+            // el root legacy de DeepSeek (eso lo convertiría en ruta custom).
+            ApiProvider::Easybits => None,
             // Xiaomi MiMo honours a root `base_url` when the per-provider table
             // has none — otherwise a minimal top-level config silently falls
             // back to the official host.
@@ -6137,6 +6164,7 @@ impl Config {
                         ApiProvider::OpenaiCodex => DEFAULT_OPENAI_CODEX_BASE_URL,
                         ApiProvider::Openmodel => DEFAULT_OPENMODEL_BASE_URL,
                         ApiProvider::Zai => DEFAULT_ZAI_BASE_URL,
+                        ApiProvider::Easybits => DEFAULT_EASYBITS_BASE_URL,
                         ApiProvider::Stepfun => DEFAULT_STEPFUN_BASE_URL,
                         ApiProvider::Anthropic => DEFAULT_ANTHROPIC_BASE_URL,
                         ApiProvider::Minimax => DEFAULT_MINIMAX_BASE_URL,
@@ -6161,7 +6189,7 @@ impl Config {
                         // No built-in endpoint; descriptor placeholder keeps the
                         // fallback total. A real custom route configures
                         // `[providers.<name>] base_url` which wins above (#1519).
-                        ApiProvider::Custom => codewhale_config::ProviderKind::Custom
+                        ApiProvider::Custom => ghosty_config::ProviderKind::Custom
                             .provider()
                             .default_base_url(),
                     }
@@ -6171,7 +6199,7 @@ impl Config {
         normalize_base_url(&base)
     }
 
-    /// The generic `CODEWHALE_BASE_URL` / `DEEPSEEK_BASE_URL` override, but
+    /// The generic `GHOSTY_BASE_URL` / `DEEPSEEK_BASE_URL` override, but
     /// only for the route that override actually selected.
     ///
     /// [`apply_env_overrides`] records the owning `(provider, identity)` in
@@ -6305,7 +6333,10 @@ impl Config {
         let provider_base = self
             .provider_config_string_with_runtime_fallback(provider, |entry| entry.base_url.clone());
         match provider {
-            ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::XiaomiMimo => {
+            ApiProvider::Deepseek
+            | ApiProvider::DeepseekCN
+            | ApiProvider::Easybits
+            | ApiProvider::XiaomiMimo => {
                 provider_base.or_else(|| self.route_owned_root_base_url(provider, &identity))
             }
             ApiProvider::NvidiaNim => provider_base.or_else(|| {
@@ -6356,9 +6387,9 @@ impl Config {
     pub(crate) fn external_credential_read_grant(
         &self,
         provider: ApiProvider,
-        source: codewhale_config::ExternalCredentialSource,
+        source: ghosty_config::ExternalCredentialSource,
         suggested_path: &Path,
-    ) -> Result<codewhale_config::ExternalCredentialReadGrant> {
+    ) -> Result<ghosty_config::ExternalCredentialReadGrant> {
         if provider != self.api_provider() {
             anyhow::bail!(
                 "external credential access for {} is dormant until that provider is explicitly selected",
@@ -6367,18 +6398,18 @@ impl Config {
         }
         let kind = provider
             .metadata()
-            .map(codewhale_config::provider::Provider::kind)
+            .map(ghosty_config::provider::Provider::kind)
             .context("external credentials are unsupported for this provider")?;
         let consent = self
             .provider_config_for(provider)
             .and_then(|entry| entry.external_credentials.as_ref())
             .with_context(|| {
                 format!(
-                    "External credentials owned by {} are disabled for {}. To allow read-only access to this exact file, run:\n  codewhale auth external-consent --provider {} --mode read-only --path {}",
+                    "External credentials owned by {} are disabled for {}. To allow read-only access to this exact file, run:\n  ghosty auth external-consent --provider {} --mode read-only --path {}",
                     source.as_str(),
                     provider.display_name(),
                     kind.as_str(),
-                    codewhale_config::quote_os_path(suggested_path)
+                    ghosty_config::quote_os_path(suggested_path)
                 )
             })?;
         consent
@@ -6397,11 +6428,11 @@ impl Config {
     pub(crate) fn external_credential_read_consent_configured(
         &self,
         provider: ApiProvider,
-        source: codewhale_config::ExternalCredentialSource,
+        source: ghosty_config::ExternalCredentialSource,
     ) -> bool {
         let Some(kind) = provider
             .metadata()
-            .map(codewhale_config::provider::Provider::kind)
+            .map(ghosty_config::provider::Provider::kind)
         else {
             return false;
         };
@@ -6512,7 +6543,7 @@ impl Config {
         // intentional override must win over the saved root key. This is
         // essential for DeepSeek-compatible subscription endpoints where the
         // user runs something like:
-        //   codewhale --provider deepseek --api-key ark-... --base-url ... --model auto
+        //   ghosty --provider deepseek --api-key ark-... --base-url ... --model auto
         if matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN)
             && cli_api_key_source().as_deref() == Some("cli")
             && let Some(env_key) = explicit_cli_key
@@ -6541,14 +6572,14 @@ impl Config {
             let credential_help =
                 credential_help_for_provider_route(provider, &self.deepseek_base_url());
             anyhow::bail!(
-                "Kimi CLI credential import is unsupported. Codewhale does not impersonate or reuse Kimi OAuth clients; configure an API key from {} instead.",
+                "Kimi CLI credential import is unsupported. Ghosty does not impersonate or reuse Kimi OAuth clients; configure an API key from {} instead.",
                 credential_help
                     .credential_url
                     .unwrap_or("the selected provider's API-key console")
             );
         }
 
-        // xAI OAuth prefers Codewhale-owned device-login storage. An existing
+        // xAI OAuth prefers Ghosty-owned device-login storage. An existing
         // Grok CLI file is considered only with provider/path-scoped read-only
         // consent. Activated by [providers.xai] auth_mode = "oauth".
         if provider == ApiProvider::Xai
@@ -6562,7 +6593,7 @@ impl Config {
         }
 
         // OpenAI Codex (ChatGPT) can read an existing Codex CLI OAuth login
-        // only after exact read-only consent. Codewhale never refreshes or
+        // only after exact read-only consent. Ghosty never refreshes or
         // rewrites that file. Explicit env overrides remain process-scoped.
         if provider == ApiProvider::OpenaiCodex && !custom_endpoint {
             if let Some(credentials) = crate::oauth::credentials_from_env() {
@@ -6571,7 +6602,7 @@ impl Config {
             let path = crate::oauth::auth_file_path();
             let grant = self.external_credential_read_grant(
                 provider,
-                codewhale_config::ExternalCredentialSource::CodexCli,
+                ghosty_config::ExternalCredentialSource::CodexCli,
                 &path,
             )?;
             return Ok(crate::oauth::get_credentials(&grant)?.access_token);
@@ -6586,7 +6617,7 @@ impl Config {
         }
 
         // 1. Config file (provider-scoped slot). This intentionally wins
-        // over ambient env so `codewhale auth set` fixes stale shell exports.
+        // over ambient env so `ghosty auth set` fixes stale shell exports.
         if self.config_credentials_are_bound_to_provider_endpoint(provider)
             && let Some(configured) = self
                 .provider_config_string_with_runtime_fallback(provider, |entry| {
@@ -6644,7 +6675,7 @@ impl Config {
         }
 
         // 2. The dispatcher resolves this same provider slot before launching
-        // the TUI. Standalone `codewhale-tui` launches must see the identical
+        // the TUI. Standalone `ghosty-tui` launches must see the identical
         // durable credential. Auto-detection is file-backed and prompt-free by
         // default; the OS keyring is queried only when the user explicitly
         // selects the system backend.
@@ -6682,10 +6713,10 @@ impl Config {
             ApiProvider::Deepseek | ApiProvider::DeepseekAnthropic
         ) && !custom_endpoint
         {
-            let path = codewhale_config::default_dsh_credentials_path();
+            let path = ghosty_config::default_dsh_credentials_path();
             if let Ok(grant) = self.external_credential_read_grant(
                 provider,
-                codewhale_config::ExternalCredentialSource::DshCli,
+                ghosty_config::ExternalCredentialSource::DshCli,
                 &path,
             ) && let Some(value) = crate::dsh_credentials::deepseek_api_key_from_grant(&grant)?
             {
@@ -6702,8 +6733,8 @@ impl Config {
             let grant = self
                 .external_credential_read_grant(
                     provider,
-                    codewhale_config::ExternalCredentialSource::AgyCli,
-                    &codewhale_config::default_agy_credentials_path(),
+                    ghosty_config::ExternalCredentialSource::AgyCli,
+                    &ghosty_config::default_agy_credentials_path(),
                 )
                 .ok();
             let process_env: std::collections::HashMap<String, String> = std::env::vars().collect();
@@ -6747,24 +6778,26 @@ impl Config {
         }
 
         match provider {
-            ApiProvider::Deepseek | ApiProvider::DeepseekCN => anyhow::bail!(
-                "DeepSeek API key not found.\n\
+            ApiProvider::Deepseek | ApiProvider::DeepseekCN => {
+                anyhow::bail!(
+                    "DeepSeek API key not found.\n\
                  \n\
                  1. Get a key:  https://platform.deepseek.com/api_keys\n\
                  2. Save it (works in every folder, no OS prompts):\n\
-                        codewhale auth set --provider deepseek\n\
+                        ghosty auth set --provider deepseek\n\
                  \n\
                  Alternatives:\n\
                    • export DEEPSEEK_API_KEY=<your-key>      (current shell only;\n\
                      also note: zsh users — exports in ~/.zshrc only reach interactive\n\
                      shells, prefer ~/.zshenv for everything)\n\
-                   • api_key = \"<your-key>\"  in ~/.codewhale/config.toml\n\
+                   • api_key = \"<your-key>\"  in ~/.ghosty/config.toml\n\
                    • already configured DeepSeek Harness? grant read-only access:\n\
-                        codewhale auth external-consent --provider deepseek --mode read-only"
-            ),
+                        ghosty auth external-consent --provider deepseek --mode read-only"
+                )
+            }
             ApiProvider::SiliconflowCn => anyhow::bail!(
-                "SiliconFlow China API key not found. Get a key: {}. Run 'codewhale auth set --provider siliconflow-CN', \
-                 set {}, or add [{}] api_key in ~/.codewhale/config.toml. \
+                "SiliconFlow China API key not found. Get a key: {}. Run 'ghosty auth set --provider siliconflow-CN', \
+                 set {}, or add [{}] api_key in ~/.ghosty/config.toml. \
                  [providers.siliconflow] remains a fallback when the CN table omits api_key.",
                 provider
                     .credential_url()
@@ -6777,7 +6810,7 @@ impl Config {
                     credential_help_for_provider_route(provider, &self.deepseek_base_url());
                 if moonshot_base_url_is_exact_kimi_code(&self.deepseek_base_url()) {
                     anyhow::bail!(
-                        "Kimi Code membership-plan API key not found. Get a plan key: {}. This route uses api.kimi.com/coding/v1 and does not import Kimi CLI credentials. Run 'codewhale auth set --provider moonshot', set {}, or add [{}] api_key.",
+                        "Kimi Code membership-plan API key not found. Get a plan key: {}. This route uses api.kimi.com/coding/v1 and does not import Kimi CLI credentials. Run 'ghosty auth set --provider moonshot', set {}, or add [{}] api_key.",
                         credential_help
                             .credential_url
                             .unwrap_or(KIMI_CODE_MEMBERSHIP_PLAN_CONSOLE_URL),
@@ -6786,7 +6819,7 @@ impl Config {
                     );
                 }
                 anyhow::bail!(
-                    "Moonshot/Kimi API key not found. Get a key: {}. Run 'codewhale auth set --provider moonshot', \
+                    "Moonshot/Kimi API key not found. Get a key: {}. Run 'ghosty auth set --provider moonshot', \
                      set {}, or add [{}] api_key. \
                      For a Kimi Code plan key, set [providers.moonshot] base_url = \
                      \"https://api.kimi.com/coding/v1\" and model = \"kimi-for-coding\".",
@@ -6816,10 +6849,10 @@ impl Config {
                 }
                 anyhow::bail!(
                     "xAI API key not found. Get a key: https://console.x.ai/\n\
-                     Run 'codewhale auth set --provider xai', set XAI_API_KEY, or add \
+                     Run 'ghosty auth set --provider xai', set XAI_API_KEY, or add \
                      [providers.xai] api_key.\n\
-                     OAuth alternative: run `codewhale auth xai-device` for \
-                     Codewhale-owned storage and set [providers.xai] auth_mode = \"oauth\"."
+                     OAuth alternative: run `ghosty auth xai-device` for \
+                     Ghosty-owned storage and set [providers.xai] auth_mode = \"oauth\"."
                 );
             }
             // Self-hosted deployments commonly run without auth on localhost.
@@ -6833,9 +6866,9 @@ impl Config {
             ApiProvider::Ollama => {
                 let help = credential_help_for_provider_route(provider, &self.deepseek_base_url());
                 anyhow::bail!(
-                    "Ollama Cloud API key not found. Get a key: {}. Run 'codewhale auth set --provider ollama', set OLLAMA_API_KEY, or add [providers.ollama] api_key in ~/.codewhale/config.toml.",
+                    "Ollama Cloud API key not found. Get a key: {}. Run 'ghosty auth set --provider ollama', set OLLAMA_API_KEY, or add [providers.ollama] api_key in ~/.ghosty/config.toml.",
                     help.credential_url
-                        .unwrap_or(codewhale_config::provider::OLLAMA_CLOUD_API_KEY_URL)
+                        .unwrap_or(ghosty_config::provider::OLLAMA_CLOUD_API_KEY_URL)
                 )
             }
             // Custom OpenAI-compatible endpoints (#1519): the key comes from the
@@ -6857,7 +6890,7 @@ impl Config {
                     None => anyhow::bail!(
                         "Custom provider '{provider_name}' has no auth configured.\n\
                          Add api_key_env = \"YOUR_ENV_VAR\" (or api_key) to \
-                         [providers.{provider_name}] in ~/.codewhale/config.toml."
+                         [providers.{provider_name}] in ~/.ghosty/config.toml."
                     ),
                 }
             }
@@ -6913,7 +6946,7 @@ impl Config {
             .unwrap_or_else(|| PathBuf::from("./memory.md"));
         if self.memory_backend() == MemoryBackend::Native {
             // The configured value is historically a *legacy single-file*
-            // path (`$CODEWHALE_HOME/memory.md`), and the native store lives
+            // path (`$GHOSTY_HOME/memory.md`), and the native store lives
             // beside it. Deriving from the parent is therefore right for the
             // default and for anyone still carrying the old setting.
             //
@@ -7142,17 +7175,17 @@ impl Config {
 
     /// How many levels of nested sub-agents the interactive `agent` tool may
     /// spawn. Reads `[subagents] max_depth`; when unset it defaults to
-    /// [`codewhale_config::DEFAULT_SPAWN_DEPTH`]. `0` is a valid value that
+    /// [`ghosty_config::DEFAULT_SPAWN_DEPTH`]. `0` is a valid value that
     /// blocks the `agent` tool at this runtime depth. Any value is clamped to
-    /// [`codewhale_config::MAX_SPAWN_DEPTH_CEILING`] so the operator's choice
+    /// [`ghosty_config::MAX_SPAWN_DEPTH_CEILING`] so the operator's choice
     /// can never exceed the hard recursion ceiling.
     #[must_use]
     pub fn subagent_max_spawn_depth(&self) -> u32 {
         self.subagents
             .as_ref()
             .and_then(|cfg| cfg.max_depth)
-            .unwrap_or(codewhale_config::DEFAULT_SPAWN_DEPTH)
-            .min(codewhale_config::MAX_SPAWN_DEPTH_CEILING)
+            .unwrap_or(ghosty_config::DEFAULT_SPAWN_DEPTH)
+            .min(ghosty_config::MAX_SPAWN_DEPTH_CEILING)
     }
 
     /// Return the provider-specific maximum sub-agent recursion depth.
@@ -7161,7 +7194,7 @@ impl Config {
         self.subagent_provider_config(provider)
             .and_then(|cfg| cfg.max_depth)
             .unwrap_or_else(|| self.subagent_max_spawn_depth())
-            .min(codewhale_config::MAX_SPAWN_DEPTH_CEILING)
+            .min(ghosty_config::MAX_SPAWN_DEPTH_CEILING)
     }
 
     /// Number of direct (depth-1) sub-agents that may execute concurrently
@@ -7334,7 +7367,7 @@ impl Config {
     /// Resolved per-SSE-chunk idle timeout in seconds.
     ///
     /// Reads `[tui].stream_chunk_timeout_secs`, falling back to the
-    /// `CODEWHALE_STREAM_IDLE_TIMEOUT_SECS` env var (legacy alias:
+    /// `GHOSTY_STREAM_IDLE_TIMEOUT_SECS` env var (legacy alias:
     /// `DEEPSEEK_STREAM_IDLE_TIMEOUT_SECS`) when the config key is
     /// omitted. `None` or `0` resolve to the default 900 seconds; explicit
     /// values are clamped to `1..=3600`.
@@ -7400,7 +7433,7 @@ impl Config {
     /// Parsed `[fleet]` table, or defaults when the table is absent
     /// (#fleet-roster cutover (v0.8.67)).
     #[must_use]
-    pub fn fleet_config(&self) -> codewhale_config::FleetConfigToml {
+    pub fn fleet_config(&self) -> ghosty_config::FleetConfigToml {
         self.fleet.clone().unwrap_or_default()
     }
 
@@ -7409,7 +7442,7 @@ impl Config {
     /// activity-persistence consumers should read through this accessor so
     /// omitted keys share one model.
     #[must_use]
-    pub fn workflow_config(&self) -> codewhale_config::WorkflowConfigToml {
+    pub fn workflow_config(&self) -> ghosty_config::WorkflowConfigToml {
         self.workflow.clone().unwrap_or_default()
     }
 
@@ -7463,8 +7496,8 @@ impl Config {
     pub fn resolve_hotbar_bindings(
         &self,
         known_action_ids: &[&str],
-    ) -> codewhale_config::HotbarConfigResolution {
-        codewhale_config::resolve_hotbar_bindings(self.hotbar.as_deref(), known_action_ids)
+    ) -> ghosty_config::HotbarConfigResolution {
+        ghosty_config::resolve_hotbar_bindings(self.hotbar.as_deref(), known_action_ids)
     }
 
     /// Resolve enabled features from defaults and config entries.
@@ -7533,7 +7566,10 @@ impl ConfigEnvironmentPolicy {
 fn root_deepseek_model_is_foreign_to_direct_provider(provider: ApiProvider, model: &str) -> bool {
     if matches!(
         provider,
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic
+        ApiProvider::Deepseek
+            | ApiProvider::DeepseekCN
+            | ApiProvider::Easybits
+            | ApiProvider::DeepseekAnthropic
     ) || provider_passes_model_through(provider)
     {
         return false;
@@ -7570,10 +7606,10 @@ fn root_deepseek_model_is_foreign_to_direct_provider(provider: ApiProvider, mode
 mod home;
 mod paths;
 use paths::{
-    canonicalize_or_keep, codewhale_home_dir, default_config_path, default_managed_config_path,
+    canonicalize_or_keep, default_config_path, default_managed_config_path,
     default_mcp_config_path, default_memory_path, default_notes_path, default_requirements_path,
-    default_skills_dir, env_config_path, expand_pathbuf, home_config_path, try_default_config_path,
-    workspace_config_key,
+    default_skills_dir, env_config_path, expand_pathbuf, ghosty_home_dir, home_config_path,
+    try_default_config_path, workspace_config_key,
 };
 pub(crate) use paths::{effective_home_dir, expand_path};
 
@@ -7583,7 +7619,7 @@ pub(crate) fn workspace_trust_config_candidate_paths() -> Vec<PathBuf> {
         if !crate::test_support::guarded_environment_provides_state_paths() {
             return vec![
                 crate::test_support::unsealed_test_state_root()
-                    .join(codewhale_config::CONFIG_FILE_NAME),
+                    .join(ghosty_config::CONFIG_FILE_NAME),
             ];
         }
     }
@@ -7600,13 +7636,13 @@ pub(crate) fn workspace_trust_config_candidate_paths() -> Vec<PathBuf> {
         }
     }
 
-    match codewhale_home_dir() {
-        Ok(Some(codewhale_home)) => return vec![codewhale_home.join("config.toml")],
+    match ghosty_home_dir() {
+        Ok(Some(ghosty_home)) => return vec![ghosty_home.join("config.toml")],
         Ok(None) => {}
         Err(error) => {
             tracing::error!(
                 error = %error,
-                "invalid Codewhale home override; refusing workspace-trust fallback"
+                "invalid Ghosty home override; refusing workspace-trust fallback"
             );
             return Vec::new();
         }
@@ -7616,7 +7652,7 @@ pub(crate) fn workspace_trust_config_candidate_paths() -> Vec<PathBuf> {
         return Vec::new();
     };
     vec![
-        home.join(".codewhale").join("config.toml"),
+        home.join(".ghosty").join("config.toml"),
         home.join(".deepseek").join("config.toml"),
     ]
 }
@@ -7694,7 +7730,7 @@ pub(crate) fn resolve_load_config_path(path: Option<PathBuf>) -> Result<Option<P
 
 /// Create an inspectable config file on first interactive launch.
 ///
-/// The file intentionally omits `api_key`; onboarding or `codewhale auth set`
+/// The file intentionally omits `api_key`; onboarding or `ghosty auth set`
 /// writes that field after the user supplies a key.
 pub fn ensure_config_file_exists(path: Option<PathBuf>) -> Result<Option<PathBuf>> {
     let config_path = match path {
@@ -7707,9 +7743,9 @@ pub fn ensure_config_file_exists(path: Option<PathBuf>) -> Result<Option<PathBuf
 
     ensure_parent_dir(&config_path)?;
     let content = format!(
-        r#"# codewhale Configuration
+        r#"# ghosty Configuration
 # Get your API key from https://platform.deepseek.com
-# Save it with: codewhale auth set --provider deepseek
+# Save it with: ghosty auth set --provider deepseek
 
 # Base URL (default: https://api.deepseek.com/beta)
 # Set https://api.deepseek.com to opt out of beta features.
@@ -7727,7 +7763,7 @@ reasoning_effort = "auto"
 [update]
 check_for_updates = true
 # check_interval_hours = 1
-# update_uri = "https://internal.mirror.example/codewhale/releases/latest"
+# update_uri = "https://internal.mirror.example/ghosty/releases/latest"
 "#
     );
     write_config_file_secure(&config_path, &content)
@@ -7737,11 +7773,11 @@ check_for_updates = true
 
 // === Environment Overrides ===
 
-/// Read the `DEEPSEEK_BASE_URL` / `CODEWHALE_BASE_URL` env var that the CLI
+/// Read the `DEEPSEEK_BASE_URL` / `GHOSTY_BASE_URL` env var that the CLI
 /// dispatcher forwards from `--base-url`.  Returns `None` when the var is
 /// absent or empty so that provider-specific defaults still apply.
 fn env_base_url_override() -> Option<String> {
-    codewhale_env_var("CODEWHALE_BASE_URL", "DEEPSEEK_BASE_URL")
+    ghosty_env_var("GHOSTY_BASE_URL", "DEEPSEEK_BASE_URL")
         .ok()
         .filter(|v| !v.trim().is_empty())
 }
@@ -7792,6 +7828,7 @@ fn provider_env_base_url_override(provider: ApiProvider) -> Option<String> {
         ApiProvider::Siliconflow | ApiProvider::SiliconflowCn => &["SILICONFLOW_BASE_URL"],
         ApiProvider::Arcee => &["ARCEE_BASE_URL"],
         ApiProvider::Moonshot => &["MOONSHOT_BASE_URL", "KIMI_BASE_URL"],
+        ApiProvider::Easybits => &["EASYBITS_BASE_URL"],
         ApiProvider::Sglang => &["SGLANG_BASE_URL"],
         ApiProvider::Vllm => &["VLLM_BASE_URL"],
         ApiProvider::Ollama => &["OLLAMA_BASE_URL"],
@@ -7832,15 +7869,12 @@ fn provider_env_base_url_override(provider: ApiProvider) -> Option<String> {
     first_nonempty_env(names)
 }
 
-/// Resolve an env var, preferring the `CODEWHALE_*` form over the
+/// Resolve an env var, preferring the `GHOSTY_*` form over the
 /// legacy `DEEPSEEK_*` form. Empty values are ignored so a blank shell export
 /// does not erase configured provider settings.
-fn codewhale_env_var(
-    codewhale_name: &str,
-    legacy_name: &str,
-) -> Result<String, std::env::VarError> {
+fn ghosty_env_var(ghosty_name: &str, legacy_name: &str) -> Result<String, std::env::VarError> {
     let read = || {
-        std::env::var(codewhale_name)
+        std::env::var(ghosty_name)
             .ok()
             .filter(|value| !value.trim().is_empty())
             .or_else(|| {
@@ -7874,14 +7908,14 @@ fn apply_env_overrides(config: &mut Config, policy: ConfigEnvironmentPolicy) {
 }
 
 fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPolicy) {
-    if let Ok(value) = codewhale_env_var("CODEWHALE_PROVIDER", "DEEPSEEK_PROVIDER") {
+    if let Ok(value) = ghosty_env_var("GHOSTY_PROVIDER", "DEEPSEEK_PROVIDER") {
         config.provider = Some(value);
     }
     let active_base_url_from_env = env_base_url_override().is_some()
         || provider_env_base_url_override(config.api_provider()).is_some()
         || (config.selects_legacy_ollama_cloud_route()
             && first_nonempty_env(&["OLLAMA_BASE_URL"]).is_some());
-    if let Ok(value) = codewhale_env_var("CODEWHALE_BASE_URL", "DEEPSEEK_BASE_URL") {
+    if let Ok(value) = ghosty_env_var("GHOSTY_BASE_URL", "DEEPSEEK_BASE_URL") {
         match config.api_provider() {
             ApiProvider::Deepseek | ApiProvider::DeepseekCN => {
                 // DeepSeek and DeepSeek-CN share this one legacy root field.
@@ -8084,6 +8118,13 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
                     .providers
                     .get_or_insert_with(ProvidersConfig::default)
                     .zai
+                    .base_url = Some(value);
+            }
+            ApiProvider::Easybits => {
+                config
+                    .providers
+                    .get_or_insert_with(ProvidersConfig::default)
+                    .easybits
                     .base_url = Some(value);
             }
             ApiProvider::Stepfun => {
@@ -8484,8 +8525,8 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
         *field = Some(value);
     }
     if policy.permits_secret_bearing_values()
-        && let Ok(value) = std::env::var("CODEWHALE_HTTP_HEADERS")
-            .or_else(|_| std::env::var("DEEPSEEK_HTTP_HEADERS"))
+        && let Ok(value) =
+            std::env::var("GHOSTY_HTTP_HEADERS").or_else(|_| std::env::var("DEEPSEEK_HTTP_HEADERS"))
         && let Ok(headers) = parse_http_headers(&value)
         && !headers.is_empty()
     {
@@ -8539,6 +8580,7 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
                 ApiProvider::Anthropic => &mut providers.anthropic,
                 ApiProvider::Openmodel => &mut providers.openmodel,
                 ApiProvider::Zai => &mut providers.zai,
+                ApiProvider::Easybits => &mut providers.easybits,
                 ApiProvider::Stepfun => &mut providers.stepfun,
                 ApiProvider::Minimax => &mut providers.minimax,
                 ApiProvider::MinimaxAnthropic => &mut providers.minimax_anthropic,
@@ -8845,7 +8887,7 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
             .opencode_zen
             .model = Some(value);
     }
-    if let Some(value) = codewhale_env_var("CODEWHALE_MODEL", "DEEPSEEK_MODEL")
+    if let Some(value) = ghosty_env_var("GHOSTY_MODEL", "DEEPSEEK_MODEL")
         .ok()
         .or_else(|| {
             std::env::var("DEEPSEEK_DEFAULT_TEXT_MODEL")
@@ -8865,7 +8907,10 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
         if (provider == ApiProvider::Custom && config.uses_legacy_literal_custom_route())
             || matches!(
                 provider,
-                ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic
+                ApiProvider::Deepseek
+                    | ApiProvider::DeepseekCN
+                    | ApiProvider::Easybits
+                    | ApiProvider::DeepseekAnthropic
             )
         {
             config.default_text_model = Some(value);
@@ -8916,6 +8961,7 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
                 ApiProvider::Anthropic => &mut providers.anthropic,
                 ApiProvider::Openmodel => &mut providers.openmodel,
                 ApiProvider::Zai => &mut providers.zai,
+                ApiProvider::Easybits => &mut providers.easybits,
                 ApiProvider::Stepfun => &mut providers.stepfun,
                 ApiProvider::Minimax => &mut providers.minimax,
                 ApiProvider::MinimaxAnthropic => &mut providers.minimax_anthropic,
@@ -8948,27 +8994,26 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
         config.default_text_model = Some(value);
     }
     if let Ok(value) =
-        std::env::var("CODEWHALE_SKILLS_DIR").or_else(|_| std::env::var("DEEPSEEK_SKILLS_DIR"))
+        std::env::var("GHOSTY_SKILLS_DIR").or_else(|_| std::env::var("DEEPSEEK_SKILLS_DIR"))
     {
         config.skills_dir = Some(value);
     }
     if let Ok(value) =
-        std::env::var("CODEWHALE_MCP_CONFIG").or_else(|_| std::env::var("DEEPSEEK_MCP_CONFIG"))
+        std::env::var("GHOSTY_MCP_CONFIG").or_else(|_| std::env::var("DEEPSEEK_MCP_CONFIG"))
     {
         config.mcp_config_path = Some(value);
     }
     if let Ok(value) =
-        std::env::var("CODEWHALE_NOTES_PATH").or_else(|_| std::env::var("DEEPSEEK_NOTES_PATH"))
+        std::env::var("GHOSTY_NOTES_PATH").or_else(|_| std::env::var("DEEPSEEK_NOTES_PATH"))
     {
         config.notes_path = Some(value);
     }
     if let Ok(value) =
-        std::env::var("CODEWHALE_MEMORY_PATH").or_else(|_| std::env::var("DEEPSEEK_MEMORY_PATH"))
+        std::env::var("GHOSTY_MEMORY_PATH").or_else(|_| std::env::var("DEEPSEEK_MEMORY_PATH"))
     {
         config.memory_path = Some(value);
     }
-    if let Ok(value) =
-        std::env::var("CODEWHALE_MEMORY").or_else(|_| std::env::var("DEEPSEEK_MEMORY"))
+    if let Ok(value) = std::env::var("GHOSTY_MEMORY").or_else(|_| std::env::var("DEEPSEEK_MEMORY"))
     {
         let on = matches!(
             value.trim().to_ascii_lowercase().as_str(),
@@ -8980,26 +9025,26 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
             .enabled = Some(on);
     }
     if let Ok(value) =
-        std::env::var("CODEWHALE_ALLOW_SHELL").or_else(|_| std::env::var("DEEPSEEK_ALLOW_SHELL"))
+        std::env::var("GHOSTY_ALLOW_SHELL").or_else(|_| std::env::var("DEEPSEEK_ALLOW_SHELL"))
     {
         config.allow_shell = Some(value == "1" || value.eq_ignore_ascii_case("true"));
     }
-    if let Ok(value) = std::env::var("CODEWHALE_APPROVAL_POLICY")
+    if let Ok(value) = std::env::var("GHOSTY_APPROVAL_POLICY")
         .or_else(|_| std::env::var("DEEPSEEK_APPROVAL_POLICY"))
     {
         config.approval_policy = Some(value);
     }
     if let Ok(value) =
-        std::env::var("CODEWHALE_SANDBOX_MODE").or_else(|_| std::env::var("DEEPSEEK_SANDBOX_MODE"))
+        std::env::var("GHOSTY_SANDBOX_MODE").or_else(|_| std::env::var("DEEPSEEK_SANDBOX_MODE"))
     {
         config.sandbox_mode = Some(value);
     }
-    if let Ok(value) = std::env::var("CODEWHALE_SANDBOX_NETWORK_ACCESS")
+    if let Ok(value) = std::env::var("GHOSTY_SANDBOX_NETWORK_ACCESS")
         .or_else(|_| std::env::var("DEEPSEEK_SANDBOX_NETWORK_ACCESS"))
     {
         config.sandbox_network_access = Some(value == "1" || value.eq_ignore_ascii_case("true"));
     }
-    if let Ok(value) = std::env::var("CODEWHALE_PROJECT_INSTRUCTION_IMPORTS") {
+    if let Ok(value) = std::env::var("GHOSTY_PROJECT_INSTRUCTION_IMPORTS") {
         config.project_instruction_imports = value
             .split(',')
             .map(str::trim)
@@ -9007,21 +9052,21 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
             .map(str::to_string)
             .collect();
     }
-    if let Ok(value) = std::env::var("CODEWHALE_YOLO").or_else(|_| std::env::var("DEEPSEEK_YOLO")) {
+    if let Ok(value) = std::env::var("GHOSTY_YOLO").or_else(|_| std::env::var("DEEPSEEK_YOLO")) {
         config.yolo = Some(value == "1" || value.eq_ignore_ascii_case("true"));
     }
     if let Ok(value) =
-        std::env::var("CODEWHALE_VERBOSITY").or_else(|_| std::env::var("DEEPSEEK_VERBOSITY"))
+        std::env::var("GHOSTY_VERBOSITY").or_else(|_| std::env::var("DEEPSEEK_VERBOSITY"))
     {
         config.verbosity = Some(value);
     }
-    if let Ok(value) = std::env::var("CODEWHALE_SANDBOX_BACKEND")
+    if let Ok(value) = std::env::var("GHOSTY_SANDBOX_BACKEND")
         .or_else(|_| std::env::var("DEEPSEEK_SANDBOX_BACKEND"))
     {
         config.sandbox_backend = Some(value);
     }
-    if let Ok(value) = codewhale_env_var("CODEWHALE_PREFER_BWRAP", "DEEPSEEK_PREFER_BWRAP") {
-        let primary_is_set = std::env::var("CODEWHALE_PREFER_BWRAP")
+    if let Ok(value) = ghosty_env_var("GHOSTY_PREFER_BWRAP", "DEEPSEEK_PREFER_BWRAP") {
+        let primary_is_set = std::env::var("GHOSTY_PREFER_BWRAP")
             .ok()
             .is_some_and(|value| !value.trim().is_empty());
         let legacy_is_set = std::env::var("DEEPSEEK_PREFER_BWRAP")
@@ -9029,29 +9074,29 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
             .is_some_and(|value| !value.trim().is_empty());
         if !primary_is_set && legacy_is_set {
             tracing::warn!(
-                "DEEPSEEK_PREFER_BWRAP is deprecated; use CODEWHALE_PREFER_BWRAP (the legacy alias is removed in 0.10.0)"
+                "DEEPSEEK_PREFER_BWRAP is deprecated; use GHOSTY_PREFER_BWRAP (the legacy alias is removed in 0.10.0)"
             );
         }
         config.prefer_bwrap = Some(value == "1" || value.eq_ignore_ascii_case("true"));
     }
     if let Ok(value) =
-        std::env::var("CODEWHALE_SANDBOX_URL").or_else(|_| std::env::var("DEEPSEEK_SANDBOX_URL"))
+        std::env::var("GHOSTY_SANDBOX_URL").or_else(|_| std::env::var("DEEPSEEK_SANDBOX_URL"))
     {
         config.sandbox_url = Some(value);
     }
     if policy.permits_secret_bearing_values()
-        && let Ok(value) = std::env::var("CODEWHALE_SANDBOX_API_KEY")
+        && let Ok(value) = std::env::var("GHOSTY_SANDBOX_API_KEY")
             .or_else(|_| std::env::var("DEEPSEEK_SANDBOX_API_KEY"))
     {
         config.sandbox_api_key = Some(value);
     }
-    if let Ok(value) = std::env::var("CODEWHALE_MANAGED_CONFIG_PATH")
+    if let Ok(value) = std::env::var("GHOSTY_MANAGED_CONFIG_PATH")
         .or_else(|_| std::env::var("DEEPSEEK_MANAGED_CONFIG_PATH"))
     {
         config.managed_config_path = Some(value);
     }
     if policy.permits_secret_bearing_values()
-        && let Ok(value) = std::env::var("CODEWHALE_SEARCH_API_KEY")
+        && let Ok(value) = std::env::var("GHOSTY_SEARCH_API_KEY")
             .or_else(|_| std::env::var("DEEPSEEK_SEARCH_API_KEY"))
         && !value.trim().is_empty()
     {
@@ -9060,19 +9105,19 @@ fn apply_env_overrides_unlocked(config: &mut Config, policy: ConfigEnvironmentPo
             .get_or_insert_with(SearchConfig::default)
             .api_key = Some(value);
     }
-    if let Ok(value) = codewhale_env_var("CODEWHALE_SEARCH_BASE_URL", "DEEPSEEK_SEARCH_BASE_URL") {
+    if let Ok(value) = ghosty_env_var("GHOSTY_SEARCH_BASE_URL", "DEEPSEEK_SEARCH_BASE_URL") {
         config
             .search
             .get_or_insert_with(SearchConfig::default)
             .base_url = Some(value);
     }
-    if let Ok(value) = std::env::var("CODEWHALE_REQUIREMENTS_PATH")
+    if let Ok(value) = std::env::var("GHOSTY_REQUIREMENTS_PATH")
         .or_else(|_| std::env::var("DEEPSEEK_REQUIREMENTS_PATH"))
     {
         config.requirements_path = Some(value);
     }
-    if let Ok(value) = std::env::var("CODEWHALE_MAX_SUBAGENTS")
-        .or_else(|_| std::env::var("DEEPSEEK_MAX_SUBAGENTS"))
+    if let Ok(value) =
+        std::env::var("GHOSTY_MAX_SUBAGENTS").or_else(|_| std::env::var("DEEPSEEK_MAX_SUBAGENTS"))
         && let Ok(parsed) = value.parse::<usize>()
     {
         config.max_subagents = Some(parsed.clamp(1, MAX_SUBAGENTS));
@@ -9094,7 +9139,10 @@ fn normalize_model_config(config: &mut Config) {
     let base_url = config.deepseek_base_url();
     config.migrated_deepseek_model_alias = if matches!(
         provider,
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::DeepseekAnthropic
+        ApiProvider::Deepseek
+            | ApiProvider::DeepseekCN
+            | ApiProvider::Easybits
+            | ApiProvider::DeepseekAnthropic
     ) {
         config
             .active_configured_model_id()
@@ -9502,8 +9550,8 @@ fn xiaomi_mimo_base_url_is_pay_as_you_go(base_url: &str) -> bool {
 fn base_url_is_custom_for_provider(provider: ApiProvider, base_url: &str) -> bool {
     let kind = provider
         .kind()
-        .unwrap_or(codewhale_config::ProviderKind::Deepseek);
-    codewhale_config::provider_preserves_custom_base_url_model(kind, base_url)
+        .unwrap_or(ghosty_config::ProviderKind::Deepseek);
+    ghosty_config::provider_preserves_custom_base_url_model(kind, base_url)
 }
 
 /// Whether this concrete route is a self-hosted endpoint whose credentials
@@ -9536,8 +9584,8 @@ fn moonshot_base_url_uses_kimi_code(base_url: &str) -> bool {
 /// route-specific K3 capability and request shaping are not safe for arbitrary
 /// Kimi-hosted paths.
 pub(crate) fn moonshot_base_url_is_exact_kimi_code(base_url: &str) -> bool {
-    codewhale_config::provider::is_exact_kimi_code_route(
-        codewhale_config::ProviderKind::Moonshot,
+    ghosty_config::provider::is_exact_kimi_code_route(
+        ghosty_config::ProviderKind::Moonshot,
         base_url,
     )
 }
@@ -9546,8 +9594,8 @@ pub(crate) fn moonshot_base_url_is_exact_kimi_code(base_url: &str) -> bool {
 /// insignificant trailing slash. Custom gateways must retain their own wire
 /// contract even when they expose a `kimi-k3` model id.
 pub(crate) fn moonshot_base_url_is_exact_direct_platform(base_url: &str) -> bool {
-    codewhale_config::provider::is_exact_moonshot_platform_route(
-        codewhale_config::ProviderKind::Moonshot,
+    ghosty_config::provider::is_exact_moonshot_platform_route(
+        ghosty_config::ProviderKind::Moonshot,
         base_url,
     )
 }
@@ -9571,8 +9619,8 @@ pub(crate) fn is_exact_xai_grok_4_6_route(
     model: &str,
 ) -> bool {
     provider == ApiProvider::Xai
-        && codewhale_config::provider::is_exact_xai_platform_route(
-            codewhale_config::ProviderKind::Xai,
+        && ghosty_config::provider::is_exact_xai_platform_route(
+            ghosty_config::ProviderKind::Xai,
             base_url,
         )
         && model.trim().eq_ignore_ascii_case(XAI_GROK_4_6_MODEL)
@@ -9609,8 +9657,8 @@ pub(crate) fn is_exact_kimi_code_bare_k3_route(
 #[must_use]
 pub(crate) fn is_exact_zai_chat_route(provider: ApiProvider, base_url: &str) -> bool {
     provider == ApiProvider::Zai
-        && codewhale_config::provider::is_exact_zai_chat_route(
-            codewhale_config::ProviderKind::Zai,
+        && ghosty_config::provider::is_exact_zai_chat_route(
+            ghosty_config::ProviderKind::Zai,
             base_url,
         )
 }
@@ -9669,11 +9717,11 @@ pub(crate) fn is_exact_known_zai_reasoning_route(
 /// `.io` and `.com` hosts are first-party; anything else is a gateway.
 #[must_use]
 pub(crate) fn minimax_base_url_is_supported_direct(base_url: &str) -> bool {
-    codewhale_config::provider::is_exact_minimax_chat_route(
-        codewhale_config::ProviderKind::Minimax,
+    ghosty_config::provider::is_exact_minimax_chat_route(
+        ghosty_config::ProviderKind::Minimax,
         base_url,
-    ) || codewhale_config::provider::is_exact_minimax_anthropic_route(
-        codewhale_config::ProviderKind::MinimaxAnthropic,
+    ) || ghosty_config::provider::is_exact_minimax_anthropic_route(
+        ghosty_config::ProviderKind::MinimaxAnthropic,
         base_url,
     )
 }
@@ -9688,8 +9736,8 @@ pub(crate) fn is_exact_minimax_m3_route(
     model: &str,
 ) -> bool {
     provider == ApiProvider::Minimax
-        && codewhale_config::provider::is_exact_minimax_chat_route(
-            codewhale_config::ProviderKind::Minimax,
+        && ghosty_config::provider::is_exact_minimax_chat_route(
+            ghosty_config::ProviderKind::Minimax,
             base_url,
         )
         && model.trim().eq_ignore_ascii_case(DEFAULT_MINIMAX_MODEL)
@@ -9705,8 +9753,8 @@ pub(crate) fn is_exact_minimax_anthropic_m3_route(
     model: &str,
 ) -> bool {
     provider == ApiProvider::MinimaxAnthropic
-        && codewhale_config::provider::is_exact_minimax_anthropic_route(
-            codewhale_config::ProviderKind::MinimaxAnthropic,
+        && ghosty_config::provider::is_exact_minimax_anthropic_route(
+            ghosty_config::ProviderKind::MinimaxAnthropic,
             base_url,
         )
         && model.trim().eq_ignore_ascii_case(DEFAULT_MINIMAX_MODEL)
@@ -9942,17 +9990,17 @@ pub(crate) fn moonshot_k3_route_display_name(base_url: &str, model: &str) -> Opt
 /// Credential help for a concrete provider route.
 ///
 /// `ProviderKind::Moonshot` intentionally retains its generic direct-API
-/// metadata in `codewhale-config`: that remains correct for Moonshot's own
+/// metadata in `ghosty-config`: that remains correct for Moonshot's own
 /// platform route. The Kimi Code membership endpoint is a distinct route and
 /// must not send its users to the generic API console or imply CLI credential
 /// import support.
 pub(crate) fn credential_help_for_provider_route(
     provider: ApiProvider,
     base_url: &str,
-) -> codewhale_config::provider::CredentialHelp {
+) -> ghosty_config::provider::CredentialHelp {
     provider.kind().map_or_else(
         || provider.credential_help(),
-        |kind| codewhale_config::provider::credential_help_for_route(kind, base_url),
+        |kind| ghosty_config::provider::credential_help_for_route(kind, base_url),
     )
 }
 
@@ -9963,7 +10011,7 @@ pub(crate) fn provider_config_uses_kimi_imported_token(config: &ProviderConfig) 
         .is_some_and(auth_mode_uses_kimi_imported_token)
 }
 
-pub(crate) use codewhale_config::{
+pub(crate) use ghosty_config::{
     auth_mode_disables_api_key, auth_mode_requires_api_key, auth_mode_uses_kimi_imported_token,
 };
 
@@ -10283,7 +10331,7 @@ fn load_sibling_exec_policy_engine(config_path: Option<&Path>) -> Result<ExecPol
     let Some(config_path) = config_path else {
         return Ok(ExecPolicyEngine::new(Vec::new(), Vec::new()));
     };
-    let permissions_path = codewhale_config::permissions_path_for_config_path(config_path);
+    let permissions_path = ghosty_config::permissions_path_for_config_path(config_path);
     if !permissions_path.exists() {
         return Ok(ExecPolicyEngine::new(Vec::new(), Vec::new()));
     }
@@ -10294,10 +10342,10 @@ fn load_sibling_exec_policy_engine(config_path: Option<&Path>) -> Result<ExecPol
             permissions_path.display()
         )
     })?;
-    let permissions: codewhale_config::PermissionsToml = toml::from_str(&raw).map_err(|_| {
+    let permissions: ghosty_config::PermissionsToml = toml::from_str(&raw).map_err(|_| {
         anyhow::anyhow!(
             "Failed to parse permissions file {}; file contents were omitted",
-            codewhale_config::quote_os_path(&permissions_path)
+            ghosty_config::quote_os_path(&permissions_path)
         )
     })?;
     if permissions.is_empty() {
@@ -10320,9 +10368,7 @@ fn merge_skills_config(
             max_install_size_bytes: override_cfg
                 .max_install_size_bytes
                 .or(base.max_install_size_bytes),
-            scan_codewhale_only: override_cfg
-                .scan_codewhale_only
-                .or(base.scan_codewhale_only),
+            scan_ghosty_only: override_cfg.scan_ghosty_only.or(base.scan_ghosty_only),
         }),
     }
 }
@@ -10415,6 +10461,7 @@ fn merge_providers(
             qianfan: merge_provider_config(base.qianfan, override_cfg.qianfan),
             openai_codex: merge_provider_config(base.openai_codex, override_cfg.openai_codex),
             zai: merge_provider_config(base.zai, override_cfg.zai),
+            easybits: merge_provider_config(base.easybits, override_cfg.easybits),
             stepfun: merge_provider_config(base.stepfun, override_cfg.stepfun),
             minimax: merge_provider_config(base.minimax, override_cfg.minimax),
             minimax_anthropic: merge_provider_config(
@@ -10459,14 +10506,14 @@ fn load_single_config_file(path: &Path) -> Result<Config> {
     let parsed: ConfigFile = toml::from_str(&contents).map_err(|_| {
         anyhow::anyhow!(
             "Failed to parse config file {}; file contents were omitted",
-            codewhale_config::quote_os_path(path)
+            ghosty_config::quote_os_path(path)
         )
     })?;
     Ok(parsed.base)
 }
 
 /// Build a one-line warning when top-level-only keys are nested under a section
-/// Codewhale does not define (`[general]` / `[sandbox]`). TOML silently drops
+/// Ghosty does not define (`[general]` / `[sandbox]`). TOML silently drops
 /// those keys, so e.g. `[general]\nallow_shell = true` never takes effect and
 /// the shell tools (`exec_shell`, `task_shell_start`, …) are absent from the
 /// catalog with no explanation. Returns `None` when nothing is misplaced.
@@ -10475,7 +10522,7 @@ fn load_single_config_file(path: &Path) -> Result<Config> {
 /// belong at the top of the file, above any `[section]` header.
 fn warn_on_misplaced_top_level_keys(raw: &str) -> Option<String> {
     let doc = toml::from_str::<toml::Value>(raw).ok()?;
-    // Sections Codewhale does not recognize but users nest settings under.
+    // Sections Ghosty does not recognize but users nest settings under.
     const UNKNOWN_SECTIONS: &[&str] = &["general", "sandbox"];
     // Keys that are only ever read from the top level of the config.
     const TOP_LEVEL_KEYS: &[&str] = &[
@@ -10500,7 +10547,7 @@ fn warn_on_misplaced_top_level_keys(raw: &str) -> Option<String> {
         return None;
     }
     Some(format!(
-        "Ignoring {} — Codewhale has no `[general]` or `[sandbox]` section, so these \
+        "Ignoring {} — Ghosty has no `[general]` or `[sandbox]` section, so these \
          keys are silently dropped. Move them to the TOP of the config file (above any \
          `[section]` header), e.g. `allow_shell = true`. Until then, shell tools stay \
          disabled. (#2589)",
@@ -10540,7 +10587,7 @@ fn apply_managed_overrides(config: &mut Config) -> Result<()> {
         // Record that as an explicit "nobody owns it" rather than clearing the
         // receipt. Clearing it would read as "this config never met the
         // environment layer", which re-enables the generic
-        // `CODEWHALE_BASE_URL` fallback for every route — including pinned
+        // `GHOSTY_BASE_URL` fallback for every route — including pinned
         // cross-provider children, which would then borrow an ambient host
         // that managed routing had just taken authority over.
         merged.base_url_env_receipt = BaseUrlEnvReceipt::NoOwner;
@@ -10575,7 +10622,7 @@ fn strip_external_credential_consent(config: &mut Config) {
             .provider_config_for_mut(provider)
             .external_credentials;
         if external.as_ref().is_some_and(|consent| {
-            consent.access != codewhale_config::ExternalCredentialAccess::Disabled
+            consent.access != ghosty_config::ExternalCredentialAccess::Disabled
         }) {
             *external = None;
         }
@@ -10586,7 +10633,7 @@ fn strip_external_credential_consent(config: &mut Config) {
                 .external_credentials
                 .as_ref()
                 .is_some_and(|consent| {
-                    consent.access != codewhale_config::ExternalCredentialAccess::Disabled
+                    consent.access != ghosty_config::ExternalCredentialAccess::Disabled
                 })
             {
                 provider.external_credentials = None;
@@ -10631,7 +10678,7 @@ fn apply_requirements(config: &mut Config) -> Result<()> {
     let requirements: RequirementsFile = toml::from_str(&contents).map_err(|_| {
         anyhow::anyhow!(
             "Failed to parse requirements file {}; file contents were omitted",
-            codewhale_config::quote_os_path(&path)
+            ghosty_config::quote_os_path(&path)
         )
     })?;
 
@@ -10708,7 +10755,7 @@ pub fn ensure_parent_dir(path: &Path) -> Result<()> {
                     perms.set_mode(mode & !0o077);
                     if let Err(err) = fs::set_permissions(parent, perms) {
                         tracing::warn!(
-                            target: "codewhale::config",
+                            target: "ghosty::config",
                             path = %parent.display(),
                             error = %err,
                             "could not tighten parent dir permissions; \
@@ -10727,7 +10774,7 @@ pub fn ensure_parent_dir(path: &Path) -> Result<()> {
 /// Write content to a config file with restrictive permissions (owner-only read/write).
 /// On Unix this sets mode 0o600 before writing.
 fn write_config_file_secure(path: &Path, content: &str) -> Result<()> {
-    codewhale_config::create_config_document(path, content)
+    ghosty_config::create_config_document(path, content)
 }
 
 /// Where a saved credential ended up. Returned by [`save_api_key`] so
@@ -10737,16 +10784,16 @@ pub enum SavedCredential {
     /// Stored in the durable secret store. The config file contains only
     /// non-secret provider metadata and has any matching plaintext `api_key`
     /// entry removed. The `backend` label is the value of
-    /// [`codewhale_secrets::Secrets::backend_name`] at write time so the toast
+    /// [`ghosty_secrets::Secrets::backend_name`] at write time so the toast
     /// text can name the actual backend (`"system keyring"`,
-    /// `"file-based (~/.codewhale/secrets/)"`).
+    /// `"file-based (~/.ghosty/secrets/)"`).
     KeyringAndConfigFile {
         /// `Secrets::backend_name()` at write time.
         backend: String,
         /// Absolute path to the credential-free config metadata file.
         path: PathBuf,
     },
-    /// Stored in the Codewhale config file only under `cfg(test)` so unit tests
+    /// Stored in the Ghosty config file only under `cfg(test)` so unit tests
     /// without an explicitly isolated secret backend do not pollute the host
     /// credential store. Production save flows never automatically downgrade
     /// a failed secret-store write to plaintext.
@@ -10775,8 +10822,8 @@ impl SavedCredential {
 ///
 /// Credentials are user-global — a key saved while working in one repo must be
 /// visible from every other repo (#5045, #5193). The ambient
-/// `CODEWHALE_CONFIG_PATH`/`DEEPSEEK_CONFIG_PATH` override can point at a
-/// workspace-scoped document (`<repo>/.codewhale/config.toml`, plaintext and
+/// `GHOSTY_CONFIG_PATH`/`DEEPSEEK_CONFIG_PATH` override can point at a
+/// workspace-scoped document (`<repo>/.ghosty/config.toml`, plaintext and
 /// easy to commit by accident), so credential writes that would land there are
 /// rescoped to the user-global config instead. Non-credential settings keep
 /// the ambient scoping, and callers that pass an explicit config path never
@@ -10784,7 +10831,7 @@ impl SavedCredential {
 /// that kind of explicit opt-in.
 fn credential_config_path() -> anyhow::Result<PathBuf> {
     let resolved = try_default_config_path()?;
-    if !codewhale_config::config_path_is_workspace_scoped(&resolved) {
+    if !ghosty_config::config_path_is_workspace_scoped(&resolved) {
         return Ok(resolved);
     }
     let global = home_config_path()
@@ -10806,7 +10853,7 @@ fn credential_config_path() -> anyhow::Result<PathBuf> {
 /// the key to plaintext `config.toml`.
 ///
 /// Under `cfg(test)` the secret-store path is enabled only when the test sets
-/// both an isolated `CODEWHALE_HOME` and an explicit backend, preventing unit
+/// both an isolated `GHOSTY_HOME` and an explicit backend, preventing unit
 /// tests from touching the developer's real credential store.
 pub fn save_api_key(api_key: &str) -> Result<SavedCredential> {
     save_root_api_key_for_secret_slot(api_key, "deepseek", true)
@@ -10854,7 +10901,7 @@ fn save_root_api_key_for_secret_slot(
                             }
                             return Err(error);
                         }
-                        codewhale_config::scrub_plaintext_api_keys_from_config_backup(&path)?;
+                        ghosty_config::scrub_plaintext_api_keys_from_config_backup(&path)?;
                         let backend = secrets.backend_name().to_string();
                         log_sensitive_event(
                             "credential.save",
@@ -10876,7 +10923,7 @@ fn save_root_api_key_for_secret_slot(
     }
 
     let path = save_api_key_to_config_file(trimmed)?;
-    codewhale_config::scrub_plaintext_api_keys_from_config_backup(&path)?;
+    ghosty_config::scrub_plaintext_api_keys_from_config_backup(&path)?;
     Ok(SavedCredential::ConfigFile(path))
 }
 
@@ -10886,28 +10933,28 @@ fn plaintext_credential_fallback_refused(
     failure: &dyn std::fmt::Display,
 ) -> anyhow::Error {
     anyhow::anyhow!(
-        "Secret storage {operation} failed: {failure}. Refusing to write the API key in plaintext to {}. Fix the configured secret backend and retry; Codewhale did not change that file.",
-        codewhale_config::quote_os_path(config_path)
+        "Secret storage {operation} failed: {failure}. Refusing to write the API key in plaintext to {}. Fix the configured secret backend and retry; Ghosty did not change that file.",
+        ghosty_config::quote_os_path(config_path)
     )
 }
 
 /// The durable secret store for credential saves and logout-time deletes.
 ///
 /// Under `cfg(test)` the store is only exposed when the test set both an
-/// isolated `CODEWHALE_HOME` and an explicit backend, so unit tests can never
+/// isolated `GHOSTY_HOME` and an explicit backend, so unit tests can never
 /// touch the developer's real credential store.
 #[cfg(not(test))]
-fn credential_secret_store() -> Option<codewhale_secrets::Secrets> {
-    Some(codewhale_secrets::Secrets::auto_detect())
+fn credential_secret_store() -> Option<ghosty_secrets::Secrets> {
+    Some(ghosty_secrets::Secrets::auto_detect())
 }
 
 #[cfg(test)]
-fn credential_secret_store() -> Option<codewhale_secrets::Secrets> {
-    let isolated_home = codewhale_paths::codewhale_home_is_explicit();
-    let explicit_backend = std::env::var_os("CODEWHALE_SECRET_BACKEND")
+fn credential_secret_store() -> Option<ghosty_secrets::Secrets> {
+    let isolated_home = ghosty_paths::ghosty_home_is_explicit();
+    let explicit_backend = std::env::var_os("GHOSTY_SECRET_BACKEND")
         .or_else(|| std::env::var_os("DEEPSEEK_SECRET_BACKEND"))
         .is_some_and(|value| !value.is_empty());
-    (isolated_home && explicit_backend).then(codewhale_secrets::Secrets::auto_detect)
+    (isolated_home && explicit_backend).then(ghosty_secrets::Secrets::auto_detect)
 }
 
 fn save_root_api_key_metadata_without_plaintext(
@@ -10963,7 +11010,7 @@ fn save_api_key_to_config_file(api_key: &str) -> Result<PathBuf> {
     } else {
         // Create new minimal config
         let content = format!(
-            r#"# codewhale Configuration
+            r#"# ghosty Configuration
 # Set provider credentials in this file or via environment variables.
 # See /links in the TUI for provider-specific credential pages.
 
@@ -11072,7 +11119,7 @@ pub fn active_provider_has_config_api_key(config: &Config) -> bool {
         return config
             .external_credential_read_grant(
                 provider,
-                codewhale_config::ExternalCredentialSource::CodexCli,
+                ghosty_config::ExternalCredentialSource::CodexCli,
                 &path,
             )
             .is_ok_and(|grant| crate::oauth::stored_credentials_present(&grant));
@@ -11145,7 +11192,7 @@ struct UserGlobalConfigCache {
 
 fn user_global_config_json() -> Option<serde_json::Value> {
     static CACHE: Mutex<Option<UserGlobalConfigCache>> = Mutex::new(None);
-    let path = codewhale_config::default_config_path().ok()?;
+    let path = ghosty_config::default_config_path().ok()?;
     let meta = fs::metadata(&path).ok()?;
     let modified = meta.modified().ok();
     let len = meta.len();
@@ -11158,7 +11205,7 @@ fn user_global_config_json() -> Option<serde_json::Value> {
         return Some(cached.json.clone());
     }
     let text = fs::read_to_string(&path).ok()?;
-    let doc: codewhale_config::ConfigToml = toml::from_str(&text).ok()?;
+    let doc: ghosty_config::ConfigToml = toml::from_str(&text).ok()?;
     let json = serde_json::to_value(&doc).ok()?;
     *guard = Some(UserGlobalConfigCache {
         path,
@@ -11217,7 +11264,7 @@ impl Config {
         let path = crate::oauth::auth_file_path();
         let grant = self.external_credential_read_grant(
             ApiProvider::OpenaiCodex,
-            codewhale_config::ExternalCredentialSource::CodexCli,
+            ghosty_config::ExternalCredentialSource::CodexCli,
             &path,
         )?;
         crate::oauth::get_credentials(&grant)
@@ -11325,7 +11372,7 @@ fn provider_config_is_explicit(entry: &ProviderConfig) -> bool {
 
 /// Save an API key to the appropriate place for the given provider.
 /// DeepSeek goes through [`save_api_key`]. Other providers write
-/// `[providers.<name>] api_key = "..."` to `~/.codewhale/config.toml`.
+/// `[providers.<name>] api_key = "..."` to `~/.ghosty/config.toml`.
 /// Returns the config file path.
 #[cfg(test)]
 pub fn save_api_key_for(provider: ApiProvider, api_key: &str) -> Result<PathBuf> {
@@ -11358,7 +11405,7 @@ pub(crate) fn save_api_key_for_identity(
     api_key: &str,
 ) -> Result<SavedCredential> {
     if identity.provider == ApiProvider::Xai {
-        return codewhale_config::with_xai_oauth_revocation_transaction(|| {
+        return ghosty_config::with_xai_oauth_revocation_transaction(|| {
             save_api_key_for_identity_unlocked(identity, route_config, api_key)
         });
     }
@@ -11373,7 +11420,7 @@ fn save_api_key_for_identity_unlocked(
     let provider = identity.provider;
     if provider == ApiProvider::OpenaiCodex {
         anyhow::bail!(
-            "OpenAI Codex uses OAuth. Run `codex login`, then grant exact read-only access with `codewhale auth external-consent --provider openai-codex --mode read-only`, or set OPENAI_CODEX_ACCESS_TOKEN for this process; Codewhale does not store an API key for this provider."
+            "OpenAI Codex uses OAuth. Run `codex login`, then grant exact read-only access with `ghosty auth external-consent --provider openai-codex --mode read-only`, or set OPENAI_CODEX_ACCESS_TOKEN for this process; Ghosty does not store an API key for this provider."
         );
     }
     let is_legacy_literal_custom = provider == ApiProvider::Custom
@@ -11485,9 +11532,7 @@ fn save_api_key_for_identity_unlocked(
                             }
                             return Err(error);
                         }
-                        codewhale_config::scrub_plaintext_api_keys_from_config_backup(
-                            &config_path,
-                        )?;
+                        ghosty_config::scrub_plaintext_api_keys_from_config_backup(&config_path)?;
                         let backend = secrets.backend_name().to_string();
                         log_sensitive_event(
                             "credential.save",
@@ -11558,7 +11603,7 @@ fn save_api_key_for_identity_unlocked(
             "config_path": config_path.display().to_string(),
         }),
     );
-    codewhale_config::scrub_plaintext_api_keys_from_config_backup(&config_path)?;
+    ghosty_config::scrub_plaintext_api_keys_from_config_backup(&config_path)?;
 
     Ok(SavedCredential::ConfigFile(config_path))
 }
@@ -11680,18 +11725,18 @@ pub(crate) fn persist_external_credential_consent_for_at(
     config_path: Option<&Path>,
     live_config: &mut Config,
     provider: ApiProvider,
-    consent_provider: codewhale_config::ProviderKind,
-    source: codewhale_config::ExternalCredentialSource,
+    consent_provider: ghosty_config::ProviderKind,
+    source: ghosty_config::ExternalCredentialSource,
     path: &Path,
 ) -> Result<PathBuf> {
     let expected = match provider {
         ApiProvider::OpenaiCodex => (
-            codewhale_config::ProviderKind::OpenaiCodex,
-            codewhale_config::ExternalCredentialSource::CodexCli,
+            ghosty_config::ProviderKind::OpenaiCodex,
+            ghosty_config::ExternalCredentialSource::CodexCli,
         ),
         ApiProvider::Xai => (
-            codewhale_config::ProviderKind::Xai,
-            codewhale_config::ExternalCredentialSource::GrokCli,
+            ghosty_config::ProviderKind::Xai,
+            ghosty_config::ExternalCredentialSource::GrokCli,
         ),
         _ => anyhow::bail!(
             "{} has no supported external credential owner",
@@ -11703,7 +11748,7 @@ pub(crate) fn persist_external_credential_consent_for_at(
         "external credential owner does not match provider {}",
         provider.as_str()
     );
-    let path = codewhale_config::resolve_external_credential_path(path)?;
+    let path = ghosty_config::resolve_external_credential_path(path)?;
     let path_value = path.to_str().context(
         "external credential path cannot be persisted losslessly because it is not valid UTF-8",
     )?;
@@ -11744,13 +11789,13 @@ pub(crate) fn persist_external_credential_consent_for_at(
         crate::config_persistence::set_document_value(
             doc,
             &[prefix[0], prefix[1], prefix[2], "consent_version"],
-            i64::from(codewhale_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION),
+            i64::from(ghosty_config::EXTERNAL_CREDENTIAL_CONSENT_VERSION),
         )
     })
     .with_context(|| {
         format!(
             "Failed to write config to {}",
-            codewhale_config::quote_os_path(&config_path)
+            ghosty_config::quote_os_path(&config_path)
         )
     })?;
     live_config
@@ -11758,7 +11803,7 @@ pub(crate) fn persist_external_credential_consent_for_at(
         .get_or_insert_with(ProvidersConfig::default);
     let entry = live_config.provider_config_for_mut(provider);
     entry.auth_mode = Some("oauth".to_string());
-    entry.external_credentials = Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+    entry.external_credentials = Some(ghosty_config::ExternalCredentialConsentToml::read_only(
         consent_provider,
         source,
         path,
@@ -11794,7 +11839,7 @@ pub(crate) fn revoke_external_credential_consent_for_at(
     .with_context(|| {
         format!(
             "Failed to write config to {}",
-            codewhale_config::quote_os_path(&config_path)
+            ghosty_config::quote_os_path(&config_path)
         )
     })?;
     live_config
@@ -11895,19 +11940,19 @@ fn provider_secret_store_api_key_with_mode(
     }
 
     // Unit tests must never inspect the developer's real credential store.
-    // Secret-store regressions opt in with an isolated CODEWHALE_HOME and an
+    // Secret-store regressions opt in with an isolated GHOSTY_HOME and an
     // explicit backend, matching the secrets crate's own test discipline.
     #[cfg(test)]
-    if !codewhale_paths::codewhale_home_is_explicit()
-        || std::env::var_os("CODEWHALE_SECRET_BACKEND").is_none()
+    if !ghosty_paths::ghosty_home_is_explicit()
+        || std::env::var_os("GHOSTY_SECRET_BACKEND").is_none()
     {
         return None;
     }
 
     let secrets = if read_only {
-        codewhale_secrets::Secrets::auto_detect_read_only()
+        ghosty_secrets::Secrets::auto_detect_read_only()
     } else {
-        codewhale_secrets::Secrets::auto_detect()
+        ghosty_secrets::Secrets::auto_detect()
     };
     // Read through the credential-store trait so every read of a durable slot
     // goes through one adapter (`crate::credentials::store`), and the value is
@@ -11939,7 +11984,7 @@ fn provider_secret_store_api_key_with_mode(
         .flatten()
 }
 
-/// Every durable credential slot CodeWhale knows how to write.
+/// Every durable credential slot GhostyCode knows how to write.
 ///
 /// The backing keyring exposes no key enumeration, so
 /// [`crate::credentials::store::SecretStoreCredentials::list`] is given the
@@ -11962,7 +12007,7 @@ fn known_secret_store_slots() -> Vec<String> {
 ///
 /// The config file intentionally outranks the secret store in the read
 /// chain, but a shadowed slot is invisible: the user rotates the key with
-/// `codewhale auth set` and nothing changes, because the stale plaintext
+/// `ghosty auth set` and nothing changes, because the stale plaintext
 /// copy still wins. Mirror the fleet-roster shadowing rule (#5098):
 /// precedence is normal, but it must be VISIBLE. The message names both
 /// sources, which one won, and the command that resolves the shadow.
@@ -11982,7 +12027,7 @@ fn config_api_key_shadow_warning(
         format!(
             "both {config_source} in the config file and secret-store slot \"{slot}\" \
              hold a credential for provider {id}; the config-file key won. Run \
-             `codewhale auth set --provider {id}` to move the key into the secret store \
+             `ghosty auth set --provider {id}` to move the key into the secret store \
              and strip the plaintext copy, or remove the config-file api_key."
         )
     })
@@ -12011,15 +12056,15 @@ fn warn_on_config_api_key_shadowing(config: &Config, provider: ApiProvider, conf
 
 /// The model this launch was explicitly asked for, if any.
 ///
-/// The `codewhale` dispatcher forwards `--model` to this binary as
-/// `CODEWHALE_MODEL` (with the legacy `DEEPSEEK_MODEL` alias), so an explicit
+/// The `ghosty` dispatcher forwards `--model` to this binary as
+/// `GHOSTY_MODEL` (with the legacy `DEEPSEEK_MODEL` alias), so an explicit
 /// flag and an explicit shell export are the same signal here: *the user named
 /// a model for this run*. That has to outrank the remembered per-provider
 /// selection in `settings.toml`, which is a convenience memory of the last
 /// `/model` pick — never a reason to run something the user did not ask for
 /// (v0.9.1 kimi-k3 dogfood report).
 pub(crate) fn explicit_launch_model_override() -> Option<String> {
-    codewhale_env_var("CODEWHALE_MODEL", "DEEPSEEK_MODEL")
+    ghosty_env_var("GHOSTY_MODEL", "DEEPSEEK_MODEL")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
@@ -12031,7 +12076,7 @@ pub(crate) fn explicit_launch_model_override() -> Option<String> {
 /// user's saved startup default. A provider merely named in config.toml is a
 /// seed instead: the user can deliberately replace that seed from `/model`.
 pub(crate) fn explicit_launch_provider_override() -> Option<String> {
-    codewhale_env_var("CODEWHALE_PROVIDER", "DEEPSEEK_PROVIDER")
+    ghosty_env_var("GHOSTY_PROVIDER", "DEEPSEEK_PROVIDER")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
@@ -12040,7 +12085,7 @@ pub(crate) fn explicit_launch_provider_override() -> Option<String> {
 pub(crate) fn explicit_cli_api_key_override() -> Option<String> {
     (cli_api_key_source().as_deref() == Some("cli"))
         .then(|| {
-            std::env::var(codewhale_config::CLI_API_KEY_ENV)
+            std::env::var(ghosty_config::CLI_API_KEY_ENV)
                 .ok()
                 .filter(|value| !value.trim().is_empty())
         })
@@ -12048,9 +12093,9 @@ pub(crate) fn explicit_cli_api_key_override() -> Option<String> {
 }
 
 pub(crate) fn cli_api_key_source() -> Option<String> {
-    codewhale_env_var(
-        codewhale_config::CLI_API_KEY_SOURCE_ENV,
-        codewhale_config::LEGACY_CLI_API_KEY_SOURCE_ENV,
+    ghosty_env_var(
+        ghosty_config::CLI_API_KEY_SOURCE_ENV,
+        ghosty_config::LEGACY_CLI_API_KEY_SOURCE_ENV,
     )
     .ok()
 }
@@ -12061,7 +12106,7 @@ fn missing_provider_api_key_message(provider: ApiProvider) -> Result<String> {
         .map(|url| format!(" Get a key: {url}."))
         .unwrap_or_default();
     Ok(format!(
-        "{} API key not found.{} Run 'codewhale auth set --provider {}', set {}, or add [{}] api_key in ~/.codewhale/config.toml.",
+        "{} API key not found.{} Run 'ghosty auth set --provider {}', set {}, or add [{}] api_key in ~/.ghosty/config.toml.",
         provider.display_name(),
         credential_hint,
         provider.as_str(),
@@ -12073,7 +12118,7 @@ fn missing_provider_api_key_message(provider: ApiProvider) -> Result<String> {
 /// Clear every saved API key from config-file storage AND the durable
 /// secret store.
 ///
-/// The full-wipe logout path (`codewhale-tui --logout`, `auth logout`)
+/// The full-wipe logout path (`ghosty-tui --logout`, `auth logout`)
 /// calls this to remove credentials so the next request can't
 /// silently use a stale config key (#343). The function removes the legacy
 /// root `api_key` entry *and* every `api_key` entry nested in a
@@ -12090,7 +12135,7 @@ fn missing_provider_api_key_message(provider: ApiProvider) -> Result<String> {
 /// (Path 0) ensures a freshly-entered key still wins over a stale env
 /// var that lingers from a previous session.
 pub fn clear_api_key() -> Result<()> {
-    codewhale_config::with_xai_oauth_revocation_transaction(clear_api_key_unlocked)
+    ghosty_config::with_xai_oauth_revocation_transaction(clear_api_key_unlocked)
 }
 
 fn clear_api_key_unlocked() -> Result<()> {
@@ -12166,9 +12211,7 @@ fn clear_api_key_under_slot_locks() -> Result<()> {
 /// once, and every deletion failure is returned as a human-readable entry so
 /// the caller can fail loudly instead of claiming a clean logout while
 /// credentials linger in the store (#5196).
-fn clear_all_provider_api_keys_from_secret_store(
-    secrets: codewhale_secrets::Secrets,
-) -> Vec<String> {
+fn clear_all_provider_api_keys_from_secret_store(secrets: ghosty_secrets::Secrets) -> Vec<String> {
     let mut failures = Vec::new();
     let store = crate::credentials::store::SecretStoreCredentials::new(
         secrets.clone(),
@@ -12202,7 +12245,7 @@ fn clear_all_provider_api_keys_from_secret_store(
 /// legacy root `api_key` when the provider is DeepSeek).
 pub fn clear_active_provider_api_key(provider: &str) -> Result<()> {
     if provider == ApiProvider::Xai.as_str() {
-        return codewhale_config::with_xai_oauth_revocation_transaction(|| {
+        return ghosty_config::with_xai_oauth_revocation_transaction(|| {
             clear_active_provider_api_key_unlocked(provider)
         });
     }
@@ -12235,7 +12278,7 @@ fn clear_active_provider_api_key_under_lock(provider: &str) -> Result<()> {
         let persisted_config: Config = toml::from_str(&persisted).map_err(|_| {
             anyhow::anyhow!(
                 "Failed to parse config from {}; file contents were omitted",
-                codewhale_config::quote_os_path(&config_path)
+                ghosty_config::quote_os_path(&config_path)
             )
         })?;
         let exact_literal_custom_table = provider == ApiProvider::Custom.as_str()
@@ -12320,16 +12363,16 @@ fn clear_active_provider_api_key_under_lock(provider: &str) -> Result<()> {
 mod tests;
 
 /// #5045 regression coverage: credential writes must never land in a
-/// workspace-scoped `.codewhale/config.toml`.
+/// workspace-scoped `.ghosty/config.toml`.
 #[cfg(test)]
 mod credential_scope_tests {
     use super::*;
     use crate::test_support::{EnvVarGuard, lock_test_env};
 
     /// With the ambient config path pointing at a workspace-local
-    /// `.codewhale/config.toml` (a checkout the user works in), saving an
+    /// `.ghosty/config.toml` (a checkout the user works in), saving an
     /// API key must write the user-global config under the isolated
-    /// `CODEWHALE_HOME`, never the project file. The `.git` marker stands in
+    /// `GHOSTY_HOME`, never the project file. The `.git` marker stands in
     /// for cwd-inside-the-workspace: chdir is process-global and unsafe in a
     /// parallel test binary, and production classifies on either signal.
     #[test]
@@ -12338,19 +12381,19 @@ mod credential_scope_tests {
         let temp = tempfile::tempdir()?;
         let workspace = temp.path().join("repo");
         fs::create_dir_all(workspace.join(".git"))?;
-        let project_dir = workspace.join(".codewhale");
+        let project_dir = workspace.join(".ghosty");
         fs::create_dir_all(&project_dir)?;
         let project_config = project_dir.join("config.toml");
         fs::write(&project_config, "approval_policy = \"never\"\n")?;
 
         let user_home = temp.path().join("user-global-home");
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", user_home.as_os_str());
-        let _config = EnvVarGuard::set("CODEWHALE_CONFIG_PATH", project_config.as_os_str());
+        let _home = EnvVarGuard::set("GHOSTY_HOME", user_home.as_os_str());
+        let _config = EnvVarGuard::set("GHOSTY_CONFIG_PATH", project_config.as_os_str());
         let _legacy_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
         // No explicit secret backend: under cfg(test) the save takes the
         // plaintext config-file path, which is exactly the surface this
         // regression guards.
-        let _backend = EnvVarGuard::remove("CODEWHALE_SECRET_BACKEND");
+        let _backend = EnvVarGuard::remove("GHOSTY_SECRET_BACKEND");
         let _legacy_backend = EnvVarGuard::remove("DEEPSEEK_SECRET_BACKEND");
 
         let saved = save_api_key("workspace-rescope-test-key")?;
@@ -12396,16 +12439,16 @@ mod credential_scope_tests {
         let temp = tempfile::tempdir()?;
         let workspace = temp.path().join("repo");
         fs::create_dir_all(workspace.join(".git"))?;
-        let project_dir = workspace.join(".codewhale");
+        let project_dir = workspace.join(".ghosty");
         fs::create_dir_all(&project_dir)?;
         let project_config = project_dir.join("config.toml");
         fs::write(&project_config, "approval_policy = \"never\"\n")?;
 
         let user_home = temp.path().join("user-global-home");
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", user_home.as_os_str());
-        let _config = EnvVarGuard::set("CODEWHALE_CONFIG_PATH", project_config.as_os_str());
+        let _home = EnvVarGuard::set("GHOSTY_HOME", user_home.as_os_str());
+        let _config = EnvVarGuard::set("GHOSTY_CONFIG_PATH", project_config.as_os_str());
         let _legacy_config = EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-        let _backend = EnvVarGuard::remove("CODEWHALE_SECRET_BACKEND");
+        let _backend = EnvVarGuard::remove("GHOSTY_SECRET_BACKEND");
         let _legacy_backend = EnvVarGuard::remove("DEEPSEEK_SECRET_BACKEND");
 
         let path = save_api_key_for(ApiProvider::Openrouter, "workspace-rescope-openrouter-key")?;

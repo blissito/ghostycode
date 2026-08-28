@@ -1,6 +1,6 @@
 # Agent Ethos
 
-Codewhale is maintained with agents, but it is not maintained by automation
+Ghosty is maintained with agents, but it is not maintained by automation
 alone. Treat community reports and patches as real collaboration: people are
 bringing us machines, providers, regions, shells, packages, and edge cases we
 could not cover by ourselves.
@@ -51,6 +51,6 @@ could not cover by ourselves.
 
 ## Product Tone
 
-Codewhale should feel like a capable coding harness with a public community,
+Ghosty should feel like a capable coding harness with a public community,
 not a closed queue. Automation should reduce maintainer load while making
 contributors feel seen, credited, and able to keep helping.

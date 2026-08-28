@@ -1751,7 +1751,7 @@ impl App {
 
     /// When the composer input exceeds [`MAX_SUBMITTED_INPUT_CHARS`], write
     /// the full content to a timestamped paste file under
-    /// `.codewhale/pastes/` and replace `self.input` with an `@`-mention
+    /// `.ghosty/pastes/` and replace `self.input` with an `@`-mention
     /// pointing at it so the model can read the full content via the
     /// normal file-mention resolution path (#553).
     fn consolidate_large_input(&mut self) {
@@ -1761,9 +1761,9 @@ impl App {
         let now = chrono::Local::now();
         let suffix = uuid::Uuid::new_v4().to_string()[..8].to_string();
         let filename = format!("paste-{}-{}.md", now.format("%Y-%m-%d-%H%M%S"), suffix);
-        let rel_path = format!(".codewhale/pastes/{filename}");
+        let rel_path = format!(".ghosty/pastes/{filename}");
 
-        let pastes_dir = self.workspace.join(".codewhale/pastes");
+        let pastes_dir = self.workspace.join(".ghosty/pastes");
         if let Err(e) = std::fs::create_dir_all(&pastes_dir) {
             // Fallback: keep a truncated version so we don't lose the
             // user's input entirely when the filesystem is unhappy.

@@ -1,5 +1,5 @@
 /**
- * Locale configuration for codewhale.net.
+ * Locale configuration for ghosty.net.
  *
  * This is the single canonical website locale registry — the locale
  * switcher, Next.js route generation, middleware detection, and content

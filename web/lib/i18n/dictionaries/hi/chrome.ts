@@ -33,7 +33,7 @@ export const chrome: ChromeDict = {
   skipToContent: "मुख्य सामग्री पर जाएँ",
 
   navPrimaryAria: "मुख्य नेविगेशन",
-  navHomeAria: "Codewhale होम",
+  navHomeAria: "Ghosty होम",
 
   installCta: "इंस्टॉल करें →",
 
@@ -73,7 +73,7 @@ export const chrome: ChromeDict = {
   themeTitle: "दस्तावेज़ीकरण थीम · ऑटो / लाइट / डार्क",
 
   footerTagline:
-    "गहराई में Codewhale उतरता है, आपको नहीं उतरना पड़ता — ओपन सोर्स रनटाइम के लिए दस्तावेज़, सोर्स और समुदाय।",
+    "गहराई में Ghosty उतरता है, आपको नहीं उतरना पड़ता — ओपन सोर्स रनटाइम के लिए दस्तावेज़, सोर्स और समुदाय।",
   footerProduct: "उत्पाद",
   footerProject: "प्रोजेक्ट",
   footerDocs: "दस्तावेज़ीकरण",

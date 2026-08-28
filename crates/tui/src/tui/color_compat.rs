@@ -18,8 +18,8 @@ use ratatui::{
 
 use crate::palette::{self, ColorDepth, PaletteMode, ThemeId, UiTheme};
 
-const RENDER_DEBUG_ENV: &str = "CODEWHALE_TUI_DEBUG";
-const ASCII_SAFE_ENV: &str = "CODEWHALE_ASCII_SAFE";
+const RENDER_DEBUG_ENV: &str = "GHOSTY_TUI_DEBUG";
+const ASCII_SAFE_ENV: &str = "GHOSTY_ASCII_SAFE";
 const RENDER_DEBUG_SAMPLE_LIMIT: usize = 24;
 
 #[derive(Debug)]
@@ -324,7 +324,7 @@ pub(crate) fn ascii_safe_enabled() -> bool {
     env_flag_enabled(std::env::var(ASCII_SAFE_ENV).ok().as_deref())
 }
 
-/// Narrow every CodeWhale-authored decorative glyph to a semantic ASCII
+/// Narrow every GhostyCode-authored decorative glyph to a semantic ASCII
 /// alternative. Scope is deliberate: box drawing, block elements (whale
 /// mark, meters, rails), braille state markers, geometric role/state marks,
 /// arrows, and typographic chrome. Language text — CJK labels, accented
@@ -844,7 +844,7 @@ mod tests {
 
         let log_path = tmp
             .path()
-            .join(".codewhale")
+            .join(".ghosty")
             .join("logs")
             .join("tui-render.log");
         let body = fs::read_to_string(log_path).expect("render debug log");

@@ -62,7 +62,7 @@ pub(crate) fn format(locale: Locale, projection: &CoordinationDetailProjection) 
         let note = projection
             .process_lock_note
             .as_deref()
-            .unwrap_or("another Codewhale process owns this workspace lock");
+            .unwrap_or("another Ghosty process owns this workspace lock");
         let _ = writeln!(out, "Coordination lock: unavailable — {note}");
     }
 

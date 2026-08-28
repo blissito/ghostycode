@@ -364,7 +364,7 @@ fn classify(
         // quota is subscription-backed, so a public API price estimate is not
         // truthful spend and must not appear as dollars in the UI. A
         // credentials-only `[providers.zai]` entry still resolves to that
-        // endpoint, because it is also CodeWhale's Z.ai default.
+        // endpoint, because it is also GhostyCode's Z.ai default.
         ApiProvider::Zai if base_url.trim().is_empty() => BillingPresentation::Unknown,
         ApiProvider::Zai if is_zai_coding_plan_endpoint(base_url) => {
             BillingPresentation::Subscription("Z.ai Coding Plan quota")
@@ -450,7 +450,7 @@ fn endpoint_shaped_payg_billing(provider: ApiProvider, base_url: &str) -> Billin
 /// purge) that run off a bare client.
 ///
 /// Everything decidable from provider identity plus a classified endpoint is
-/// decided; everything that depends on credentials or an auth mode CodeWhale
+/// decided; everything that depends on credentials or an auth mode GhostyCode
 /// cannot see from here stays [`BillingPresentation::Unknown`]. In particular a
 /// local, custom, or plan endpoint is never allowed to fall through to metered
 /// per-token dollars on the strength of a provider name (#4318).
@@ -883,7 +883,7 @@ enum CredentialProduct {
 /// the *same* endpoints and the same `MINIMAX_API_KEY`, so the product can
 /// only come from an explicit pay mode or the credential's own product prefix.
 ///
-/// A key held in the Codewhale secret store / OS keyring is deliberately not
+/// A key held in the Ghosty secret store / OS keyring is deliberately not
 /// probed: classification must never be a reason to open secret storage. When
 /// no product marker is visible the route is `Unprovable`, and [`for_route`]
 /// reports Unknown instead of inventing pay-as-you-go dollars.
@@ -1039,7 +1039,7 @@ mod tests {
     /// so the resolver has to answer from the config alone.
     fn moonshot_endpoint_env_lock() -> [crate::test_support::EnvVarGuard; 4] {
         [
-            crate::test_support::EnvVarGuard::remove("CODEWHALE_BASE_URL"),
+            crate::test_support::EnvVarGuard::remove("GHOSTY_BASE_URL"),
             crate::test_support::EnvVarGuard::remove("DEEPSEEK_BASE_URL"),
             crate::test_support::EnvVarGuard::remove("MOONSHOT_BASE_URL"),
             crate::test_support::EnvVarGuard::remove("KIMI_BASE_URL"),
@@ -1341,7 +1341,7 @@ mod tests {
     fn dispatched_moonshot_receipt_owns_billing_over_any_later_config_state() {
         let _lock = crate::test_support::lock_test_env();
         // Env-only endpoint selection: nothing is in the provider table.
-        let _generic = crate::test_support::EnvVarGuard::remove("CODEWHALE_BASE_URL");
+        let _generic = crate::test_support::EnvVarGuard::remove("GHOSTY_BASE_URL");
         let _legacy = crate::test_support::EnvVarGuard::remove("DEEPSEEK_BASE_URL");
         let _moonshot = crate::test_support::EnvVarGuard::remove("MOONSHOT_BASE_URL");
         let _kimi = crate::test_support::EnvVarGuard::set(
@@ -1449,7 +1449,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("xAI billing fixture");
         let grok_path = temp.path().join("external-grok-auth.json");
         std::fs::write(&grok_path, "must-never-be-read").expect("external trap");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
         let _grok = crate::test_support::EnvVarGuard::set("GROK_AUTH_PATH", &grok_path);
 
         let config = config_with(
@@ -1544,7 +1544,7 @@ mod tests {
         // endpoint override has to be locked out for the assertion to be
         // about the default at all.
         let _lock = crate::test_support::lock_test_env();
-        let _generic = crate::test_support::EnvVarGuard::remove("CODEWHALE_BASE_URL");
+        let _generic = crate::test_support::EnvVarGuard::remove("GHOSTY_BASE_URL");
         let _legacy = crate::test_support::EnvVarGuard::remove("DEEPSEEK_BASE_URL");
         let config = config_with(ApiProvider::Zai, ProviderConfig::default());
         assert_eq!(
@@ -1558,7 +1558,7 @@ mod tests {
         // Same reason as the Z.ai default test: the PAYG half asserts against
         // StepFun's shipped default endpoint.
         let _lock = crate::test_support::lock_test_env();
-        let _generic = crate::test_support::EnvVarGuard::remove("CODEWHALE_BASE_URL");
+        let _generic = crate::test_support::EnvVarGuard::remove("GHOSTY_BASE_URL");
         let _legacy = crate::test_support::EnvVarGuard::remove("DEEPSEEK_BASE_URL");
         let payg_billing = for_route(&Config::default(), ApiProvider::Stepfun);
         assert_eq!(payg_billing, BillingPresentation::Metered);
@@ -1885,12 +1885,12 @@ mod tests {
             .path()
             .canonicalize()
             .expect("canonical xAI owned credential fixture");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &owned_home);
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &owned_home);
         let owned_path = owned_home.join("credentials/xai-auth.json");
         std::fs::create_dir_all(owned_path.parent().expect("owned credential parent"))
             .expect("create owned credential directory");
         #[cfg(windows)]
-        crate::external_credentials::secure_codewhale_owned_windows_path(
+        crate::external_credentials::secure_ghosty_owned_windows_path(
             owned_path.parent().expect("owned credential parent"),
             true,
         )
@@ -1910,7 +1910,7 @@ mod tests {
             })
             .to_string(),
         )
-        .expect("write Codewhale-owned xAI credential");
+        .expect("write Ghosty-owned xAI credential");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
@@ -1918,7 +1918,7 @@ mod tests {
                 .expect("secure owned credential file");
         }
         #[cfg(windows)]
-        crate::external_credentials::secure_codewhale_owned_windows_path(&owned_path, false)
+        crate::external_credentials::secure_ghosty_owned_windows_path(&owned_path, false)
             .expect("secure owned credential file");
         let oauth = config_with(
             ApiProvider::Xai,
@@ -2363,7 +2363,7 @@ mod tests {
         crate::test_support::EnvVarGuard::remove("MINIMAX_API_KEY")
     }
 
-    /// The release blocker: a MiniMax key saved through `codewhale auth set`
+    /// The release blocker: a MiniMax key saved through `ghosty auth set`
     /// lives in the secret store, so neither the config table nor
     /// `MINIMAX_API_KEY` carries a product marker. Classification must not
     /// open the secret store to find out, and must not silently call the

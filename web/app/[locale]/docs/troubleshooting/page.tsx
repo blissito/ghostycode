@@ -38,14 +38,14 @@ export default async function TroubleshootingPage({
       <section id="docker" className="scroll-mt-32">
         <h2 className="font-display text-2xl mb-1">{t.dockerTitle}</h2>
         <p className={`${t.bodyClassName} mt-3`}>{t.dockerLead}</p>
-        <pre className="code-block mt-4">{`docker volume create codewhale-home
+        <pre className="code-block mt-4">{`docker volume create ghosty-home
 
 docker run --rm -it \\
   -e DEEPSEEK_API_KEY="your-api-key-here" \\
-  -v codewhale-home:/home/codewhale/.codewhale \\
+  -v ghosty-home:/home/ghosty/.ghosty \\
   -v "$PWD:/workspace" \\
   -w /workspace \\
-  ghcr.io/hmbown/codewhale:latest`}</pre>
+  ghcr.io/blissito/ghostycode:latest`}</pre>
         <p className={`${t.bodyClassName} mt-3`}>{t.dockerToolboxNote}</p>
       </section>
 

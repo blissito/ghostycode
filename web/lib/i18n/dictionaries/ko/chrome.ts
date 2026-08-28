@@ -38,7 +38,7 @@ export const chrome: ChromeDict = {
 
 
   navPrimaryAria: "기본 탐색",
-  navHomeAria: "Codewhale 홈",
+  navHomeAria: "Ghosty 홈",
 
   installCta: "설치 →",
 
@@ -80,7 +80,7 @@ export const chrome: ChromeDict = {
   themeTitle: "문서 테마 · 자동 / 밝게 / 어둡게",
 
   footerTagline:
-    "Codewhale이 깊은 곳으로 대신 잠수하니 당신은 잠수하지 않아도 됩니다 — 오픈 소스 런타임의 문서, 소스, 커뮤니티.",
+    "Ghosty이 깊은 곳으로 대신 잠수하니 당신은 잠수하지 않아도 됩니다 — 오픈 소스 런타임의 문서, 소스, 커뮤니티.",
   footerProduct: "제품",
   footerProject: "프로젝트",
   footerDocs: "문서",

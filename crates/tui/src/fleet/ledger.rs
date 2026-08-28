@@ -13,11 +13,11 @@ use std::io::{BufRead, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use codewhale_protocol::fleet::*;
+use ghosty_protocol::fleet::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-const FLEET_DIR: &str = ".codewhale";
+const FLEET_DIR: &str = ".ghosty";
 const FLEET_LEDGER_FILE: &str = "fleet.jsonl";
 const FLEET_LEDGER_LOCK_FILE: &str = "fleet.lock";
 const PARTIAL_SUFFIX: &str = ".tmp";
@@ -287,7 +287,7 @@ pub struct FleetLedger {
 }
 
 impl FleetLedger {
-    /// Open (or create) the ledger under `workspace/.codewhale/fleet.jsonl`.
+    /// Open (or create) the ledger under `workspace/.ghosty/fleet.jsonl`.
     pub fn open(workspace: &Path) -> Result<Self> {
         let dir = workspace.join(FLEET_DIR);
         std::fs::create_dir_all(&dir)
@@ -2054,10 +2054,10 @@ fn redact_fleet_event_text(value: &str) -> String {
     let redacted = inline_secret_assignment_pattern()
         .replace_all(&redacted, "$1$2[redacted]")
         .into_owned();
-    let redacted = codewhale_config::persistence::redact_secrets(&redacted);
+    let redacted = ghosty_config::persistence::redact_secrets(&redacted);
     let redacted = redacted
         .split_whitespace()
-        .map(codewhale_config::persistence::redact_secrets)
+        .map(ghosty_config::persistence::redact_secrets)
         .collect::<Vec<_>>()
         .join(" ");
     let mut chars = redacted.chars();
@@ -2589,7 +2589,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let ledger = FleetLedger::open(tmp.path()).unwrap();
         let mut run = sample_run("budget-run");
-        run.usage_ceiling = Some(codewhale_protocol::fleet::FleetUsageCeiling {
+        run.usage_ceiling = Some(ghosty_protocol::fleet::FleetUsageCeiling {
             max_total_tokens: 1_000,
         });
         ledger.create_run(&run).unwrap();
@@ -2732,7 +2732,7 @@ mod tests {
                 timestamp: "2026-06-12T17:01:00Z".to_string(),
                 payload: FleetWorkerEventPayload::Artifact(FleetArtifactRef {
                     kind: FleetArtifactKind::Report,
-                    path: PathBuf::from(".codewhale/private/full-report.md"),
+                    path: PathBuf::from(".ghosty/private/full-report.md"),
                     checksum: Some("sha256:private-checksum".to_string()),
                     mime_type: Some("text/markdown".to_string()),
                     size_bytes: Some(42),
@@ -2752,7 +2752,7 @@ mod tests {
                 failure_kind: Some(FleetTaskFailureKind::Task),
                 artifacts: vec![FleetArtifactRef {
                     kind: FleetArtifactKind::Report,
-                    path: PathBuf::from(".codewhale/private/full-report.md"),
+                    path: PathBuf::from(".ghosty/private/full-report.md"),
                     checksum: Some("sha256:private-checksum".to_string()),
                     mime_type: Some("text/markdown".to_string()),
                     size_bytes: Some(42),
@@ -3003,7 +3003,7 @@ mod tests {
                         FleetWorkerEventPayload::Starting,
                         FleetWorkerEventPayload::Artifact(FleetArtifactRef {
                             kind: FleetArtifactKind::Log,
-                            path: PathBuf::from(".codewhale/fleet/run-1/task-a/worker-1.log"),
+                            path: PathBuf::from(".ghosty/fleet/run-1/task-a/worker-1.log"),
                             checksum: None,
                             mime_type: Some("text/plain".to_string()),
                             size_bytes: Some(0),

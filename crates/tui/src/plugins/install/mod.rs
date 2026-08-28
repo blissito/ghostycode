@@ -2,7 +2,7 @@
 //!
 //! Fetches a plugin bundle from a local directory, a `github:owner/repo`
 //! archive, or a direct tarball URL, and places it under the user plugins
-//! root (`~/.codewhale/plugins/<name>/`). This module deliberately mirrors
+//! root (`~/.ghosty/plugins/<name>/`). This module deliberately mirrors
 //! [`crate::skills::install`]: the download, network-gating, traversal
 //! rejection, and marker machinery is *reused* from there (`fetch_tarball`,
 //! `is_safe_path`, `write_installed_from_v2`, `INSTALLED_FROM_MARKER`), while

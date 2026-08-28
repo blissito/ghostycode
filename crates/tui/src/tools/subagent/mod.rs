@@ -317,7 +317,7 @@ const SUBAGENT_API_TIMEOUT_BACKOFF_JITTER_FACTOR: f64 = 0.2;
 /// indefinitely.
 /// Legacy fallback for the per-step DeepSeek API timeout. The active timeout
 /// now travels on `SubAgentRuntime::step_api_timeout` so users can override
-/// it via `[subagents] api_timeout_secs` in `~/.codewhale/config.toml`. The
+/// it via `[subagents] api_timeout_secs` in `~/.ghosty/config.toml`. The
 /// constant only exists for tests/stub runtimes that need a hard-coded
 /// default; production runtimes set the field explicitly (#1806, #1808).
 const DEFAULT_STEP_API_TIMEOUT: Duration =
@@ -366,7 +366,7 @@ const SUBAGENT_PERSIST_DEBOUNCE: Duration = Duration::from_millis(1500);
 pub const SUBAGENT_LIST_CLEANUP_MIN_INTERVAL: Duration = Duration::from_secs(2);
 
 /// #freeze: lightweight perf counters for the sub-agent persist hot path,
-/// gated behind `CODEWHALE_SUBAGENT_PERF_TRACE=1`. The atomic increments are
+/// gated behind `GHOSTY_SUBAGENT_PERF_TRACE=1`. The atomic increments are
 /// always cheap; only the structured `subagent_perf` log line is gated.
 static SUBAGENT_PERSIST_WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static SUBAGENT_PERSIST_SKIPPED: std::sync::atomic::AtomicU64 =
@@ -375,7 +375,7 @@ static SUBAGENT_PERSIST_SKIPPED: std::sync::atomic::AtomicU64 =
 fn subagent_perf_enabled() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENABLED.get_or_init(|| {
-        std::env::var("CODEWHALE_SUBAGENT_PERF_TRACE")
+        std::env::var("GHOSTY_SUBAGENT_PERF_TRACE")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false)
     })
@@ -431,7 +431,7 @@ impl SubAgentAssignment {
 /// [`migrate_legacy_role_token`] at deserialization / parse boundaries.
 ///
 /// This is the closed runtime role set. It is distinct from
-/// `codewhale_config::FleetRole`, which is the open config-side role
+/// `ghosty_config::FleetRole`, which is the open config-side role
 /// *declaration* (free-form name plus instruction overlay) carried by a
 /// Fleet profile.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -636,7 +636,7 @@ pub struct SubAgentResult {
     pub worker_status: Option<AgentWorkerStatus>,
     /// Effective non-secret runtime posture for Fleet-backed workers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_permissions: Option<codewhale_protocol::fleet::FleetEffectivePermissions>,
+    pub runtime_permissions: Option<ghosty_protocol::fleet::FleetEffectivePermissions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_run_id: Option<String>,
     #[serde(default)]
@@ -1840,13 +1840,13 @@ struct SpawnRequest {
     /// True when the caller supplied `thinking`/`reasoning_effort` explicitly.
     /// A saved Fleet profile's reasoning tier only applies when the caller did
     /// not — an explicit spawn-time tier always wins (#4137 parity with the
-    /// headless `codewhale exec` launch path).
+    /// headless `ghosty exec` launch path).
     thinking_explicit: bool,
     /// Optional working directory for the child. Must canonicalize to a path
     /// inside the parent's workspace. For first-class git worktree isolation,
     /// use `worktree` instead of pre-creating a cwd by hand.
     cwd: Option<PathBuf>,
-    /// Optional first-class git worktree isolation. When set, Codewhale
+    /// Optional first-class git worktree isolation. When set, Ghosty
     /// creates a sibling worktree/branch and runs the child from that checkout.
     worktree: Option<SubAgentWorktreeRequest>,
     /// Optional file path for cache-aware resident mode (#529). When set,
@@ -2056,15 +2056,15 @@ impl Default for PersistedSubAgentState {
 /// Default cap on sub-agent recursion depth. Override via
 /// `[subagents] max_depth = N` in config.
 ///
-/// Sourced from [`codewhale_config::DEFAULT_SPAWN_DEPTH`] so standalone
+/// Sourced from [`ghosty_config::DEFAULT_SPAWN_DEPTH`] so standalone
 /// sub-agents and fleet workers share ONE recursion axis (no "two moving
 /// targets"). Configured/requested depths clamp to
-/// [`codewhale_config::MAX_SPAWN_DEPTH_CEILING`].
-pub const DEFAULT_MAX_SPAWN_DEPTH: u32 = codewhale_config::DEFAULT_SPAWN_DEPTH;
+/// [`ghosty_config::MAX_SPAWN_DEPTH_CEILING`].
+pub const DEFAULT_MAX_SPAWN_DEPTH: u32 = ghosty_config::DEFAULT_SPAWN_DEPTH;
 
 /// Resolve a child runtime's `max_spawn_depth` from its (already-incremented)
 /// `spawn_depth` and the model-supplied per-call `max_depth`, clamped to the
-/// absolute [`codewhale_config::MAX_SPAWN_DEPTH_CEILING`].
+/// absolute [`ghosty_config::MAX_SPAWN_DEPTH_CEILING`].
 ///
 /// Without the absolute clamp, `max_spawn_depth = spawn_depth + max_depth`
 /// makes the recursion gate (`spawn_depth + 1 > max_spawn_depth`) reduce to
@@ -2074,14 +2074,14 @@ pub const DEFAULT_MAX_SPAWN_DEPTH: u32 = codewhale_config::DEFAULT_SPAWN_DEPTH;
 fn clamp_child_max_spawn_depth(child_spawn_depth: u32, requested_max_depth: u32) -> u32 {
     child_spawn_depth
         .saturating_add(requested_max_depth)
-        .min(codewhale_config::MAX_SPAWN_DEPTH_CEILING)
+        .min(ghosty_config::MAX_SPAWN_DEPTH_CEILING)
 }
 
 /// Terminal-state notification emitted to the immediate parent's completion
 /// inbox when one of its children finishes (issue #756). For root-spawned
 /// agents that inbox is the engine turn loop; for nested agents it is a
 /// parent-local receiver inside `run_subagent`. Carries the already-rendered
-/// `<codewhale:subagent.done>` sentinel that the model expects in the
+/// `<ghosty:subagent.done>` sentinel that the model expects in the
 /// transcript per the constitution (`prompts/text.rs`, `BASE_PROMPT`).
 #[derive(Debug, Clone)]
 pub struct SubAgentCompletion {
@@ -2452,7 +2452,7 @@ pub struct SubAgentRuntime {
     pub client: DeepSeekClient,
     /// Session `Config` snapshot, used to build a *fresh* LLM client bound to a
     /// different provider when a fleet roster member's profile pins one (#4193,
-    /// the interactive-TUI twin of the headless `codewhale exec --provider`
+    /// the interactive-TUI twin of the headless `ghosty exec --provider`
     /// route from #4181). The engine threads it in via
     /// [`SubAgentRuntime::with_api_config`]; `child_runtime`/`background_runtime`
     /// clone the `Arc` so every descendant can re-derive a provider-B client.
@@ -3252,7 +3252,7 @@ struct CoordinationProcessLock {
 /// fd, and flock treats a second descriptor in the same process as a
 /// conflict. This is a transient handover that self-heals on the next
 /// projection retry (#5036) — UI surfaces must not present it as "another
-/// Codewhale process" (owner report, 2026-08-04).
+/// Ghosty process" (owner report, 2026-08-04).
 pub const COORDINATION_SAME_PROCESS_HANDOVER: &str =
     "handing delegated coordination between engines in this process";
 
@@ -3266,14 +3266,14 @@ pub const COORDINATION_LOCK_TIMEOUT_MARKER: &str =
 impl CoordinationProcessLock {
     fn acquire(state_root: &Path) -> Result<Self> {
         let requested_root = normalize_subagent_workspace(state_root);
-        let lock_dir = requested_root.join(".codewhale").join("state");
+        let lock_dir = requested_root.join(".ghosty").join("state");
         fs::create_dir_all(&lock_dir)?;
         // Creating a missing root can change its canonical spelling on
         // Windows (for example by adding a `\\?\` prefix). Re-resolve both
         // sides before checking containment.
         let state_root = normalize_subagent_workspace(state_root);
         let lock_path = state_root
-            .join(".codewhale")
+            .join(".ghosty")
             .join("state")
             .join(SUBAGENT_STATE_LOCK_FILE);
         reject_root_relative_symlinks(&state_root, &lock_path)?;
@@ -3324,7 +3324,7 @@ impl CoordinationProcessLock {
                     ))
                 } else {
                     Err(anyhow!(
-                        "another Codewhale process{} owns delegated coordination for {}: {error}",
+                        "another Ghosty process{} owns delegated coordination for {}: {error}",
                         holder_pid
                             .map(|pid| format!(" (pid {pid})"))
                             .unwrap_or_default(),
@@ -4471,7 +4471,7 @@ impl SubAgentManager {
         let path = checked_subagent_state_path(&self.state_root, path)?;
 
         // If canonical path doesn't exist, try legacy .deepseek/ path for one-time
-        // migration. The next persist will write to the canonical .codewhale/ path.
+        // migration. The next persist will write to the canonical .ghosty/ path.
         let path = if path.exists() {
             path
         } else {
@@ -7236,7 +7236,7 @@ impl SubAgentManager {
         }
         // Deliberately NOT here: a pass that terminalized every Running agent
         // without a live task handle whenever this process lacked the
-        // coordination flock (#2.6). Two Codewhale sessions in one workspace is
+        // coordination flock (#2.6). Two Ghosty sessions in one workspace is
         // ordinary usage, and failure to append to a shared bookkeeping ledger
         // is not evidence that live work has stopped. Liveness is decided by
         // the heartbeat above — which is actual evidence — never by who owns
@@ -7754,7 +7754,7 @@ fn json_line(value: &Value) -> Result<Vec<u8>> {
 
 fn subagent_transcript_artifact_relative_path(agent_id: &str) -> PathBuf {
     let digest = crate::hashing::sha256_hex(agent_id.as_bytes());
-    Path::new(".codewhale")
+    Path::new(".ghosty")
         .join("state")
         .join(SUBAGENT_TRANSCRIPT_ARTIFACT_DIR)
         .join(format!("{digest}.jsonl"))
@@ -7858,9 +7858,7 @@ fn default_state_path(state_root: &Path) -> Result<PathBuf> {
     // is migrated on load (see load_state).
     checked_subagent_state_path(
         &state_root,
-        &Path::new(".codewhale")
-            .join("state")
-            .join(SUBAGENT_STATE_FILE),
+        &Path::new(".ghosty").join("state").join(SUBAGENT_STATE_FILE),
     )
 }
 
@@ -8162,7 +8160,7 @@ pub fn new_shared_subagent_manager_with_timeout(
 ///
 /// `workspace` remains the child execution and file-authority root. The worker
 /// ledger, complete transcript artifacts and coordination lock live under
-/// `state_root/.codewhale/state`. Distinct state roots intentionally do not
+/// `state_root/.ghosty/state`. Distinct state roots intentionally do not
 /// share write claims; an embedding host that runs them against the same
 /// workspace must provide any required cross-session write coordination.
 #[allow(clippy::too_many_arguments)] // legacy open constructor; budget pair rides along
@@ -8859,7 +8857,7 @@ async fn inspect_agent_from_input(
                     "status": "running",
                     "unchanged": true,
                     "child_route": child_route,
-                    "hint": "No change since your last check. Checking again in a loop is the anti-pattern; one blocking wait is not. Make one agent(action=\"wait\") call — until=\"all\" to join every running child in a single block — or continue independent work, or end your turn. Results arrive automatically as <codewhale:subagent.done> sentinels.",
+                    "hint": "No change since your last check. Checking again in a loop is the anti-pattern; one blocking wait is not. Make one agent(action=\"wait\") call — until=\"all\" to join every running child in a single block — or continue independent work, or end your turn. Results arrive automatically as <ghosty:subagent.done> sentinels.",
                 });
                 let mut tool_result = ToolResult::json(&payload)
                     .map_err(|err| ToolError::execution_failed(err.to_string()))?;
@@ -9031,7 +9029,7 @@ async fn cancel_agent_from_input(
 /// Bounds for `agent(action="wait")` (#4097). The default is short so a
 /// `wait` does not make the session deaf: the turn is blocked for at most
 /// this long and user messages have nowhere to land. Results arrive
-/// automatically as `<codewhale:subagent.done>` sentinels, so ending the
+/// automatically as `<ghosty:subagent.done>` sentinels, so ending the
 /// turn and staying reachable is the preferred default — only `wait` when
 /// you must join before continuing.
 const SUBAGENT_WAIT_DEFAULT_TIMEOUT_SECS: u64 = 30;
@@ -9047,7 +9045,7 @@ const SUBAGENT_WAIT_CHECK_INTERVAL: Duration = Duration::from_millis(250);
 /// `agent(action="wait")`: block until a running child settles (leaves
 /// `Running` — completed, failed, cancelled, interrupted/needs-input, or
 /// budget-exhausted), then return a compact summary. Full child results are
-/// still delivered as `<codewhale:subagent.done>` sentinels by the runtime;
+/// still delivered as `<ghosty:subagent.done>` sentinels by the runtime;
 /// this call only provides the legitimate "join" the model previously faked
 /// with peek→sleep loops (#4097).
 ///
@@ -9178,11 +9176,11 @@ async fn wait_result_payload(
         })
         .collect();
     let note = if timed_out {
-        "Wait timed out with children still running. Do not poll — wait again (until=\"all\" blocks for the whole batch), continue independent work, or end your turn; results arrive automatically as <codewhale:subagent.done> sentinels."
+        "Wait timed out with children still running. Do not poll — wait again (until=\"all\" blocks for the whole batch), continue independent work, or end your turn; results arrive automatically as <ghosty:subagent.done> sentinels."
     } else if settled_entries.is_empty() {
         "No sub-agents are running anymore."
     } else {
-        "Full results arrive as <codewhale:subagent.done> sentinels — read those before synthesizing; do not re-peek settled children unless you need the full projection."
+        "Full results arrive as <ghosty:subagent.done> sentinels — read those before synthesizing; do not re-peek settled children unless you need the full projection."
     };
     let payload = json!({
         "action": "wait",
@@ -9346,12 +9344,12 @@ fn enforce_fleet_member_route_requirements(
                 let state = candidate.capabilities().image_input;
                 if !state.is_supported() {
                     let state = match state {
-                        codewhale_config::route::CapabilityState::Unsupported => "unsupported",
-                        codewhale_config::route::CapabilityState::Unknown => "unknown",
-                        codewhale_config::route::CapabilityState::Supported => unreachable!(),
+                        ghosty_config::route::CapabilityState::Unsupported => "unsupported",
+                        ghosty_config::route::CapabilityState::Unknown => "unknown",
+                        ghosty_config::route::CapabilityState::Supported => unreachable!(),
                     };
                     return Err(ToolError::execution_failed(format!(
-                        "Fleet member '{member_id}' requires vision, but exact route {provider_id}/{model_id} has image_input={state}. Codewhale will not reroute a capability-bound member; pin an exact route with verified image_input support."
+                        "Fleet member '{member_id}' requires vision, but exact route {provider_id}/{model_id} has image_input={state}. Ghosty will not reroute a capability-bound member; pin an exact route with verified image_input support."
                     )));
                 }
             }
@@ -9757,7 +9755,7 @@ fn mint_child_route_receipt(
         // pushed real receipts past 384 bytes (394 with the sha, 386 on some
         // legitimate routes without it), breaking admission. Twelve hex chars
         // plus the version identify the build without bloating every receipt.
-        runtime_build_sha: option_env!("CODEWHALE_BUILD_COMMIT")
+        runtime_build_sha: option_env!("GHOSTY_BUILD_COMMIT")
             .map(|sha| sha.get(..12).unwrap_or(sha).to_string())
             .unwrap_or_else(|| "unknown".to_string()),
     };
@@ -9825,7 +9823,7 @@ fn apply_session_spawn_defaults(runtime: &mut SubAgentRuntime) {
 /// `identity` is stamped onto the returned spawn metadata so panel/history
 /// consumers can render workflow children without parsing prompt text (#4119).
 pub(crate) async fn spawn_workflow_task(
-    request: codewhale_workflow_js::TaskRequest,
+    request: ghosty_workflow_js::TaskRequest,
     manager: SharedSubAgentManager,
     mut runtime: SubAgentRuntime,
     identity: WorkflowTaskSpawnIdentity,
@@ -10084,8 +10082,7 @@ fn build_subagent_system_prompt_with_skills(
 /// Every fresh and nested child derives this from its inherited ToolContext;
 /// forked children receive it at system precedence as well.
 fn subagent_skill_catalog(context: &ToolContext) -> String {
-    let mode =
-        crate::skills::SkillDiscoveryMode::from_codewhale_only(context.skills_scan_codewhale_only);
+    let mode = crate::skills::SkillDiscoveryMode::from_ghosty_only(context.skills_scan_ghosty_only);
     let registry = context
         .skills_dir
         .as_deref()
@@ -10180,12 +10177,12 @@ fn build_initial_subagent_messages_with_system(
             .filter(|state| !state.is_empty())
         {
             messages.push(system_text_message(format!(
-                "<codewhale:fork_state>\n{state}\n</codewhale:fork_state>"
+                "<ghosty:fork_state>\n{state}\n</ghosty:fork_state>"
             )));
         }
 
         messages.push(system_text_message(format!(
-            "<codewhale:subagent_context>\n{}\n</codewhale:subagent_context>",
+            "<ghosty:subagent_context>\n{}\n</ghosty:subagent_context>",
             subagent_system_prompt
         )));
     }
@@ -10592,7 +10589,7 @@ fn strip_evidence_block(text: &str) -> String {
     text.trim().to_string()
 }
 
-/// Build a `<codewhale:subagent.done>` JSON sentinel for a successful child.
+/// Build a `<ghosty:subagent.done>` JSON sentinel for a successful child.
 /// Intended to surface in the parent's transcript so the model recognizes
 /// child completion.
 ///
@@ -10624,7 +10621,7 @@ fn subagent_done_sentinel(agent_id: &str, res: &SubAgentResult, truncated: bool)
     if let Some(child_route) = res.child_route.clone() {
         payload["child_route"] = json!(child_route);
     }
-    format!("<codewhale:subagent.done>{payload}</codewhale:subagent.done>")
+    format!("<ghosty:subagent.done>{payload}</ghosty:subagent.done>")
 }
 
 fn subagent_failure_class(status: &SubAgentStatus, error: &str) -> &'static str {
@@ -10669,7 +10666,7 @@ fn subagent_failed_sentinel(res: &SubAgentResult, error: &str) -> String {
         "error_location": "previous_line",
         "child_route": res.child_route,
     });
-    format!("<codewhale:subagent.done>{payload}</codewhale:subagent.done>")
+    format!("<ghosty:subagent.done>{payload}</ghosty:subagent.done>")
 }
 
 fn response_was_truncated(response: &MessageResponse) -> bool {
@@ -11264,7 +11261,7 @@ fn drain_child_completion_events(
 
 fn child_completion_runtime_message(completions: &[SubAgentCompletion]) -> Message {
     let mut text = String::from(
-        "<codewhale:runtime_event kind=\"child_subagent_completion\" visibility=\"internal\">\n\
+        "<ghosty:runtime_event kind=\"child_subagent_completion\" visibility=\"internal\">\n\
 This is an internal runtime event, not user input. One or more child sub-agents \
 you spawned have finished. Treat each child summary as an unverified self-report: \
 if you rely on it, cite the child agent_id and the EVIDENCE lines it provided, \
@@ -11280,7 +11277,7 @@ then re-plan dependent work before claiming completion.\n",
         text.push_str(&completion.payload);
         text.push('\n');
     }
-    text.push_str("</codewhale:runtime_event>");
+    text.push_str("</ghosty:runtime_event>");
 
     Message {
         role: Role::User,
@@ -12379,7 +12376,7 @@ fn optional_input_str<'a>(input: &'a Value, keys: &[&str]) -> Result<Option<&'a 
         }
         let text = value
             .as_str()
-            .ok_or_else(|| codewhale_tools::type_mismatch(key, value, "a string"))?;
+            .ok_or_else(|| ghosty_tools::type_mismatch(key, value, "a string"))?;
         let trimmed = text.trim();
         if trimmed.is_empty() {
             continue;
@@ -12407,7 +12404,7 @@ fn parse_optional_u64(input: &Value, keys: &[&str]) -> Result<Option<u64>, ToolE
     value
         .as_u64()
         .map(Some)
-        .ok_or_else(|| codewhale_tools::type_mismatch(key, value, "a non-negative integer"))
+        .ok_or_else(|| ghosty_tools::type_mismatch(key, value, "a non-negative integer"))
 }
 
 /// Optional array of tool names, refusing a wrong type instead of dropping it.
@@ -12421,12 +12418,12 @@ fn parse_tool_name_list(input: &Value, key: &str) -> Result<Option<Vec<String>>,
     };
     let array = value
         .as_array()
-        .ok_or_else(|| codewhale_tools::type_mismatch(key, value, "an array of tool names"))?;
+        .ok_or_else(|| ghosty_tools::type_mismatch(key, value, "an array of tool names"))?;
     let mut tools: Vec<String> = Vec::new();
     for item in array {
         let tool = item
             .as_str()
-            .ok_or_else(|| codewhale_tools::type_mismatch(&format!("{key}[]"), item, "a string"))?;
+            .ok_or_else(|| ghosty_tools::type_mismatch(&format!("{key}[]"), item, "a string"))?;
         let trimmed = tool.trim();
         if !trimmed.is_empty() && !tools.iter().any(|existing| existing == trimmed) {
             tools.push(trimmed.to_string());
@@ -12649,7 +12646,7 @@ fn parse_spawn_request(input: &Value) -> Result<SpawnRequest, ToolError> {
         parse_optional_bool(input, &["fork_context", "forkContext", "inherit_context"])?;
     let max_depth = parse_optional_u64(input, &["max_depth", "maxDepth", "max_spawn_depth"])?
         .map(|depth| {
-            let ceiling = codewhale_config::MAX_SPAWN_DEPTH_CEILING;
+            let ceiling = ghosty_config::MAX_SPAWN_DEPTH_CEILING;
             u32::try_from(depth)
                 .map_err(|_| {
                     ToolError::invalid_input(format!("max_depth must be between 0 and {ceiling}"))
@@ -13217,7 +13214,7 @@ fn apply_spawn_profile(
     // options. Only a member that actually binds a provider/model (or an
     // explicitly-named `profile:` member outside the General slot) is
     // route-bound and rejects overrides.
-    let is_general_slot = matches!(member.profile.slot, codewhale_config::FleetSlot::General);
+    let is_general_slot = matches!(member.profile.slot, ghosty_config::FleetSlot::General);
     let route_permissive = is_general_slot
         || (resolved_from_role
             && member.profile.model.is_none()
@@ -13272,7 +13269,7 @@ fn apply_spawn_profile(
     });
 
     // A saved Fleet profile's reasoning tier must reach the spawn, not just the
-    // headless `codewhale exec` argv. Without this, `agent { profile: "x" }`
+    // headless `ghosty exec` argv. Without this, `agent { profile: "x" }`
     // (direct AND workflow spawn, which share this path) silently ran on the
     // session tier while the same profile launched as a Fleet subprocess ran on
     // its own. An explicit caller `thinking` still wins.
@@ -13398,7 +13395,7 @@ fn resolve_spawn_model_selection(
                 source: SpawnRouteSource::AgentProfileModel,
             });
         }
-        if member.profile.loadout == codewhale_config::FleetLoadout::Fast {
+        if member.profile.loadout == ghosty_config::FleetLoadout::Fast {
             return Ok(SpawnModelSelection {
                 model_route: ModelRoute::Faster,
                 source: SpawnRouteSource::AgentProfileLoadout,
@@ -13539,7 +13536,7 @@ fn parse_optional_bool(input: &Value, names: &[&str]) -> Result<Option<bool>, To
     value
         .as_bool()
         .map(Some)
-        .ok_or_else(|| codewhale_tools::type_mismatch(name, value, "a boolean"))
+        .ok_or_else(|| ghosty_tools::type_mismatch(name, value, "a boolean"))
 }
 
 /// Parse an optional caller-supplied `disallowed_tools` array (#4042). Mirrors
@@ -13759,7 +13756,7 @@ fn fallback_subagent_assignment_route(
 /// Enumerates through the catalog-backed [`crate::provider_lake`] facade rather
 /// than the raw legacy `model_completion_names_for_provider` table (#4116 /
 /// #4188). The facade prefers live Models.dev, then the offline bundled
-/// snapshot, and only then the legacy hardcoded table for Codewhale-only /
+/// snapshot, and only then the legacy hardcoded table for Ghosty-only /
 /// unbundled providers. This consumer only reads the first entry.
 fn operator_model_for_subagent(runtime: &SubAgentRuntime) -> String {
     let provider = runtime.client.api_provider();

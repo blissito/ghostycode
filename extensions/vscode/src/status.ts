@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { RuntimeState, SnapshotEntry, ThreadSummary } from "./runtime";
 
 export class RuntimeStatusView implements vscode.WebviewViewProvider {
-  public static readonly viewType = "codewhale.runtimeStatus";
+  public static readonly viewType = "ghosty.runtimeStatus";
 
   private view?: vscode.WebviewView;
   private state: RuntimeState = {
@@ -20,15 +20,15 @@ export class RuntimeStatusView implements vscode.WebviewViewProvider {
     view.webview.options = { enableScripts: true };
     view.webview.onDidReceiveMessage((message: { command?: string }) => {
       if (message.command === "check") {
-        void vscode.commands.executeCommand("codewhale.checkRuntime");
+        void vscode.commands.executeCommand("ghosty.checkRuntime");
       } else if (message.command === "start") {
-        void vscode.commands.executeCommand("codewhale.startRuntime");
+        void vscode.commands.executeCommand("ghosty.startRuntime");
       } else if (message.command === "terminal") {
-        void vscode.commands.executeCommand("codewhale.openTerminal");
+        void vscode.commands.executeCommand("ghosty.openTerminal");
       } else if (message.command === "threads") {
-        void vscode.commands.executeCommand("codewhale.refreshAgentView");
+        void vscode.commands.executeCommand("ghosty.refreshAgentView");
       } else if (message.command === "snapshots") {
-        void vscode.commands.executeCommand("codewhale.refreshSnapshots");
+        void vscode.commands.executeCommand("ghosty.refreshSnapshots");
       }
     });
     this.render();
@@ -94,7 +94,7 @@ export class RuntimeStatusView implements vscode.WebviewViewProvider {
   <button data-command="threads">Refresh Threads</button>
   <button data-command="snapshots">Refresh Restore Points</button>
   <button data-command="start">Start Local Runtime</button>
-  <button data-command="terminal">Open CodeWhale Terminal</button>
+  <button data-command="terminal">Open GhostyCode Terminal</button>
   <div class="section-title">Agent View</div>
   ${threadsHtml}
   <div class="section-title">Restore Points</div>

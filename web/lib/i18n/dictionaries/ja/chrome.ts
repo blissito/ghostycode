@@ -35,7 +35,7 @@ export const chrome: ChromeDict = {
 
 
   navPrimaryAria: "メインナビゲーション",
-  navHomeAria: "Codewhale ホーム",
+  navHomeAria: "Ghosty ホーム",
 
   installCta: "インストール →",
 

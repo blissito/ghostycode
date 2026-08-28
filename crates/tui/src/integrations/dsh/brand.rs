@@ -1,4 +1,4 @@
-//! Whale Brothers / Codewhale identity lockup for the DSH bundle skin.
+//! Whale Brothers / Ghosty identity lockup for the DSH bundle skin.
 //!
 //! The palette and ocean scene can be mistaken for an ordinary theme. This
 //! small, plugin-owned React surface uses DSH's additive `shell.overlay` Slot

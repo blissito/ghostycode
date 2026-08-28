@@ -1,5 +1,5 @@
 //! Process-wide TLS bootstrap plus the platform HTTP client constructors that
-//! depend on it. Every reqwest client Codewhale builds goes through here so
+//! depend on it. Every reqwest client Ghosty builds goes through here so
 //! the rustls crypto provider is installed exactly once, before the first
 //! client, on every path (TUI, CLI, tests).
 

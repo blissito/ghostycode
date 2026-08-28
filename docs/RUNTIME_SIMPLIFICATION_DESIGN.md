@@ -1,4 +1,4 @@
-# Codewhale Runtime Simplification Design
+# Ghosty Runtime Simplification Design
 
 **Status:** Pre-implementation design record for the v0.9.1 cutover, kept for its
 "Rejected alternatives" provenance. It is **not** current runtime documentation
@@ -98,7 +98,7 @@ synthetic always-active catalog entry.
 - Behavior-preserving: targeted unit tests for `File`, `Git`, `Run`, and `Web`
   dispatch against legacy inputs.
 - Regression: `cargo fmt`, `cargo clippy --workspace --all-targets --locked`,
-  `cargo test -p codewhale-tui --bin codewhale-tui --locked`, and
+  `cargo test -p ghosty-tui --bin ghosty-tui --locked`, and
   `cargo test --workspace`.
 
 ### v0.9.1 receipt

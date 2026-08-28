@@ -1,7 +1,7 @@
 //! Clipboard handling for paste support in TUI
 //!
 //! Supports text and image paste operations. Images on the clipboard are
-//! encoded as PNG and persisted under `~/.codewhale/clipboard-images/` so the
+//! encoded as PNG and persisted under `~/.ghosty/clipboard-images/` so the
 //! model can reach them via the existing `@`-mention / file tools (DeepSeek
 //! V4 does not currently accept inline image input on its Chat Completions
 //! endpoint, so we materialize the bytes to disk instead of base64-embedding
@@ -79,7 +79,7 @@ impl TerminalClipboardContext {
         let ssh_tty = std::env::var_os("SSH_TTY");
         let display = std::env::var_os("DISPLAY");
         let wayland_display = std::env::var_os("WAYLAND_DISPLAY");
-        let ssh_clipboard = std::env::var_os("CODEWHALE_SSH_CLIPBOARD");
+        let ssh_clipboard = std::env::var_os("GHOSTY_SSH_CLIPBOARD");
         let tmux = std::env::var_os("TMUX");
         Self::from_env_values(
             ssh_client.as_deref(),
@@ -370,7 +370,7 @@ impl ClipboardHandler {
 
     /// Read the clipboard and return the parsed content.
     ///
-    /// `workspace` is used as a fallback location when `~/.codewhale/` cannot
+    /// `workspace` is used as a fallback location when `~/.ghosty/` cannot
     /// be resolved (e.g. running with a stripped HOME in CI sandboxes).
     pub fn read(&mut self, workspace: &Path) -> Option<ClipboardContent> {
         // With no display exported over SSH there is no synchronously readable
@@ -676,7 +676,7 @@ fn osc52_sequence(text: &str) -> Result<String> {
 }
 
 /// Resolve the directory pasted images should land in. Prefers
-/// `~/.codewhale/clipboard-images/` so the path is stable across worktrees and
+/// `~/.ghosty/clipboard-images/` so the path is stable across worktrees and
 /// matches the location described in user-facing docs; falls back to
 /// `<workspace>/clipboard-images/` if the home dir is unavailable.
 pub(crate) fn clipboard_images_dir(workspace: &Path) -> PathBuf {
@@ -686,7 +686,7 @@ pub(crate) fn clipboard_images_dir(workspace: &Path) -> PathBuf {
 
 fn clipboard_images_dir_for_home(workspace: &Path, home: Option<&Path>) -> PathBuf {
     if let Some(home) = home {
-        return home.join(".codewhale").join("clipboard-images");
+        return home.join(".ghosty").join("clipboard-images");
     }
     workspace.join("clipboard-images")
 }
@@ -889,13 +889,13 @@ mod tests {
     }
 
     #[test]
-    fn clipboard_images_dir_uses_codewhale_home_directory() {
+    fn clipboard_images_dir_uses_ghosty_home_directory() {
         let home = tempfile::tempdir().unwrap();
         let workspace = tempfile::tempdir().unwrap();
 
         assert_eq!(
             clipboard_images_dir_for_home(workspace.path(), Some(home.path())),
-            home.path().join(".codewhale").join("clipboard-images")
+            home.path().join(".ghosty").join("clipboard-images")
         );
     }
 
@@ -1109,7 +1109,7 @@ exit 42
             .duration_since(std::time::UNIX_EPOCH)
             .expect("clock after epoch")
             .as_nanos();
-        let socket = format!("codewhale-clipboard-{}-{nonce}", std::process::id());
+        let socket = format!("ghosty-clipboard-{}-{nonce}", std::process::id());
 
         struct TmuxServer(String);
         impl Drop for TmuxServer {

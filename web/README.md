@@ -1,6 +1,6 @@
-# codewhale-web
+# ghosty-web
 
-Documentation and community site for [Codewhale](https://github.com/Hmbown/CodeWhale) — lives at **codewhale.net**.
+Documentation and community site for [Ghosty](https://github.com/blissito/ghostycode) — lives at **ghosty.net**.
 
 Next.js 15 (App Router) + Tailwind, deployed to Cloudflare Workers via [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare). Curated "Today's Dispatch" content is regenerated every 6 hours by a Cloudflare Cron Trigger that calls `deepseek-v4-flash` to summarise recent repo activity, and stored in Workers KV.
 
@@ -19,7 +19,7 @@ Env (mirrors `.env.example`):
 | --------------------------- | ---------------------------------------------------------------- | -------------------- |
 | `DEEPSEEK_API_KEY`          | DeepSeek platform key (`sk-...`)                                 | only for the `/api/cron` tasks (summarization + community agent) |
 | `GITHUB_TOKEN`              | Fine-grained PAT, public-repo read scope                         | optional (raises rate limit 60 → 5000 req/h) |
-| `GITHUB_REPO`               | Defaults to `Hmbown/CodeWhale`                                   | optional             |
+| `GITHUB_REPO`               | Defaults to `blissito/ghostycode`                                   | optional             |
 | `CRON_SECRET`               | Shared secret for manual `/api/cron` invocation                  | optional (Cloudflare cron triggers don't need it) |
 | `DEEPSEEK_MODEL`            | Defaults to `deepseek-v4-flash`                                  | optional             |
 | `DEEPSEEK_BASE_URL`         | Defaults to `https://api.deepseek.com`                           | optional             |
@@ -39,7 +39,7 @@ record the exact 40-character `origin/main` SHA and trigger that ref:
 ```bash
 git fetch origin main
 git rev-parse origin/main
-gh workflow run web.yml --repo Hmbown/CodeWhale --ref main
+gh workflow run web.yml --repo blissito/ghostycode --ref main
 ```
 
 Every green push to `main` also emits a `Deployment approval needed` workflow
@@ -55,7 +55,7 @@ local comparison is available without starting a deployment:
 npm run compare:deployed-facts -- --expected-revision <exact-40-character-sha>
 ```
 
-You already own `codewhale.net` on Cloudflare and have a Workers Paid plan. The deploy is two steps:
+You already own `ghosty.net` on Cloudflare and have a Workers Paid plan. The deploy is two steps:
 
 1. **Provision KV namespaces once:**
 
@@ -77,12 +77,12 @@ You already own `codewhale.net` on Cloudflare and have a Workers Paid plan. The 
    npm run deploy                           # builds with OpenNext + uploads
    ```
 
-3. **Point the domain:** in the Cloudflare dashboard, add a Worker route for `codewhale.net/*` → the deployed Worker, named `codewhale-web` (see `wrangler.jsonc`).
+3. **Point the domain:** in the Cloudflare dashboard, add a Worker route for `ghosty.net/*` → the deployed Worker, named `ghosty-web` (see `wrangler.jsonc`).
 
 The first cron run happens within 6 hours; you can also kick it manually:
 
 ```bash
-curl -H "x-cron-secret: $CRON_SECRET" "https://codewhale.net/api/cron?task=curate"
+curl -H "x-cron-secret: $CRON_SECRET" "https://ghosty.net/api/cron?task=curate"
 ```
 
 ## What's where
@@ -123,7 +123,7 @@ web/
 ├── components/
 │   ├── nav.tsx                 sticky header w/ date strip + CJK accents
 │   ├── footer.tsx              dense 5-column footer
-│   ├── whale.tsx               shared Codewhale mark
+│   ├── whale.tsx               shared Ghosty mark
 │   ├── ticker.tsx              live wire: merges, issues, releases + handles
 │   ├── feed-card.tsx           one issue/PR card
 │   ├── locale-switcher.tsx     N-locale dropdown with partial badges
@@ -154,7 +154,7 @@ default model, Node engines) are never hand-written into pages:
 
 1. **Build time** — `scripts/derive-facts.mjs` runs as `prebuild` (and before
    `npm run dev`), parses the parent repo (`Cargo.toml`, `crates/tui/src/config.rs`,
-   `crates/tui/src/sandbox/mod.rs`, `npm/codewhale/package.json`) and writes
+   `crates/tui/src/sandbox/mod.rs`, `npm/ghosty/package.json`) and writes
    `lib/facts.generated.ts`. Never edit that file by hand.
 2. **Published release** — `data/latest-published-release.json` records the
    latest GitHub Release separately from the source candidate. Install commands

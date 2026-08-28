@@ -135,7 +135,7 @@ jobs:
                 workflow=true
                 ;;
             esac
-            # Mobile runtime surface: the `codewhale serve --mobile`
+            # Mobile runtime surface: the `ghosty serve --mobile`
             # HTTP/SSE stack that scripts/mobile-smoke.sh exercises. Pull
             # requests run the smoke only when one of these changes; every
             # push to main still runs it unconditionally as the pre-release
@@ -258,13 +258,13 @@ jobs:
         env:
           HOME: ${{ runner.temp }}/cw-hermetic-home
           USERPROFILE: ${{ runner.temp }}/cw-hermetic-home
-          CODEWHALE_HOME: ${{ runner.temp }}/cw-hermetic-home/.codewhale
+          GHOSTY_HOME: ${{ runner.temp }}/cw-hermetic-home/.ghosty
           RUST_MIN_STACK: "8388608"
         run: |
-          mkdir -p "${HOME}" "${CODEWHALE_HOME}"
-          unset CODEWHALE_CONFIG_PATH DEEPSEEK_CONFIG_PATH DEEPSEEK_HOME || true
-          cargo test -p codewhale-tui --lib --locked -- command_safety auto_review authority sandbox
-          cargo test -p codewhale-execpolicy --locked
+          mkdir -p "${HOME}" "${GHOSTY_HOME}"
+          unset GHOSTY_CONFIG_PATH DEEPSEEK_CONFIG_PATH DEEPSEEK_HOME || true
+          cargo test -p ghosty-tui --lib --locked -- command_safety auto_review authority sandbox
+          cargo test -p ghosty-execpolicy --locked
 
   lint:
     name: Lint
@@ -485,7 +485,7 @@ jobs:
           cache-bin: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Run workflow crate tests
-        run: cargo test -p codewhale-workflow --locked
+        run: cargo test -p ghosty-workflow --locked
 
   test:
     name: Test
@@ -590,7 +590,7 @@ jobs:
         env:
           # Give test threads the stack the product gives itself. main.rs runs
           # the owner thread and every tokio worker at
-          # CODEWHALE_MAIN_STACK_BYTES (16 MiB) because the engine and
+          # GHOSTY_MAIN_STACK_BYTES (16 MiB) because the engine and
           # runtime-thread futures are genuinely deep. `#[tokio::test]` builds
           # its own runtime and never sees that, so tests ran the same code on
           # ~2 MiB (~1 MiB on Windows) — a configuration that never ships.
@@ -621,7 +621,7 @@ jobs:
         # instead of once per desktop OS keeps the coverage while taking
         # ~2min off the Windows critical path.
         if: needs.changes.outputs.heavy == 'true' && matrix.os == 'macos-latest'
-        run: cargo run -p codewhale-tui --all-features -- eval
+        run: cargo run -p ghosty-tui --all-features -- eval
       - name: sccache stats
         if: needs.changes.outputs.heavy == 'true' && (matrix.os != 'ubuntu-latest' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request') && steps.sccache.outcome == 'success'
         continue-on-error: true
@@ -690,7 +690,7 @@ jobs:
         env:
           CARGO_PROFILE_RELEASE_LTO: 'off'
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
-        run: cargo build --release --locked -p codewhale-cli -p codewhale-tui
+        run: cargo build --release --locked -p ghosty-cli -p ghosty-tui
       - name: Smoke wrapper install and delegated entrypoints
         if: needs.changes.outputs.heavy == 'true' && (matrix.os != 'ubuntu-latest' || github.event_name == 'workflow_dispatch')
         run: node scripts/release/npm-wrapper-smoke.js

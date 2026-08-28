@@ -1,6 +1,6 @@
 # Localization Matrix
 
-Canonical tracking document for every locale Codewhale ships, is actively
+Canonical tracking document for every locale Ghosty ships, is actively
 building, is planning, or has explicitly deferred.
 
 > **Scope note (2026-07-12):** this matrix covers three surfaces — the TUI
@@ -15,7 +15,7 @@ building, is planning, or has explicitly deferred.
 > `docs/zh_hans/` and `docs/id/`, and their status is tracked in
 > `docs/zh_hans/README.md` and issue #5482, not in this matrix.
 
-Customer-visible copy also follows the [Codewhale voice and terminal
+Customer-visible copy also follows the [Ghosty voice and terminal
 charter](VOICE.md); commands, key names, and glyphs remain code-owned around
 localized prose.
 
@@ -27,7 +27,7 @@ Source-of-truth README: `README.md` (English, post-#3087).
 
 | Status | Meaning |
 |--------|---------|
-| **shipped** | Live on codewhale.net and/or published as a standalone README, or a TUI pack at exact `en.json` parity |
+| **shipped** | Live on ghosty.net and/or published as a standalone README, or a TUI pack at exact `en.json` parity |
 | **partial** | Shipped but intentionally incomplete; missing scope falls back to English and the partial status is visible |
 | **planned** | Explicitly prioritized for the next wave |
 | **deferred** | Acknowledged as wanted but not yet scheduled; needs layout QA, bridge support, or community champion |
@@ -185,7 +185,7 @@ carry an explicit `planned`/`partial`/`deferred` row in this matrix.
    in the `/config` and changelog commands. Keep the schema/round-trip invariant
    tied to `Locale::shipped()` so these surfaces cannot silently drift.
 4. Run `python3 scripts/check-tui-locale-parity.py` and
-   `cargo test -p codewhale-tui localization`.
+   `cargo test -p ghosty-tui localization`.
 5. If the pack must ship incomplete, declare it partial: keep it out of
    `shipped_complete()`, mark it in `is_partial_pack()`, and add it to
    `PARTIAL_PACKS` in `scripts/check-tui-locale-parity.py` with a tracking

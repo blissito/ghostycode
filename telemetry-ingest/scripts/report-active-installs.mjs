@@ -57,7 +57,7 @@ export function activeInstallsSql(days) {
   toDate(timestamp) AS day,
   count(DISTINCT index1) AS active_installs,
   sum(_sample_interval) AS sessions_started
-FROM codewhale_telemetry
+FROM ghosty_telemetry
 WHERE timestamp >= toStartOfDay(NOW()) - INTERVAL '${days - 1}' DAY
   AND blob1 = 'session_start'
 GROUP BY day
@@ -69,7 +69,7 @@ FORMAT JSON`;
 export function freshnessSql() {
   return `SELECT
   max(timestamp) AS newest_event
-FROM codewhale_telemetry
+FROM ghosty_telemetry
 FORMAT JSON`;
 }
 
@@ -150,7 +150,7 @@ export function trendSummary(rows, days, now = new Date()) {
 export function formatReport(rows, { days, now = new Date(), newestEvent = null } = {}) {
   const today = now.toISOString().slice(0, 10);
   const lines = [
-    "Codewhale observed active installs (UTC)",
+    "Ghosty observed active installs (UTC)",
     "day         active installs   sessions started",
   ];
   for (const row of rows) {

@@ -27,10 +27,10 @@ export interface RepoFacts {
 }
 
 export const FACTS: RepoFacts = {
-  "generatedAt": "2026-08-25T09:50:23.220Z",
+  "generatedAt": "2026-08-28T19:33:10.354Z",
   "sourceRevision": null,
   "sourceCommittedAt": null,
-  "version": "0.9.11",
+  "version": "0.0.15",
   "crates": [
     "agent",
     "app-server",
@@ -293,6 +293,6 @@ export const FACTS: RepoFacts = {
     "tag": "v0.9.11",
     "version": "0.9.11",
     "publishedAt": "2026-08-23T17:39:46Z",
-    "url": "https://github.com/Hmbown/CodeWhale/releases/tag/v0.9.11"
+    "url": "https://github.com/blissito/ghostycode/releases/tag/v0.9.11"
   }
 };

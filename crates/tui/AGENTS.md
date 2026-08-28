@@ -32,8 +32,8 @@ and do not require both full suites or workspace Clippy for an unrelated leaf
 change. These are available release/cross-cutting gates, not per-edit ritual:
 
 ```sh
-cargo test -p codewhale-tui --lib --locked
-cargo test -p codewhale-tui --tests --locked
+cargo test -p ghosty-tui --lib --locked
+cargo test -p ghosty-tui --tests --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 ```
 
@@ -42,7 +42,7 @@ Use both or the workspace gate only when the risk genuinely spans both.
 `scripts/dev-test.sh <area|path> [filter]` prints and runs the fastest
 targeted invocation for a source path (for example
 `scripts/dev-test.sh crates/tui/src/elapsed.rs`). It uses `cargo nextest
-run` when nextest is installed (`CODEWHALE_DEV_NEXTEST=0` forces libtest)
+run` when nextest is installed (`GHOSTY_DEV_NEXTEST=0` forces libtest)
 and applies `scripts/dev-cache.sh` so a new worktree gets an isolated
 Cargo build-dir. For PTY
 failures, reproduce the behavior directly before changing it. Script one input

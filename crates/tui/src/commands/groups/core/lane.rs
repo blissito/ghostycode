@@ -2,12 +2,12 @@
 //!
 //! A **Lane** is one running Workflow. This command does not reimplement Lane
 //! lifecycle: it resolves the verb through the shared control-plane contract
-//! in `codewhale-lane` and calls the same executor `codewhale lane …` calls,
+//! in `ghosty-lane` and calls the same executor `ghosty lane …` calls,
 //! so the slash surface, its hotbar action, and the CLI produce identical
 //! availability, target selection, outcomes, and receipts.
 
-use codewhale_lane::control::{execute_lane_control, operations_for_domain};
-use codewhale_lane::{ControlDomain, ControlOperation, ControlSurface};
+use ghosty_lane::control::{execute_lane_control, operations_for_domain};
+use ghosty_lane::{ControlDomain, ControlOperation, ControlSurface};
 
 use crate::commands::traits::{CommandInfo, RegisterCommand};
 use crate::localization::MessageId;
@@ -28,7 +28,7 @@ pub(in crate::commands) struct LaneCmd;
 fn split_verb(arg: Option<&str>) -> (&str, Option<&str>) {
     let Some(rest) = arg.map(str::trim).filter(|value| !value.is_empty()) else {
         // Bare `/lane` (and therefore a bare hotbar dispatch) lists, matching
-        // `codewhale lane list`. Listing is read-only, so a one-key hotbar
+        // `ghosty lane list`. Listing is read-only, so a one-key hotbar
         // press can never mutate durable state.
         return ("list", None);
     };
@@ -42,12 +42,12 @@ fn help_text() -> String {
     let mut out = String::from(
         "Usage: /lane [list|status <lane-id>|interrupt <lane-id>|restart <lane-id>|resume <lane-id>]\n\n\
          A Lane is one running Workflow; Runtime owns where/how it runs. These verbs act on the \
-         durable Lane registry under $CODEWHALE_HOME/lanes/, the same records `codewhale lane` \
+         durable Lane registry under $GHOSTY_HOME/lanes/, the same records `ghosty lane` \
          reads. Append @<lifecycle-seq> to a lane id to fence a write to the exact generation you \
          observed.\n\n\
          Reads here do not reconcile: folding a finished Runtime exit into the record means \
          probing tmux and taking a lock, which would block the composer. Statuses are as last \
-         recorded — `codewhale lane list` reconciles. Interrupt is submitted to an off-loop \
+         recorded — `ghosty lane list` reconciles. Interrupt is submitted to an off-loop \
          worker and answered immediately with a queued receipt and a ticket; the terminal \
          result (transitioned, no_change, or conflict) arrives under that ticket.\n",
     );
@@ -181,7 +181,7 @@ mod tests {
         assert!(help.contains("read"));
         assert!(help.contains("write"));
         assert!(
-            help.contains("$CODEWHALE_HOME/lanes/"),
+            help.contains("$GHOSTY_HOME/lanes/"),
             "help must say which durable store it reads"
         );
     }
@@ -244,7 +244,7 @@ mod tests {
         let descriptor = ControlOperation::LaneList.descriptor();
         assert_eq!(
             descriptor.authority,
-            codewhale_lane::ControlAuthority::Read,
+            ghosty_lane::ControlAuthority::Read,
             "a bare hotbar press must not be a write"
         );
         assert!(

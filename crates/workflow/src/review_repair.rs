@@ -2,7 +2,7 @@
 //!
 //! ## What this is not
 //!
-//! It is **not a fourth Mode.** Codewhale has exactly three Modes — Plan, Act,
+//! It is **not a fourth Mode.** Ghosty has exactly three Modes — Plan, Act,
 //! Operate — and exactly three permission postures — Ask, Auto-Review, Full
 //! Access. A review→repair loop is a *Workflow shape*: an ordering of existing
 //! roles over existing gates. It therefore lives here, beside [`crate::gates`],

@@ -86,7 +86,7 @@ fn tokens_report_uses_codex_oauth_route_context() {
     let mut app = create_test_app();
     app.api_provider = crate::config::ApiProvider::OpenaiCodex;
     app.set_model_selection("gpt-5.5".to_string());
-    app.active_route_limits = Some(codewhale_config::route::RouteLimits {
+    app.active_route_limits = Some(ghosty_config::route::RouteLimits {
         context_tokens: Some(272_000),
         input_tokens: None,
         output_tokens: None,

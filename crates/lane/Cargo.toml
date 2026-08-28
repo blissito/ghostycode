@@ -1,11 +1,11 @@
 [package]
-name = "codewhale-lane"
+name = "ghosty-lane"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Lane registry and Runtime backends for Codewhale workflow instances"
+description = "Lane registry and Runtime backends for Ghosty workflow instances"
 
 [lints]
 workspace = true
@@ -13,7 +13,7 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
-codewhale-config = { path = "../config", version = "0.9.11" }
+ghosty-config = { path = "../config", version = "0.0.15" }
 fd-lock = "4.0.4"
 serde.workspace = true
 serde_json.workspace = true

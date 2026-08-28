@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 use anyhow::Result;
 use bash_arity::BashArityDict;
-use codewhale_protocol::NetworkPolicyAmendment;
+use ghosty_protocol::NetworkPolicyAmendment;
 use serde::{Deserialize, Serialize};
 
 /// Priority layer for typed permission-rule selection. Higher ordinal = higher
@@ -921,7 +921,7 @@ pub fn normalize_workspace_scope(value: &str) -> Option<String> {
     let (root, components) = if let Some(path) = value.strip_prefix('/') {
         ("/".to_string(), path.to_string())
     } else if is_windows_absolute_path(&value) {
-        // Windows paths are case-insensitive in the environments CodeWhale
+        // Windows paths are case-insensitive in the environments GhostyCode
         // supports. Keep the POSIX branch case-sensitive so two distinct
         // repositories on a case-sensitive filesystem cannot share a grant.
         let value = value.to_ascii_lowercase();
@@ -2744,12 +2744,12 @@ mod tests {
     #[test]
     fn workspace_scope_normalizes_windows_separators_and_case() {
         let rule =
-            ToolAskRule::exec_shell("cargo test").into_exact_workspace_allow(r"C:\Repo\CodeWhale");
+            ToolAskRule::exec_shell("cargo test").into_exact_workspace_allow(r"C:\Repo\GhostyCode");
         let engine = engine_with_ask_rule(rule);
         let decision = engine
             .check(ExecPolicyContext {
                 command: "cargo test",
-                cwd: "c:/repo/codewhale",
+                cwd: "c:/repo/ghostycode",
                 tool: Some("exec_shell"),
                 path: None,
                 ask_for_approval: OnRequest,
@@ -2759,8 +2759,8 @@ mod tests {
 
         assert_eq!(decision.matched_action, Some(PermissionAction::Allow));
         assert_eq!(
-            normalize_workspace_scope(r"C:\Repo\CodeWhale"),
-            Some("c:/repo/codewhale".to_string())
+            normalize_workspace_scope(r"C:\Repo\GhostyCode"),
+            Some("c:/repo/ghostycode".to_string())
         );
         assert_eq!(normalize_workspace_scope("relative/repo"), None);
         assert_eq!(normalize_workspace_scope("/"), None);
@@ -2769,12 +2769,12 @@ mod tests {
     #[test]
     fn workspace_scope_preserves_posix_case_and_rejects_traversal() {
         assert_eq!(
-            normalize_workspace_scope("/Workspace/CodeWhale"),
-            Some("/Workspace/CodeWhale".to_string())
+            normalize_workspace_scope("/Workspace/GhostyCode"),
+            Some("/Workspace/GhostyCode".to_string())
         );
         assert_ne!(
-            normalize_workspace_scope("/Workspace/CodeWhale"),
-            normalize_workspace_scope("/workspace/codewhale")
+            normalize_workspace_scope("/Workspace/GhostyCode"),
+            normalize_workspace_scope("/workspace/ghosty")
         );
         assert_eq!(normalize_workspace_scope("/workspace/../other"), None);
     }

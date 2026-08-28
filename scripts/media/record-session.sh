@@ -27,14 +27,14 @@ command -v ffmpeg >/dev/null || die "ffmpeg is not installed (brew install ffmpe
 [[ -f "${tape}" ]] || die "missing tape: ${tape}"
 
 # Record the exact binary that was dogfooded, not whatever is first on PATH.
-binary="$(command -v codewhale || true)"
-[[ -n "${binary}" ]] || die "codewhale is not on PATH — run scripts/release/install-dogfood.sh first"
+binary="$(command -v ghosty || true)"
+[[ -n "${binary}" ]] || die "ghosty is not on PATH — run scripts/release/install-dogfood.sh first"
 
 version_line="$("${binary}" --version)"
 head_sha="$(git -C "${repo_root}" rev-parse HEAD)"
 short_sha="${head_sha:0:12}"
 if [[ "${version_line}" != *"${short_sha}"* ]]; then
-  die "installed codewhale is not this checkout.
+  die "installed ghosty is not this checkout.
   installed: ${version_line}
   HEAD:      ${short_sha}
   Recording a SHA that is not the release candidate makes the asset a lie about
@@ -63,13 +63,13 @@ fi
 
 # --- Sealed environment -----------------------------------------------------
 sealed="$(mktemp -d)"
-mkdir -p "${sealed}/.codewhale" "${demo_dir}" "${out_dir}"
+mkdir -p "${sealed}/.ghosty" "${demo_dir}" "${out_dir}"
 cleanup() { rm -rf "${sealed}"; }
 trap cleanup EXIT
 
 # Blue Stage dark, selected in the product rather than imitated by the
 # emulator palette (see the tape's note).
-cat > "${sealed}/.codewhale/config.toml" <<'TOML'
+cat > "${sealed}/.ghosty/config.toml" <<'TOML'
 theme = "Blue Stage"
 TOML
 
@@ -81,9 +81,9 @@ echo
 
 pushd "${demo_dir}" >/dev/null
 HOME="${sealed}" \
-CODEWHALE_HOME="${sealed}/.codewhale" \
-CODEWHALE_CONFIG_PATH="${sealed}/.codewhale/config.toml" \
-CODEWHALE_MCP_CONFIG="${sealed}/.codewhale/mcp.json" \
+GHOSTY_HOME="${sealed}/.ghosty" \
+GHOSTY_CONFIG_PATH="${sealed}/.ghosty/config.toml" \
+GHOSTY_MCP_CONFIG="${sealed}/.ghosty/mcp.json" \
   vhs "${tape}"
 popd >/dev/null
 
@@ -104,7 +104,7 @@ ffmpeg -loglevel error -y -i "${gif}" -frames:v 1 "${out_dir}/first-fleet-sessio
 cat > "${out_dir}/capture.json" <<JSON
 {
   "id": "first-fleet-session",
-  "issue": "https://github.com/Hmbown/CodeWhale/issues/4906",
+  "issue": "https://github.com/blissito/ghostycode/issues/4906",
   "recorded_from_commit": "${head_sha}",
   "version_line": "${version_line}",
   "tape": "docs/evidence/v092-first-fleet-session.tape",

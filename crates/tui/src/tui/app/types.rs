@@ -44,12 +44,12 @@ impl SettingSelection {
     }
 }
 
-/// The user-facing operating mode. Defined in codewhale-config; re-exported
+/// The user-facing operating mode. Defined in ghosty-config; re-exported
 /// here so `crate::tui::app::types::AppMode` keeps working.
-pub use codewhale_config::AppMode;
+pub use ghosty_config::AppMode;
 
 /// Localized, TUI-only presentation of [`AppMode`]. Kept out of
-/// codewhale-config so the mode type does not depend on the locale packs.
+/// ghosty-config so the mode type does not depend on the locale packs.
 pub trait AppModeUi {
     /// Localized short name for the mode picker (user-facing surface only).
     fn display_name_localized(self, locale: Locale) -> Cow<'static, str>;
@@ -354,7 +354,7 @@ impl ReasoningEffort {
         }
         // Ollama's current OpenAI-compatible Chat Completions contract
         // documents the complete none/low/medium/high/max ladder. Keep every
-        // real tier distinct for normal turns; only Codewhale-only synonyms
+        // real tier distinct for normal turns; only Ghosty-only synonyms
         // are folded onto the nearest documented spelling.
         if provider == ApiProvider::OllamaCloud {
             return match normalized {
@@ -717,7 +717,7 @@ pub struct TuiOptions {
 pub enum InitialInput {
     /// Pre-populate the composer and wait for the user to press Enter.
     ///
-    /// Used by `codewhale pr <N>` (#451) to drop the model into a session
+    /// Used by `ghosty pr <N>` (#451) to drop the model into a session
     /// with the PR context already typed so the user can edit before sending.
     Prefill(String),
     /// Pre-populate the composer, submit it once startup is ready, then keep
@@ -762,7 +762,7 @@ pub struct QueuedMessage {
 ///
 /// The marker travels with the queued message so a draft that waits behind an
 /// active turn keeps the same no-tools policy when it is eventually sent.
-pub(crate) const WORKFLOW_DRAFT_INSTRUCTION_PREFIX: &str = "[codewhale.workflow-draft.v1]";
+pub(crate) const WORKFLOW_DRAFT_INSTRUCTION_PREFIX: &str = "[ghosty.workflow-draft.v1]";
 
 /// How a freshly-typed user input should be sent.
 ///
@@ -975,7 +975,7 @@ pub enum AppAction {
     OpenSetupWizard,
     /// Open the constitution-first `/setup` wizard at a specific step.
     OpenSetupWizardAt {
-        step: codewhale_config::SetupStep,
+        step: ghosty_config::SetupStep,
     },
     /// Record that the bundled/default constitution should be used.
     UseBundledConstitution,

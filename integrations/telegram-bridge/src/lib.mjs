@@ -449,30 +449,30 @@ export function validateBridgeConfig(env, options = {}) {
     add(errors, "placeholder_value", "TELEGRAM_BOT_TOKEN still contains a placeholder value");
   }
 
-  const runtimeUrl = envFirst(env, "CODEWHALE_RUNTIME_URL", "DEEPSEEK_RUNTIME_URL") || "http://127.0.0.1:7878";
+  const runtimeUrl = envFirst(env, "GHOSTY_RUNTIME_URL", "DEEPSEEK_RUNTIME_URL") || "http://127.0.0.1:7878";
   try {
     const parsed = new URL(runtimeUrl);
     const localHosts = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      add(errors, "invalid_runtime_url", "CODEWHALE_RUNTIME_URL must use http or https");
+      add(errors, "invalid_runtime_url", "GHOSTY_RUNTIME_URL must use http or https");
     }
     if (!localHosts.has(parsed.hostname) && options.requireLocalRuntime !== false) {
-      add(errors, "remote_runtime_url", "CODEWHALE_RUNTIME_URL should point at localhost on a VM deployment");
+      add(errors, "remote_runtime_url", "GHOSTY_RUNTIME_URL should point at localhost on a VM deployment");
     }
   } catch {
-    add(errors, "invalid_runtime_url", "CODEWHALE_RUNTIME_URL is not a valid URL");
+    add(errors, "invalid_runtime_url", "GHOSTY_RUNTIME_URL is not a valid URL");
   }
 
-  const runtimeToken = envFirst(env, "CODEWHALE_RUNTIME_TOKEN", "DEEPSEEK_RUNTIME_TOKEN");
+  const runtimeToken = envFirst(env, "GHOSTY_RUNTIME_TOKEN", "DEEPSEEK_RUNTIME_TOKEN");
   if (!runtimeToken) {
-    add(errors, "missing_required", "CODEWHALE_RUNTIME_TOKEN is required");
+    add(errors, "missing_required", "GHOSTY_RUNTIME_TOKEN is required");
   } else if (isPlaceholderValue(runtimeToken)) {
-    add(errors, "placeholder_value", "CODEWHALE_RUNTIME_TOKEN still contains a placeholder value");
+    add(errors, "placeholder_value", "GHOSTY_RUNTIME_TOKEN still contains a placeholder value");
   }
 
-  const workspace = envFirst(env, "CODEWHALE_WORKSPACE", "DEEPSEEK_WORKSPACE");
+  const workspace = envFirst(env, "GHOSTY_WORKSPACE", "DEEPSEEK_WORKSPACE");
   if (workspace && !workspace.startsWith("/")) {
-    add(errors, "relative_workspace", "CODEWHALE_WORKSPACE must be an absolute path");
+    add(errors, "relative_workspace", "GHOSTY_WORKSPACE must be an absolute path");
   }
   if (
     workspace &&
@@ -480,7 +480,7 @@ export function validateBridgeConfig(env, options = {}) {
     workspace !== workspaceRoot &&
     !workspace.startsWith(`${workspaceRoot}/`)
   ) {
-    add(warnings, "workspace_root", `CODEWHALE_WORKSPACE is outside ${workspaceRoot}`);
+    add(warnings, "workspace_root", `GHOSTY_WORKSPACE is outside ${workspaceRoot}`);
   }
 
   const threadMapPath = envFirst(env, "TELEGRAM_THREAD_MAP_PATH");
@@ -491,11 +491,11 @@ export function validateBridgeConfig(env, options = {}) {
   const allowGroups = parseBool(env.TELEGRAM_ALLOW_GROUPS, false);
   const requirePrefix = parseBool(env.TELEGRAM_REQUIRE_PREFIX_IN_GROUP, true);
   const allowUnlisted = parseBool(
-    envFirst(env, "TELEGRAM_ALLOW_UNLISTED", "CODEWHALE_ALLOW_UNLISTED", "DEEPSEEK_ALLOW_UNLISTED"),
+    envFirst(env, "TELEGRAM_ALLOW_UNLISTED", "GHOSTY_ALLOW_UNLISTED", "DEEPSEEK_ALLOW_UNLISTED"),
     false
   );
   const allowlist = parseList(
-    envFirst(env, "TELEGRAM_CHAT_ALLOWLIST", "CODEWHALE_CHAT_ALLOWLIST", "DEEPSEEK_CHAT_ALLOWLIST")
+    envFirst(env, "TELEGRAM_CHAT_ALLOWLIST", "GHOSTY_CHAT_ALLOWLIST", "DEEPSEEK_CHAT_ALLOWLIST")
   );
 
   if (!allowlist.length && allowUnlisted) {
@@ -521,27 +521,27 @@ export function validateBridgeConfig(env, options = {}) {
   if (!Number.isFinite(pollTimeout) || pollTimeout < 1 || pollTimeout > 60) {
     add(errors, "invalid_poll_timeout", "TELEGRAM_POLL_TIMEOUT_SECONDS must be between 1 and 60");
   }
-  const turnTimeoutMs = Number(envFirst(env, "CODEWHALE_TURN_TIMEOUT_MS", "DEEPSEEK_TURN_TIMEOUT_MS") || 900000);
+  const turnTimeoutMs = Number(envFirst(env, "GHOSTY_TURN_TIMEOUT_MS", "DEEPSEEK_TURN_TIMEOUT_MS") || 900000);
   if (!Number.isFinite(turnTimeoutMs) || turnTimeoutMs < 1000) {
-    add(errors, "invalid_turn_timeout", "CODEWHALE_TURN_TIMEOUT_MS must be at least 1000");
+    add(errors, "invalid_turn_timeout", "GHOSTY_TURN_TIMEOUT_MS must be at least 1000");
   }
 
   if (runtimeEnv) {
-    const runtimeFileToken = envFirst(runtimeEnv, "CODEWHALE_RUNTIME_TOKEN", "DEEPSEEK_RUNTIME_TOKEN");
+    const runtimeFileToken = envFirst(runtimeEnv, "GHOSTY_RUNTIME_TOKEN", "DEEPSEEK_RUNTIME_TOKEN");
     if (!runtimeFileToken) {
-      add(errors, "missing_runtime_token", "runtime.env is missing CODEWHALE_RUNTIME_TOKEN");
+      add(errors, "missing_runtime_token", "runtime.env is missing GHOSTY_RUNTIME_TOKEN");
     } else if (isPlaceholderValue(runtimeFileToken)) {
-      add(errors, "placeholder_runtime_token", "runtime.env CODEWHALE_RUNTIME_TOKEN is still a placeholder");
+      add(errors, "placeholder_runtime_token", "runtime.env GHOSTY_RUNTIME_TOKEN is still a placeholder");
     } else if (runtimeToken && runtimeToken !== runtimeFileToken) {
       add(errors, "token_mismatch", "Runtime and bridge token values do not match");
     }
 
-    const provider = envFirst(runtimeEnv, "CODEWHALE_PROVIDER", "DEEPSEEK_PROVIDER");
+    const provider = envFirst(runtimeEnv, "GHOSTY_PROVIDER", "DEEPSEEK_PROVIDER");
     if (!provider) {
-      add(warnings, "missing_provider", "runtime.env does not set CODEWHALE_PROVIDER");
+      add(warnings, "missing_provider", "runtime.env does not set GHOSTY_PROVIDER");
     }
 
-    const runtimePort = Number(envFirst(runtimeEnv, "CODEWHALE_RUNTIME_PORT", "DEEPSEEK_RUNTIME_PORT") || 7878);
+    const runtimePort = Number(envFirst(runtimeEnv, "GHOSTY_RUNTIME_PORT", "DEEPSEEK_RUNTIME_PORT") || 7878);
     if (!Number.isInteger(runtimePort) || runtimePort <= 0 || runtimePort > 65535) {
       add(errors, "invalid_runtime_port", "runtime port must be a valid TCP port");
     }
@@ -566,7 +566,7 @@ export function formatValidationReport(result) {
 
 export function helpText() {
   return [
-    "CodeWhale Telegram bridge commands:",
+    "GhostyCode Telegram bridge commands:",
     "/menu - open tappable controls",
     "/help - show this help",
     "/status - runtime and workspace status",
@@ -579,6 +579,6 @@ export function helpText() {
     "/allow <approval_id> [remember] - approve a pending tool call",
     "/deny <approval_id> - deny a pending tool call",
     "",
-    "Anything else is sent as a CodeWhale prompt."
+    "Anything else is sent as a GhostyCode prompt."
   ].join("\n");
 }

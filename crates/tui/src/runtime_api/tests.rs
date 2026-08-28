@@ -42,11 +42,11 @@ fn runtime_session_fallback_retains_non_unicode_explicit_home_boundary() {
     let _lock = lock_test_env();
     let tmp = tempfile::tempdir().expect("temporary root");
     let home = tmp.path().join("home");
-    let explicit = tmp.path().join(std::ffi::OsString::from_vec(
-        b"codewhale-\xff-home".to_vec(),
-    ));
+    let explicit = tmp
+        .path()
+        .join(std::ffi::OsString::from_vec(b"ghosty-\xff-home".to_vec()));
     let _home = EnvVarGuard::set("HOME", &home);
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &explicit);
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &explicit);
 
     assert_eq!(fallback_sessions_dir(), explicit.join("sessions"));
 }
@@ -199,7 +199,7 @@ async fn http_and_web_server_thread_manager_installs_configured_workshop_byte_bu
 fn runtime_tui_settings_reject_legacy_modes_and_do_not_save_env_overlays() -> Result<()> {
     let _lock = lock_test_env();
     let tmp = tempfile::tempdir()?;
-    let settings_dir = tmp.path().join(".codewhale");
+    let settings_dir = tmp.path().join(".ghosty");
     fs::create_dir_all(&settings_dir)?;
     fs::write(
         settings_dir.join("settings.toml"),
@@ -332,9 +332,9 @@ fn workspace_status_reports_head_and_dirty_counts() -> Result<()> {
         &repo,
         &[
             "-c",
-            "user.name=CodeWhale Test",
+            "user.name=GhostyCode Test",
             "-c",
-            "user.email=codewhale@example.invalid",
+            "user.email=ghosty@example.invalid",
             "commit",
             "-m",
             "init",
@@ -719,7 +719,7 @@ fn runtime_auth_ignores_blank_configured_tokens() {
 }
 
 #[test]
-fn runtime_token_environment_prefers_the_codewhale_name() {
+fn runtime_token_environment_prefers_the_ghosty_name() {
     let environment = runtime_token_environment(&|name| match name {
         RUNTIME_TOKEN_ENV => Some(" canonical-token ".to_string()),
         LEGACY_RUNTIME_TOKEN_ENV => Some("legacy-token".to_string()),
@@ -780,12 +780,12 @@ fn url_query_component_percent_encodes_token() {
 fn token_from_cookie_header_decodes_percent_encoded_token() {
     assert_eq!(
         token_from_cookie_header(Some(
-            "theme=dark; codewhale_runtime_token=abc%20ABC%2B%2F%3F%3A%3D%26%25"
+            "theme=dark; ghosty_runtime_token=abc%20ABC%2B%2F%3F%3A%3D%26%25"
         )),
         Some("abc ABC+/?:=&%".to_string())
     );
     assert_eq!(
-        token_from_cookie_header(Some("codewhale_runtime_token=bad%ZZ")),
+        token_from_cookie_header(Some("ghosty_runtime_token=bad%ZZ")),
         None
     );
 }
@@ -867,7 +867,7 @@ async fn spawn_test_server_with_root_token_mobile_workspace(
 #[derive(Default)]
 struct TestServerOverrides {
     sub_agent_manager: Option<SharedSubAgentManager>,
-    fleet_codewhale_binary: Option<String>,
+    fleet_ghosty_binary: Option<String>,
     config: Option<Config>,
     config_path: Option<PathBuf>,
     config_profile: Option<String>,
@@ -883,7 +883,7 @@ async fn spawn_test_server_with_root_token_mobile_workspace_and_subagents(
     mobile_enabled: bool,
     workspace: PathBuf,
     sub_agent_manager: Option<SharedSubAgentManager>,
-    fleet_codewhale_binary: Option<String>,
+    fleet_ghosty_binary: Option<String>,
 ) -> Result<
     Option<(
         SocketAddr,
@@ -899,7 +899,7 @@ async fn spawn_test_server_with_root_token_mobile_workspace_and_subagents(
         workspace,
         TestServerOverrides {
             sub_agent_manager,
-            fleet_codewhale_binary,
+            fleet_ghosty_binary,
             ..TestServerOverrides::default()
         },
     )
@@ -996,9 +996,9 @@ async fn spawn_test_server_with_root_token_mobile_workspace_and_overrides(
         bind_port: addr.port(),
         mobile_enabled,
         web: overrides.web,
-        fleet_codewhale_binary: overrides
-            .fleet_codewhale_binary
-            .unwrap_or_else(configured_codewhale_binary),
+        fleet_ghosty_binary: overrides
+            .fleet_ghosty_binary
+            .unwrap_or_else(configured_ghosty_binary),
         compat_stream_test_hook: overrides.compat_stream_test_hook,
     };
     let app = build_router(state);
@@ -1033,7 +1033,7 @@ async fn spawn_test_server_with_config_path(
         tokio::task::JoinHandle<()>,
     )>,
 > {
-    let root = std::env::temp_dir().join(format!("codewhale-config-api-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-api-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let workspace = root.join("workspace");
     fs::create_dir_all(&root)?;
@@ -1061,7 +1061,7 @@ async fn spawn_test_server_with_config_path_and_profile(
         tokio::task::JoinHandle<()>,
     )>,
 > {
-    let root = std::env::temp_dir().join(format!("codewhale-config-api-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-api-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let workspace = root.join("workspace");
     fs::create_dir_all(&root)?;
@@ -1148,7 +1148,7 @@ async fn collect_sse_frames(
 fn write_fake_fleet_binary(root: &Path, marker: &Path) -> Result<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
 
-    let binary = root.join("fake-codewhale");
+    let binary = root.join("fake-ghosty");
     fs::write(
         &binary,
         format!(
@@ -1165,11 +1165,11 @@ fn write_fake_fleet_binary(root: &Path, marker: &Path) -> Result<PathBuf> {
 #[cfg(windows)]
 fn write_fake_fleet_binary(root: &Path, marker: &Path) -> Result<PathBuf> {
     // Exercise the same executable/Job Object path as a released Windows
-    // Codewhale binary. A `.cmd` fake introduces an extra `cmd.exe` wrapper
+    // Ghosty binary. A `.cmd` fake introduces an extra `cmd.exe` wrapper
     // whose lifetime can end before the Fleet host attaches its Job Object,
     // making the test race a process topology production does not use.
-    let source = root.join("fake-codewhale.rs");
-    let binary = root.join("fake-codewhale.exe");
+    let source = root.join("fake-ghosty.rs");
+    let binary = root.join("fake-ghosty.exe");
     let helper = format!(
         r##"fn main() {{
     std::fs::File::create({marker:?}).expect("create Fleet restart marker");
@@ -1183,7 +1183,7 @@ fn write_fake_fleet_binary(root: &Path, marker: &Path) -> Result<PathBuf> {
     let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     let output = std::process::Command::new(rustc)
         .arg("--edition=2024")
-        .arg("--crate-name=codewhale_fleet_test_helper")
+        .arg("--crate-name=ghosty_fleet_test_helper")
         .arg(&source)
         .arg("-o")
         .arg(&binary)
@@ -1297,7 +1297,7 @@ async fn health_and_tasks_endpoints_work() -> Result<()> {
         .json()
         .await?;
     assert_eq!(health["status"], "ok");
-    assert_eq!(health["service"], "codewhale-runtime-api");
+    assert_eq!(health["service"], "ghosty-runtime-api");
 
     let created: serde_json::Value = client
         .post(format!("http://{addr}/v1/tasks"))
@@ -1409,7 +1409,7 @@ async fn omitted_runtime_models_use_the_active_provider_default() -> Result<()> 
 #[cfg(unix)]
 #[tokio::test]
 async fn mcp_tools_endpoint_is_passive_until_connect_requested() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("codewhale-mcp-tools-api-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-mcp-tools-api-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     fs::create_dir_all(&root)?;
     let sentinel = root.join("mcp-spawned");
@@ -1517,20 +1517,20 @@ async fn runtime_token_guard_protects_v1_routes() -> Result<()> {
         .get(format!("http://{addr}/v1/threads/summary"))
         .header(
             header::COOKIE,
-            format!("codewhale_runtime_token={}", url_query_component(&token)),
+            format!("ghosty_runtime_token={}", url_query_component(&token)),
         )
         .send()
         .await?
         .error_for_status()?;
     assert_eq!(cookie_token.status(), StatusCode::OK);
 
-    let codewhale_header = client
+    let ghosty_header = client
         .get(format!("http://{addr}/v1/threads/summary"))
-        .header("x-codewhale-runtime-token", &token)
+        .header("x-ghosty-runtime-token", &token)
         .send()
         .await?
         .error_for_status()?;
-    assert_eq!(codewhale_header.status(), StatusCode::OK);
+    assert_eq!(ghosty_header.status(), StatusCode::OK);
 
     let deepseek_header = client
         .get(format!("http://{addr}/v1/threads/summary"))
@@ -1546,7 +1546,7 @@ async fn runtime_token_guard_protects_v1_routes() -> Result<()> {
 
 #[tokio::test]
 async fn web_bootstrap_sets_strict_cookie_once_and_preserves_v1_auth() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("codewhale-web-api-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-web-api-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let workspace = root.join("workspace");
     let token = "cwrt_runtime_secret_never_in_browser_storage".to_string();
@@ -1586,7 +1586,7 @@ async fn web_bootstrap_sets_strict_cookie_once_and_preserves_v1_auth() -> Result
     assert!(!page_body.contains(&nonce));
 
     let icon = client
-        .get(format!("http://{addr}/assets/codewhale-192.png"))
+        .get(format!("http://{addr}/assets/ghosty-192.png"))
         .send()
         .await?;
     assert_eq!(icon.status(), StatusCode::OK);
@@ -1600,14 +1600,14 @@ async fn web_bootstrap_sets_strict_cookie_once_and_preserves_v1_auth() -> Result
 
     let wrong = client
         .get(format!(
-            "http://{addr}/__codewhale/bootstrap/cwwb_00000000000000000000000000000000"
+            "http://{addr}/__ghosty/bootstrap/cwwb_00000000000000000000000000000000"
         ))
         .send()
         .await?;
     assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
 
     let exchange = client
-        .get(format!("http://{addr}/__codewhale/bootstrap/{nonce}"))
+        .get(format!("http://{addr}/__ghosty/bootstrap/{nonce}"))
         .send()
         .await?;
     assert_eq!(exchange.status(), StatusCode::SEE_OTHER);
@@ -1624,7 +1624,7 @@ async fn web_bootstrap_sets_strict_cookie_once_and_preserves_v1_auth() -> Result
         .and_then(|value| value.to_str().ok())
         .context("missing bootstrap Set-Cookie")?
         .to_string();
-    assert!(set_cookie.starts_with("codewhale_web_session=cwws_"));
+    assert!(set_cookie.starts_with("ghosty_web_session=cwws_"));
     assert!(set_cookie.ends_with("; HttpOnly; SameSite=Strict; Path=/"));
     assert!(!set_cookie.contains(&token));
 
@@ -1683,7 +1683,7 @@ async fn web_bootstrap_sets_strict_cookie_once_and_preserves_v1_auth() -> Result
     assert_eq!(bearer_post.status(), StatusCode::CREATED);
 
     let reused = client
-        .get(format!("http://{addr}/__codewhale/bootstrap/{nonce}"))
+        .get(format!("http://{addr}/__ghosty/bootstrap/{nonce}"))
         .send()
         .await?;
     assert_eq!(reused.status(), StatusCode::UNAUTHORIZED);
@@ -1703,9 +1703,9 @@ async fn web_assets_are_absent_outside_web_mode() -> Result<()> {
     let client = crate::tls::reqwest_client();
     for path in [
         "/",
-        "/assets/codewhale-web.css",
-        "/assets/codewhale-web.js",
-        "/assets/codewhale-192.png",
+        "/assets/ghosty-web.css",
+        "/assets/ghosty-web.js",
+        "/assets/ghosty-192.png",
     ] {
         let response = client.get(format!("http://{addr}{path}")).send().await?;
         assert_eq!(response.status(), StatusCode::NOT_FOUND, "path={path}");
@@ -1729,9 +1729,9 @@ async fn thread_summary_includes_workspace_branch_metadata() -> Result<()> {
         &repo,
         &[
             "-c",
-            "user.name=CodeWhale Test",
+            "user.name=GhostyCode Test",
             "-c",
-            "user.email=codewhale@example.invalid",
+            "user.email=ghosty@example.invalid",
             "commit",
             "-m",
             "init",
@@ -1960,7 +1960,7 @@ fn test_fleet_route_config() -> crate::config::Config {
 
 #[tokio::test]
 async fn fleet_status_runtime_api_exposes_state_and_actions() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("codewhale-fleet-api-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-fleet-api-{}", Uuid::new_v4()));
     let workspace = root.join("workspace");
     fs::create_dir_all(&workspace)?;
     let sub_agent_manager = runtime_api_sub_agent_manager(&workspace, 2);
@@ -1968,13 +1968,13 @@ async fn fleet_status_runtime_api_exposes_state_and_actions() -> Result<()> {
         .with_sub_agent_manager(sub_agent_manager.clone())
         .with_session_model(DEFAULT_TEXT_MODEL)
         .with_route_config(test_fleet_route_config());
-    let task = codewhale_protocol::fleet::FleetTaskSpec {
+    let task = ghosty_protocol::fleet::FleetTaskSpec {
         id: "task-a".to_string(),
         name: "Task A".to_string(),
         description: None,
         objective: Some("Inspect fleet status through Runtime API".to_string()),
         instructions: "Stay running for inspection.".to_string(),
-        worker: Some(codewhale_protocol::fleet::FleetTaskWorkerProfile {
+        worker: Some(ghosty_protocol::fleet::FleetTaskWorkerProfile {
             agent_profile: None,
             role: Some("reviewer".to_string()),
             loadout: None,
@@ -2008,7 +2008,7 @@ async fn fleet_status_runtime_api_exposes_state_and_actions() -> Result<()> {
         1,
     )?;
     let restarted_marker = root.join("restarted-worker-ran");
-    let fake_codewhale = write_fake_fleet_binary(&root, &restarted_marker)?;
+    let fake_ghosty = write_fake_fleet_binary(&root, &restarted_marker)?;
     let worker_id = report.worker_ids[0].clone();
     let sessions_dir = root.join("sessions");
     let Some((addr, _runtime_threads, handle)) =
@@ -2019,7 +2019,7 @@ async fn fleet_status_runtime_api_exposes_state_and_actions() -> Result<()> {
             false,
             workspace,
             Some(sub_agent_manager),
-            Some(fake_codewhale.display().to_string()),
+            Some(fake_ghosty.display().to_string()),
         )
         .await?
     else {
@@ -2243,9 +2243,9 @@ async fn agent_runs_runtime_api_exposes_persisted_worker_receipts() -> Result<()
     use crate::worker_profile::{ModelRoute, ToolScope, WorkerRuntimeProfile};
     use std::collections::VecDeque;
 
-    let root = std::env::temp_dir().join(format!("codewhale-agent-runs-api-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-agent-runs-api-{}", Uuid::new_v4()));
     let workspace = root.join("workspace");
-    fs::create_dir_all(workspace.join(".codewhale/state"))?;
+    fs::create_dir_all(workspace.join(".ghosty/state"))?;
 
     let record = AgentWorkerRecord {
         spec: AgentWorkerSpec {
@@ -2347,7 +2347,7 @@ async fn agent_runs_runtime_api_exposes_persisted_worker_receipts() -> Result<()
         "workers": [record],
     });
     fs::write(
-        workspace.join(".codewhale/state/subagents.v1.json"),
+        workspace.join(".ghosty/state/subagents.v1.json"),
         serde_json::to_vec_pretty(&state_payload)?,
     )?;
 
@@ -4090,7 +4090,7 @@ async fn session_resume_thread_returns_404_for_missing_session() -> Result<()> {
 #[tokio::test]
 async fn session_resume_thread_returns_400_when_saved_custom_provider_was_removed() -> Result<()> {
     let root = std::env::temp_dir().join(format!(
-        "codewhale-session-removed-provider-{}",
+        "ghosty-session-removed-provider-{}",
         Uuid::new_v4()
     ));
     let sessions_dir = root.join("sessions");
@@ -4735,7 +4735,7 @@ fn snapshots_endpoint_lists_workspace_snapshots() -> Result<()> {
 async fn spawn_server_with_saved_sessions(
     sessions: &[(&str, &str, bool)],
 ) -> Result<Option<(SocketAddr, PathBuf, tokio::task::JoinHandle<()>)>> {
-    let root = std::env::temp_dir().join(format!("codewhale-session-routes-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-session-routes-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let workspace = root.join("workspace");
     fs::create_dir_all(&workspace)?;
@@ -5743,14 +5743,14 @@ async fn runtime_info_reports_bind_state() -> Result<()> {
         .error_for_status()?
         .json()
         .await?;
-    assert_eq!(info["service"], "codewhale-runtime-api");
+    assert_eq!(info["service"], "ghosty-runtime-api");
     assert_eq!(info["runtime_api_version"], "1.0");
-    assert_eq!(info["codewhale_version"], info["version"]);
-    let commit = info["codewhale_commit"]
+    assert_eq!(info["ghosty_version"], info["version"]);
+    let commit = info["ghosty_commit"]
         .as_str()
         .expect("runtime build commit must be a string");
     // Since #5245 the commit is env-stamped only: a stamped build (CI /
-    // release / a `CODEWHALE_BUILD_SHA=…` dogfood build) reports a full 40-hex
+    // release / a `GHOSTY_BUILD_SHA=…` dogfood build) reports a full 40-hex
     // sha; an unstamped local build honestly reports "unknown" rather than
     // reading the checkout. Both are valid provenance — a fabricated sha
     // would be the bug.
@@ -5777,7 +5777,7 @@ async fn runtime_info_reports_bind_state() -> Result<()> {
     assert_eq!(info["capabilities"]["worker_runtime"], true);
     assert_eq!(info["account"]["schema_version"], 1);
     assert_eq!(info["account"]["state"], "signed_out");
-    assert_eq!(info["account"]["api_base"], "https://api.codewhale.net");
+    assert_eq!(info["account"]["api_base"], "https://api.ghosty.net");
     assert_eq!(info["account"]["scopes"], json!([]));
     assert!(info["account"].get("access_token").is_none());
     assert!(info["account"].get("refresh_token").is_none());
@@ -5790,15 +5790,15 @@ async fn runtime_info_reports_bind_state() -> Result<()> {
 
 #[test]
 fn unauthenticated_runtime_info_redacts_secure_account_identity_without_loading_it() {
-    use codewhale_secrets::account::{AccountSessionState, RuntimeAccountInfo};
+    use ghosty_secrets::account::{AccountSessionState, RuntimeAccountInfo};
 
     let loaded = std::cell::Cell::new(false);
-    let info = runtime_account_info_for_request(false, "https://api.codewhale.net", || {
+    let info = runtime_account_info_for_request(false, "https://api.ghosty.net", || {
         loaded.set(true);
         RuntimeAccountInfo {
             schema_version: 1,
             state: AccountSessionState::Authenticated,
-            api_base: "https://api.codewhale.net".to_string(),
+            api_base: "https://api.ghosty.net".to_string(),
             account_id: Some("acct-private".to_string()),
             session_id: Some("session-private".to_string()),
             scopes: vec!["identity:read".to_string()],
@@ -5819,8 +5819,8 @@ fn unauthenticated_runtime_info_redacts_secure_account_identity_without_loading_
 #[test]
 fn runtime_account_api_origin_rejects_credentials_paths_and_non_loopback_http() {
     assert_eq!(
-        normalize_runtime_account_api_base("https://api.codewhale.net/"),
-        Some("https://api.codewhale.net".to_string())
+        normalize_runtime_account_api_base("https://api.ghosty.net/"),
+        Some("https://api.ghosty.net".to_string())
     );
     assert_eq!(
         normalize_runtime_account_api_base("http://127.0.0.1:8787"),
@@ -5830,7 +5830,7 @@ fn runtime_account_api_origin_rejects_credentials_paths_and_non_loopback_http() 
         "https://user:secret@example.test",
         "https://example.test/account",
         "https://example.test?token=secret",
-        "http://api.codewhale.net",
+        "http://api.ghosty.net",
     ] {
         assert_eq!(
             normalize_runtime_account_api_base(invalid),
@@ -6035,7 +6035,7 @@ async fn mobile_page_is_available_only_when_enabled() -> Result<()> {
         .await?
         .error_for_status()?;
     let html = enabled.text().await?;
-    assert!(html.contains("Codewhale Mobile"));
+    assert!(html.contains("Ghosty Mobile"));
     assert!(html.contains("/v1/approvals/"));
     assert!(html.contains("MAX_VISIBLE_EVENTS = 100"));
     assert!(html.contains("replay_limit="));
@@ -6064,7 +6064,7 @@ async fn mobile_page_serves_shell_when_auth_enabled() -> Result<()> {
         .await?
         .error_for_status()?;
     let html = shell.text().await?;
-    assert!(html.contains("Codewhale Mobile"));
+    assert!(html.contains("Ghosty Mobile"));
     assert!(html.contains("TOKEN_COOKIE"));
 
     let bearer = client
@@ -6073,7 +6073,7 @@ async fn mobile_page_serves_shell_when_auth_enabled() -> Result<()> {
         .send()
         .await?
         .error_for_status()?;
-    assert!(bearer.text().await?.contains("Codewhale Mobile"));
+    assert!(bearer.text().await?.contains("Ghosty Mobile"));
 
     handle.abort();
     Ok(())
@@ -6096,7 +6096,7 @@ async fn mobile_insecure_mode_allows_page_and_v1_routes_without_token() -> Resul
         .send()
         .await?
         .error_for_status()?;
-    assert!(page.text().await?.contains("Codewhale Mobile"));
+    assert!(page.text().await?.contains("Ghosty Mobile"));
 
     let summary = client
         .get(format!("http://{addr}/v1/threads/summary"))
@@ -6679,7 +6679,7 @@ async fn skills_endpoint_exposes_safe_plugin_provenance_and_shared_toggle() -> R
     let plugin_config = crate::plugins::discovery::DiscoveryConfig {
         workspace: workspace.clone(),
         user_plugins_dir: tmp.path().join("plugins"),
-        workspace_plugins_dir: workspace.join(".codewhale/plugins"),
+        workspace_plugins_dir: workspace.join(".ghosty/plugins"),
         builtin_plugin_dirs: Vec::new(),
         state_path: tmp.path().join("plugin-state/state.json"),
     };
@@ -6805,40 +6805,40 @@ fn resolve_skills_dir_finds_workspace_local_skills_fallback() {
 }
 
 #[test]
-fn resolve_skills_dir_respects_codewhale_only_scan() {
+fn resolve_skills_dir_respects_ghosty_only_scan() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let workspace = tmp.path();
     let agents_skills = workspace.join(".agents").join("skills");
-    let codewhale_skills = workspace.join(".codewhale").join("skills");
+    let ghosty_skills = workspace.join(".ghosty").join("skills");
     fs::create_dir_all(&agents_skills).expect("create agents skills dir");
-    fs::create_dir_all(&codewhale_skills).expect("create codewhale skills dir");
+    fs::create_dir_all(&ghosty_skills).expect("create ghosty skills dir");
 
     let config = Config {
         skills: Some(crate::config::SkillsConfig {
-            scan_codewhale_only: Some(true),
+            scan_ghosty_only: Some(true),
             ..Default::default()
         }),
         ..Default::default()
     };
     let resolved = resolve_skills_dir(&config, workspace);
 
-    let expected = fs::canonicalize(&codewhale_skills).expect("canonical codewhale skills");
+    let expected = fs::canonicalize(&ghosty_skills).expect("canonical ghosty skills");
     assert_eq!(resolved, expected);
 }
 
 #[test]
-fn resolve_skills_dir_preserves_explicit_dir_in_codewhale_only_scan() {
+fn resolve_skills_dir_preserves_explicit_dir_in_ghosty_only_scan() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let workspace = tmp.path().join("workspace");
-    let codewhale_skills = workspace.join(".codewhale").join("skills");
+    let ghosty_skills = workspace.join(".ghosty").join("skills");
     let configured_skills = tmp.path().join("configured-skills");
-    fs::create_dir_all(&codewhale_skills).expect("create codewhale skills dir");
+    fs::create_dir_all(&ghosty_skills).expect("create ghosty skills dir");
     fs::create_dir_all(&configured_skills).expect("create configured skills dir");
 
     let config = Config {
         skills_dir: Some(configured_skills.to_string_lossy().into_owned()),
         skills: Some(crate::config::SkillsConfig {
-            scan_codewhale_only: Some(true),
+            scan_ghosty_only: Some(true),
             ..Default::default()
         }),
         ..Default::default()
@@ -6964,7 +6964,7 @@ fn resolve_skills_dir_rejects_symlink_escaping_workspace() {
 
 #[cfg(unix)]
 #[test]
-fn resolve_skills_dir_rejects_codewhale_only_symlink_escaping_workspace() {
+fn resolve_skills_dir_rejects_ghosty_only_symlink_escaping_workspace() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let _env_lock = crate::test_support::lock_test_env();
     let _home = crate::test_support::EnvVarGuard::set("HOME", tmp.path());
@@ -6974,14 +6974,14 @@ fn resolve_skills_dir_rejects_codewhale_only_symlink_escaping_workspace() {
     fs::create_dir_all(&workspace_root).expect("create workspace");
     fs::create_dir_all(&escape_target).expect("create escape target");
 
-    let dotcodewhale = workspace_root.join(".codewhale");
-    fs::create_dir_all(&dotcodewhale).expect("create .codewhale");
-    let bad_link = dotcodewhale.join("skills");
+    let dotghosty = workspace_root.join(".ghosty");
+    fs::create_dir_all(&dotghosty).expect("create .ghosty");
+    let bad_link = dotghosty.join("skills");
     std::os::unix::fs::symlink(&escape_target, &bad_link).expect("symlink");
 
     let config = Config {
         skills: Some(crate::config::SkillsConfig {
-            scan_codewhale_only: Some(true),
+            scan_ghosty_only: Some(true),
             ..Default::default()
         }),
         ..Default::default()
@@ -6991,12 +6991,12 @@ fn resolve_skills_dir_rejects_codewhale_only_symlink_escaping_workspace() {
     let canon_escape = fs::canonicalize(&escape_target).expect("canon escape");
     assert_ne!(
         resolved, canon_escape,
-        "CodeWhale-only symlink escaping workspace must not be resolved as skills dir"
+        "GhostyCode-only symlink escaping workspace must not be resolved as skills dir"
     );
     assert_eq!(
         resolved,
         config.skills_dir(),
-        "with no valid in-workspace CodeWhale skills dir, resolution should fall back to config"
+        "with no valid in-workspace GhostyCode skills dir, resolution should fall back to config"
     );
 }
 
@@ -7033,7 +7033,7 @@ async fn post_set_config(
 
 #[tokio::test]
 async fn set_config_rejects_unknown_key_with_bad_request() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("codewhale-config-unknown-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-unknown-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let Some((addr, _runtime_threads, handle)) =
         spawn_test_server_with_root(root, sessions_dir).await?
@@ -7065,7 +7065,7 @@ async fn set_config_rejects_unknown_key_with_bad_request() -> Result<()> {
 async fn set_config_validates_max_history_input() -> Result<()> {
     // Fix #4: invalid max_history input must return 400 instead of silently
     // falling back to a default value.
-    let root = std::env::temp_dir().join(format!("codewhale-config-maxhist-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-maxhist-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let Some((addr, _runtime_threads, handle)) =
         spawn_test_server_with_root(root, sessions_dir).await?
@@ -7098,7 +7098,7 @@ async fn set_config_validates_max_history_input() -> Result<()> {
 async fn set_config_validates_subagents_enabled_input() -> Result<()> {
     // Fix #1: subagents_enabled must validate input and reject non-boolean
     // values with a descriptive 400 error.
-    let root = std::env::temp_dir().join(format!("codewhale-config-subenabled-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-subenabled-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let Some((addr, _runtime_threads, handle)) =
         spawn_test_server_with_root(root, sessions_dir).await?
@@ -7130,7 +7130,7 @@ async fn set_config_validates_subagents_enabled_input() -> Result<()> {
 async fn set_config_validates_subagents_max_depth_input() -> Result<()> {
     // Fix #1: subagents_max_depth must validate input and reject non-integer
     // values with a descriptive 400 error.
-    let root = std::env::temp_dir().join(format!("codewhale-config-subdepth-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-subdepth-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let Some((addr, _runtime_threads, handle)) =
         spawn_test_server_with_root(root, sessions_dir).await?
@@ -7154,8 +7154,7 @@ async fn set_config_validates_subagents_max_depth_input() -> Result<()> {
 async fn set_config_with_config_path_writes_to_specified_file() -> Result<()> {
     // Fix #2: when the server is started with --config, set_config must
     // persist to that specific file rather than the default discovery path.
-    let root =
-        std::env::temp_dir().join(format!("codewhale-config-path-persist-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-path-persist-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "# initial\n")?;
@@ -7169,7 +7168,7 @@ async fn set_config_with_config_path_writes_to_specified_file() -> Result<()> {
 
     // Persist a subagents_max_depth value above the ceiling to also verify
     // clamping (Fix #1).
-    let over_ceiling = u64::from(codewhale_config::MAX_SPAWN_DEPTH_CEILING) + 10;
+    let over_ceiling = u64::from(ghosty_config::MAX_SPAWN_DEPTH_CEILING) + 10;
     let (status, body) = post_set_config(
         &client,
         &addr,
@@ -7198,7 +7197,7 @@ async fn set_config_with_config_path_writes_to_specified_file() -> Result<()> {
     // The value should be clamped to MAX_SPAWN_DEPTH_CEILING.
     let expected = format!(
         "max_depth = {}",
-        u64::from(codewhale_config::MAX_SPAWN_DEPTH_CEILING)
+        u64::from(ghosty_config::MAX_SPAWN_DEPTH_CEILING)
     );
     assert!(
         contents.contains(&expected),
@@ -7221,7 +7220,7 @@ async fn set_config_with_config_path_writes_to_specified_file() -> Result<()> {
 #[tokio::test]
 async fn reload_config_endpoint_returns_success() -> Result<()> {
     // Basic smoke test that /v1/config/reload returns 200 with a message.
-    let root = std::env::temp_dir().join(format!("codewhale-config-reload-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-reload-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let Some((addr, _runtime_threads, handle)) =
         spawn_test_server_with_root(root, sessions_dir).await?
@@ -7292,10 +7291,8 @@ async fn get_provider_models(
 
 #[tokio::test]
 async fn get_config_returns_active_provider_model() -> Result<()> {
-    let root = std::env::temp_dir().join(format!(
-        "codewhale-config-active-provider-{}",
-        Uuid::new_v4()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("ghosty-config-active-provider-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -7328,7 +7325,7 @@ async fn get_config_returns_active_provider_model() -> Result<()> {
 #[tokio::test]
 async fn api_surfaces_only_configured_model_for_custom_provider_route() -> Result<()> {
     let root = std::env::temp_dir().join(format!(
-        "codewhale-config-custom-provider-model-{}",
+        "ghosty-config-custom-provider-model-{}",
         Uuid::new_v4()
     ));
     fs::create_dir_all(&root)?;
@@ -7390,7 +7387,7 @@ async fn api_surfaces_only_configured_model_for_custom_provider_route() -> Resul
 #[tokio::test]
 async fn api_surfaces_only_active_model_when_runtime_route_passes_ids_through() -> Result<()> {
     let root = std::env::temp_dir().join(format!(
-        "codewhale-config-runtime-pass-through-{}",
+        "ghosty-config-runtime-pass-through-{}",
         Uuid::new_v4()
     ));
     fs::create_dir_all(&root)?;
@@ -7440,7 +7437,7 @@ async fn api_surfaces_only_active_model_when_runtime_route_passes_ids_through() 
 async fn provider_models_expose_exact_image_input_facts_and_thread_selection_stays_local()
 -> Result<()> {
     let root = std::env::temp_dir().join(format!(
-        "codewhale-provider-model-capabilities-{}",
+        "ghosty-provider-model-capabilities-{}",
         Uuid::new_v4()
     ));
     fs::create_dir_all(&root)?;
@@ -7553,7 +7550,7 @@ fn provider_catalog_keeps_official_deepseek_facts_but_not_custom_proxy_claims() 
             ApiProvider::Deepseek,
             "deepseek-v4-flash-vision-exp",
         ),
-        codewhale_config::route::CapabilityState::Unknown,
+        ghosty_config::route::CapabilityState::Unknown,
         "same-name custom proxy must not surface first-party vision capability as verified"
     );
 }
@@ -7585,9 +7582,9 @@ async fn provider_catalog_reports_exact_named_custom_credential_state_without_se
 {
     let _env_lock = lock_test_env();
     let _key_source = EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-    let _cli_key = EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+    let _cli_key = EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
     let root = std::env::temp_dir().join(format!(
-        "codewhale-provider-credential-state-{}",
+        "ghosty-provider-credential-state-{}",
         Uuid::new_v4()
     ));
     fs::create_dir_all(&root)?;
@@ -7603,7 +7600,7 @@ kind = "openai-compatible"
 base_url = "https://secret-route.example.test/tenant/private/v1"
 model = "private-model"
 api_key = "sk-provider-fixture-do-not-leak"
-api_key_env = "CODEWHALE_PROVIDER_FIXTURE_ENV"
+api_key_env = "GHOSTY_PROVIDER_FIXTURE_ENV"
 "#,
         ),
         (
@@ -7679,7 +7676,7 @@ model = "local-model"
         let serialized = serde_json::to_string(&providers)?;
         for forbidden in [
             "sk-provider-fixture-do-not-leak",
-            "CODEWHALE_PROVIDER_FIXTURE_ENV",
+            "GHOSTY_PROVIDER_FIXTURE_ENV",
             "secret-route.example.test",
             "missing-route.example.test",
             "127.0.0.1:18190",
@@ -7702,10 +7699,8 @@ model = "local-model"
 
 #[tokio::test]
 async fn provider_catalog_preserves_named_custom_identity_for_new_threads() -> Result<()> {
-    let root = std::env::temp_dir().join(format!(
-        "codewhale-provider-named-custom-{}",
-        Uuid::new_v4()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("ghosty-provider-named-custom-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -7772,8 +7767,7 @@ async fn reload_config_reads_from_config_path_and_updates_in_memory_state() -> R
     // If Fix #2 is reverted (reload uses Config::load(None, None) instead of
     // state.config_path), the reload will read an empty/default config and
     // the persisted value will NOT appear in GET /v1/config → test fails.
-    let root =
-        std::env::temp_dir().join(format!("codewhale-config-reload-path-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-reload-path-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "# initial\n")?;
@@ -7800,7 +7794,7 @@ async fn reload_config_reads_from_config_path_and_updates_in_memory_state() -> R
         .expect("subagents_max_depth should be a number");
     assert_eq!(
         initial_depth,
-        u64::from(codewhale_config::DEFAULT_SPAWN_DEPTH),
+        u64::from(ghosty_config::DEFAULT_SPAWN_DEPTH),
         "initial subagents_max_depth should be DEFAULT_SPAWN_DEPTH"
     );
 
@@ -7899,7 +7893,7 @@ async fn switch_provider_without_model_arg_preserves_user_per_provider_model() -
     // touch the model key when no model arg is provided — mirroring the
     // TUI's `/provider volcengine` (model: None) flow in
     // `commands/groups/core/provider.rs` + `tui/ui.rs::switch_provider`.
-    let root = std::env::temp_dir().join(format!("codewhale-switch-no-model-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-switch-no-model-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -7972,7 +7966,7 @@ async fn switch_provider_with_explicit_model_arg_persists_model() -> Result<()> 
     // glm-2.5` or a model-picker selection), the switch endpoint MUST
     // persist that model — mirroring `switch_provider`'s
     // `if model_override.is_some()` branch (ui.rs:9400-9405).
-    let root = std::env::temp_dir().join(format!("codewhale-switch-with-model-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-switch-with-model-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -8022,7 +8016,7 @@ model = "glm-2"
 
 #[tokio::test]
 async fn switch_provider_rejects_unknown_provider_id() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("codewhale-switch-unknown-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-switch-unknown-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "# empty\n")?;
@@ -8055,7 +8049,7 @@ async fn switch_provider_rejects_unknown_provider_id() -> Result<()> {
 async fn switch_provider_rejects_legacy_deepseek_cn_alias() -> Result<()> {
     // The legacy `deepseek-cn` alias has no ProviderKind metadata; the
     // GUI must use `deepseek` instead. Same guard as list_provider_models.
-    let root = std::env::temp_dir().join(format!("codewhale-switch-cn-alias-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-switch-cn-alias-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "# empty\n")?;
@@ -8086,10 +8080,8 @@ async fn switch_provider_with_deepseek_and_explicit_model_updates_default_text_m
     // endpoint must persist `default_text_model` (the DeepSeek-specific
     // root key) in addition to the provider change, mirroring
     // `switch_provider` in ui.rs which pins `default_model` for DeepSeek.
-    let root = std::env::temp_dir().join(format!(
-        "codewhale-switch-deepseek-model-{}",
-        Uuid::new_v4()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("ghosty-switch-deepseek-model-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -8147,8 +8139,7 @@ async fn switch_provider_empty_model_string_treated_as_no_override() -> Result<(
     // An empty string model (`{ "model": "" }`) must be treated the same
     // as no model at all — the endpoint should NOT persist a model key,
     // matching the TUI's behavior where a blank model arg is ignored.
-    let root =
-        std::env::temp_dir().join(format!("codewhale-switch-empty-model-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-switch-empty-model-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -8199,8 +8190,7 @@ model = "glm-2"
 async fn switch_provider_persists_provider_key_on_disk() -> Result<()> {
     // Verify that the root `provider = "..."` key is correctly written to
     // the config file on disk, not just in the response body.
-    let root =
-        std::env::temp_dir().join(format!("codewhale-switch-provider-disk-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-switch-provider-disk-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -8238,10 +8228,8 @@ model = "glm-2"
 
 #[tokio::test]
 async fn zai_model_update_is_provider_scoped_and_preserves_deepseek_fallback() -> Result<()> {
-    let root = std::env::temp_dir().join(format!(
-        "codewhale-config-zai-model-scope-{}",
-        Uuid::new_v4()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("ghosty-config-zai-model-scope-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -8308,10 +8296,8 @@ model = "GLM-5.2"
 
 #[tokio::test]
 async fn reload_config_preserves_profile_selected_named_custom_route() -> Result<()> {
-    let root = std::env::temp_dir().join(format!(
-        "codewhale-config-reload-profile-{}",
-        Uuid::new_v4()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("ghosty-config-reload-profile-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -8367,8 +8353,7 @@ async fn reload_config_refreshes_mcp_config_path() -> Result<()> {
     // this test would fail because the old field wouldn't update. Since we
     // removed the stale field and read directly from config, this test also
     // validates that architectural decision.
-    let root =
-        std::env::temp_dir().join(format!("codewhale-config-mcp-refresh-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-mcp-refresh-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "# initial\n")?;
@@ -8434,7 +8419,7 @@ async fn set_config_with_persist_false_does_not_write_to_disk() -> Result<()> {
     // Verify the persist:false branch: response reports persisted:false and
     // the config file on disk is NOT modified. This is the "dry run" path
     // the GUI can use to validate input without committing changes.
-    let root = std::env::temp_dir().join(format!("codewhale-config-nopersist-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-nopersist-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     let initial_contents = "# initial empty config\n";
@@ -8485,8 +8470,7 @@ async fn set_config_subagents_max_depth_below_ceiling_not_clamped() -> Result<()
     // Verify that values at and below the ceiling pass through unchanged.
     // The existing clamping test only verifies over-ceiling clamping; this
     // test ensures legitimate values are not accidentally modified.
-    let root =
-        std::env::temp_dir().join(format!("codewhale-config-depth-noclamp-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-depth-noclamp-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "# initial\n")?;
@@ -8499,7 +8483,7 @@ async fn set_config_subagents_max_depth_below_ceiling_not_clamped() -> Result<()
     let client = crate::tls::reqwest_client();
 
     // Test a value at the ceiling (should not be clamped).
-    let ceiling = u64::from(codewhale_config::MAX_SPAWN_DEPTH_CEILING);
+    let ceiling = u64::from(ghosty_config::MAX_SPAWN_DEPTH_CEILING);
     let (status, body) = post_set_config(
         &client,
         &addr,
@@ -8543,7 +8527,7 @@ async fn set_config_subagents_enabled_false_persists() -> Result<()> {
     // Verify that subagents_enabled=false is properly persisted. The
     // existing test only verifies the true branch; this covers the false
     // branch to ensure both boolean values round-trip correctly.
-    let root = std::env::temp_dir().join(format!("codewhale-config-subfalse-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-subfalse-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "[subagents]\nenabled = true\n")?;
@@ -8577,7 +8561,7 @@ async fn reload_config_with_malformed_file_returns_error() -> Result<()> {
     // Verify error handling: if the config file contains invalid TOML,
     // reload should return 500 instead of crashing or silently succeeding.
     // This catches regressions where the map_err is accidentally removed.
-    let root = std::env::temp_dir().join(format!("codewhale-config-malformed-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-malformed-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "# initial\n")?;
@@ -8619,10 +8603,8 @@ async fn reload_config_with_malformed_file_returns_error() -> Result<()> {
 
 #[tokio::test]
 async fn set_config_model_follows_persisted_provider_before_reload() -> Result<()> {
-    let root = std::env::temp_dir().join(format!(
-        "codewhale-config-provider-model-{}",
-        Uuid::new_v4()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("ghosty-config-provider-model-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(
@@ -8688,7 +8670,7 @@ async fn reload_config_applies_multiple_persisted_keys() -> Result<()> {
     // reload picks up ALL changes. This catches regressions where reload
     // only applies the last-written key or where set_config overwrites
     // prior keys unexpectedly.
-    let root = std::env::temp_dir().join(format!("codewhale-config-multi-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-multi-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "# initial\n")?;
@@ -8781,7 +8763,7 @@ async fn set_config_response_contains_all_expected_fields() -> Result<()> {
     // Verify the SetConfigResponse shape: key, value, message, persisted,
     // requires_reload. This catches serialization regressions and ensures
     // the GUI client can rely on these fields being present and correct.
-    let root = std::env::temp_dir().join(format!("codewhale-config-shape-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-config-shape-{}", Uuid::new_v4()));
     fs::create_dir_all(&root)?;
     let config_file = root.join("custom-config.toml");
     fs::write(&config_file, "# initial\n")?;
@@ -8874,7 +8856,7 @@ async fn cors_layer_advertises_exact_supported_headers_and_never_an_extra() -> R
         .header("Access-Control-Request-Method", "POST")
         .header(
             "Access-Control-Request-Headers",
-            "authorization, content-type, accept, x-codewhale-runtime-token, x-deepseek-runtime-token",
+            "authorization, content-type, accept, x-ghosty-runtime-token, x-deepseek-runtime-token",
         )
         .send()
         .await?;
@@ -8901,7 +8883,7 @@ async fn cors_layer_advertises_exact_supported_headers_and_never_an_extra() -> R
         "accept",
         "authorization",
         "content-type",
-        "x-codewhale-runtime-token",
+        "x-ghosty-runtime-token",
         "x-deepseek-runtime-token",
     ]
     .into_iter()
@@ -8997,7 +8979,7 @@ async fn thread_goal_crud_and_invalid_transition() -> Result<()> {
     assert_eq!(fetched["goal_id"], created["goal_id"]);
 
     // Simulate progress on the first goal before replacing it.
-    let mut accrued: codewhale_protocol::ThreadGoal = serde_json::from_value(created.clone())?;
+    let mut accrued: ghosty_protocol::ThreadGoal = serde_json::from_value(created.clone())?;
     accrued.tokens_used = 1_234;
     accrued.time_used_seconds = 45;
     accrued.continuation_count = 3;
@@ -9186,7 +9168,7 @@ async fn runtime_info_advertises_thread_goals_capability() -> Result<()> {
 
 #[test]
 fn fleet_receipt_json_pass_result_has_no_failure_fields() {
-    use codewhale_protocol::fleet::{FleetReceipt, FleetRunId, FleetTaskResult};
+    use ghosty_protocol::fleet::{FleetReceipt, FleetRunId, FleetTaskResult};
     let receipt = FleetReceipt {
         run_id: FleetRunId::from("run-1"),
         task_id: "task-a".to_string(),
@@ -9217,9 +9199,7 @@ fn fleet_receipt_json_pass_result_has_no_failure_fields() {
 
 #[test]
 fn fleet_receipt_json_verifier_failure_is_not_retry_eligible() {
-    use codewhale_protocol::fleet::{
-        FleetReceipt, FleetRunId, FleetTaskFailureKind, FleetTaskResult,
-    };
+    use ghosty_protocol::fleet::{FleetReceipt, FleetRunId, FleetTaskFailureKind, FleetTaskResult};
     let receipt = FleetReceipt {
         run_id: FleetRunId::from("run-v"),
         task_id: "task-v".to_string(),
@@ -9248,9 +9228,7 @@ fn fleet_receipt_json_verifier_failure_is_not_retry_eligible() {
 
 #[test]
 fn fleet_receipt_json_transport_failure_is_retry_eligible() {
-    use codewhale_protocol::fleet::{
-        FleetReceipt, FleetRunId, FleetTaskFailureKind, FleetTaskResult,
-    };
+    use ghosty_protocol::fleet::{FleetReceipt, FleetRunId, FleetTaskFailureKind, FleetTaskResult};
     let receipt = FleetReceipt {
         run_id: FleetRunId::from("run-t"),
         task_id: "task-t".to_string(),
@@ -9272,7 +9250,7 @@ fn fleet_receipt_json_transport_failure_is_retry_eligible() {
 
 #[test]
 fn fleet_receipt_json_receipt_artifact_sets_evidence_available() {
-    use codewhale_protocol::fleet::{
+    use ghosty_protocol::fleet::{
         FleetArtifactKind, FleetArtifactRef, FleetReceipt, FleetRunId, FleetScore, FleetTaskResult,
     };
     use std::path::PathBuf;
@@ -9287,7 +9265,7 @@ fn fleet_receipt_json_receipt_artifact_sets_evidence_available() {
         failure_kind: None,
         artifacts: vec![FleetArtifactRef {
             kind: FleetArtifactKind::Receipt,
-            path: PathBuf::from(".codewhale/fleet/run-e/task-e/worker-e/receipt.json"),
+            path: PathBuf::from(".ghosty/fleet/run-e/task-e/worker-e/receipt.json"),
             checksum: Some("sha256:abc123".to_string()),
             mime_type: Some("application/json".to_string()),
             size_bytes: Some(512),
@@ -9315,19 +9293,19 @@ async fn fleet_receipt_api_list_and_get_round_trip() -> Result<()> {
     use crate::fleet::task_spec::{
         FleetTaskSpecDocument, FleetTaskVerification, prepare_verification_receipt,
     };
-    use codewhale_protocol::fleet::{FleetScore, FleetTaskResult};
+    use ghosty_protocol::fleet::{FleetScore, FleetTaskResult};
 
-    let root = std::env::temp_dir().join(format!("codewhale-receipt-api-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-receipt-api-{}", Uuid::new_v4()));
     let workspace = root.join("workspace");
     fs::create_dir_all(&workspace)?;
 
-    let task = codewhale_protocol::fleet::FleetTaskSpec {
+    let task = ghosty_protocol::fleet::FleetTaskSpec {
         id: "task-receipt".to_string(),
         name: "Receipt Task".to_string(),
         description: None,
         objective: Some("Test receipt API".to_string()),
         instructions: "run tests".to_string(),
-        worker: Some(codewhale_protocol::fleet::FleetTaskWorkerProfile {
+        worker: Some(ghosty_protocol::fleet::FleetTaskWorkerProfile {
             agent_profile: None,
             role: Some("reviewer".to_string()),
             loadout: None,
@@ -9507,7 +9485,7 @@ async fn memory_list_returns_empty_for_fresh_store() -> Result<()> {
     let _lock = lock_test_env();
     let home = root.join("home");
     fs::create_dir_all(&home)?;
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &home);
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &home);
     let Some((addr, _rt, handle)) = spawn_test_server_with_root(root, sessions_dir).await? else {
         return Ok(());
     };
@@ -9565,7 +9543,7 @@ async fn memory_create_list_and_get_entry() -> Result<()> {
     let _lock = lock_test_env();
     let home = root.join("home");
     fs::create_dir_all(&home)?;
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &home);
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &home);
     let Some((addr, _rt, handle)) = spawn_test_server_with_root(root.clone(), sessions_dir).await?
     else {
         return Ok(());
@@ -9637,7 +9615,7 @@ async fn memory_summary_is_redacted_to_max_chars() -> Result<()> {
     let _lock = lock_test_env();
     let home = root.join("home");
     fs::create_dir_all(&home)?;
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &home);
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &home);
     let Some((addr, _rt, handle)) = spawn_test_server_with_root(root.clone(), sessions_dir).await?
     else {
         return Ok(());
@@ -9675,7 +9653,7 @@ async fn memory_clear_removes_global_scope() -> Result<()> {
     let _lock = lock_test_env();
     let home = root.join("home");
     fs::create_dir_all(&home)?;
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &home);
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &home);
     let Some((addr, _rt, handle)) = spawn_test_server_with_root(root.clone(), sessions_dir).await?
     else {
         return Ok(());
@@ -9734,7 +9712,7 @@ async fn memory_create_rejects_empty_text_and_bad_scope() -> Result<()> {
     let _lock = lock_test_env();
     let home = root.join("home");
     fs::create_dir_all(&home)?;
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &home);
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &home);
     let Some((addr, _rt, handle)) = spawn_test_server_with_root(root.clone(), sessions_dir).await?
     else {
         return Ok(());
@@ -9768,7 +9746,7 @@ async fn memory_search_query_filters_results() -> Result<()> {
     let _lock = lock_test_env();
     let home = root.join("home");
     fs::create_dir_all(&home)?;
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &home);
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &home);
     let Some((addr, _rt, handle)) = spawn_test_server_with_root(root.clone(), sessions_dir).await?
     else {
         return Ok(());
@@ -9813,7 +9791,7 @@ async fn memory_search_query_filters_results() -> Result<()> {
 
 #[tokio::test]
 async fn mcp_server_management_crud() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("codewhale-mcp-mgmt-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-mcp-mgmt-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     fs::create_dir_all(&root)?;
 
@@ -9999,8 +9977,7 @@ async fn mcp_server_management_crud() -> Result<()> {
 
 #[tokio::test]
 async fn mcp_server_management_create_requires_command_or_url() -> Result<()> {
-    let root =
-        std::env::temp_dir().join(format!("codewhale-mcp-mgmt-validation-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-mcp-mgmt-validation-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     fs::create_dir_all(&root)?;
 
@@ -10033,7 +10010,7 @@ async fn mcp_server_management_create_requires_command_or_url() -> Result<()> {
 
 #[tokio::test]
 async fn mcp_server_management_redacts_credentials() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("codewhale-mcp-mgmt-redact-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-mcp-mgmt-redact-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     fs::create_dir_all(&root)?;
 
@@ -10082,7 +10059,7 @@ async fn mcp_server_management_redacts_credentials() -> Result<()> {
 
 #[tokio::test]
 async fn runtime_info_advertises_mcp_server_management() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("codewhale-mcp-capability-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-mcp-capability-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let Some((addr, _runtime_threads, handle)) =
         spawn_test_server_with_root(root, sessions_dir).await?
@@ -10110,10 +10087,10 @@ async fn runtime_info_advertises_mcp_server_management() -> Result<()> {
 
 // ─── Skill lifecycle API tests ──────────────────────────────────────────────
 
-/// Create a minimal skill package under `root_dir/.codewhale/skills/<name>`.
+/// Create a minimal skill package under `root_dir/.ghosty/skills/<name>`.
 /// Returns the skill dir path plus a digest that can be used in requests.
 fn create_managed_skill(root_dir: &std::path::Path, name: &str) -> Result<(PathBuf, String)> {
-    let skill_dir = root_dir.join(".codewhale").join("skills").join(name);
+    let skill_dir = root_dir.join(".ghosty").join("skills").join(name);
     fs::create_dir_all(&skill_dir)?;
     fs::write(
         skill_dir.join("SKILL.md"),
@@ -10374,7 +10351,7 @@ async fn skill_lifecycle_audit_returns_receipt_for_installed_skill() -> Result<(
     assert_eq!(skills.len(), 1);
     let entry = &skills[0];
     assert_eq!(entry["name"], "auditable");
-    assert_eq!(entry["source_kind"], "codewhale_managed");
+    assert_eq!(entry["source_kind"], "ghosty_managed");
     // Digest must be known for a properly written managed skill.
     assert_eq!(entry["digest"]["state"], "known");
     assert!(
@@ -10478,7 +10455,7 @@ async fn skill_lifecycle_update_rejects_invalid_scope() -> Result<()> {
 
 #[tokio::test]
 async fn skill_lifecycle_endpoints_require_auth_when_token_is_set() -> Result<()> {
-    let root = std::env::temp_dir().join(format!("codewhale-skill-auth-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ghosty-skill-auth-{}", Uuid::new_v4()));
     let sessions_dir = root.join("sessions");
     let token = "skill-lifecycle-test-token".to_string();
     let Some((addr, _runtime_threads, handle)) =

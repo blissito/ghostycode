@@ -4,15 +4,15 @@ use std::{
 };
 
 use async_trait::async_trait;
-use codewhale_agent::ModelRegistry;
-use codewhale_config::ConfigToml;
-use codewhale_core::Runtime;
-use codewhale_execpolicy::{AskForApproval, ExecPolicyEngine};
-use codewhale_hooks::{HookDispatcher, HookEvent, HookSink};
-use codewhale_mcp::McpManager;
-use codewhale_protocol::{ToolKind, ToolOutput, ToolPayload};
-use codewhale_state::StateStore;
-use codewhale_tools::{
+use ghosty_agent::ModelRegistry;
+use ghosty_config::ConfigToml;
+use ghosty_core::Runtime;
+use ghosty_execpolicy::{AskForApproval, ExecPolicyEngine};
+use ghosty_hooks::{HookDispatcher, HookEvent, HookSink};
+use ghosty_mcp::McpManager;
+use ghosty_protocol::{ToolKind, ToolOutput, ToolPayload};
+use ghosty_state::StateStore;
+use ghosty_tools::{
     FunctionCallError, ToolCall, ToolCallSource, ToolDescriptor, ToolHandler, ToolInvocation,
     ToolRegistry,
 };
@@ -73,7 +73,7 @@ async fn invoke_fixture(
     let mut hooks = HookDispatcher::default();
     hooks.add_sink(recording.clone());
     let state_path = std::env::temp_dir().join(format!(
-        "codewhale-core-tool-success-{name}-{}.db",
+        "ghosty-core-tool-success-{name}-{}.db",
         Uuid::new_v4().simple()
     ));
     let runtime = Runtime::new(
@@ -94,7 +94,7 @@ async fn invoke_fixture(
                 raw_tool_call_id: None,
             },
             AskForApproval::Never,
-            Path::new("/tmp/codewhale"),
+            Path::new("/tmp/ghosty"),
         )
         .await
         .expect("application failure remains a transport-successful tool result");

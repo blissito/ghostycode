@@ -111,7 +111,7 @@ fn render_permissions(plugin: &LoadedPlugin) -> String {
         )
     };
     format!(
-        "filesystem_roots=[{filesystem}] network_hosts=[{network}] (exact allowlist for Codewhale-managed remote requests; redirects stay same-origin) lifecycle_mutation={} stdio_runtime=[{stdio_authority}]",
+        "filesystem_roots=[{filesystem}] network_hosts=[{network}] (exact allowlist for Ghosty-managed remote requests; redirects stay same-origin) lifecycle_mutation={} stdio_runtime=[{stdio_authority}]",
         plugin.inventory.lifecycle_mutation
     )
 }

@@ -6,7 +6,7 @@
 //! - **MCP servers** are surfaced through the existing external-import consent
 //!   flow (`/mcp import <name> --approve`); nothing merges automatically.
 //! - **Env vars** that are known-safe (timeouts, output caps, editor choices)
-//!   are proposed as a portable bundle file for `codewhale config import`,
+//!   are proposed as a portable bundle file for `ghosty config import`,
 //!   which carries its own plan/consent/rollback. Secret-shaped or unknown
 //!   keys are named but never imported or echoed.
 //! - **Permissions** become approval-policy recommendations in a written
@@ -180,7 +180,7 @@ fn safe_env_value(value: &Value) -> Option<String> {
         Value::Bool(flag) => Some(flag.to_string()),
         _ => None,
     }?;
-    (codewhale_config::persistence::redact_secrets(&text) == text).then_some(text)
+    (ghosty_config::persistence::redact_secrets(&text) == text).then_some(text)
 }
 
 /// Build the plan from already-read sources plus MCP candidates discovered by
@@ -240,7 +240,7 @@ pub(crate) fn build_plan(
                 if let Some(rules) = permissions.get(key).and_then(Value::as_array) {
                     for rule in rules {
                         if let Some(text) = rule.as_str() {
-                            target.push(codewhale_config::persistence::redact_secrets(text));
+                            target.push(ghosty_config::persistence::redact_secrets(text));
                         }
                     }
                 }
@@ -257,7 +257,7 @@ pub(crate) fn build_plan(
     plan
 }
 
-/// Claude `permissions.defaultMode` → the Codewhale approval-posture
+/// Claude `permissions.defaultMode` → the Ghosty approval-posture
 /// recommendation (report text only; nothing is applied).
 pub(crate) fn approval_posture_recommendation(mode: Option<&str>) -> &'static str {
     match mode {
@@ -297,10 +297,10 @@ pub(crate) fn portable_bundle_json(plan: &ClaudeImportPlan) -> String {
         .collect();
     serde_json::json!({
         "schema_version": 1,
-        "kind": "codewhale.portable-config",
+        "kind": "ghosty.portable-config",
         "metadata": {
             "name": "claude-import",
-            "generator": "codewhale /import-claude",
+            "generator": "ghosty /import-claude",
         },
         "global": global,
     })
@@ -373,7 +373,7 @@ pub(crate) fn render_plan(plan: &ClaudeImportPlan) -> String {
         }
     }
     if plan.has_claude_md {
-        out.push_str("\nStanding instructions: ~/.claude/CLAUDE.md found — copy it to ~/.codewhale/instructions.md (or the repo's AGENTS.md) to carry it over.\n");
+        out.push_str("\nStanding instructions: ~/.claude/CLAUDE.md found — copy it to ~/.ghosty/instructions.md (or the repo's AGENTS.md) to carry it over.\n");
     }
     out
 }
@@ -385,7 +385,7 @@ pub(crate) fn report_markdown(plan: &ClaudeImportPlan) -> String {
     );
     out.push_str(&render_plan(plan));
     if !plan.env_safe.is_empty() {
-        out.push_str("\n## Apply the portable bundle\n\nReview the generated bundle, then run:\n\n    codewhale config import <bundle path>\n\n");
+        out.push_str("\n## Apply the portable bundle\n\nReview the generated bundle, then run:\n\n    ghosty config import <bundle path>\n\n");
     }
     out.push_str("\n## Manual follow-ups\n\n- MCP: `/mcp import <name> --approve` per server (consent is recorded).\n- Permissions: map rules in /permissions and execpolicy.\n- Hooks: re-create matching hooks with /hooks.\n- Paths: copy CLAUDE.md if you want those standing instructions.\n");
     out
@@ -485,7 +485,7 @@ mod tests {
         let bundle = portable_bundle_json(&plan);
         assert!(!bundle.contains("sk-ant-secret-value"), "{bundle}");
         assert!(!bundle.contains("sk-editor-secret-value"), "{bundle}");
-        assert!(bundle.contains("codewhale.portable-config"));
+        assert!(bundle.contains("ghosty.portable-config"));
         assert!(bundle.contains("BASH_DEFAULT_TIMEOUT_MS"));
     }
 

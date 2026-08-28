@@ -1,9 +1,9 @@
 # Whale Teams in the TUI
 
-Codewhale Cloud's **Whale Teams / Signal Cut** identity (CWC, 2026-08-15)
+Ghosty Cloud's **Whale Teams / Signal Cut** identity (CWC, 2026-08-15)
 gives every agent role a species-led whale and every whale one of six runtime
 states. This document is the contract for how that identity appears in the
-Codewhale terminal UI. The implementation is `crates/tui/src/tui/whales.rs`.
+Ghosty terminal UI. The implementation is `crates/tui/src/tui/whales.rs`.
 
 The source artwork (six species × six states × four colorways of 384×192
 rasters, plus concept boards and the visual brief) lives in the CWC repository.
@@ -12,7 +12,7 @@ art, using the same state grammar and the same palette tokens.
 
 ## Role → species (single table)
 
-| Codewhale role id / `FleetRole` | Whale | Species | Job |
+| Ghosty role id / `FleetRole` | Whale | Species | Job |
 | --- | --- | --- | --- |
 | `scout` | Scout | beaked whale | research |
 | `builder` | Patch | harbor porpoise | coding |
@@ -20,10 +20,10 @@ art, using the same state grammar and the same palette tokens.
 | `consultant`, `synthesizer` | Echo | pilot whale | communications |
 | `verifier` | Keel | sperm whale | operations |
 | `reviewer` | Lantern | orca | review |
-| `worker`, `general`, `custom`, unknown | *(plain Codewhale whale)* | whale | general work |
+| `worker`, `general`, `custom`, unknown | *(plain Ghosty whale)* | whale | general work |
 
 `WhaleSpecies::for_role_id` is the only place this mapping exists. Roles the
-table does not name render the plain Codewhale whale — the mapping never
+table does not name render the plain Ghosty whale — the mapping never
 guesses from keywords.
 
 The roster resolves species from the profile id first (built-in ids are role
@@ -98,12 +98,12 @@ The drawing decisions — including the empty-state hero mark in
 
 Portraits are 3 rows × 14 columns: a two-column state-cue lane on the left,
 the head at the left, the crown fluke `▚△▞` on the right (the same vocabulary
-as the idle Codewhale mark in `underwater.rs`), and a wake lane under the tail.
+as the idle Ghosty mark in `underwater.rs`), and a wake lane under the tail.
 Badges are two cells: a species feature glyph in the role accent plus a body
 cell.
 
 Every glyph has a `glyphs::ascii_fallback` entry, and `portrait_ascii` /
-`badge_ascii` expose the narrowed silhouettes. With `CODEWHALE_ASCII_SAFE=1`
+`badge_ascii` expose the narrowed silhouettes. With `GHOSTY_ASCII_SAFE=1`
 the seven badges stay distinct: `<#` `#]` `#\` `:#` `#-` `*#` `.#`.
 
 ## Surfaces

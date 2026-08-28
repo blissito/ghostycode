@@ -63,7 +63,7 @@ export default async function (args) {
         // `label` carries the short progress name. A separate short
         // `description` would never reach the driver.
         description: [
-          "You are one independent candidate in a Codewhale Workflow search.",
+          "You are one independent candidate in a Ghosty Workflow search.",
           "Implement the same frozen brief and rubric in this isolated worktree only.",
           "Do not inspect other candidates, rankings, hidden tests, or evaluator internals.",
           "Do not push. Do not merge. Do not touch the parent checkout.",

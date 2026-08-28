@@ -21,7 +21,7 @@ pub(super) fn event_owner_is_active(
 }
 
 /// Bind the Runtime thread store to a session before the process-owner lock
-/// is taken, so a second Codewhale on the same machine does not collide on
+/// is taken, so a second Ghosty on the same machine does not collide on
 /// the default root (#5630). Resume reuses the loaded id; a fresh session
 /// claims one here so first persist keeps it.
 fn ensure_runtime_session_id(app: &mut App) -> String {
@@ -275,7 +275,7 @@ pub async fn run_tui(
     };
     if use_alt_screen {
         execute!(stdout, EnterAlternateScreen)?;
-        // Windows also suppresses Codewhale's own verbose CLI logger while
+        // Windows also suppresses Ghosty's own verbose CLI logger while
         // the alt-screen is active. The stderr redirect above catches raw
         // writes; this prevents the known verbose source at the origin.
         #[cfg(windows)]
@@ -567,7 +567,7 @@ pub async fn run_tui(
         // Lifecycle outbox (`[lifecycle_outbox]`): fires alongside the
         // session_start hook, with the same session identity. No-op when
         // the feature is disabled.
-        app.lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+        app.lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
             event: "session_start".to_string(),
             kind: "session.started".to_string(),
             thread_id: outbox_thread_id,
@@ -672,7 +672,7 @@ pub async fn run_tui(
         // Lifecycle outbox (`[lifecycle_outbox]`): fires alongside the
         // session_end hook, with the same session identity. No-op when
         // the feature is disabled.
-        app.lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+        app.lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
             event: "session_end".to_string(),
             kind: "session.ended".to_string(),
             thread_id: context.session_id.clone().unwrap_or_default(),
@@ -739,7 +739,7 @@ pub async fn run_tui(
         // `#![deny(clippy::print_stderr)]` would otherwise refuse it.
         #[allow(clippy::print_stderr)]
         {
-            eprintln!("codewhale: {failure}");
+            eprintln!("ghosty: {failure}");
         }
     }
 
@@ -802,6 +802,14 @@ pub(crate) async fn run_event_loop(
     let mut last_status_frame = Instant::now()
         .checked_sub(Duration::from_millis(UI_STATUS_ANIMATION_MS))
         .unwrap_or_else(Instant::now);
+    // Ojos del fantasma (parpadeo / miradas) en la pantalla vacía y en la
+    // bienvenida. A diferencia del spinner de estado, esto avanza con la app
+    // en reposo, así que necesita su propia cadencia para despertar el loop.
+    let mut last_ghost_frame = Instant::now()
+        .checked_sub(Duration::from_millis(
+            crate::tui::underwater::GHOST_ANIM_FRAME_MS,
+        ))
+        .unwrap_or_else(Instant::now);
     // 120 FPS draw cap. Without this we redraw on every SSE chunk during a
     // long stream — wasted work the user can't perceive. See
     // `tui::frame_rate_limiter` for the rationale; ports the small piece of
@@ -855,8 +863,8 @@ pub(crate) async fn run_event_loop(
     // record = silent rewrite, downgrade records without hinting); this only
     // renders the outcome. Local bookkeeping — independent of the network
     // update check, and skipped entirely when home cannot be resolved.
-    if let Ok(home) = codewhale_config::codewhale_home() {
-        let outcome = codewhale_release::record_launch(&home, env!("CARGO_PKG_VERSION"));
+    if let Ok(home) = ghosty_config::ghosty_home() {
+        let outcome = ghosty_release::record_launch(&home, env!("CARGO_PKG_VERSION"));
         if let Some(record_error) = outcome.record_error {
             tracing::debug!(error = %record_error, "could not persist the last-launch record");
         }
@@ -943,7 +951,7 @@ pub(crate) async fn run_event_loop(
             // Which command to advertise depends on who owns this binary on
             // disk, so resolve that here rather than hardcoding our own
             // updater into the wording.
-            let install = codewhale_release::current_install_method();
+            let install = ghosty_release::current_install_method();
             app.update_available = Some(notice.chip_label());
             app.push_status_toast(
                 notice.toast_line(install),
@@ -1593,16 +1601,16 @@ pub(crate) async fn run_event_loop(
                         // Lifecycle outbox (`[lifecycle_outbox]`): the turn
                         // boundary the shell-hook system deliberately lacks.
                         // No-op when the feature is disabled.
-                        app.lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+                        app.lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
                             event: "turn_start".to_string(),
                             kind: "turn.started".to_string(),
                             thread_id: app.hooks.session_id().to_string(),
                             turn_id: app.runtime_turn_id.clone(),
                             item_id: None,
                             payload: serde_json::json!({
-                                "model": codewhale_hooks::bounded_text(
+                                "model": ghosty_hooks::bounded_text(
                                     &app.model,
-                                    codewhale_hooks::OUTBOX_DETAIL_MAX_CHARS,
+                                    ghosty_hooks::OUTBOX_DETAIL_MAX_CHARS,
                                 ),
                                 "workspace": app.workspace.display().to_string(),
                             }),
@@ -2096,8 +2104,8 @@ pub(crate) async fn run_event_loop(
                         // silently zero the counter for every user who does
                         // not use hooks.
                         {
-                            let telemetry = codewhale_telemetry::session_counters();
-                            telemetry.bump(codewhale_telemetry::Counter::Turns);
+                            let telemetry = ghosty_telemetry::session_counters();
+                            telemetry.bump(ghosty_telemetry::Counter::Turns);
                             telemetry.observe_turn_secs(turn_elapsed.as_secs());
                         }
 
@@ -2131,7 +2139,7 @@ pub(crate) async fn run_event_loop(
                                 "interrupted" => "turn.interrupted",
                                 _ => "turn.ended",
                             };
-                            app.lifecycle_outbox.emit(codewhale_hooks::LifecycleEvent {
+                            app.lifecycle_outbox.emit(ghosty_hooks::LifecycleEvent {
                                 event: "turn_end".to_string(),
                                 kind: kind.to_string(),
                                 thread_id: app.hooks.session_id().to_string(),
@@ -2143,9 +2151,9 @@ pub(crate) async fn run_event_loop(
                                     "workspace": app.workspace.display().to_string(),
                                     "error": error
                                         .as_deref()
-                                        .map(|message| codewhale_hooks::bounded_text(
+                                        .map(|message| ghosty_hooks::bounded_text(
                                             message,
-                                            codewhale_hooks::OUTBOX_DETAIL_MAX_CHARS,
+                                            ghosty_hooks::OUTBOX_DETAIL_MAX_CHARS,
                                         )),
                                 }),
                             });
@@ -2439,7 +2447,7 @@ pub(crate) async fn run_event_loop(
                                                 "failed to restart terminal input after handoff refusal"
                                             );
                                             format!(
-                                                "Terminal input recovery also failed ({restart_err}); restart Codewhale if keys stop responding."
+                                                "Terminal input recovery also failed ({restart_err}); restart Ghosty if keys stop responding."
                                             )
                                         }
                                     };
@@ -2478,7 +2486,7 @@ pub(crate) async fn run_event_loop(
                                 )
                                 .with_context(|| {
                                     format!(
-                                        "terminal handoff failed ({err}) and Codewhale could not restore terminal controls"
+                                        "terminal handoff failed ({err}) and Ghosty could not restore terminal controls"
                                     )
                                 })?;
                                 app.push_status_toast(
@@ -2847,8 +2855,8 @@ pub(crate) async fn run_event_loop(
                         // A count and nothing else. The tool name, the
                         // description, the input, and the matched rule are all
                         // user- or model-authored strings.
-                        codewhale_telemetry::session_counters()
-                            .bump(codewhale_telemetry::Counter::ApprovalModalShown);
+                        ghosty_telemetry::session_counters()
+                            .bump(ghosty_telemetry::Counter::ApprovalModalShown);
                         // Mirror semantics: the approval is always shown
                         // locally. When the web mirror is attached to this
                         // turn, ALSO record it so the web can answer; the
@@ -3614,6 +3622,19 @@ pub(crate) async fn run_event_loop(
             app.needs_redraw = false;
         }
 
+        // Fantasma en pantalla: pedir un frame cada GHOST_ANIM_FRAME_MS y
+        // asegurar que el poll despierte a tiempo. Deliberadamente NO va
+        // detrás de `low_motion`: a ~5.5 fps no hay riesgo de parpadeo, y
+        // congelarlo dejaría al fantasma sin vida justo en Ghostty / VS Code /
+        // SSH, donde ese flag se activa solo.
+        let ghost_on_screen = crate::tui::widgets::should_render_empty_state(app)
+            || app.onboarding == OnboardingState::Welcome;
+        let ghost_frame = Duration::from_millis(crate::tui::underwater::GHOST_ANIM_FRAME_MS);
+        if ghost_on_screen && last_ghost_frame.elapsed() >= ghost_frame {
+            app.needs_redraw = true;
+            last_ghost_frame = Instant::now();
+        }
+
         let mut poll_timeout =
             if app.is_loading || has_running_agents || app.is_compacting || app.is_purging {
                 Duration::from_millis(active_poll_ms(app))
@@ -3634,6 +3655,10 @@ pub(crate) async fn run_event_loop(
         }
         if web_config_session.is_some() {
             poll_timeout = poll_timeout.min(Duration::from_millis(WEB_CONFIG_POLL_MS));
+        }
+        if ghost_on_screen {
+            let remaining = ghost_frame.saturating_sub(last_ghost_frame.elapsed());
+            poll_timeout = poll_timeout.min(remaining.max(Duration::from_millis(16)));
         }
         // While the quit-confirmation prompt is armed, ensure we wake up to
         // expire it on time even if no input event arrives.
@@ -3689,7 +3714,7 @@ pub(crate) async fn run_event_loop(
                     Err(err) => {
                         tracing::warn!(error = %err, "failed to restart terminal input pump");
                         app.push_status_toast(
-                            "Terminal input stalled; recovery failed. Restart Codewhale if keys stop responding.",
+                            "Terminal input stalled; recovery failed. Restart Ghosty if keys stop responding.",
                             StatusToastLevel::Error,
                             None,
                         );
@@ -4406,14 +4431,14 @@ pub(crate) async fn run_event_loop(
                 if app.view_stack.is_empty() && app.kill_to_end_of_line() {
                     continue;
                 }
-                codewhale_telemetry::session_counters()
-                    .bump(codewhale_telemetry::Counter::CommandPaletteOpen);
+                ghosty_telemetry::session_counters()
+                    .bump(ghosty_telemetry::Counter::CommandPaletteOpen);
                 app.view_stack.push(CommandPaletteView::new_for_locale(
                     app.ui_locale,
                     build_command_palette_entries(
                         app.ui_locale,
                         &app.skills_dir,
-                        app.skills_scan_codewhale_only,
+                        app.skills_scan_ghosty_only,
                         &app.workspace,
                         &app.mcp_config_path,
                         app.mcp_snapshot.as_ref(),
@@ -5901,7 +5926,7 @@ pub(crate) async fn run_xai_device_login_from_tui(
 
     let switched = match login_result {
         Ok(pending) => {
-            apply_codewhale_owned_xai_login(
+            apply_ghosty_owned_xai_login(
                 app,
                 engine_handle,
                 config,

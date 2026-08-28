@@ -54,14 +54,14 @@ use crate::tools::subagent::SubAgentStatus;
 use crate::tools::todo::new_shared_todo_list;
 #[cfg(test)]
 use crate::tui::app::AppMode;
-use codewhale_protocol::agent_mail::{
+use ghosty_protocol::agent_mail::{
     AGENT_MAIL_EVENT_DELIVERED, AGENT_MAIL_EVENT_DELIVERING, AGENT_MAIL_EVENT_DELIVERY_FAILED,
     AGENT_MAIL_EVENT_QUEUED, AGENT_MAIL_EVENT_READ, AGENT_MAIL_SCHEMA_VERSION, AgentMailAddress,
     AgentMailDeliveryMode, AgentMailEnvelope, AgentMailEventPayload, AgentMailFailureCode,
     AgentMailFailureReceipt, AgentMailMessageId, AgentMailSendRequest, AgentMailSendResponse,
     AgentMailStatus, MAX_AGENT_MAIL_DELIVERY_ATTEMPTS, MAX_AGENT_MAIL_SUMMARY_BYTES,
 };
-use codewhale_protocol::runtime::{
+use ghosty_protocol::runtime::{
     DynamicToolCallContent, DynamicToolCallParams, DynamicToolCallResult, DynamicToolSpec,
     TurnEnvironmentParams,
 };
@@ -79,7 +79,7 @@ const EVENT_TRANSACTION_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
 const EVENT_TRANSACTION_LOCK_POLL: Duration = Duration::from_millis(5);
 const EVENT_TRANSACTION_LOCK_FILE: &str = "events.lock";
 const RUNTIME_PROCESS_OWNER_LOCK_FILE: &str = "runtime-process.owner.lock";
-const RUNTIME_PROCESS_OWNER_LOCK_HELD: &str = "This runtime is already active in another process. Close the other Codewhale session and try again, or set CODEWHALE_RUNTIME_DIR to a different directory.";
+const RUNTIME_PROCESS_OWNER_LOCK_HELD: &str = "This runtime is already active in another process. Close the other Ghosty session and try again, or set GHOSTY_RUNTIME_DIR to a different directory.";
 const AGENT_MAIL_OWNER_FILE: &str = "owner.json";
 const TURN_OPERATION_BINDING_SCHEMA_VERSION: u32 = 1;
 const REQUEST_USER_INPUT_TOOL_NAME: &str = "request_user_input";
@@ -536,7 +536,7 @@ where
             if value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
                 value.to_ascii_lowercase()
             } else {
-                codewhale_config::catalog::base_url_fingerprint(value)
+                ghosty_config::catalog::base_url_fingerprint(value)
             }
         })
         .collect::<Vec<_>>()
@@ -1383,19 +1383,19 @@ impl RuntimeThreadStore {
     /// Persist a goal record for a thread. The goal is stored as a JSON file
     /// in the `goals/` subdirectory; it is independent of the TUI state store
     /// and requires only that the runtime thread exists.
-    pub fn save_goal(&self, goal: &codewhale_protocol::ThreadGoal) -> Result<()> {
+    pub fn save_goal(&self, goal: &ghosty_protocol::ThreadGoal) -> Result<()> {
         write_json_atomic(&self.goal_path(&goal.thread_id)?, goal)
     }
 
     /// Load the goal for a thread, returning `None` if no goal has been set.
-    pub fn load_goal(&self, thread_id: &str) -> Result<Option<codewhale_protocol::ThreadGoal>> {
+    pub fn load_goal(&self, thread_id: &str) -> Result<Option<ghosty_protocol::ThreadGoal>> {
         let path = self.goal_path(thread_id)?;
         if !path.exists() {
             return Ok(None);
         }
         let raw = read_store_file(&path)
             .with_context(|| format!("Failed to read goal {}", path.display()))?;
-        let goal: codewhale_protocol::ThreadGoal = serde_json::from_str(&raw)
+        let goal: ghosty_protocol::ThreadGoal = serde_json::from_str(&raw)
             .with_context(|| format!("Failed to parse goal {}", path.display()))?;
         Ok(Some(goal))
     }
@@ -2052,7 +2052,7 @@ impl RuntimeThreadManagerConfig {
 }
 
 fn runtime_dir_override() -> Option<PathBuf> {
-    std::env::var("CODEWHALE_RUNTIME_DIR")
+    std::env::var("GHOSTY_RUNTIME_DIR")
         .or_else(|_| std::env::var("DEEPSEEK_RUNTIME_DIR"))
         .ok()
         .filter(|override_dir| !override_dir.trim().is_empty())
@@ -2868,7 +2868,7 @@ fn resolve_runtime_thread_route_for_identity(
 fn runtime_compaction_config(
     provider: ApiProvider,
     model: &str,
-    route_limits: Option<codewhale_config::route::RouteLimits>,
+    route_limits: Option<ghosty_config::route::RouteLimits>,
     auto_compact: bool,
     auto_compact_explicit: bool,
     threshold_percent: f64,
@@ -4142,7 +4142,7 @@ impl RuntimeThreadManager {
     pub async fn emit_goal_updated_event(
         &self,
         thread_id: &str,
-        goal: codewhale_protocol::ThreadGoal,
+        goal: ghosty_protocol::ThreadGoal,
     ) -> Result<RuntimeEventRecord> {
         let payload = serde_json::json!({
             "kind": "thread_goal_updated",
@@ -4164,10 +4164,7 @@ impl RuntimeThreadManager {
     }
 
     /// Return the persistent goal for a thread, or `Ok(None)` if none exists.
-    pub async fn get_goal(
-        &self,
-        thread_id: &str,
-    ) -> Result<Option<codewhale_protocol::ThreadGoal>> {
+    pub async fn get_goal(&self, thread_id: &str) -> Result<Option<ghosty_protocol::ThreadGoal>> {
         let thread_id = thread_id.to_string();
         let store = self.store.clone();
         tokio::task::spawn_blocking(move || store.load_goal(&thread_id))
@@ -4176,7 +4173,7 @@ impl RuntimeThreadManager {
     }
 
     /// Persist (create or replace) the goal for a thread.
-    pub async fn save_goal(&self, goal: codewhale_protocol::ThreadGoal) -> Result<()> {
+    pub async fn save_goal(&self, goal: ghosty_protocol::ThreadGoal) -> Result<()> {
         let store = self.store.clone();
         tokio::task::spawn_blocking(move || store.save_goal(&goal))
             .await
@@ -4205,13 +4202,13 @@ impl RuntimeThreadManager {
         request.summary = sanitize_agent_mail_text(&request.summary, MAX_AGENT_MAIL_SUMMARY_BYTES);
         request.sender.display_label = sanitize_agent_mail_text(
             &request.sender.display_label,
-            codewhale_protocol::agent_mail::MAX_AGENT_MAIL_DISPLAY_LABEL_BYTES,
+            ghosty_protocol::agent_mail::MAX_AGENT_MAIL_DISPLAY_LABEL_BYTES,
         );
         for evidence in &mut request.evidence {
             if let Some(label) = evidence.label.as_mut() {
                 *label = sanitize_agent_mail_text(
                     label,
-                    codewhale_protocol::agent_mail::MAX_AGENT_MAIL_EVIDENCE_LABEL_BYTES,
+                    ghosty_protocol::agent_mail::MAX_AGENT_MAIL_EVIDENCE_LABEL_BYTES,
                 );
             }
         }
@@ -7630,7 +7627,7 @@ impl RuntimeThreadManager {
                 notes_path: cfg.notes_path(),
                 mcp_config_path: cfg.mcp_config_path(),
                 skills_dir: cfg.skills_dir(),
-                skills_scan_codewhale_only: cfg.skills_config().scan_codewhale_only(),
+                skills_scan_ghosty_only: cfg.skills_config().scan_ghosty_only(),
                 instructions: if isolated_chat {
                     Vec::new()
                 } else {

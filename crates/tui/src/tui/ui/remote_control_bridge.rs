@@ -400,20 +400,18 @@ pub(crate) fn start_remote_control_session(app: &mut App, config: &Config) {
         .file_name()
         .and_then(|value| value.to_str())
         .filter(|value| !value.is_empty())
-        .unwrap_or("Codewhale session")
+        .unwrap_or("Ghosty session")
         .to_string();
     let git_remote = crate::remote_control::observed_git_repo(&app.workspace);
-    let runtime_commit = option_env!("CODEWHALE_BUILD_COMMIT")
-        .unwrap_or("")
-        .to_string();
+    let runtime_commit = option_env!("GHOSTY_BUILD_COMMIT").unwrap_or("").to_string();
     // The crash-recoverable delivery journal is mandatory outside tests: it is
     // what lets an interrupted session prove which terminal/approval events
     // never reached the account before handing the session back.
-    let journal_dir = match codewhale_config::codewhale_home() {
+    let journal_dir = match ghosty_config::ghosty_home() {
         Ok(home) => home.join("remote-control"),
         Err(_) => {
             let error =
-                "Remote control needs a writable Codewhale home directory for its delivery journal."
+                "Remote control needs a writable Ghosty home directory for its delivery journal."
                     .to_string();
             app.status_message = Some(error.clone());
             app.push_status_toast(error, StatusToastLevel::Error, Some(12_000));

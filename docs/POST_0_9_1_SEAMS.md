@@ -26,10 +26,10 @@ is pure view wiring.
 streaming adapters open through it:
 
 - HTTP policy (`DualWithH1Fallback` / `Http1Only`, env pin via
-  `CODEWHALE_FORCE_HTTP1`)
+  `GHOSTY_FORCE_HTTP1`)
 - dual/H1-twin client selection (`client_for_policy`)
 - bounded response-header wait (`stream_open_timeout`, env override
-  `CODEWHALE_STREAM_OPEN_TIMEOUT_SECS`)
+  `GHOSTY_STREAM_OPEN_TIMEOUT_SECS`)
 - one shared open function (`open_sse_response`): a classified H2 header
   stall on the dual client retries exactly once on the HTTP/1.1 twin;
   an H1-pinned request never retries; nothing retries once response
@@ -59,10 +59,10 @@ StreamFn (shared decode loop) is still deferred.
 
 ## Reserved vocabulary: "Operation" (not shipped, not a rename)
 
-**Workflow keeps its name.** `/workflow`, `codewhale workflow`, the `workflow`
+**Workflow keeps its name.** `/workflow`, `ghosty workflow`, the `workflow`
 tool, the `[workflow]` config table, `*.workflow.js` sources, and the public
 vocabulary below are unchanged in v0.9.2, and no `/operation` or
-`codewhale operation` alias ships.
+`ghosty operation` alias ships.
 
 The public vocabulary stays:
 

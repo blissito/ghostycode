@@ -1,6 +1,6 @@
 # Referensi Pintasan Tombol (Keybindings)
 
-Katalog resmi seluruh pintasan tombol yang dikenali oleh TUI Codewhale.
+Katalog resmi seluruh pintasan tombol yang dikenali oleh TUI Ghosty.
 
 ---
 

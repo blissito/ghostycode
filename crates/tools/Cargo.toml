@@ -1,11 +1,11 @@
 [package]
-name = "codewhale-tools"
+name = "ghosty-tools"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Tool invocation lifecycle, schema validation, and scheduler parallelism for Codewhale"
+description = "Tool invocation lifecycle, schema validation, and scheduler parallelism for Ghosty"
 
 [lints]
 workspace = true
@@ -13,7 +13,7 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-codewhale-protocol = { path = "../protocol", version = "0.9.11" }
+ghosty-protocol = { path = "../protocol", version = "0.0.15" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

@@ -37,7 +37,7 @@ export default async function DocsLayout({
               {t.installCta}
             </Link>
             <Link
-              href="https://github.com/Hmbown/CodeWhale/tree/main/docs"
+              href="https://github.com/blissito/ghostycode/tree/main/docs"
               target="_blank"
               rel="noreferrer"
               className="portal-button portal-button-secondary"

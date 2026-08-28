@@ -24,7 +24,7 @@ const DEFAULT_MAX_CHARS: usize = 200_000;
 const MAX_MAX_CHARS: usize = 1_000_000;
 const FALLBACK_MAX_CHARS: usize = 4000;
 const REVIEW_RECEIPT_SCHEMA_VERSION: u32 = 1;
-const REVIEW_CLIENT_UNAVAILABLE: &str = "Review tool requires an active Codewhale model client";
+const REVIEW_CLIENT_UNAVAILABLE: &str = "Review tool requires an active Ghosty model client";
 
 const REVIEW_SYSTEM_PROMPT: &str = "You are a senior code reviewer. Return ONLY valid JSON with \
 the following schema:\n\
@@ -261,7 +261,7 @@ pub fn write_review_receipt(
         }
         path.to_path_buf()
     } else {
-        let dir = codewhale_config::ensure_state_dir("review-receipts")?;
+        let dir = ghosty_config::ensure_state_dir("review-receipts")?;
         let digest = receipt
             .diff_fingerprint
             .strip_prefix("sha256:")
@@ -283,7 +283,7 @@ pub fn read_review_receipt(path: &Path) -> anyhow::Result<ReviewReceipt> {
 pub fn latest_review_receipt_for_diff(
     diff: &str,
 ) -> anyhow::Result<Option<(PathBuf, ReviewReceipt)>> {
-    let dir = codewhale_config::resolve_state_dir("review-receipts")?;
+    let dir = ghosty_config::resolve_state_dir("review-receipts")?;
     if !dir.is_dir() {
         return Ok(None);
     }
@@ -902,7 +902,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn missing_review_client_uses_codewhale_provider_neutral_language() {
+    async fn missing_review_client_uses_ghosty_provider_neutral_language() {
         let tool = ReviewTool::new(None, "unused".to_string());
         let context = ToolContext::new(PathBuf::from("."));
 
@@ -914,7 +914,7 @@ mod tests {
 
         assert_eq!(
             error,
-            "Failed to locate tool: Review tool requires an active Codewhale model client"
+            "Failed to locate tool: Review tool requires an active Ghosty model client"
         );
         assert!(!error.contains("DeepSeek"));
     }
@@ -939,10 +939,10 @@ mod tests {
     async fn staged_diff_with_base_compares_merge_base_to_index() {
         let repo = tempfile::TempDir::new().expect("temp git repository");
         fixture_git(repo.path(), &["init"]);
-        fixture_git(repo.path(), &["config", "user.name", "Codewhale Test"]);
+        fixture_git(repo.path(), &["config", "user.name", "Ghosty Test"]);
         fixture_git(
             repo.path(),
-            &["config", "user.email", "codewhale-test@example.invalid"],
+            &["config", "user.email", "ghosty-test@example.invalid"],
         );
 
         let tracked = repo.path().join("tracked.txt");
@@ -1117,7 +1117,7 @@ mod tests {
             &output,
             "review body",
             vec![ReviewReceiptCheck {
-                name: "cargo test -p codewhale-tui".to_string(),
+                name: "cargo test -p ghosty-tui".to_string(),
                 status: "passed".to_string(),
             }],
         );

@@ -2,11 +2,11 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
-use codewhale_config::{
-    CODEWHALE_APP_DIR, CONFIG_FILE_NAME, LEGACY_APP_DIR, codewhale_home, default_config_path,
+use ghosty_config::{
+    CONFIG_FILE_NAME, GHOSTY_APP_DIR, LEGACY_APP_DIR, default_config_path, ghosty_home,
 };
-use codewhale_secrets::FileKeyringStore;
-use codewhale_state::StateStore;
+use ghosty_secrets::FileKeyringStore;
+use ghosty_state::StateStore;
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -15,11 +15,11 @@ struct ProcessEnv {
     cwd: PathBuf,
     home: Option<OsString>,
     userprofile: Option<OsString>,
-    codewhale_home: Option<OsString>,
+    ghosty_home: Option<OsString>,
 }
 
 impl ProcessEnv {
-    fn install(root: &Path, home: &Path, userprofile: &Path, codewhale_home: &OsString) -> Self {
+    fn install(root: &Path, home: &Path, userprofile: &Path, ghosty_home: &OsString) -> Self {
         let lock = ENV_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -28,7 +28,7 @@ impl ProcessEnv {
             cwd: std::env::current_dir().expect("current directory"),
             home: std::env::var_os("HOME"),
             userprofile: std::env::var_os("USERPROFILE"),
-            codewhale_home: std::env::var_os("CODEWHALE_HOME"),
+            ghosty_home: std::env::var_os("GHOSTY_HOME"),
         };
 
         // SAFETY: this integration-test process serializes all environment and
@@ -36,7 +36,7 @@ impl ProcessEnv {
         unsafe {
             std::env::set_var("HOME", home);
             std::env::set_var("USERPROFILE", userprofile);
-            std::env::set_var("CODEWHALE_HOME", codewhale_home);
+            std::env::set_var("GHOSTY_HOME", ghosty_home);
         }
         std::env::set_current_dir(root).expect("install isolated current directory");
         prior
@@ -51,7 +51,7 @@ impl Drop for ProcessEnv {
         unsafe {
             restore_var("HOME", self.home.take());
             restore_var("USERPROFILE", self.userprofile.take());
-            restore_var("CODEWHALE_HOME", self.codewhale_home.take());
+            restore_var("GHOSTY_HOME", self.ghosty_home.take());
         }
     }
 }
@@ -77,8 +77,8 @@ fn whitespace_override_uses_home_before_userprofile_and_allows_legacy_fallback()
     let _env = ProcessEnv::install(tmp.path(), &home, &userprofile, &OsString::from(" \t "));
 
     assert_eq!(
-        codewhale_home().expect("config home"),
-        home.join(CODEWHALE_APP_DIR)
+        ghosty_home().expect("config home"),
+        home.join(GHOSTY_APP_DIR)
     );
     assert_eq!(
         default_config_path().expect("config path"),
@@ -92,7 +92,7 @@ fn whitespace_override_uses_home_before_userprofile_and_allows_legacy_fallback()
         FileKeyringStore::default_paths_read_only().expect("secret paths");
     assert_eq!(
         primary_secrets,
-        home.join(CODEWHALE_APP_DIR)
+        home.join(GHOSTY_APP_DIR)
             .join("secrets")
             .join("secrets.json")
     );
@@ -107,14 +107,14 @@ fn whitespace_override_uses_home_before_userprofile_and_allows_legacy_fallback()
 fn non_unicode_override_is_one_explicit_isolation_boundary() {
     use std::os::unix::ffi::OsStringExt;
 
-    use codewhale_state::default_state_db_path;
+    use ghosty_state::default_state_db_path;
 
     let tmp = tempfile::tempdir().expect("temporary root");
     let home = tmp.path().join("home");
     let userprofile = tmp.path().join("userprofile");
     let explicit = tmp
         .path()
-        .join(OsString::from_vec(b"codewhale-\xff-home".to_vec()));
+        .join(OsString::from_vec(b"ghosty-\xff-home".to_vec()));
     let _env = ProcessEnv::install(
         tmp.path(),
         &home,
@@ -122,7 +122,7 @@ fn non_unicode_override_is_one_explicit_isolation_boundary() {
         &explicit.as_os_str().to_os_string(),
     );
 
-    assert_eq!(codewhale_home().expect("config home"), explicit);
+    assert_eq!(ghosty_home().expect("config home"), explicit);
     assert_eq!(
         default_config_path().expect("config path"),
         explicit.join(CONFIG_FILE_NAME)

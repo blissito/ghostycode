@@ -63,12 +63,12 @@ pub fn error_text_looks_auth_required(text: &str) -> bool {
 
 pub fn auth_required_login_hint(server_name: &str) -> String {
     format!(
-        "MCP server '{server_name}' requires OAuth authentication. Run `codewhale mcp login {server_name}` to authenticate."
+        "MCP server '{server_name}' requires OAuth authentication. Run `ghosty mcp login {server_name}` to authenticate."
     )
 }
 
 /// TUI recovery for a stale Streamable HTTP OAuth session. `/mcp auth` is not a
-/// command; login is `/mcp login <name>` (CLI: `codewhale mcp login <name>`).
+/// command; login is `/mcp login <name>` (CLI: `ghosty mcp login <name>`).
 pub fn tui_reauth_hint() -> &'static str {
     "Re-authorize this server (/mcp login <name>) to continue."
 }
@@ -660,7 +660,7 @@ fn normalize_scopes(scopes_supported: Option<Vec<String>>) -> Option<Vec<String>
 }
 
 fn load_oauth_tokens(server_name: &str, url: &str) -> Result<Option<StoredMcpOAuthTokens>> {
-    let secrets = codewhale_secrets::Secrets::auto_detect();
+    let secrets = ghosty_secrets::Secrets::auto_detect();
     let key = store_key(server_name, url);
     let Some(serialized) = secrets
         .get(&key)
@@ -682,7 +682,7 @@ fn parse_stored_oauth_tokens(serialized: &str, server_name: &str) -> Result<Stor
 }
 
 fn save_oauth_tokens(tokens: &StoredMcpOAuthTokens) -> Result<()> {
-    let secrets = codewhale_secrets::Secrets::auto_detect();
+    let secrets = ghosty_secrets::Secrets::auto_detect();
     let key = store_key(&tokens.server_name, &tokens.url);
     let serialized = serde_json::to_string(tokens).context("serializing MCP OAuth token")?;
     secrets
@@ -691,7 +691,7 @@ fn save_oauth_tokens(tokens: &StoredMcpOAuthTokens) -> Result<()> {
 }
 
 fn delete_oauth_tokens(server_name: &str, url: &str) -> Result<bool> {
-    let secrets = codewhale_secrets::Secrets::auto_detect();
+    let secrets = ghosty_secrets::Secrets::auto_detect();
     let key = store_key(server_name, url);
     let existed = secrets
         .get(&key)
@@ -922,7 +922,7 @@ async fn start_authorization(
     let Some(client_id) = oauth_client_id.filter(|client_id| !client_id.trim().is_empty()) else {
         let mut oauth_state = OAuthState::new(server_url, Some(client)).await?;
         oauth_state
-            .start_authorization(scopes, redirect_uri, Some("CodeWhale"))
+            .start_authorization(scopes, redirect_uri, Some("GhostyCode"))
             .await?;
         return Ok(oauth_state);
     };
@@ -1245,7 +1245,7 @@ mod tests {
     fn auth_required_login_hint_names_server() {
         let hint = auth_required_login_hint("nordic-mcp");
         assert!(hint.contains("nordic-mcp"));
-        assert!(hint.contains("codewhale mcp login nordic-mcp"));
+        assert!(hint.contains("ghosty mcp login nordic-mcp"));
         assert!(!hint.contains("/mcp auth"));
     }
 

@@ -1,4 +1,4 @@
-//! Secret storage for CodeWhale API keys.
+//! Secret storage for GhostyCode API keys.
 //!
 //! Provides a small abstraction (`KeyringStore`) plus a default
 //! file-based implementation (`FileKeyringStore`), an opt-in OS keyring
@@ -11,7 +11,7 @@
 //! explicit at the call site.
 #![deny(missing_docs)]
 
-/// Shared secure-storage contract for the Codewhale account session.
+/// Shared secure-storage contract for the Ghosty account session.
 pub mod account;
 
 use std::collections::HashMap;
@@ -19,20 +19,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use codewhale_paths::codewhale_home_is_explicit;
+use ghosty_paths::ghosty_home_is_explicit;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Default OS keychain service name. Kept as `deepseek` for compatibility
-/// with credentials saved before the CodeWhale rename. macOS users can verify
+/// with credentials saved before the GhostyCode rename. macOS users can verify
 /// entries with `security find-generic-password -s deepseek -a <provider>`.
 pub const DEFAULT_SERVICE: &str = "deepseek";
 /// Select the secret storage backend. Supported values are `file` (default)
 /// and `system`/`keyring` for the OS credential store.
-pub const SECRET_BACKEND_ENV: &str = "CODEWHALE_SECRET_BACKEND";
+pub const SECRET_BACKEND_ENV: &str = "GHOSTY_SECRET_BACKEND";
 /// Legacy alias for [`SECRET_BACKEND_ENV`].
 pub const LEGACY_SECRET_BACKEND_ENV: &str = "DEEPSEEK_SECRET_BACKEND";
-const FILE_BACKEND_LABEL: &str = "file-based (~/.codewhale/secrets/)";
+const FILE_BACKEND_LABEL: &str = "file-based (~/.ghosty/secrets/)";
 
 /// Errors that may arise from a [`KeyringStore`] backend.
 #[derive(Debug, Error)]
@@ -62,7 +62,7 @@ pub enum SecretsError {
 /// Abstract secret store trait.
 ///
 /// Concrete implementations may use the OS keyring ([`DefaultKeyringStore`]),
-/// a JSON file under `~/.codewhale/secrets/` ([`FileKeyringStore`]), or an
+/// a JSON file under `~/.ghosty/secrets/` ([`FileKeyringStore`]), or an
 /// in-memory map for tests ([`InMemoryKeyringStore`]).
 ///
 /// All implementations must be [`Send`] + [`Sync`] so they can be shared
@@ -89,7 +89,7 @@ pub trait KeyringStore: Send + Sync {
     /// Short, human-readable label for this backend.
     ///
     /// Used by diagnostic output (e.g. `doctor` command) to indicate which
-    /// storage backend is active. Examples: `"file-based (~/.codewhale/secrets/)"`,
+    /// storage backend is active. Examples: `"file-based (~/.ghosty/secrets/)"`,
     /// `"system keyring"`, `"in-memory (test)"`.
     fn backend_name(&self) -> &'static str;
 }
@@ -350,7 +350,7 @@ impl KeyringStore for InMemoryKeyringStore {
 /// JSON-on-disk secret store for headless environments.
 ///
 /// This is the default backend. Secrets are serialised as a JSON object
-/// at `<home>/.codewhale/secrets/secrets.json` with Unix file mode `0600`
+/// at `<home>/.ghosty/secrets/secrets.json` with Unix file mode `0600`
 /// (owner read/write only). The parent directory is created with mode `0700`
 /// if it does not exist.
 ///
@@ -368,15 +368,15 @@ pub struct FileKeyringStore {
 /// File-backed secret lookup that never migrates or changes either store.
 ///
 /// Normal runtime credential resolution keeps its additive legacy migration:
-/// older entries under `~/.deepseek/secrets/` are copied into the Codewhale
+/// older entries under `~/.deepseek/secrets/` are copied into the Ghosty
 /// location before use. Diagnostic commands need the same read precedence
 /// without creating that destination, so this store reads the primary file
 /// first and falls back to the legacy file only when the primary has no entry
-/// and the Codewhale home is not explicitly isolated.
+/// and the Ghosty home is not explicitly isolated.
 #[derive(Debug, Clone)]
 struct ReadOnlyFileKeyringStore {
     primary: FileKeyringStore,
-    /// The ambient legacy store is unavailable when `CODEWHALE_HOME` is an
+    /// The ambient legacy store is unavailable when `GHOSTY_HOME` is an
     /// explicit isolation boundary.
     legacy: Option<FileKeyringStore>,
 }
@@ -394,17 +394,17 @@ impl FileKeyringStore {
         Self { path: path.into() }
     }
 
-    /// Default path: `<home>/.codewhale/secrets/secrets.json`. Honours
-    /// `CODEWHALE_HOME`, then `HOME`, `USERPROFILE`, and finally the platform
+    /// Default path: `<home>/.ghosty/secrets/secrets.json`. Honours
+    /// `GHOSTY_HOME`, then `HOME`, `USERPROFILE`, and finally the platform
     /// home directory from the `dirs` crate. On first use, non-conflicting
     /// entries from the legacy `<home>/.deepseek/secrets/secrets.json` file are
-    /// copied into the CodeWhale store — unless `CODEWHALE_HOME` is explicit,
+    /// copied into the GhostyCode store — unless `GHOSTY_HOME` is explicit,
     /// in which case ambient `$HOME/.deepseek` credentials are never imported.
     pub fn default_path() -> Result<PathBuf, SecretsError> {
-        let primary = default_codewhale_secrets_path()?;
-        // Match the diagnostic isolation boundary: an explicit Codewhale home
+        let primary = default_ghosty_secrets_path()?;
+        // Match the diagnostic isolation boundary: an explicit Ghosty home
         // must not silently pull ambient legacy DeepSeek credentials.
-        if !codewhale_home_is_explicit() {
+        if !ghosty_home_is_explicit() {
             match legacy_deepseek_secrets_path() {
                 Ok(legacy) => {
                     if let Err(err) = Self::migrate_legacy_file_if_needed(&primary, &legacy) {
@@ -430,8 +430,8 @@ impl FileKeyringStore {
     /// flows must keep using [`Self::default_path`] so their existing additive
     /// migration behavior remains unchanged.
     pub fn default_paths_read_only() -> Result<(PathBuf, Option<PathBuf>), SecretsError> {
-        let primary = default_codewhale_secrets_path()?;
-        let legacy = (!codewhale_home_is_explicit())
+        let primary = default_ghosty_secrets_path()?;
+        let legacy = (!ghosty_home_is_explicit())
             .then(legacy_deepseek_secrets_path)
             .transpose()?;
         Ok((primary, legacy))
@@ -656,8 +656,8 @@ impl KeyringStore for FileKeyringStore {
     }
 }
 
-fn default_codewhale_secrets_path() -> Result<PathBuf, SecretsError> {
-    Ok(codewhale_paths::codewhale_home()
+fn default_ghosty_secrets_path() -> Result<PathBuf, SecretsError> {
+    Ok(ghosty_paths::ghosty_home()
         .map_err(|error| {
             SecretsError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
         })?
@@ -667,7 +667,7 @@ fn default_codewhale_secrets_path() -> Result<PathBuf, SecretsError> {
 }
 
 fn legacy_deepseek_secrets_path() -> Result<PathBuf, SecretsError> {
-    Ok(codewhale_paths::legacy_deepseek_home()
+    Ok(ghosty_paths::legacy_deepseek_home()
         .ok_or_else(home_resolution_error)?
         .join("secrets")
         .join("secrets.json"))
@@ -740,7 +740,7 @@ pub struct SecretBackendDiagnostic {
     pub path: Option<PathBuf>,
     /// Metadata-only presence of the canonical file-store path.
     pub presence: SecretBackendPresence,
-    /// Ambient legacy file-store path, suppressed by explicit `CODEWHALE_HOME`.
+    /// Ambient legacy file-store path, suppressed by explicit `GHOSTY_HOME`.
     pub legacy_path: Option<PathBuf>,
     /// Metadata-only presence of the legacy file-store path.
     pub legacy_presence: SecretBackendPresence,
@@ -845,7 +845,7 @@ fn configured_secret_backend() -> Option<String> {
 /// # Examples
 ///
 /// ```no_run
-/// use codewhale_secrets::Secrets;
+/// use ghosty_secrets::Secrets;
 ///
 /// let secrets = Secrets::auto_detect();
 /// if let Some(key) = secrets.resolve("deepseek") {
@@ -934,7 +934,7 @@ impl Secrets {
     /// or legacy migration.
     ///
     /// The selected backend and lookup precedence match [`Self::auto_detect`],
-    /// but file-backed lookup reads the Codewhale location first and the legacy
+    /// but file-backed lookup reads the Ghosty location first and the legacy
     /// location second instead of copying legacy entries into a new file. This
     /// lets status and doctor reports label a saved credential without changing
     /// user state.
@@ -1008,8 +1008,8 @@ impl Secrets {
     /// Construct a file-backed diagnostic store without migration or write
     /// capability.
     ///
-    /// This reads the Codewhale file first and the legacy file second (unless
-    /// `CODEWHALE_HOME` is explicit), but never copies legacy entries into a
+    /// This reads the Ghosty file first and the legacy file second (unless
+    /// `GHOSTY_HOME` is explicit), but never copies legacy entries into a
     /// primary store. It intentionally bypasses an opted-in OS keyring so
     /// callers that only need non-secret diagnostics do not cause a platform
     /// credential prompt.
@@ -1017,14 +1017,14 @@ impl Secrets {
     pub fn file_backed_read_only() -> Self {
         // Fail closed like the writable path in `file_backed_from_default_path`:
         // never fall back to a cwd-relative credential path. A planted
-        // `.codewhale-secrets.json` beside the working directory must not
+        // `.ghosty-secrets.json` beside the working directory must not
         // become the credential store when home resolution fails.
         match ReadOnlyFileKeyringStore::default_for_diagnostics() {
             Ok(store) => Self::new(Arc::new(store)),
             Err(err) => {
                 tracing::error!(
                     "could not resolve the file-backed secret path ({err}); credentials will not be read. \
-                     Fix: set CODEWHALE_HOME to an absolute path or make HOME/USERPROFILE resolvable"
+                     Fix: set GHOSTY_HOME to an absolute path or make HOME/USERPROFILE resolvable"
                 );
                 Self::read_only_empty_store()
             }
@@ -1258,7 +1258,7 @@ mod tests {
 
     fn clear_known_envs() {
         for var in [
-            "CODEWHALE_HOME",
+            "GHOSTY_HOME",
             "DEEPSEEK_API_KEY",
             "OPENROUTER_API_KEY",
             "NOVITA_API_KEY",
@@ -1328,13 +1328,13 @@ mod tests {
 
     /// Live check for #5172: on macOS/Windows the probe used to return Ok
     /// without touching the backend at all. Run explicitly with
-    /// `cargo test -p codewhale-secrets -- --ignored` on a desktop machine:
+    /// `cargo test -p ghosty-secrets -- --ignored` on a desktop machine:
     /// a healthy native keyring answers a read of the deliberately absent
     /// `__probe__` entry with NoEntry, silently, and the probe succeeds.
     #[test]
     #[ignore = "touches the real OS keyring; run on a desktop machine"]
     fn probe_performs_a_real_backend_read() {
-        let store = DefaultKeyringStore::new("codewhale-probe-live-check");
+        let store = DefaultKeyringStore::new("ghosty-probe-live-check");
         store
             .probe()
             .expect("the native keyring backend should be reachable on this machine");
@@ -1414,7 +1414,7 @@ mod tests {
             .join("secrets.json");
         let primary = tmp
             .path()
-            .join(".codewhale")
+            .join(".ghosty")
             .join("secrets")
             .join("secrets.json");
         FileKeyringStore::new(&legacy)
@@ -1445,21 +1445,21 @@ mod tests {
     }
 
     #[test]
-    fn read_only_auto_detect_respects_explicit_codewhale_home_isolation() {
+    fn read_only_auto_detect_respects_explicit_ghosty_home_isolation() {
         let _lock = env_lock();
         clear_known_envs();
         let tmp = tempfile::tempdir().unwrap();
-        let codewhale_home = tmp.path().join("isolated-codewhale-home");
+        let ghosty_home = tmp.path().join("isolated-ghosty-home");
         let _home = EnvVarGuard::set("HOME", tmp.path());
         let _userprofile = EnvVarGuard::set("USERPROFILE", tmp.path());
-        let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
         let _backend = EnvVarGuard::set(SECRET_BACKEND_ENV, "file");
         let legacy = tmp
             .path()
             .join(".deepseek")
             .join("secrets")
             .join("secrets.json");
-        let primary = codewhale_home.join("secrets").join("secrets.json");
+        let primary = ghosty_home.join("secrets").join("secrets.json");
         FileKeyringStore::new(&legacy)
             .set("deepseek", "synthetic-ambient-legacy-value")
             .unwrap();
@@ -1469,7 +1469,7 @@ mod tests {
         assert_eq!(
             secrets.get("deepseek").unwrap(),
             None,
-            "an explicit CODEWHALE_HOME must not read ambient legacy secrets"
+            "an explicit GHOSTY_HOME must not read ambient legacy secrets"
         );
         assert!(
             !primary.exists(),
@@ -1514,9 +1514,9 @@ mod tests {
         clear_known_envs();
         let tmp = tempfile::tempdir().unwrap();
         // A relative override fails home resolution deterministically, which
-        // used to fall back to a planted `.codewhale-secrets.json` in the cwd.
-        let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", "relative-codewhale-home");
-        let planted = tmp.path().join(".codewhale-secrets.json");
+        // used to fall back to a planted `.ghosty-secrets.json` in the cwd.
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", "relative-ghosty-home");
+        let planted = tmp.path().join(".ghosty-secrets.json");
         std::fs::write(
             &planted,
             r#"{"entries":{"deepseek":"planted-cwd-credential"}}"#,
@@ -1545,12 +1545,12 @@ mod tests {
         let _lock = env_lock();
         clear_known_envs();
         let tmp = tempfile::tempdir().unwrap();
-        let codewhale_home = tmp.path().join("isolated-codewhale-home");
+        let ghosty_home = tmp.path().join("isolated-ghosty-home");
         let _home = EnvVarGuard::set("HOME", tmp.path());
         let _userprofile = EnvVarGuard::set("USERPROFILE", tmp.path());
-        let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
         let _backend = EnvVarGuard::set(SECRET_BACKEND_ENV, "file");
-        let primary = codewhale_home.join("secrets").join("secrets.json");
+        let primary = ghosty_home.join("secrets").join("secrets.json");
         FileKeyringStore::new(&primary)
             .set("deepseek", "synthetic-isolated-primary-value")
             .unwrap();
@@ -1579,7 +1579,7 @@ mod tests {
     }
 
     #[test]
-    fn file_default_path_uses_codewhale_home() {
+    fn file_default_path_uses_ghosty_home() {
         let _lock = env_lock();
         clear_known_envs();
         let tmp = tempfile::tempdir().unwrap();
@@ -1591,21 +1591,21 @@ mod tests {
         assert_eq!(
             path,
             tmp.path()
-                .join(".codewhale")
+                .join(".ghosty")
                 .join("secrets")
                 .join("secrets.json")
         );
     }
 
     #[test]
-    fn file_default_path_honors_codewhale_home() {
+    fn file_default_path_honors_ghosty_home() {
         let _lock = env_lock();
         clear_known_envs();
         let tmp = tempfile::tempdir().unwrap();
-        let custom = tmp.path().join("custom-codewhale");
+        let custom = tmp.path().join("custom-ghosty");
         let _home = EnvVarGuard::set("HOME", tmp.path());
         let _userprofile = EnvVarGuard::set("USERPROFILE", tmp.path());
-        let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &custom);
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &custom);
 
         let path = FileKeyringStore::default_path().unwrap();
 
@@ -1613,7 +1613,7 @@ mod tests {
     }
 
     #[test]
-    fn file_default_path_migrates_legacy_entries_to_codewhale() {
+    fn file_default_path_migrates_legacy_entries_to_ghosty() {
         let _lock = env_lock();
         clear_known_envs();
         let tmp = tempfile::tempdir().unwrap();
@@ -1634,7 +1634,7 @@ mod tests {
         assert_eq!(
             primary,
             tmp.path()
-                .join(".codewhale")
+                .join(".ghosty")
                 .join("secrets")
                 .join("secrets.json")
         );
@@ -1662,7 +1662,7 @@ mod tests {
             .join("secrets.json");
         let primary = tmp
             .path()
-            .join(".codewhale")
+            .join(".ghosty")
             .join("secrets")
             .join("secrets.json");
         FileKeyringStore::new(legacy)
@@ -2334,23 +2334,23 @@ mod tests {
         assert_eq!(
             path,
             tmp.path()
-                .join(".codewhale")
+                .join(".ghosty")
                 .join("secrets")
                 .join("secrets.json")
         );
     }
 
     #[test]
-    fn default_path_with_explicit_codewhale_home_does_not_migrate_ambient_legacy() {
-        // FR003-C001: explicit CODEWHALE_HOME must not silently import ambient
+    fn default_path_with_explicit_ghosty_home_does_not_migrate_ambient_legacy() {
+        // FR003-C001: explicit GHOSTY_HOME must not silently import ambient
         // `$HOME/.deepseek/secrets` credentials into the isolated home.
         let _lock = env_lock();
         clear_known_envs();
         let tmp = tempfile::tempdir().unwrap();
-        let codewhale_home = tmp.path().join("isolated-codewhale-home");
+        let ghosty_home = tmp.path().join("isolated-ghosty-home");
         let _home = EnvVarGuard::set("HOME", tmp.path());
         let _userprofile = EnvVarGuard::set("USERPROFILE", tmp.path());
-        let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+        let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
         let legacy = tmp
             .path()
             .join(".deepseek")
@@ -2361,17 +2361,17 @@ mod tests {
             .unwrap();
 
         let path = FileKeyringStore::default_path().unwrap();
-        assert_eq!(path, codewhale_home.join("secrets").join("secrets.json"));
+        assert_eq!(path, ghosty_home.join("secrets").join("secrets.json"));
         assert!(
             !path.exists(),
-            "explicit CODEWHALE_HOME must not create/migrate a primary store from ambient legacy"
+            "explicit GHOSTY_HOME must not create/migrate a primary store from ambient legacy"
         );
 
         let secrets = Secrets::auto_detect();
         assert_eq!(
             secrets.get("deepseek").unwrap(),
             None,
-            "explicit CODEWHALE_HOME must not surface ambient legacy credentials"
+            "explicit GHOSTY_HOME must not surface ambient legacy credentials"
         );
     }
 
@@ -2380,7 +2380,7 @@ mod tests {
         // FR003-C002: a relative fallback would resolve against the workspace
         // and risk committing credentials. It must be write-refusing instead.
         let secrets =
-            Secrets::file_backed_from_default_path(Ok(PathBuf::from(".codewhale-secrets.json")));
+            Secrets::file_backed_from_default_path(Ok(PathBuf::from(".ghosty-secrets.json")));
         assert!(matches!(
             secrets.set("deepseek", "must-not-land-relative"),
             Err(SecretsError::ReadOnly)

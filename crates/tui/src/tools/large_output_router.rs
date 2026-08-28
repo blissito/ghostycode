@@ -360,7 +360,7 @@ pub const EVIDENCE_RETENTION_SECS: u64 = 7 * 24 * 60 * 60;
 
 #[must_use]
 pub fn classic_output_routing_enabled() -> bool {
-    std::env::var("CODEWHALE_CLASSIC_OUTPUT_ROUTING")
+    std::env::var("GHOSTY_CLASSIC_OUTPUT_ROUTING")
         .ok()
         .is_some_and(|value| matches!(value.trim(), "1" | "true" | "yes" | "on"))
 }

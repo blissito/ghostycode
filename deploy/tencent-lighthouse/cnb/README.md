@@ -8,9 +8,9 @@ The active root `.cnb.yml` does two things:
 
 - runs Feishu bridge and version-drift checks when CNB receives `main`;
 - builds Linux x64 release assets from `v*` tags, creates the CNB release, and
-  uploads the current `codewhale-linux-x64` and `codew-linux-x64` commands,
-  the compatibility-only `codewhale-tui-linux-x64` release filename, and
-  `codewhale-artifacts-sha256.txt`.
+  uploads the current `ghosty-linux-x64` and `ghosty-tui-linux-x64` commands,
+  the compatibility-only `ghosty-tui-linux-x64` release filename, and
+  `ghosty-artifacts-sha256.txt`.
 
 The files in this directory are retained as deploy-button templates for Tencent
 Lighthouse. Copy only the deploy environment file after the Lighthouse instance
@@ -31,11 +31,11 @@ Configure these as protected CNB environment variables or secrets:
 - `LIGHTHOUSE_HOST`: public IP or DNS name of the Lighthouse instance
 - `LIGHTHOUSE_SSH_TARGET`: SSH target, for example `ubuntu@203.0.113.10`
 - `LIGHTHOUSE_SSH_PRIVATE_KEY`: private deploy key allowed to update the server
-- `CODEWHALE_REPO_BRANCH`: branch or tag to deploy, for example `main`
+- `GHOSTY_REPO_BRANCH`: branch or tag to deploy, for example `main`
 
 Optional:
 
-- `CODEWHALE_REPO_URL`: defaults to the CNB mirror URL
+- `GHOSTY_REPO_URL`: defaults to the CNB mirror URL
 - `LIGHTHOUSE_SSH_PORT`: defaults to `22`
 
 The server side should already have the runtime checkout, environment files,
@@ -44,7 +44,7 @@ and systemd services installed by the maintainer-owned server setup process.
 ## Safety Notes
 
 - Do not store Feishu App Secret or provider API keys in CNB. They belong in
-  `/etc/codewhale/*.env` on Lighthouse.
+  `/etc/ghosty/*.env` on Lighthouse.
 - Do not expose `127.0.0.1:7878` through EdgeOne, a security group, or a public
   reverse proxy.
 - Start with a manual deploy button. Automatic deploy on every `main` push is

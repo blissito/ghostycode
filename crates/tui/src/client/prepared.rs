@@ -9,7 +9,7 @@
 //! describes it. Because there is exactly one builder, a preview cannot
 //! report a request different from the one a turn would send.
 //!
-//! Scope, stated plainly: this is *not* every outbound request Codewhale
+//! Scope, stated plainly: this is *not* every outbound request Ghosty
 //! makes. Chat-dialect translation builds its own small fixed body, and FIM,
 //! speech, provider-native search, model listing, and the auto-router
 //! classifier are separate calls with separate shapes. They are auxiliary and
@@ -26,7 +26,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use codewhale_config::provider::WireFormat;
+use ghosty_config::provider::WireFormat;
 
 use crate::config::ApiProvider;
 

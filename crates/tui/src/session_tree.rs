@@ -582,7 +582,7 @@ mod tests {
         j.append(SessionEntryKind::User {
             text: "hello".into(),
         });
-        let c = SessionImportContainer::new("codewhale".into(), &j, None);
+        let c = SessionImportContainer::new("ghosty".into(), &j, None);
         let json = c.to_json().unwrap();
         let back = SessionImportContainer::from_json(&json).unwrap();
         let j2 = back.into_journal().unwrap();

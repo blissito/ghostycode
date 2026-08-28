@@ -6,8 +6,8 @@
 //! below is that leader's team. The header names the selected saved Fleet and
 //! whether it is user-global or folder-scoped, so scope is never ambiguous.
 //! Below the operator sits the merged [`FleetRoster`] (built-in <
-//! `[fleet.profiles]` config < `$CODEWHALE_HOME/agents/*.toml` personal <
-//! `.codewhale/agents/*.toml` project members)
+//! `[fleet.profiles]` config < `$GHOSTY_HOME/agents/*.toml` personal <
+//! `.ghosty/agents/*.toml` project members)
 //! as a scrollable list with a detail pane for the selected row. The view
 //! never writes anything; `s` / Enter on a selected-v2 member opens that
 //! Fleet's exact editor, while the legacy profile wizard is used only when no

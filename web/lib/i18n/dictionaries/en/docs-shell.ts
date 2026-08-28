@@ -7,13 +7,13 @@ import type { DocsShellDict } from "../types";
  * commit, never mixed into a structural move.
  */
 export const docsShell: DocsShellDict = {
-  metaTitle: "Docs · Codewhale",
+  metaTitle: "Docs · Ghosty",
   metaDescription:
-    "Codewhale documentation: install, user guide, configuration, providers, core concepts, tools, MCP, skills, sandbox, runtime API, troubleshooting.",
-  portalMark: "Codewhale documentation",
+    "Ghosty documentation: install, user guide, configuration, providers, core concepts, tools, MCP, skills, sandbox, runtime API, troubleshooting.",
+  portalMark: "Ghosty documentation",
   heroTitle: "Find the guidance you need.",
   heroLead:
     "Start with the guide and install pages, or go straight to vocabulary, modes, permissions, tools, providers, Fleet, hooks, MCP, and the Runtime API. Each page links to its source document in the repository.",
-  installCta: "Install Codewhale",
+  installCta: "Install Ghosty",
   sourceDocsCta: "Browse source docs ↗",
 };

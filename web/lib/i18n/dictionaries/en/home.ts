@@ -10,12 +10,12 @@ import type { HomeDict } from "../types";
  * that needs a different mark can set one without touching the page.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — dives into the deep so you don't have to.",
+  metaTitle: "Ghosty — dives into the deep so you don't have to.",
   metaDescription:
-    "Codewhale dives into the deep so you don't have to — an open-source terminal coding agent. Bring your own model. Runs on your machine. Rust, MIT.",
+    "Ghosty dives into the deep so you don't have to — an open-source terminal coding agent. Bring your own model. Runs on your machine. Rust, MIT.",
 
   kicker: "Open source · Bring your own model · Runs in your terminal",
-  heroTitleA: "Codewhale dives into the deep",
+  heroTitleA: "Ghosty dives into the deep",
   heroTitleB: "so you don't have to.",
   heroIntro:
     "{brand} is an open-source coding agent for your terminal. Give it a model and a task. It reads your code, edits files, runs the checks, and stops when the job is done or it needs you. Use any model, or a different one for each role.",
@@ -38,8 +38,8 @@ export const home: HomeDict = {
 
   shotSession: "Session",
   screenshotAlt:
-    "Codewhale terminal session in Operate mode: the whale, the composer, and the status footer",
-  figcaption: "Codewhale session · Operate mode · permissions: Ask",
+    "Ghosty terminal session in Operate mode: the whale, the composer, and the status footer",
+  figcaption: "Ghosty session · Operate mode · permissions: Ask",
 
   proofHeading: "A coding agent in your terminal. Any model. On your machine.",
   proofBody:
@@ -85,7 +85,7 @@ export const home: HomeDict = {
   surfacesHeading: "Use it where the work happens.",
   surfaces: [
     ["TUI", "Interactive terminal work"],
-    ["codewhale exec", "Scripts and CI"],
+    ["ghosty exec", "Scripts and CI"],
     ["Web client", "Browser client, localhost only"],
     ["Runtime API + MCP", "Local integrations"],
     ["Fleet", "Several agents on one job"],

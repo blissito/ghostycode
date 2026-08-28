@@ -6,7 +6,7 @@ import type { DocsGuideDict } from "../types";
  * change belongs in its own commit, never mixed into a structural move.
  */
 export const docsGuide: DocsGuideDict = {
-  metaTitle: "Getting started · Codewhale Docs",
+  metaTitle: "Getting started · Ghosty Docs",
   metaDescription:
     "The full path from install to your ideal fleet: install, a first keyless session, provider connection, and fleet setup.",
   bodyClassName: "text-ink-soft leading-relaxed",

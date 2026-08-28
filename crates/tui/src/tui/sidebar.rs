@@ -1403,7 +1403,7 @@ mod tests {
     fn usd_only_priced_audit(usd: f64) -> crate::pricing::TurnCostAudit {
         crate::pricing::TurnCostAudit {
             estimate: Some(crate::pricing::CostEstimate::usd_only(usd)),
-            provenance: Some(codewhale_config::pricing::PricingProvenance::ModelsDevBundled),
+            provenance: Some(ghosty_config::pricing::PricingProvenance::ModelsDevBundled),
             unpriced_classes: Vec::new(),
             unpriced_reason: None,
             live_pricing_defect: None,
@@ -1415,7 +1415,7 @@ mod tests {
     fn dual_currency_priced_audit(usd: f64, cny: f64) -> crate::pricing::TurnCostAudit {
         crate::pricing::TurnCostAudit {
             estimate: Some(crate::pricing::CostEstimate { usd, cny }),
-            provenance: Some(codewhale_config::pricing::PricingProvenance::ModelsDevBundled),
+            provenance: Some(ghosty_config::pricing::PricingProvenance::ModelsDevBundled),
             unpriced_classes: Vec::new(),
             unpriced_reason: None,
             live_pricing_defect: None,

@@ -3,7 +3,7 @@
 //! Listing is read-only and only considers immediate, canonical child
 //! directories of `~/.kimi-code/plugins/managed`. Import requires the exact
 //! content hash shown by listing, then routes the local directory through the
-//! ordinary reviewed installer. The resulting Codewhale plugin still starts
+//! ordinary reviewed installer. The resulting Ghosty plugin still starts
 //! disabled and untrusted; this module never launches or probes an external
 //! Kimi application, daemon, MCP binary, or permission grant.
 

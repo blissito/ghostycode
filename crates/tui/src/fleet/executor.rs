@@ -1,13 +1,13 @@
-//! Fleet executor — runs a fleet worker as a real `codewhale exec` subprocess.
+//! Fleet executor — runs a fleet worker as a real `ghosty exec` subprocess.
 //!
-//! A fleet worker IS a headless `codewhale exec` run. There is no separate
+//! A fleet worker IS a headless `ghosty exec` run. There is no separate
 //! "fleet worker" execution engine: the sub-agent runtime, full tool surface,
-//! and recursion depth all come from the one `codewhale exec` runtime, so
+//! and recursion depth all come from the one `ghosty exec` runtime, so
 //! fleet and sub-agents are one substrate (not two moving targets).
 //!
 //! This module is the bridge:
 //! - [`build_worker_exec_command`] turns a `FleetTaskSpec` + `FleetExecConfig`
-//!   into the `codewhale [route flags] exec --output-format stream-json …`
+//!   into the `ghosty [route flags] exec --output-format stream-json …`
 //!   argv that a host adapter ([`super::host`]) launches locally or over SSH.
 //! - [`map_exec_stream_line`] maps one stream-json line emitted by that worker
 //!   into a [`FleetWorkerEventPayload`] for the durable ledger, so the ledger
@@ -21,8 +21,8 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use codewhale_config::FleetExecConfig;
-use codewhale_protocol::fleet::{FleetHostSpec, FleetTaskSpec, FleetWorkerEventPayload};
+use ghosty_config::FleetExecConfig;
+use ghosty_protocol::fleet::{FleetHostSpec, FleetTaskSpec, FleetWorkerEventPayload};
 
 use super::host::{FleetHostAdapter, FleetWorkerCommand};
 use super::profile::AgentProfile;
@@ -52,15 +52,15 @@ struct WorkerExecLimits {
 ///
 /// Kept here so every long-lived surface (CLI and Runtime API) launches the
 /// same configured worker binary instead of silently diverging.
-pub fn configured_codewhale_binary() -> String {
-    std::env::var("CODEWHALE_FLEET_CODEWHALE_BINARY")
+pub fn configured_ghosty_binary() -> String {
+    std::env::var("GHOSTY_FLEET_GHOSTY_BINARY")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "codewhale".to_string())
+        .unwrap_or_else(|| "ghosty".to_string())
 }
 
-/// Build the `codewhale exec` argv that runs a fleet task headlessly.
+/// Build the `ghosty exec` argv that runs a fleet task headlessly.
 ///
 /// `--auto` is always passed: a headless worker has no human to approve tool
 /// calls, so it runs with full (policy-gated) tool access. `--output-format
@@ -78,7 +78,7 @@ pub fn configured_codewhale_binary() -> String {
 /// that provider's credentials from its own env/config, so this invariant
 /// holds.
 pub fn build_worker_exec_command(
-    codewhale_binary: &str,
+    ghosty_binary: &str,
     task_spec: &FleetTaskSpec,
     exec_config: &FleetExecConfig,
     model: Option<&str>,
@@ -86,7 +86,7 @@ pub fn build_worker_exec_command(
     let max_turns = effective_task_max_turns(task_spec, exec_config);
     let max_tool_calls = task_max_tool_calls(task_spec);
     build_worker_exec_command_from_prompt(
-        codewhale_binary,
+        ghosty_binary,
         fleet_task_prompt(task_spec),
         exec_config,
         WorkerExecRoute {
@@ -112,7 +112,7 @@ pub fn build_worker_exec_command(
 /// run-level model and emit no `--provider`, so the worker keeps its own
 /// session default (today's behavior, unchanged).
 pub fn build_worker_exec_command_with_profiles(
-    codewhale_binary: &str,
+    ghosty_binary: &str,
     task_spec: &FleetTaskSpec,
     exec_config: &FleetExecConfig,
     model: Option<&str>,
@@ -124,7 +124,7 @@ pub fn build_worker_exec_command_with_profiles(
     let max_turns = effective_task_max_turns(task_spec, exec_config);
     let max_tool_calls = task_max_tool_calls(task_spec);
     Ok(build_worker_exec_command_from_prompt(
-        codewhale_binary,
+        ghosty_binary,
         fleet_task_prompt_with_profiles(task_spec, agent_profiles)?,
         exec_config,
         WorkerExecRoute {
@@ -145,7 +145,7 @@ pub fn build_worker_exec_command_with_profiles(
 /// uses the projected objective and carries a machine-readable outer authority
 /// envelope into the child process.
 pub fn build_worker_exec_command_with_launch_spec(
-    codewhale_binary: &str,
+    ghosty_binary: &str,
     task_spec: &FleetTaskSpec,
     launch_spec: &AgentWorkerSpec,
     exec_config: &FleetExecConfig,
@@ -163,7 +163,7 @@ pub fn build_worker_exec_command_with_launch_spec(
     let max_turns = (launch_spec.max_steps > 0).then_some(launch_spec.max_steps);
     let max_tool_calls = task_max_tool_calls(task_spec);
     Ok(build_worker_exec_command_from_prompt(
-        codewhale_binary,
+        ghosty_binary,
         launch_spec.objective.clone(),
         exec_config,
         WorkerExecRoute {
@@ -274,7 +274,7 @@ pub(crate) fn authority_envelope_for_worker(
 }
 
 fn build_worker_exec_command_from_prompt(
-    codewhale_binary: &str,
+    ghosty_binary: &str,
     task_prompt: String,
     exec_config: &FleetExecConfig,
     route: WorkerExecRoute<'_>,
@@ -283,10 +283,10 @@ fn build_worker_exec_command_from_prompt(
 ) -> FleetWorkerCommand {
     let mut args: Vec<String> = Vec::new();
 
-    // The canonical `codewhale` dispatcher owns these route overrides as
+    // The canonical `ghosty` dispatcher owns these route overrides as
     // global flags and deliberately rejects them after `exec`. Keep them in
     // front of the subcommand so Fleet commands work through the installed
-    // dispatcher as well as when a host points directly at `codewhale-tui`.
+    // dispatcher as well as when a host points directly at `ghosty-tui`.
     if let Some(model) = route.model.map(str::trim).filter(|m| !m.is_empty()) {
         args.push("--model".to_string());
         args.push(model.to_string());
@@ -354,10 +354,10 @@ fn build_worker_exec_command_from_prompt(
     // The composed task prompt is the final positional argument.
     args.push(task_prompt);
 
-    FleetWorkerCommand::new(codewhale_binary.to_string(), args)
+    FleetWorkerCommand::new(ghosty_binary.to_string(), args)
 }
 
-/// Map one `codewhale exec` stream-json line into a fleet ledger event.
+/// Map one `ghosty exec` stream-json line into a fleet ledger event.
 ///
 /// Returns `None` for lines that don't correspond to a worker lifecycle
 /// transition (e.g. `session_capture`, `metadata`). The exec event schema is
@@ -511,11 +511,11 @@ pub fn classify_worker_exit(exit_code: Option<i32>, stopped: bool) -> FleetWorke
     }
 }
 
-/// Drives fleet workers as real `codewhale exec` subprocesses on the local
+/// Drives fleet workers as real `ghosty exec` subprocesses on the local
 /// host, incrementally draining each worker's stream-json output into fleet
 /// ledger events.
 ///
-/// The caller (the `codewhale fleet run` loop / `FleetManager`) owns the
+/// The caller (the `ghosty fleet run` loop / `FleetManager`) owns the
 /// ledger; the executor owns the OS process boundary and the incremental log
 /// parse. Because the worker is a separate process, its heavy runtime/tool
 /// construction never touches the orchestrator — the parent only ingests a
@@ -530,7 +530,7 @@ pub struct FleetExecutor {
 /// Durable lease identity owned by one concrete host process.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FleetExecutorAttempt {
-    pub run_id: codewhale_protocol::fleet::FleetRunId,
+    pub run_id: ghosty_protocol::fleet::FleetRunId,
     pub task_id: String,
     pub attempt: u32,
 }
@@ -884,11 +884,11 @@ impl FleetExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codewhale_config::{
+    use ghosty_config::{
         FleetDelegationHints, FleetLoadout, FleetProfile, FleetProfilePermissions, FleetRole,
         FleetSlot,
     };
-    use codewhale_protocol::fleet::{
+    use ghosty_protocol::fleet::{
         FleetHostSpec, FleetTaskBudget, FleetTaskSpec, FleetTaskWorkerProfile, FleetWorkerSpec,
         FleetWorkspaceRequirements,
     };
@@ -1008,10 +1008,10 @@ mod tests {
     }
 
     #[test]
-    fn worker_command_is_a_headless_codewhale_exec_run() {
+    fn worker_command_is_a_headless_ghosty_exec_run() {
         let exec = FleetExecConfig::default();
-        let cmd = build_worker_exec_command("codewhale", &task("read the file"), &exec, None);
-        assert_eq!(cmd.program, "codewhale");
+        let cmd = build_worker_exec_command("ghosty", &task("read the file"), &exec, None);
+        assert_eq!(cmd.program, "ghosty");
         assert_eq!(cmd.args[0], "exec");
         assert!(cmd.args.contains(&"--auto".to_string()));
         // stream-json so the executor can ingest the worker's event stream.
@@ -1030,7 +1030,7 @@ mod tests {
             append_system_prompt: "never push to main".to_string(),
             ..FleetExecConfig::default()
         };
-        let cmd = build_worker_exec_command("codewhale", &task("audit"), &exec, Some("glm-5.1"));
+        let cmd = build_worker_exec_command("ghosty", &task("audit"), &exec, Some("glm-5.1"));
         let exec_idx = cmd
             .args
             .iter()
@@ -1067,7 +1067,7 @@ mod tests {
             ..FleetExecConfig::default()
         };
 
-        let cmd = build_worker_exec_command("codewhale", &task, &exec, None);
+        let cmd = build_worker_exec_command("ghosty", &task, &exec, None);
         let max_turns_idx = cmd
             .args
             .iter()
@@ -1099,7 +1099,7 @@ mod tests {
         launch_spec.max_steps = 13;
 
         let cmd = build_worker_exec_command_with_launch_spec(
-            "codewhale",
+            "ghosty",
             &task,
             &launch_spec,
             &FleetExecConfig {
@@ -1130,7 +1130,7 @@ mod tests {
         let mut task = task("audit");
         task.worker.as_mut().unwrap().agent_profile = Some("reviewer".to_string());
         let cmd = build_worker_exec_command_with_profiles(
-            "codewhale",
+            "ghosty",
             &task,
             &FleetExecConfig::default(),
             None,
@@ -1162,7 +1162,7 @@ mod tests {
         assert!(launch_spec.runtime_profile.permissions.network);
 
         let cmd = build_worker_exec_command_with_launch_spec(
-            "codewhale",
+            "ghosty",
             &task,
             &launch_spec,
             &FleetExecConfig::default(),
@@ -1196,7 +1196,7 @@ mod tests {
             task.worker.as_mut().unwrap().role = Some(role.to_string());
             let launch_spec = launch_spec(&task, tmp.path());
             let cmd = build_worker_exec_command_with_launch_spec(
-                "codewhale",
+                "ghosty",
                 &task,
                 &launch_spec,
                 &FleetExecConfig::default(),
@@ -1254,7 +1254,7 @@ mod tests {
         let launch_spec = launch_spec(&task, tmp.path());
 
         let cmd = build_worker_exec_command_with_launch_spec(
-            "codewhale",
+            "ghosty",
             &task,
             &launch_spec,
             &FleetExecConfig::default(),
@@ -1298,7 +1298,7 @@ mod tests {
         profile.profile.reasoning_effort = Some("max".to_string());
 
         let cmd = build_worker_exec_command_with_profiles(
-            "codewhale",
+            "ghosty",
             &task,
             &FleetExecConfig::default(),
             Some("deepseek-v4-pro"), // parent/session model on provider A.
@@ -1399,7 +1399,7 @@ mod tests {
         profile.profile.model = Some("qwen-2.5-7b".to_string());
 
         let cmd = build_worker_exec_command_with_profiles(
-            "codewhale",
+            "ghosty",
             &task,
             &FleetExecConfig::default(),
             Some("deepseek-v4-pro"),
@@ -1452,7 +1452,7 @@ mod tests {
     #[test]
     fn worker_command_without_profile_provider_omits_provider_and_keeps_run_model() {
         let cmd = build_worker_exec_command_with_profiles(
-            "codewhale",
+            "ghosty",
             &task("read"),
             &FleetExecConfig::default(),
             Some("deepseek-v4-pro"),
@@ -1507,7 +1507,7 @@ mod tests {
             max_tool_calls: Some(0),
             ..FleetTaskBudget::default()
         });
-        let cmd = build_worker_exec_command("codewhale", &task, &exec, None);
+        let cmd = build_worker_exec_command("ghosty", &task, &exec, None);
         assert!(!cmd.args.join(" ").contains("--max-turns"));
         assert!(!cmd.args.join(" ").contains("--max-tool-calls"));
     }
@@ -1515,7 +1515,7 @@ mod tests {
     #[test]
     fn default_max_turns_does_not_add_a_hidden_worker_cap() {
         let exec = FleetExecConfig::default();
-        let joined = build_worker_exec_command("codewhale", &task("x"), &exec, None)
+        let joined = build_worker_exec_command("ghosty", &task("x"), &exec, None)
             .args
             .join(" ");
         assert!(
@@ -1678,8 +1678,8 @@ mod tests {
     }
 
     /// End-to-end: run a REAL subprocess that emits stream-json (standing in for
-    /// `codewhale exec`), and prove the executor drains its events and terminal
-    /// exit through the real host adapter — no codewhale binary needed. This is
+    /// `ghosty exec`), and prove the executor drains its events and terminal
+    /// exit through the real host adapter — no ghosty binary needed. This is
     /// the verifiable proof that a fleet worker is an out-of-process exec run.
     #[cfg(unix)]
     #[test]
@@ -1773,7 +1773,7 @@ mod tests {
     /// Dogfood smoke (#3166): several concurrent exec-style workers with one
     /// injected failure. Proves the executor drives a small fleet to terminal
     /// outcomes and that a failing worker is classified distinctly from the
-    /// passing ones — all without the codewhale binary.
+    /// passing ones — all without the ghosty binary.
     #[cfg(unix)]
     #[test]
     fn executor_drives_concurrent_workers_with_injected_failure() {

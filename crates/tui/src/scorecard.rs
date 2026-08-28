@@ -247,7 +247,7 @@ impl AvailableCost {
     /// Legacy/unknown provenance: no route to price against at all.
     ///
     /// This still counts toward money coverage. A recording whose provider text
-    /// CodeWhale cannot parse is a turn whose spend is unknown, not a turn that
+    /// GhostyCode cannot parse is a turn whose spend is unknown, not a turn that
     /// cost nothing — excusing it would let a legacy input file report a complete
     /// total (#4318).
     fn unknown_route() -> Self {
@@ -382,7 +382,7 @@ fn provider_scoped_cost(
                 ..AvailableCost::default()
             };
         }
-        // A recorded surface CodeWhale cannot place must not inherit the
+        // A recorded surface GhostyCode cannot place must not inherit the
         // provider's default rates.
         crate::pricing::EndpointMetering::Unknown if billing_surface.is_some() => {
             return AvailableCost::failed_closed(

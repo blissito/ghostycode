@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
 
@@ -14,7 +14,7 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }
 
@@ -50,7 +50,7 @@ fn assert_terminal_stream_error(output: Output, expected_fragment: &str) {
 
 #[test]
 fn invalid_workflow_input_is_terminal_ndjson() {
-    let output = Command::new(codewhale_tui_binary())
+    let output = Command::new(ghosty_tui_binary())
         .args([
             "workflow-tool",
             "--approval-source",
@@ -68,7 +68,7 @@ fn missing_profile_is_terminal_ndjson() {
     let dir = tempfile::tempdir().expect("tempdir");
     let config = dir.path().join("config.toml");
     std::fs::write(&config, "provider = \"vllm\"\n").expect("write config");
-    let output = Command::new(codewhale_tui_binary())
+    let output = Command::new(ghosty_tui_binary())
         .arg("--config")
         .arg(&config)
         .args([
@@ -80,7 +80,7 @@ fn missing_profile_is_terminal_ndjson() {
             "--input-json",
             r#"{"action":"run"}"#,
         ])
-        .env("CODEWHALE_HOME", dir.path().join("codewhale-home"))
+        .env("GHOSTY_HOME", dir.path().join("ghosty-home"))
         .output()
         .expect("run workflow-tool with missing profile");
     assert_terminal_stream_error(output, "Profile 'missing-profile' not found");
@@ -103,7 +103,7 @@ provider = "anthropic"
 "#,
     )
     .expect("write profile config");
-    let output = Command::new(codewhale_tui_binary())
+    let output = Command::new(ghosty_tui_binary())
         .arg("--config")
         .arg(&config)
         .args([
@@ -115,9 +115,9 @@ provider = "anthropic"
             "--input-json",
             r#"{"action":"run","script":"phase('offline'); return { ok: true };"}"#,
         ])
-        .env("CODEWHALE_HOME", dir.path().join("codewhale-home"))
+        .env("GHOSTY_HOME", dir.path().join("ghosty-home"))
         .env("DEEPSEEK_API_KEY_SOURCE", "cli")
-        .env("CODEWHALE_CLI_API_KEY", "profile-switch-secret")
+        .env("GHOSTY_CLI_API_KEY", "profile-switch-secret")
         .output()
         .expect("run profile-switched workflow-tool");
 

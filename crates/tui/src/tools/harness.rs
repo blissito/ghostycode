@@ -1,4 +1,4 @@
-//! Model-facing controller for Codewhale's continual RLM harness.
+//! Model-facing controller for Ghosty's continual RLM harness.
 
 use async_trait::async_trait;
 use serde_json::{Value, json};

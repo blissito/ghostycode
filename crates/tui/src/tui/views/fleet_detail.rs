@@ -1100,7 +1100,7 @@ mod tests {
         // The receipt names the path as this platform writes it, so build the
         // expected tail the same way instead of hard-coding `/` — on Windows
         // `Path::display` renders the separators as `\`.
-        let expected_tail = std::path::Path::new(".codewhale")
+        let expected_tail = std::path::Path::new(".ghosty")
             .join("fleets")
             .join("fleet-c.toml")
             .display()

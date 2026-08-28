@@ -234,8 +234,8 @@ impl SkillsManagerView {
                     return ViewAction::None;
                 };
                 let want_kind = match self.import_scope {
-                    SkillTargetScope::Project => SkillRootKind::CodeWhaleProject,
-                    SkillTargetScope::Global => SkillRootKind::CodeWhaleGlobal,
+                    SkillTargetScope::Project => SkillRootKind::GhostyCodeProject,
+                    SkillTargetScope::Global => SkillRootKind::GhostyCodeGlobal,
                 };
                 // Only treat same-scope owned peers as replace conflicts — the
                 // mutation controller replaces inside `import_scope` alone.
@@ -551,8 +551,8 @@ fn action_label(kind: SkillActionKind) -> &'static str {
 
 fn source_label(kind: SkillSourceKind) -> &'static str {
     match kind {
-        SkillSourceKind::CodeWhaleManaged => "managed",
-        SkillSourceKind::CodeWhaleManual => "manual",
+        SkillSourceKind::GhostyCodeManaged => "managed",
+        SkillSourceKind::GhostyCodeManual => "manual",
         SkillSourceKind::CompatibleExternal => "external",
         SkillSourceKind::BuiltIn => "built-in",
         SkillSourceKind::ReviewedPluginSnapshot => "plugin",
@@ -849,7 +849,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let _home = IsolatedHome::new(&tmp);
         let workspace = tmp.path().join("ws");
-        let skill_dir = workspace.join(".codewhale").join("skills").join("demo");
+        let skill_dir = workspace.join(".ghosty").join("skills").join("demo");
         fs::create_dir_all(&skill_dir).unwrap();
         fs::write(
             skill_dir.join("SKILL.md"),
@@ -915,7 +915,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let _home = IsolatedHome::new(&tmp);
         let mut app = app_in(&tmp);
-        app.skills_dir = tmp.path().join("home").join(".codewhale").join("skills");
+        app.skills_dir = tmp.path().join("home").join(".ghosty").join("skills");
         crate::skills::install_system_skills(&app.skills_dir).unwrap();
 
         let view = SkillsManagerView::new(&app);
@@ -946,7 +946,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let _home = IsolatedHome::new(&tmp);
         let mut app = app_in(&tmp);
-        app.skills_dir = tmp.path().join("home").join(".codewhale").join("skills");
+        app.skills_dir = tmp.path().join("home").join(".ghosty").join("skills");
         crate::skills::install_system_skills(&app.skills_dir).unwrap();
         write_skill_pkg(&app.skills_dir.join("my-workflow"), "my-workflow", "mine");
 
@@ -982,7 +982,7 @@ mod tests {
 
         // Project-owned conflict only — Global import must not prompt replace.
         write_skill_pkg(
-            &workspace.join(".codewhale").join("skills").join("shared"),
+            &workspace.join(".ghosty").join("skills").join("shared"),
             "shared",
             "owned-project",
         );

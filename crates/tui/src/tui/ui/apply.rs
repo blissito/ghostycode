@@ -33,7 +33,7 @@ pub(crate) fn apply_agent_spawned_status_and_observer(
     prompt_summary: &str,
 ) {
     let label = app.ensure_agent_label(agent_id);
-    codewhale_telemetry::session_counters().bump(codewhale_telemetry::Counter::SubagentSpawn);
+    ghosty_telemetry::session_counters().bump(ghosty_telemetry::Counter::SubagentSpawn);
     app.status_message = Some(format!("{label} starting: {prompt_summary}"));
     if let Err(error) =
         execute_subagent_observer_hook(app, HookEvent::SubagentSpawn, agent_id, "prompt", prompt)
@@ -74,13 +74,13 @@ pub(crate) fn apply_coordination_detail_projection(
     // new engine before the old engine's manager has dropped the flock, and
     // flock treats the second fd in this same process as a conflict. That
     // state self-heals on the next projection retry (#5036), and a 30-second
-    // warning blaming "another Codewhale process" would be false (owner
+    // warning blaming "another Ghosty process" would be false (owner
     // report, 2026-08-04) — so it stays off the sticky strip.
     if !projection.process_lock_held {
         let note = projection
             .process_lock_note
             .as_deref()
-            .unwrap_or("another Codewhale process owns delegated coordination for this workspace");
+            .unwrap_or("another Ghosty process owns delegated coordination for this workspace");
         let same_process_handover =
             note.contains(crate::tools::subagent::COORDINATION_SAME_PROCESS_HANDOVER);
         // The strip is one row. The old copy opened with the diagnosis
@@ -94,7 +94,7 @@ pub(crate) fn apply_coordination_detail_projection(
         let message = if note.contains(crate::tools::subagent::COORDINATION_LOCK_TIMEOUT_MARKER) {
             "Timed out claiming delegated coordination for this workspace — job rows still settle locally.".to_string()
         } else {
-            "Another CodeWhale session in this workspace owns delegated coordination — job rows still settle locally.".to_string()
+            "Another GhostyCode session in this workspace owns delegated coordination — job rows still settle locally.".to_string()
         };
         // Demoted from sticky 30s to transient 5s — two sessions in same workspace
         // should not feel broken; job rows still settle locally. The detail view
@@ -209,7 +209,7 @@ pub(crate) fn apply_engine_error_to_app(
         let provider = app.api_provider;
         let config_path = match crate::config::resolve_load_config_path(app.config_path.clone()) {
             Ok(Some(path)) => path.display().to_string(),
-            Ok(None) => "~/.codewhale/config.toml".to_string(),
+            Ok(None) => "~/.ghosty/config.toml".to_string(),
             Err(error) => error.to_string(),
         };
         app.status_message = Some(
@@ -609,7 +609,7 @@ pub(crate) async fn apply_model_and_compaction_update(
     engine_handle: &EngineHandle,
     compaction: crate::compaction::CompactionConfig,
     mode: AppMode,
-    route_limits: Option<codewhale_config::route::RouteLimits>,
+    route_limits: Option<ghosty_config::route::RouteLimits>,
 ) {
     let _ = engine_handle
         .send(Op::SetModel {
@@ -1035,7 +1035,7 @@ pub(super) fn reject_inline_inference_while_runtime_chat_owns_run(
     }
     let notice = app
         .tr(MessageId::SettingLockedDuringTurn)
-        .replace("{setting}", "Codewhale Runtime");
+        .replace("{setting}", "Ghosty Runtime");
     app.push_status_toast(notice, crate::tui::app::StatusToastLevel::Info, Some(6_000));
     true
 }
@@ -1232,7 +1232,7 @@ pub(crate) async fn apply_command_result(
                 sync_mode_update(app, engine_handle).await;
             }
             AppAction::PermissionRulesChanged => {
-                match codewhale_config::load_permissions_snapshot(app.config_path.clone()) {
+                match ghosty_config::load_permissions_snapshot(app.config_path.clone()) {
                     Ok(snapshot) => {
                         let ruleset = snapshot.permissions().ruleset();
                         config.exec_policy_engine.set_ruleset(ruleset.clone());
@@ -1799,7 +1799,7 @@ pub(crate) async fn apply_command_result(
                                 .with_locale(app.ui_locale)
                                 .with_provider_health(&app.provider_health),
                         );
-                        let template = codewhale_config::provider_setup_template(&template_id);
+                        let template = ghosty_config::provider_setup_template(&template_id);
                         let message = match template {
                             Some(template) if template.is_unpublished() => {
                                 app.tr(MessageId::ProviderTemplateUnpublished).into_owned()
@@ -2204,7 +2204,7 @@ pub(crate) fn apply_workspace_runtime_state(app: &mut App, config: &Config, work
         workspace.clone(),
     );
     app.skills_dir = crate::tui::app::resolve_skills_dir(&workspace, &config.skills_dir(), config);
-    app.skills_scan_codewhale_only = config.skills_config().scan_codewhale_only();
+    app.skills_scan_ghosty_only = config.skills_config().scan_ghosty_only();
     app.project_context_pack_enabled = config.project_context_pack_enabled();
     app.refresh_skill_cache();
     app.workspace_context = None;
@@ -2222,7 +2222,7 @@ pub(crate) fn apply_workspace_runtime_state(app: &mut App, config: &Config, work
 pub(crate) fn apply_hotbar_setup_saved(
     app: &mut App,
     config: &mut Config,
-    bindings: Vec<codewhale_config::HotbarBindingToml>,
+    bindings: Vec<ghosty_config::HotbarBindingToml>,
 ) {
     match crate::config_persistence::persist_hotbar_bindings(app.config_path.as_deref(), &bindings)
     {
@@ -2304,7 +2304,7 @@ pub(crate) fn apply_setup_runtime_preset(
     app: &mut App,
     config: &mut Config,
     preset: crate::tui::setup::SetupRuntimePreset,
-    state: codewhale_config::SetupState,
+    state: ghosty_config::SetupState,
 ) -> Result<String> {
     if let Some(source) = config.runtime_preset_blocker(
         app.config_path.as_deref(),
@@ -2919,7 +2919,7 @@ pub(crate) async fn apply_provider_picker_setup_confirmed(
     switched
 }
 
-pub(crate) async fn apply_codewhale_owned_xai_login(
+pub(crate) async fn apply_ghosty_owned_xai_login(
     app: &mut App,
     engine_handle: &mut EngineHandle,
     config: &mut Config,
@@ -2934,8 +2934,8 @@ pub(crate) async fn apply_codewhale_owned_xai_login(
         Ok(activation) => {
             app.status_message = Some(format!(
                 "{status_prefix}; activated {} via {}",
-                codewhale_config::quote_os_path(&activation.auth_path),
-                codewhale_config::quote_os_path(&activation.config_path)
+                ghosty_config::quote_os_path(&activation.auth_path),
+                ghosty_config::quote_os_path(&activation.config_path)
             ));
             app.api_key_env_only = false;
         }
@@ -2988,7 +2988,7 @@ pub(crate) fn apply_loaded_session_with_goal(
     )
     .map_err(|reason| {
         format!(
-            "saved session provider '{}' could not be resolved from the live config: {reason}. Codewhale will not fall back",
+            "saved session provider '{}' could not be resolved from the live config: {reason}. Ghosty will not fall back",
             provider_identity.key
         )
     })?;

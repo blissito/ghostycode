@@ -1,6 +1,6 @@
-//! `.codewhale/constitution.json` — the Codewhale-specific repo authority and
+//! `.ghosty/constitution.json` — the Ghosty-specific repo authority and
 //! prioritization policy. This module owns discovery (workspace upward to the
-//! git root), parsing, the rendered `<codewhale_repo_constitution>` authority
+//! git root), parsing, the rendered `<ghosty_repo_constitution>` authority
 //! block, and the mechanically enforceable write holds compiled for
 //! `crate::repo_law`.
 
@@ -11,14 +11,14 @@ use serde::Deserialize;
 use super::{context_candidate_exists, find_git_root, join_relative_components, load_context_file};
 
 /// Relative path (within a workspace or one of its parents) to the
-/// Codewhale-specific repo authority/prioritization policy.
-const REPO_CONSTITUTION_RELATIVE_PATH: &[&str] = &[".codewhale", "constitution.json"];
+/// Ghosty-specific repo authority/prioritization policy.
+const REPO_CONSTITUTION_RELATIVE_PATH: &[&str] = &[".ghosty", "constitution.json"];
 
 /// `schema_version` understood by this build of the constitution loader.
 const SUPPORTED_CONSTITUTION_SCHEMA: u32 = 1;
 
-/// Codewhale-specific repo authority/prioritization policy, loaded from
-/// `.codewhale/constitution.json`. All fields are optional so a minimal file
+/// Ghosty-specific repo authority/prioritization policy, loaded from
+/// `.ghosty/constitution.json`. All fields are optional so a minimal file
 /// (or a future schema) still parses; unknown fields are ignored.
 #[derive(Debug, Clone, Default, Deserialize)]
 struct RepoConstitution {
@@ -245,7 +245,7 @@ impl RepoConstitution {
             }
         }
         format!(
-            "<codewhale_repo_constitution source=\"{}\">\nCodewhale-specific repo authority policy (local law: subordinate to the global Constitution and the current user request, but above memory and old handoffs; WHALE.md is ignored and should be migrated, not treated as law).\n\n{}</codewhale_repo_constitution>",
+            "<ghosty_repo_constitution source=\"{}\">\nGhosty-specific repo authority policy (local law: subordinate to the global Constitution and the current user request, but above memory and old handoffs; WHALE.md is ignored and should be migrated, not treated as law).\n\n{}</ghosty_repo_constitution>",
             source.display(),
             body.trim_end()
         )
@@ -289,7 +289,7 @@ fn contains_release_version_token(value: &str) -> bool {
         })
 }
 
-/// Discover and render `.codewhale/constitution.json` from `workspace` or, if
+/// Discover and render `.ghosty/constitution.json` from `workspace` or, if
 /// absent, its parent directories up to the git root. Returns the rendered
 /// authority block plus any parse warnings.
 pub(crate) fn load_repo_constitution_block(
@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn mixed_advisory_and_enforced_invariants_render_and_back_compat_holds() {
         let tmp = tempdir().expect("tempdir");
-        let dir = tmp.path().join(".codewhale");
+        let dir = tmp.path().join(".ghosty");
         fs::create_dir_all(&dir).expect("law dir");
         fs::write(
             dir.join("constitution.json"),
@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn legacy_string_only_invariants_render_unchanged_and_compile_nothing() {
         let tmp = tempdir().expect("tempdir");
-        let dir = tmp.path().join(".codewhale");
+        let dir = tmp.path().join(".ghosty");
         fs::create_dir_all(&dir).expect("law dir");
         fs::write(
             dir.join("constitution.json"),
@@ -439,7 +439,7 @@ mod tests {
     fn repository_constitution_avoids_hard_coded_release_lane_policy() {
         let repo_constitution = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
-            .join(".codewhale")
+            .join(".ghosty")
             .join("constitution.json");
         let raw = fs::read_to_string(&repo_constitution).expect("read repo constitution");
         let constitution: RepoConstitution =

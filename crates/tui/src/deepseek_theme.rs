@@ -1,4 +1,4 @@
-//! Codewhale terminal theme tokens (legacy module path).
+//! Ghosty terminal theme tokens (legacy module path).
 //!
 //! A small, deliberately flat module that names the color, border, and
 //! padding choices the TUI is making. Values follow the semantic grammar
@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn dark_theme_uses_codewhale_semantic_roles() {
+    fn dark_theme_uses_ghosty_semantic_roles() {
         let theme = Theme::dark();
         assert_eq!(theme.variant, Variant::Dark);
         assert_eq!(theme.section_border_color, palette::BORDER_COLOR);

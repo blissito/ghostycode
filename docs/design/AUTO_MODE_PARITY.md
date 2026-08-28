@@ -1,6 +1,6 @@
-# Auto mode parity: Codewhale Auto-Review vs Claude Code auto mode vs Kimi Code
+# Auto mode parity: Ghosty Auto-Review vs Claude Code auto mode vs Kimi Code
 
-Status: design + gap ledger (2026-08-15). Source of truth for Codewhale
+Status: design + gap ledger (2026-08-15). Source of truth for Ghosty
 behavior is `docs/MODES.md`, `docs/AUTHORIZATION_ORDER.md`, and the code in
 `crates/tui/src/tui/auto_review.rs`, `crates/tui/src/core/engine/reviewer.rs`,
 and `crates/tui/src/core/engine/turn_loop.rs`. Statements about the other
@@ -69,7 +69,7 @@ From `kimi --help` and `moonshotai.github.io/kimi-code` (llms-full):
 - Its Auto policy (per `docs/MODES.md`, at the pinned commit) applies deny
   rules and then approves; there is no model reviewer.
 
-## What Codewhale does today (0.9.8 candidate)
+## What Ghosty does today (0.9.8 candidate)
 
 - Postures (`Shift+Tab`, `/config approval_mode`): **Ask** (`suggest`),
   **Auto-Review** (`auto`), **Full Access** (`bypass`), plus `never`.
@@ -81,7 +81,7 @@ From `kimi --help` and `moonshotai.github.io/kimi-code` (llms-full):
   closed). Repo-law holds that require a person block instead of opening a
   hidden modal. Ask rules force prompts in every posture. Full Access
   auto-approves non-bypassable registered holds instead of opening a modal.
-- Every decision is written to `$CODEWHALE_HOME/audit.log`
+- Every decision is written to `$GHOSTY_HOME/audit.log`
   (`tool.auto_review` with `gate: deterministic|guardian`).
 - Children inherit the parent posture; an explicit Full Access handoff
   keeps the child from prompting.
@@ -89,10 +89,10 @@ From `kimi --help` and `moonshotai.github.io/kimi-code` (llms-full):
 
 ## Parity matrix
 
-| Row | Claude Code auto | Kimi Code auto/yolo | Codewhale Auto-Review | Status |
+| Row | Claude Code auto | Kimi Code auto/yolo | Ghosty Auto-Review | Status |
 | --- | --- | --- | --- | --- |
 | What runs without asking | reads + working-dir edits by rule; rest via classifier | yolo: regular tool calls; auto: everything, no questions | proven-safe by deterministic floor; fallback holds via guardian | **parity** (different mechanism, same outcome class) |
-| What always asks / never auto-runs | explicit `ask` rules; protected paths; org-`ask` connectors; `requiresUserInteraction` MCP | plan-mode exit | ask rules; safety-floor holds needing a person (denied, not hidden); high/critical guardian risk; repo law | **parity** — Codewhale denies rather than prompts in Auto-Review, by design (no hidden modal) |
+| What always asks / never auto-runs | explicit `ask` rules; protected paths; org-`ask` connectors; `requiresUserInteraction` MCP | plan-mode exit | ask rules; safety-floor holds needing a person (denied, not hidden); high/critical guardian risk; repo law | **parity** — Ghosty denies rather than prompts in Auto-Review, by design (no hidden modal) |
 | Denial UX | notification + `Blocked by classifier` reason to the model; `/permissions` → Recently denied, `r` retries | approval dialog / denial | tool error carries the reason to the model; **now** a one-line transcript receipt | **partial** → transcript receipt added here; recently-denied ledger + retry is a follow-up |
 | Decision receipts | `Allowed by auto mode classifier` under classified messages | none documented | audit log only → **now** transcript notes for guardian allow/deny/unavailable, deterministic blocks, and held-without-pausing | **closed in this lane** |
 | Allow/deny lists | `permissions.allow/ask/deny` + prose `autoMode.*` | `/permission` always-allow rules | `permissions.toml` ask rules (`/permissions list/remove`), configured block rules, execpolicy | **partial**: prose trusted-infrastructure config is deliberately absent (guardian sees only the exact call); `/permissions` now explains the posture and where receipts go |

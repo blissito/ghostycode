@@ -1,5 +1,5 @@
 //! TUI runtime logging. Initializes a `tracing-subscriber` that writes to a
-//! per-process file under `~/.codewhale/logs/tui-YYYY-MM-DD-PID.log`, and (on
+//! per-process file under `~/.ghosty/logs/tui-YYYY-MM-DD-PID.log`, and (on
 //! Unix and Windows) redirects the process's `stderr` handle/fd to that same
 //! file for the lifetime of the alt-screen TUI.
 //!
@@ -22,7 +22,7 @@
 //!
 //! Defence-in-depth:
 //!   1. A `tracing-subscriber` writes formatted logs to
-//!      `~/.codewhale/logs/tui-YYYY-MM-DD-PID.log` so `tracing::warn!` /
+//!      `~/.ghosty/logs/tui-YYYY-MM-DD-PID.log` so `tracing::warn!` /
 //!      `tracing::error!` calls go somewhere observable instead of
 //!      disappearing into the void (the TUI previously had no global
 //!      subscriber, so contributors reached for `eprintln!`).
@@ -209,18 +209,18 @@ pub fn init() -> Result<TuiLogGuard> {
 }
 
 pub(crate) fn log_directory() -> Option<PathBuf> {
-    // $CODEWHALE_HOME is a hard override of the base data directory
+    // $GHOSTY_HOME is a hard override of the base data directory
     // (docs/CONFIGURATION.md): when SET, logs live under it and we do NOT fall
     // back to the legacy ~/.deepseek path — silent fallback would defeat the
     // isolation the override promises (CI, containers, test harnesses). We
-    // check the env var directly rather than codewhale_home()'s Ok/Err because
-    // that helper succeeds (returns $HOME/.codewhale) even when the override is
+    // check the env var directly rather than ghosty_home()'s Ok/Err because
+    // that helper succeeds (returns $HOME/.ghosty) even when the override is
     // unset, which would short-circuit the legacy fallback below.
-    if let Some(home) = codewhale_paths::codewhale_home_override().ok().flatten() {
+    if let Some(home) = ghosty_paths::ghosty_home_override().ok().flatten() {
         return Some(home.join("logs"));
     }
     let resolve = |base: PathBuf| -> Option<PathBuf> {
-        let primary = base.join(".codewhale").join("logs");
+        let primary = base.join(".ghosty").join("logs");
         if primary.exists() {
             return Some(primary);
         }
@@ -230,7 +230,7 @@ pub(crate) fn log_directory() -> Option<PathBuf> {
         }
         Some(primary)
     };
-    codewhale_paths::user_home().and_then(resolve)
+    ghosty_paths::user_home().and_then(resolve)
 }
 
 fn log_file_name(date: &str, pid: u32) -> String {
@@ -368,10 +368,10 @@ mod tests {
         let userprofile = tmp.path().join("userprofile");
         let _home = crate::test_support::EnvVarGuard::set("HOME", &home);
         let _userprofile = crate::test_support::EnvVarGuard::set("USERPROFILE", &userprofile);
-        let _codewhale_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", " \t ");
-        let _config_path = crate::test_support::EnvVarGuard::remove("CODEWHALE_CONFIG_PATH");
+        let _ghosty_home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", " \t ");
+        let _config_path = crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH");
         let _legacy_config_path = crate::test_support::EnvVarGuard::remove("DEEPSEEK_CONFIG_PATH");
-        let primary = home.join(".codewhale");
+        let primary = home.join(".ghosty");
 
         assert_eq!(crate::config::effective_home_dir(), Some(home.clone()));
         assert_eq!(
@@ -411,7 +411,7 @@ mod tests {
         }
 
         let resolved = log_directory().expect("log_directory should resolve");
-        assert_eq!(resolved, tmp.path().join(".codewhale").join("logs"));
+        assert_eq!(resolved, tmp.path().join(".ghosty").join("logs"));
 
         // SAFETY: cleanup under the same lock.
         unsafe {
@@ -519,20 +519,20 @@ mod tests {
     }
 
     #[test]
-    fn log_directory_honors_codewhale_home_as_hard_override() {
+    fn log_directory_honors_ghosty_home_as_hard_override() {
         let _lock = crate::test_support::lock_test_env();
         let tmp = tempfile::TempDir::new().unwrap();
         // SAFETY: serialised by lock_test_env.
         unsafe {
-            std::env::set_var("CODEWHALE_HOME", tmp.path());
+            std::env::set_var("GHOSTY_HOME", tmp.path());
         }
-        // $CODEWHALE_HOME IS the home dir (no ".codewhale" appended), and the
+        // $GHOSTY_HOME IS the home dir (no ".ghosty" appended), and the
         // legacy ~/.deepseek fallback is bypassed entirely.
         let resolved = log_directory().expect("log_directory should resolve");
         assert_eq!(resolved, tmp.path().join("logs"));
         // SAFETY: cleanup under the same lock.
         unsafe {
-            std::env::remove_var("CODEWHALE_HOME");
+            std::env::remove_var("GHOSTY_HOME");
         }
     }
 }

@@ -40,11 +40,7 @@ const MAX_SCHEMA_COST_ROWS: usize = 24;
 const SCHEMA_TOKEN_DIVISOR: usize = 4;
 
 const SYSTEM_LAYER_MARKERS: &[(&str, &str, PromptLayerKind)] = &[
-    (
-        "Bundled constitution",
-        "## Codewhale",
-        PromptLayerKind::Static,
-    ),
+    ("Bundled constitution", "## Ghosty", PromptLayerKind::Static),
     ("Language policy", "## Language", PromptLayerKind::Static),
     (
         "Output formatting",
@@ -53,12 +49,12 @@ const SYSTEM_LAYER_MARKERS: &[(&str, &str, PromptLayerKind)] = &[
     ),
     (
         "User-global constitution",
-        "<codewhale_user_constitution",
+        "<ghosty_user_constitution",
         PromptLayerKind::Static,
     ),
     (
         "Repository constitution",
-        "<codewhale_repo_constitution",
+        "<ghosty_repo_constitution",
         PromptLayerKind::Static,
     ),
     (
@@ -1165,7 +1161,7 @@ mod tests {
         app.system_prompt = Some(SystemPrompt::Blocks(vec![
             SystemBlock {
                 block_type: "text".to_string(),
-                text: "## Stable Base\n\nYou are CodeWhale.".to_string(),
+                text: "## Stable Base\n\nYou are GhostyCode.".to_string(),
                 cache_control: None,
             },
             SystemBlock {
@@ -1225,7 +1221,7 @@ mod tests {
     fn inspector_text_prompt_shows_layer_map() {
         let mut app = test_app();
         app.system_prompt = Some(SystemPrompt::Text(
-            "## Codewhale\nBundled base law.\n\n## Language\nUse English.\n\n## Output Formatting\nBe clear.\n\n<codewhale_user_constitution>\nUser law\n</codewhale_user_constitution>\n\n<codewhale_repo_constitution>\nRepo law\n</codewhale_repo_constitution>\n\n<project_instructions source=\"AGENTS.md\">\nRules\n</project_instructions>\n\n## Project Context Pack\n{}\n\n## Environment\n- lang: en\n\n## Skills\n- rust\n\n## Core Execution\nInspect, edit, verify.\n\n## Compact\nTemplate\n\n## Repo Working Set\nsrc/".to_string(),
+            "## Ghosty\nBundled base law.\n\n## Language\nUse English.\n\n## Output Formatting\nBe clear.\n\n<ghosty_user_constitution>\nUser law\n</ghosty_user_constitution>\n\n<ghosty_repo_constitution>\nRepo law\n</ghosty_repo_constitution>\n\n<project_instructions source=\"AGENTS.md\">\nRules\n</project_instructions>\n\n## Project Context Pack\n{}\n\n## Environment\n- lang: en\n\n## Skills\n- rust\n\n## Core Execution\nInspect, edit, verify.\n\n## Compact\nTemplate\n\n## Repo Working Set\nsrc/".to_string(),
         ));
 
         let text = build_context_inspector_text(&app, Locale::En);
@@ -1249,7 +1245,7 @@ mod tests {
     #[test]
     fn inspector_text_prompt_without_markers_shows_single_blob() {
         let mut app = test_app();
-        app.system_prompt = Some(SystemPrompt::Text("You are CodeWhale.".to_string()));
+        app.system_prompt = Some(SystemPrompt::Text("You are GhostyCode.".to_string()));
 
         let text = build_context_inspector_text(&app, Locale::En);
         assert!(text.contains("Single text blob"));
@@ -1263,7 +1259,7 @@ mod tests {
         app.system_prompt = Some(SystemPrompt::Blocks(vec![
             SystemBlock {
                 block_type: "text".to_string(),
-                text: "## Base\nYou are CodeWhale.".to_string(),
+                text: "## Base\nYou are GhostyCode.".to_string(),
                 cache_control: None,
             },
             SystemBlock {

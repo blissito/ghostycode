@@ -7,7 +7,7 @@ use serde_json::json;
 
 use super::RuntimeApiState;
 
-const RUNTIME_TOKEN_COOKIE: &str = "codewhale_runtime_token";
+const RUNTIME_TOKEN_COOKIE: &str = "ghosty_runtime_token";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ResolvedRuntimeAuth {
@@ -43,7 +43,7 @@ pub(super) fn runtime_auth_status_lines(auth: &ResolvedRuntimeAuth) -> Vec<Strin
     if auth.generated {
         return vec![
             "Runtime API auth: generated bearer token for this process (not printed).".to_string(),
-            "  Set CODEWHALE_RUNTIME_TOKEN (or DEEPSEEK_RUNTIME_TOKEN as an alias) or pass --auth-token when another client needs to connect.".to_string(),
+            "  Set GHOSTY_RUNTIME_TOKEN (or DEEPSEEK_RUNTIME_TOKEN as an alias) or pass --auth-token when another client needs to connect.".to_string(),
         ];
     }
     if auth.token.is_some() {
@@ -102,7 +102,7 @@ fn request_has_header_runtime_token(req: &Request, expected: &str) -> bool {
         .is_some_and(|token| token == expected)
         || req
             .headers()
-            .get("x-codewhale-runtime-token")
+            .get("x-ghosty-runtime-token")
             .and_then(|value| value.to_str().ok())
             .is_some_and(|token| token == expected)
         || req

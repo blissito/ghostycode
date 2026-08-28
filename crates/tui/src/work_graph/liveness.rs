@@ -9,7 +9,7 @@ use super::{AcceptanceRequirement, EvidenceRef, OperationObservation, OwnerState
 use crate::fleet::ledger::{FleetTaskLedgerStatus, FleetTaskState};
 use crate::task_manager::TaskStatus;
 use chrono::{DateTime, Utc};
-use codewhale_lane::{LaneRecord, LaneStatus};
+use ghosty_lane::{LaneRecord, LaneStatus};
 
 /// Spawn intent registered before an owner starts work.
 #[derive(Debug, Clone, PartialEq)]

@@ -91,7 +91,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
               {ledeParts.map((part, index) => (
                 <Fragment key={index}>
                   {index > 0 && (
-                    <span className="font-cjk text-indigo font-semibold">Codewhale</span>
+                    <span className="font-cjk text-indigo font-semibold">Ghosty</span>
                   )}
                   {part}
                 </Fragment>
@@ -113,7 +113,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             <div className="product-install paper-install">
               <div className="eyebrow mb-2">{d.installEyebrow}</div>
               <InstallCodeBlock
-                cmd="npm install -g codewhale"
+                cmd="npm install -g ghosty"
                 copyLabel={d.copy}
                 copiedLabel={d.copied}
               />
@@ -130,7 +130,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
               its own translated unit — the separators are CSS punctuation, so
               nothing is concatenated around a token and no locale inherits an
               English joining word. `cw` is the binary's own name, code-owned
-              exactly like `Codewhale`.
+              exactly like `Ghosty`.
             */}
             <p
               className="product-facts paper-facts dotline"
@@ -155,12 +155,12 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             <div className="product-shot-toolbar paper-shot-toolbar">
               <span>
                 <Whale size={18} />
-                Codewhale TUI
+                Ghosty TUI
               </span>
               <span>{d.shotSession}</span>
             </div>
             <Image
-              src="/codewhale-tui.webp"
+              src="/ghosty-tui.webp"
               alt={d.screenshotAlt}
               width={1562}
               height={1256}
@@ -240,7 +240,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             ))}
           </ol>
           <div className="product-receipt" aria-label={d.receiptAria} data-reveal>
-            <span>$ codewhale exec &quot;fix the failing test&quot;</span>
+            <span>$ ghosty exec &quot;fix the failing test&quot;</span>
             <span>inspect&nbsp;&nbsp; {d.receiptInspect}</span>
             <span>act&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {d.receiptAct}</span>
             <span>verify&nbsp;&nbsp;&nbsp; cargo test --locked</span>
@@ -339,7 +339,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                   ❯
                 </span>
                 <InstallCodeBlock
-                  cmd="npm install -g codewhale"
+                  cmd="npm install -g ghosty"
                   copyLabel={d.copy}
                   copiedLabel={d.copied}
                 />

@@ -10,7 +10,7 @@ use std::path::Path;
 use serde::Serialize;
 use thiserror::Error;
 
-use codewhale_config::{
+use ghosty_config::{
     FleetConfigToml, FleetDelegationHints, FleetLoadout, FleetProfile, FleetProfilePermissions,
     FleetRole, FleetSlot,
 };
@@ -249,7 +249,7 @@ pub fn friendly_model_name(member: &AgentProfile) -> Option<String> {
     if model.is_empty() {
         return None;
     }
-    let catalog = codewhale_config::catalog::bundled_models_dev_catalog();
+    let catalog = ghosty_config::catalog::bundled_models_dev_catalog();
     if let Some(provider) = member
         .profile
         .provider
@@ -518,7 +518,7 @@ mod tests {
         let roster = roster_from_fleet(
             &fleet,
             FleetScope::Workspace,
-            Path::new(".codewhale/fleets/launch.toml"),
+            Path::new(".ghosty/fleets/launch.toml"),
         );
         let projected = roster.get("scout-one").expect("case-insensitive id");
         assert_eq!(projected.display_name.as_deref(), Some("Flash Scout"));
@@ -642,7 +642,7 @@ mod tests {
         let roster = roster_from_fleet(
             &fleet,
             FleetScope::Workspace,
-            Path::new(".codewhale/fleets/named-members.toml"),
+            Path::new(".ghosty/fleets/named-members.toml"),
         );
 
         for selector in ["Release Lead", "name:Release Lead"] {
@@ -699,7 +699,7 @@ mod tests {
     #[test]
     fn invalid_selected_fleet_becomes_visible_failure_without_legacy_members() {
         let workspace = tempfile::TempDir::new().expect("workspace");
-        let fleets = workspace.path().join(".codewhale/fleets");
+        let fleets = workspace.path().join(".ghosty/fleets");
         std::fs::create_dir_all(&fleets).unwrap();
         std::fs::write(fleets.join("selected"), "Broken\n").unwrap();
         std::fs::write(

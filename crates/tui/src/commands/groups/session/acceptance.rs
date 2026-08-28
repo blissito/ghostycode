@@ -69,7 +69,7 @@ impl std::fmt::Debug for SessionCommandWorld {
     }
 }
 
-#[given("a CodeWhale session workspace with one user message")]
+#[given("a GhostyCode session workspace with one user message")]
 fn workspace_with_one_user_message(world: &mut SessionCommandWorld) {
     let tmpdir = TempDir::new().expect("session workflow TempDir");
     let mut app = create_test_app_with_tmpdir(&tmpdir);
@@ -93,7 +93,7 @@ fn workspace_with_one_user_message(world: &mut SessionCommandWorld) {
     world.tmpdir = Some(tmpdir);
 }
 
-#[given("a CodeWhale persisted session workspace with one user message")]
+#[given("a GhostyCode persisted session workspace with one user message")]
 fn persisted_workspace_with_one_user_message(world: &mut SessionCommandWorld) {
     workspace_with_one_user_message(world);
     let original_id = "original-session".to_string();
@@ -103,7 +103,7 @@ fn persisted_workspace_with_one_user_message(world: &mut SessionCommandWorld) {
     persist_active_session(world);
 }
 
-#[given("a CodeWhale session workspace with stale and fresh saved sessions")]
+#[given("a GhostyCode session workspace with stale and fresh saved sessions")]
 fn workspace_with_stale_and_fresh_saved_sessions(world: &mut SessionCommandWorld) {
     workspace_with_one_user_message(world);
     persist_session_with_age(world, "fresh-session", "Fresh session", 1);
@@ -323,13 +323,13 @@ fn exported_markdown_contains_active_transcript(world: &mut SessionCommandWorld)
     let content = std::fs::read_to_string(export_path)
         .unwrap_or_else(|err| panic!("read exported transcript {export_path:?}: {err}"));
 
-    assert!(content.contains("# Codewhale conversation export"));
+    assert!(content.contains("# Ghosty conversation export"));
     assert!(content.contains("## 1. user"));
     assert!(content.contains("Remember the whale migration"));
 }
 
-#[then("CodeWhale should defer the session-loaded receipt to the event loop")]
-fn codewhale_defers_session_loaded_receipt(world: &mut SessionCommandWorld) {
+#[then("GhostyCode should defer the session-loaded receipt to the event loop")]
+fn ghosty_defers_session_loaded_receipt(world: &mut SessionCommandWorld) {
     assert_eq!(
         world.last_message, None,
         "the command layer must not report success before the event loop applies the load action"
@@ -378,8 +378,8 @@ fn active_session_is_forked_session(world: &mut SessionCommandWorld) {
     assert_app_contains_message(app, "Remember the whale migration");
 }
 
-#[then("CodeWhale should reject the fork because there are no messages")]
-fn codewhale_rejects_empty_fork(world: &mut SessionCommandWorld) {
+#[then("GhostyCode should reject the fork because there are no messages")]
+fn ghosty_rejects_empty_fork(world: &mut SessionCommandWorld) {
     assert_eq!(
         world.last_result_is_error,
         Some(true),
@@ -489,8 +489,8 @@ fn session_picker_should_be_open(world: &mut SessionCommandWorld) {
     assert_eq!(app.view_stack.top_kind(), Some(ModalKind::SessionPicker));
 }
 
-#[then("CodeWhale should report that one session was pruned")]
-fn codewhale_reports_one_session_pruned(world: &mut SessionCommandWorld) {
+#[then("GhostyCode should report that one session was pruned")]
+fn ghosty_reports_one_session_pruned(world: &mut SessionCommandWorld) {
     let message = world
         .last_message
         .as_deref()
@@ -526,8 +526,8 @@ fn stale_session_no_longer_loadable(world: &mut SessionCommandWorld) {
     );
 }
 
-#[then("CodeWhale should trigger context compaction")]
-fn codewhale_triggers_context_compaction(world: &mut SessionCommandWorld) {
+#[then("GhostyCode should trigger context compaction")]
+fn ghosty_triggers_context_compaction(world: &mut SessionCommandWorld) {
     assert_eq!(
         world.last_result_is_error,
         Some(false),
@@ -543,8 +543,8 @@ fn codewhale_triggers_context_compaction(world: &mut SessionCommandWorld) {
     );
 }
 
-#[then("CodeWhale should trigger context purge")]
-fn codewhale_triggers_context_purge(world: &mut SessionCommandWorld) {
+#[then("GhostyCode should trigger context purge")]
+fn ghosty_triggers_context_purge(world: &mut SessionCommandWorld) {
     assert_eq!(
         world.last_result_is_error,
         Some(false),
@@ -560,8 +560,8 @@ fn codewhale_triggers_context_purge(world: &mut SessionCommandWorld) {
     );
 }
 
-#[then(regex = r#"^CodeWhale should send a session relay instruction focused on "([^"]+)"$"#)]
-fn codewhale_sends_session_relay_instruction_focused_on(
+#[then(regex = r#"^GhostyCode should send a session relay instruction focused on "([^"]+)"$"#)]
+fn ghosty_sends_session_relay_instruction_focused_on(
     world: &mut SessionCommandWorld,
     focus: String,
 ) {
@@ -588,8 +588,8 @@ fn codewhale_sends_session_relay_instruction_focused_on(
     );
 }
 
-#[then("CodeWhale should reject the unknown session command")]
-fn codewhale_rejects_unknown_session_command(world: &mut SessionCommandWorld) {
+#[then("GhostyCode should reject the unknown session command")]
+fn ghosty_rejects_unknown_session_command(world: &mut SessionCommandWorld) {
     assert_eq!(
         world.last_result_is_error,
         Some(true),
@@ -703,7 +703,7 @@ fn execute_isolated(world: &mut SessionCommandWorld, command: &str) -> CommandRe
 
     let _lock = lock_test_env();
     let _home = EnvVarGuard::set("HOME", &home);
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty"));
 
     let app = world.app.as_deref_mut().expect("app should exist");
     commands::user_registry::reload(Some(&app.workspace));
@@ -741,7 +741,7 @@ fn persist_active_session(world: &SessionCommandWorld) {
 
     let _lock = lock_test_env();
     let _home = EnvVarGuard::set("HOME", &home);
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty"));
     let manager = SessionManager::default_location().expect("open isolated session manager");
 
     manager
@@ -774,7 +774,7 @@ fn persist_session_with_age(world: &SessionCommandWorld, session_id: &str, title
 
     let _lock = lock_test_env();
     let _home = EnvVarGuard::set("HOME", &home);
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty"));
     let manager = SessionManager::default_location().expect("open isolated session manager");
 
     manager.save_session(&session).expect("persist session");
@@ -798,7 +798,7 @@ fn try_load_saved_session(
 
     let _lock = lock_test_env();
     let _home = EnvVarGuard::set("HOME", &home);
-    let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
+    let _ghosty_home = EnvVarGuard::set("GHOSTY_HOME", home.join(".ghosty"));
     let manager = SessionManager::default_location().expect("open isolated session manager");
 
     manager.load_session(session_id)

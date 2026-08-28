@@ -1,6 +1,6 @@
 //! Shared Fleet control-plane surface (#1888, #4022).
 //!
-//! `codewhale fleet …` and the `/fleet …` slash command (and therefore its
+//! `ghosty fleet …` and the `/fleet …` slash command (and therefore its
 //! hotbar action) run the *same* verbs against the *same* durable ledger and
 //! render the *same* [`ControlReceipt`]. Nothing here formats twice: the CLI's
 //! `print_status` / `print_inspection` delegate to the renderers below.
@@ -11,13 +11,13 @@
 
 use std::path::{Path, PathBuf};
 
-use codewhale_lane::control::{
+use ghosty_lane::control::{
     Availability, ControlContext, ControlDomain, ControlFailure, ControlFailureKind,
     ControlOperation, ControlReceipt, ControlSurface, DEFAULT_RUN_LIST_LIMIT, Known, RunListPage,
     RunRouteDto, RunSummaryDto, RunUsageDto, UnknownReason, parse_target, redact_path,
     sanitize_line,
 };
-use codewhale_protocol::fleet::{
+use ghosty_protocol::fleet::{
     FleetArtifactKind, FleetReceipt, FleetRun, FleetRunId, FleetRunStatus, FleetWorkerEventPayload,
     FleetWorkerStatus,
 };
@@ -33,7 +33,7 @@ pub const MAX_INSPECTION_ARTIFACT_ROWS: usize = 24;
 /// The durable Fleet ledger for `workspace`, without creating it.
 #[must_use]
 pub fn fleet_ledger_path(workspace: &Path) -> PathBuf {
-    workspace.join(".codewhale").join("fleet.jsonl")
+    workspace.join(".ghosty").join("fleet.jsonl")
 }
 
 /// Read-only availability probe for the Fleet domain.
@@ -190,7 +190,7 @@ pub fn status_lines(status: &FleetStatusSnapshot) -> Vec<String> {
     lines
 }
 
-/// Exactly the text `codewhale fleet status` has always printed.
+/// Exactly the text `ghosty fleet status` has always printed.
 #[must_use]
 pub fn render_fleet_status_snapshot(status: &FleetStatusSnapshot) -> String {
     status_lines(status).join("\n")
@@ -266,7 +266,7 @@ pub fn render_inspection(inspection: &FleetWorkerInspection) -> String {
     inspection_lines(inspection).join("\n")
 }
 
-/// Artifact listing lines for `codewhale fleet artifacts`.
+/// Artifact listing lines for `ghosty fleet artifacts`.
 #[must_use]
 pub fn artifact_lines(inspection: &FleetWorkerInspection) -> Vec<String> {
     if inspection.artifacts.is_empty() {
@@ -424,7 +424,7 @@ fn instant_of(value: &Known<String>) -> Option<chrono::DateTime<chrono::Utc>> {
 }
 
 // ---------------------------------------------------------------------------
-// Executor — the one code path behind `codewhale fleet …` and `/fleet …`
+// Executor — the one code path behind `ghosty fleet …` and `/fleet …`
 // ---------------------------------------------------------------------------
 
 /// Run a Fleet control verb against the durable workspace ledger, using a
@@ -680,7 +680,7 @@ pub fn execute_fleet_control_with(
             descriptor,
             surface,
             Availability::Unavailable {
-                reason: codewhale_lane::UnavailableReason::SurfaceNotSupported,
+                reason: ghosty_lane::UnavailableReason::SurfaceNotSupported,
                 hint: sanitize_line(descriptor.cli_invocation),
             },
         ),
@@ -690,8 +690,8 @@ pub fn execute_fleet_control_with(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codewhale_lane::{ControlAuthority, LifecycleOutcome, PersistenceScope, UnavailableReason};
-    use codewhale_protocol::fleet::{FleetResolvedRoute, FleetTaskResult};
+    use ghosty_lane::{ControlAuthority, LifecycleOutcome, PersistenceScope, UnavailableReason};
+    use ghosty_protocol::fleet::{FleetResolvedRoute, FleetTaskResult};
     use std::collections::BTreeMap;
 
     fn run(id: &str) -> FleetRun {
@@ -884,7 +884,7 @@ mod tests {
                 receipt
                     .availability
                     .hint()
-                    .is_some_and(|hint| hint.contains("codewhale fleet restart"))
+                    .is_some_and(|hint| hint.contains("ghosty fleet restart"))
             );
         }
     }

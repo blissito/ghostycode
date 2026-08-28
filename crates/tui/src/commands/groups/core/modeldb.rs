@@ -6,7 +6,7 @@
 //! selects, routes, or tiers a model (#3205, #2300). Attributes the catalog
 //! does not state render as `unknown`, never guessed.
 
-use codewhale_config::model_reference::ModelReferenceDatabase;
+use ghosty_config::model_reference::ModelReferenceDatabase;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 

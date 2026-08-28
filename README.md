@@ -1,104 +1,182 @@
-# Codewhale
+<div align="center">
 
-Codewhale is an open source coding agent for your terminal, built in Rust and
-improved in public with the people who use it.
+<img src="https://easybits-public.fly.storage.tigris.dev/699f35cbc8ad86037eda62b1/HGF" alt="Ghosty" width="160" />
 
-![Codewhale running in a terminal](assets/screenshot.webp)
+# Ghosty Code
 
-[简体中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Tiếng Việt](README.vi.md) · [Bahasa Indonesia](README.id.md) · [한국어](README.ko-KR.md) · [Español](README.es-419.md) · [Português](README.pt-BR.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [繁體中文](README.zh-TW.md) · [हिन्दी](README.hi.md) · [Türkçe](README.tr.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [العربية](README.ar.md) · [Català](README.ca.md)
+**DeepSeek V4 terminal coding agent &amp; constitutional harness.** 👻
 
-[![CI](https://github.com/Hmbown/CodeWhale/actions/workflows/ci.yml/badge.svg)](https://github.com/Hmbown/CodeWhale/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/codewhale-cli?label=crates.io)](https://crates.io/crates/codewhale-cli)
-[![npm](https://img.shields.io/npm/v/codewhale?label=npm)](https://www.npmjs.com/package/codewhale)
-[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/37gfS3ksug)
+[![CI](https://github.com/blissito/ghostycode/actions/workflows/ci.yml/badge.svg)](https://github.com/blissito/ghostycode/actions/workflows/ci.yml)
 
-## Install
+</div>
+
+Ghosty Code is a **DeepSeek V4 terminal coding agent** and **constitutional harness** —
+a Rust TUI that reads, edits, runs shell commands, searches your repo, and coordinates
+sub-agents through long tool-using sessions with evidence-driven verification.
+Built for developers who want a keyboard-first coding agent with MCP support,
+session persistence, and zero vendor lock-in. Open source (MIT).
+
+> ### ⚡ Novedad (0.0.15) — Ghosty se pone al día con upstream
+>
+> Esta versión vuelve a sincronizar Ghosty con [CodeWhale](https://github.com/Hmbown/CodeWhale),
+> el proyecto del que nace. Es un salto grande por dentro —el árbol se triplica—
+> pero lo que verás tú es esto:
+>
+> - **Un solo binario.** `ghosty` lo hace todo; ya no existe `ghosty-tui` ni el
+>   error `Companion ghosty-tui binary not found`. Quien lo tenga instalado
+>   recibe el comando viejo refrescado, sin código obsoleto.
+> - **Agente completo desde Zed y JetBrains** (`ghosty serve --acp`): lee y
+>   edita archivos, ejecuta comandos, cancela a media respuesta, cambia de
+>   modelo. Antes por ACP solo había chat.
+> - **Cambia de proveedor sin reiniciar**, con el `/provider` nuevo: lista,
+>   prueba la conexión y edita la key desde la TUI.
+> - **La constitución se cumple.** Las invariantes de `.ghosty/constitution.json`
+>   dejan de ser prosa en el prompt y pasan a verificarse mecánicamente.
+> - **Límites reales por modelo.** `max_tokens` y ventana de contexto ya salen
+>   del catálogo de cada ruta, no de un número fijo.
+> - **EasyBits es proveedor de primera clase** (`--provider easybits`), no un
+>   alias: el modo ya no se pierde al guardar. Y `ghosty auth set` sobre una
+>   instalación nueva deja ese proveedor activo, sin paso extra.
+> - **El fantasma volvió**, con más gestos.
+>
+> Sigue disponible **Kimi K3** con tu key de **Moonshot** (1M de contexto):
+>
+> ```bash
+> ghosty auth set --provider moonshot --api-key "TU_KEY_MOONSHOT"
+> ```
+
+## Instalación
+
+**Recomendado** — sin Node ni Rust, baja el binario precompilado:
 
 ```bash
-npm install -g codewhale
-codewhale
+curl -fsSL https://formmy.app/ghosty/install.sh | sh
 ```
 
-The first run helps you connect a provider or stay offline. Codewhale also
-supports Cargo, Docker, Nix, Scoop, prebuilt archives, Android/Termux, and a CNB
-mirror. See [the installation guide](docs/INSTALL.md).
-
-Tab completion is one command per shell — `codewhale completion bash|zsh|fish|powershell|elvish`.
-See [shell completions](docs/INSTALL.md#8-shell-completions).
-
-## Use
-
-Talk to Codewhale the same way you would talk to a teammate:
-
-```text
-Fix the failing tests and explain what changed.
-```
-
-Or run a task without opening the TUI:
+### Alternativas
 
 ```bash
-codewhale exec "fix the failing tests and explain what changed"
+# npm (baja el binario precompilado del release)
+npm install -g ghostycode
+
+# Cargo (requiere Rust 1.88+)
+cargo install --git https://github.com/blissito/ghostycode ghosty-cli
+
+# Descarga directa: archivos por plataforma en
+# https://github.com/blissito/ghostycode/releases
 ```
 
-Codewhale can read your repository, edit files, run commands, inspect results,
-and keep working toward a goal. You decide how much access it has.
+El paquete de npm se llama **`ghostycode`**; el comando que instala es **`ghosty`**.
 
-## Why Codewhale
+## Primer uso
 
-- **Use the model you want.** Connect hosted providers or local models through
-  Ollama, vLLM, or SGLang. Switch provider and model with `/model`.
-- **Stay in control.** Plan is read-only. Ask, Auto-Review, and Full Access make
-  approval behavior visible. `/undo` reverts the last turn and `/restore`
-  returns the workspace to an earlier snapshot.
-- **Keep long work organized.** Save sessions, set a durable `/goal`, review
-  workflows before they run, and coordinate agents without turning their
-  internal instructions into your transcript.
-- **Extend the agent you already have.** Connect MCP servers and skills,
-  configure hooks, and keep agent roles as readable files in your project or
-  personal settings.
+```bash
+ghosty auth set --provider deepseek --api-key "TU_DEEPSEEK_API_KEY"
+# Kimi K3 directo (Moonshot; 1M contexto)
+ghosty auth set --provider moonshot --api-key "TU_KEY_MOONSHOT"
+# GLM-5.2 directo (Z.AI Coding Plan)
+ghosty auth set --provider zai --api-key "TU_TOKEN_ZAI"
+# EasyBits (revendedor de DeepSeek; la misma key sirve para LLM y MCP)
+ghosty auth set --provider easybits --api-key "TU_EASYBITS_API_KEY"
+ghosty doctor    # verifica setup y conexión
+ghosty           # abre la TUI interactiva
+```
 
-Run `/help` in the TUI for commands and keyboard shortcuts.
+La config vive en `~/.ghosty/config.toml`. También puedes usar la variable de entorno
+`DEEPSEEK_API_KEY`. Más providers y las notas de EasyBits en
+[`docs/PROVIDERS.md`](docs/PROVIDERS.md).
 
-## Safety
+## Comandos básicos
 
-Codewhale runs on your machine with the access you grant it. Approval modes and
-repository rules limit what the agent may do; optional OS sandboxing adds a
-stronger execution boundary where supported. Unknown model prices stay unknown
-instead of being reported as free.
+```bash
+ghosty                                # TUI interactiva
+ghosty "explica esta función"         # prompt de una sola vez
+ghosty --model auto "arregla el bug"  # auto-selecciona modelo + thinking
+ghosty --yolo                         # auto-aprueba herramientas
+ghosty sessions                       # lista sesiones guardadas
+ghosty resume --last                  # retoma la última sesión
+ghosty models                         # lista modelos disponibles
+ghosty update                         # actualiza el binario
+```
 
-Read [authorization order](docs/AUTHORIZATION_ORDER.md) for the exact policy
-stack and [configuration](docs/CONFIGURATION.md) for local settings.
+## Modos
 
-## Documentation
+- **Agent** — ejecuta herramientas (editar, correr, buscar) con tu aprobación.
+- **Plan** — propone un plan antes de tocar nada.
+- **Yolo** (`--yolo`) — auto-aprueba todo. Úsalo con cuidado.
 
-- [Providers and local models](docs/PROVIDERS.md)
-- [Agent teams](docs/FLEET.md)
-- [MCP](docs/MCP.md), [hooks](docs/HOOKS.md), and [configuration](docs/CONFIGURATION.md)
-- [Local web client](docs/WEB.md)
-- [All documentation](docs)
+Cambia de modo dentro de la TUI o con flags al arrancar.
 
-## Join the community
+## Modelos DeepSeek V4
 
-Codewhale gets better when people use it, report what feels wrong, and help fix
-it. If a provider is missing, a workflow is awkward, or the terminal UI gets in
-your way, [open an issue](https://github.com/Hmbown/CodeWhale/issues). If you
-know how to improve it, [open a pull request](CONTRIBUTING.md). First
-contributions are welcome, and contributors keep credit for the work that
-lands.
+| Modelo | Thinking | Ideal para |
+|--------|----------|------------|
+| `deepseek-v4-pro` | ✅ | Razonamiento complejo, código, mates |
+| `deepseek-v4-flash` | ❌ | Tareas rápidas y económicas |
+| `auto` | — | Elige modelo + thinking según el turno |
 
-Join the [Discord](https://discord.gg/37gfS3ksug), or add Hunter on WeChat
-(`hunterbown`) and ask to join the Whale Brothers group.
+Override con `--model <nombre>` o `/model` dentro de la TUI.
 
-## Project history
+### GLM de Z.AI — directo o vía OpenRouter
 
-Codewhale began as `deepseek-tui` and still preserves that configuration and
-session compatibility. It is now provider-neutral and independently maintained;
-it is not affiliated with any model provider.
+Ghosty habla con la familia **GLM de Z.AI** por dos rutas:
 
-Thanks to every contributor and to the open source communities that helped the
-project grow. See [the contributor record](docs/CONTRIBUTORS.md).
+**Directo (Z.AI Coding Plan)** — `provider = "zai"` (`ZAI_API_KEY`), endpoint
+`api.z.ai/api/coding/paas/v4`. Paridad de cache y thinking con DeepSeek:
 
-## License
+| Modelo | Contexto | Ideal para |
+|--------|----------|------------|
+| `GLM-5.2` (default) | — | Modelo GLM más capaz |
+| `GLM-5.1` | — | GLM estándar |
+| `GLM-5-Turbo` | — | GLM rápido para explorar |
 
-[MIT](LICENSE). Portions adapted from other open-source projects are recorded
-in [third-party notices](docs/THIRD_PARTY_NOTICES.md).
+**Vía OpenRouter** — `provider = "openrouter"` (`OPENROUTER_API_KEY`):
+`z-ai/glm-5.2` (1M), `z-ai/glm-5.1` (202K), `z-ai/glm-5-turbo` (202K).
+
+La lista completa de modelos OpenRouter (Qwen, Kimi, MiniMax, Gemma, etc.) está
+en [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
+
+## MCP — easybits incluido por defecto
+
+Ghosty trae preconfigurado el servidor MCP de **easybits** (gestión de archivos
+desde el agente, 100+ herramientas). Viene **desactivado** de fábrica hasta que
+añadas tu llave, así que una instalación nueva nunca falla por falta de credencial.
+
+1. Consigue tu API key en el panel de desarrollador de easybits:
+   **https://www.easybits.cloud/dash/developer**
+2. Añádela (esto la activa):
+
+   ```bash
+   ghosty mcp add easybits --url "https://www.easybits.cloud/api/mcp?tools=core" --bearer TU_EASYBITS_API_KEY
+   ```
+
+3. Verifica: `ghosty mcp list`
+
+> **¿Por qué un solo grupo y no `core,sandbox`?** EasyBits revende DeepSeek, cuya
+> API tiene un **tope duro de 128 tools por request** y las cuenta todas. `core` son
+> 65 y `sandbox` 47; con las ~36 built-in de Ghosty, uno solo cabe y los dos juntos
+> no (146 > 128 → `Invalid 'tools': array too long`). Ghosty te avisa antes de enviar
+> la petición si te pasas.
+>
+> Para tener **cajas, S3 y base de datos a la vez**, usa el modo híbrido: conecta
+> solo `?tools=sandbox` por MCP (crear una caja no tiene endpoint REST) y usa S3 y
+> DB por `curl` contra `https://www.easybits.cloud/api/v2` con la misma key. Está
+> paso a paso en [`docs/TALLER.md`](docs/TALLER.md).
+
+Gestiona otros servidores con `ghosty mcp add stdio|http <nombre> ...`,
+`ghosty mcp enable|disable|remove <nombre>` y `ghosty mcp validate`.
+
+## Más
+
+- **Servidor**: `ghosty serve --http` (API HTTP/SSE) o `--mobile` (control desde el móvil en LAN).
+- **Zed/ACP**: `ghosty serve --acp`.
+- Otros proveedores compatibles con OpenAI vía `base_url` en la config.
+
+## Related
+
+- **[formmy.app/ghosty](https://formmy.app/ghosty)** — Ghosty on the web: run your agent from a browser dashboard.
+- **[easybits.cloud](https://www.easybits.cloud)** — File management MCP server (100+ tools), pre-bundled with Ghosty.
+
+## Licencia
+
+MIT — ver [LICENSE](./LICENSE).

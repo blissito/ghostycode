@@ -10,13 +10,13 @@ import type { HomeDict } from "../types";
  * touching the page.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — 一入码门深似海，它替你潜。",
+  metaTitle: "Ghosty — 一入码门深似海，它替你潜。",
   metaDescription:
-    "Codewhale 潜入深海，你不必亲自下潜——开源的终端编程智能体。模型自带，跑在你自己的机器上。Rust 编写，MIT 许可。",
+    "Ghosty 潜入深海，你不必亲自下潜——开源的终端编程智能体。模型自带，跑在你自己的机器上。Rust 编写，MIT 许可。",
 
   kicker: "开源 · 自带模型 · 运行在你的终端",
   heroTitleA: "一入码门深似海，",
-  heroTitleB: "Codewhale 替你潜。",
+  heroTitleB: "Ghosty 替你潜。",
   heroIntro:
     "{brand} 是一个跑在终端里的开源编程智能体。给它一个模型和一个任务。它会读你的代码、改文件、跑检查，活干完了或需要你拿主意时就停下来。模型随便用，也可以给每个角色各配一个。",
   install: "安装",
@@ -37,8 +37,8 @@ export const home: HomeDict = {
   figcaptionSourceCandidate: "未发布",
 
   shotSession: "会话",
-  screenshotAlt: "Codewhale 终端会话，Operate 模式：鲸鱼、输入区与状态栏",
-  figcaption: "Codewhale 会话 · Operate 模式 · 权限：Ask",
+  screenshotAlt: "Ghosty 终端会话，Operate 模式：鲸鱼、输入区与状态栏",
+  figcaption: "Ghosty 会话 · Operate 模式 · 权限：Ask",
 
   proofHeading: "终端里的编程智能体。任意模型。本机运行。",
   proofBody:
@@ -84,7 +84,7 @@ export const home: HomeDict = {
   surfacesHeading: "活在哪里干，就在哪里用。",
   surfaces: [
     ["TUI", "交互式终端工作"],
-    ["codewhale exec", "脚本与 CI"],
+    ["ghosty exec", "脚本与 CI"],
     ["Web 客户端", "浏览器客户端，仅限本机"],
     ["运行时 API + MCP", "本地集成"],
     ["Fleet", "多个智能体协作一件事"],

@@ -15,9 +15,9 @@ fn without_ambient_credentials() -> Vec<crate::tests::ScopedEnvVar> {
         .copied()
         .collect::<Vec<_>>();
     names.extend([
-        codewhale_config::CLI_API_KEY_ENV,
-        codewhale_config::CLI_API_KEY_SOURCE_ENV,
-        codewhale_config::LEGACY_CLI_API_KEY_SOURCE_ENV,
+        ghosty_config::CLI_API_KEY_ENV,
+        ghosty_config::CLI_API_KEY_SOURCE_ENV,
+        ghosty_config::LEGACY_CLI_API_KEY_SOURCE_ENV,
     ]);
     names.sort_unstable();
     names.dedup();
@@ -37,7 +37,7 @@ fn expect_credential_error(result: anyhow::Result<String>, context: &'static str
 #[test]
 fn command_parses_and_documents_the_pipe_only_boundary() {
     let cli = Cli::try_parse_from([
-        "codewhale",
+        "ghosty",
         "auth",
         "print-api-key",
         "--provider",
@@ -53,7 +53,7 @@ fn command_parses_and_documents_the_pipe_only_boundary() {
         }))
     ));
 
-    let help = Cli::try_parse_from(["codewhale", "auth", "print-api-key", "--help"])
+    let help = Cli::try_parse_from(["ghosty", "auth", "print-api-key", "--help"])
         .expect_err("help exits")
         .to_string();
     assert!(help.contains("runtime-effective API key"), "{help}");
@@ -200,7 +200,7 @@ fn api_key_resolves_the_runtime_provider_slot_without_printing_it() {
 fn api_key_uses_shared_secret_store_precedence() {
     use std::sync::Arc;
 
-    use codewhale_secrets::{InMemoryKeyringStore, KeyringStore};
+    use ghosty_secrets::{InMemoryKeyringStore, KeyringStore};
 
     let _env_lock = crate::tests::env_lock();
     let _ambient_credentials = without_ambient_credentials();
@@ -247,9 +247,9 @@ fn api_key_rejects_missing_and_bearer_owned_routes() {
     assert!(missing.to_string().contains("no runtime-effective API key"));
 
     store.config.providers.openai_codex.external_credentials =
-        Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+        Some(ghosty_config::ExternalCredentialConsentToml::read_only(
             ProviderKind::OpenaiCodex,
-            codewhale_config::ExternalCredentialSource::CodexCli,
+            ghosty_config::ExternalCredentialSource::CodexCli,
             crate::openai_codex_auth_file_path(),
         ));
     let codex = expect_credential_error(
@@ -281,9 +281,9 @@ fn api_key_rejects_missing_and_bearer_owned_routes() {
     store.config.providers.xai.oauth_credential_generation = None;
     store.config.providers.xai.api_key = Some("cw-test-xai-key-must-not-win-91a4".to_string());
     store.config.providers.xai.external_credentials =
-        Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+        Some(ghosty_config::ExternalCredentialConsentToml::read_only(
             ProviderKind::Xai,
-            codewhale_config::ExternalCredentialSource::GrokCli,
+            ghosty_config::ExternalCredentialSource::GrokCli,
             crate::grok_auth_file_path(),
         ));
     let external_xai = expect_credential_error(
@@ -377,9 +377,9 @@ fn custom_endpoint_keys_stay_endpoint_bound_and_cli_overrides_win() {
 
     store.config.providers.xai.auth_mode = Some("oauth".to_string());
     store.config.providers.xai.external_credentials =
-        Some(codewhale_config::ExternalCredentialConsentToml::read_only(
+        Some(ghosty_config::ExternalCredentialConsentToml::read_only(
             ProviderKind::Xai,
-            codewhale_config::ExternalCredentialSource::GrokCli,
+            ghosty_config::ExternalCredentialSource::GrokCli,
             crate::grok_auth_file_path(),
         ));
     let explicit = resolve_api_key(

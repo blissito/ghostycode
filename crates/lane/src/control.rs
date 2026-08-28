@@ -10,9 +10,9 @@
 //! `ControlOperation` type names *control-plane verbs*, which is an internal
 //! contract detail, never a user-facing noun.
 //!
-//! Why this lives in `codewhale-lane`: it is the lowest crate that both the
-//! thin `codewhale` CLI facade and the TUI (slash commands, hotbar, and the
-//! `codewhale fleet …` entrypoints that the facade delegates to) already
+//! Why this lives in `ghosty-lane`: it is the lowest crate that both the
+//! thin `ghosty` CLI facade and the TUI (slash commands, hotbar, and the
+//! `ghosty fleet …` entrypoints that the facade delegates to) already
 //! depend on. Putting the contract anywhere else would fork it.
 
 use std::fmt;
@@ -50,7 +50,7 @@ pub const REDACTED: &str = "[redacted]";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlSurface {
-    /// `codewhale …` (and the `codewhale-tui …` entrypoints it delegates to).
+    /// `ghosty …` (and the `ghosty-tui …` entrypoints it delegates to).
     Cli,
     /// A `/command` typed into the composer — or dispatched by a hotbar slot,
     /// which is the same code path with the same authority.
@@ -129,9 +129,9 @@ impl ControlExecution {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlDomain {
-    /// One running Workflow, recorded in `$CODEWHALE_HOME/lanes/`.
+    /// One running Workflow, recorded in `$GHOSTY_HOME/lanes/`.
     Lane,
-    /// Fleet workers and runs, recorded in `<workspace>/.codewhale/fleet.jsonl`.
+    /// Fleet workers and runs, recorded in `<workspace>/.ghosty/fleet.jsonl`.
     Fleet,
 }
 
@@ -179,9 +179,9 @@ pub enum PersistenceScope {
     Ephemeral,
     /// Current TUI session state only.
     Session,
-    /// `$CODEWHALE_HOME/lanes/` records and logs.
+    /// `$GHOSTY_HOME/lanes/` records and logs.
     LaneRegistry,
-    /// `<workspace>/.codewhale/fleet.jsonl`.
+    /// `<workspace>/.ghosty/fleet.jsonl`.
     FleetLedger,
 }
 
@@ -323,7 +323,7 @@ impl ControlOperation {
     /// Resolve a descriptor from a domain plus the verb word a user typed.
     ///
     /// Every surface routes through this so `/lane interrupt`, a hotbar
-    /// dispatch of the same command, and `codewhale lane interrupt` cannot
+    /// dispatch of the same command, and `ghosty lane interrupt` cannot
     /// drift onto different verbs. Compatibility spellings live here once.
     #[must_use]
     pub fn parse_verb(domain: ControlDomain, verb: &str) -> Option<Self> {
@@ -379,9 +379,9 @@ pub enum UnavailableReason {
     SurfaceNotSupported,
     /// No backend has been built for this verb.
     BackendNotImplemented,
-    /// `$CODEWHALE_HOME/lanes/` has no records yet.
+    /// `$GHOSTY_HOME/lanes/` has no records yet.
     NoLaneRegistry,
-    /// This workspace has no `.codewhale/fleet.jsonl`.
+    /// This workspace has no `.ghosty/fleet.jsonl`.
     NoFleetLedger,
 }
 
@@ -567,14 +567,14 @@ impl OperationDescriptor {
             PersistenceScope::LaneRegistry if !ctx.lane_registry_present => {
                 Availability::unavailable(
                     UnavailableReason::NoLaneRegistry,
-                    "no Lane registry yet; start one with `codewhale lane start`",
+                    "no Lane registry yet; start one with `ghosty lane start`",
                 )
             }
             PersistenceScope::FleetLedger if !ctx.fleet_ledger_present => {
                 Availability::unavailable(
                     UnavailableReason::NoFleetLedger,
-                    "this workspace has no .codewhale/fleet.jsonl; create it with \
-                     `codewhale fleet init`",
+                    "this workspace has no .ghosty/fleet.jsonl; create it with \
+                     `ghosty fleet init`",
                 )
             }
             _ => Availability::Available,
@@ -583,15 +583,15 @@ impl OperationDescriptor {
 }
 
 const LANE_RESTART_HINT: &str = "Lane restart has no backend: a Lane is one running Workflow and is re-created by \
-     `codewhale lane start` / `codewhale workflow run`, not restarted in place.";
+     `ghosty lane start` / `ghosty workflow run`, not restarted in place.";
 const LANE_RESUME_HINT: &str = "Lane resume has no backend: a stopped Lane's Runtime session is gone, so there is \
      nothing to resume. Start a new Lane against the same issue/goal.";
 const FLEET_RESTART_HINT: &str = "Fleet restart re-leases a task and then drives the manager loop to completion, which \
-     only the CLI runs. Use `codewhale fleet restart <worker-id>`.";
+     only the CLI runs. Use `ghosty fleet restart <worker-id>`.";
 /// Lane interrupt tears down the Runtime (tmux kill-session, worktree TTL
 /// cleanup), which must never run on the TUI composer thread. It is *not*
 /// CLI-only: the slash surface submits it to an off-loop worker and returns a
-/// `queued` receipt with a ticket. See `codewhale-tui::lane_control`.
+/// `queued` receipt with a ticket. See `ghosty-tui::lane_control`.
 const LANE_INTERRUPT_OFF_LOOP: &str =
     "submitted to the Lane control worker; the terminal receipt arrives under this ticket";
 
@@ -611,7 +611,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: true,
         hotbar_bare_dispatch: true,
         slash_command: "lane",
-        cli_invocation: "codewhale lane list",
+        cli_invocation: "ghosty lane list",
         summary: "List durable Lanes newest first.",
     },
     OperationDescriptor {
@@ -628,7 +628,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: true,
         hotbar_bare_dispatch: false,
         slash_command: "lane",
-        cli_invocation: "codewhale lane status <lane-id>",
+        cli_invocation: "ghosty lane status <lane-id>",
         summary: "Show one Lane's durable status, Runtime, and attach metadata.",
     },
     OperationDescriptor {
@@ -645,7 +645,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: true,
         hotbar_bare_dispatch: false,
         slash_command: "lane",
-        cli_invocation: "codewhale lane interrupt <lane-id>",
+        cli_invocation: "ghosty lane interrupt <lane-id>",
         summary: "Stop a running Lane and run its worktree TTL cleanup.",
     },
     OperationDescriptor {
@@ -664,7 +664,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: false,
         hotbar_bare_dispatch: false,
         slash_command: "lane",
-        cli_invocation: "codewhale lane restart <lane-id>",
+        cli_invocation: "ghosty lane restart <lane-id>",
         summary: "Restart a Lane in place (no backend).",
     },
     OperationDescriptor {
@@ -683,7 +683,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: false,
         hotbar_bare_dispatch: false,
         slash_command: "lane",
-        cli_invocation: "codewhale lane resume <lane-id>",
+        cli_invocation: "ghosty lane resume <lane-id>",
         summary: "Resume a stopped Lane (no backend).",
     },
     OperationDescriptor {
@@ -700,7 +700,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: false,
         hotbar_bare_dispatch: false,
         slash_command: "fleet",
-        cli_invocation: "codewhale fleet list",
+        cli_invocation: "ghosty fleet list",
         summary: "List durable Fleet runs from the workspace ledger.",
     },
     OperationDescriptor {
@@ -717,7 +717,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: false,
         hotbar_bare_dispatch: false,
         slash_command: "fleet",
-        cli_invocation: "codewhale fleet status",
+        cli_invocation: "ghosty fleet status",
         summary: "Show durable Fleet run/worker counts from the workspace ledger.",
     },
     OperationDescriptor {
@@ -734,7 +734,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: false,
         hotbar_bare_dispatch: false,
         slash_command: "fleet",
-        cli_invocation: "codewhale fleet interrupt <worker-id>",
+        cli_invocation: "ghosty fleet interrupt <worker-id>",
         summary: "Cancel a Fleet worker's active task in the durable ledger.",
     },
     OperationDescriptor {
@@ -754,7 +754,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: false,
         hotbar_bare_dispatch: false,
         slash_command: "fleet",
-        cli_invocation: "codewhale fleet restart <worker-id>",
+        cli_invocation: "ghosty fleet restart <worker-id>",
         summary: "Re-lease a Fleet worker's task and drive the manager loop.",
     },
     OperationDescriptor {
@@ -771,7 +771,7 @@ pub static OPERATIONS: &[OperationDescriptor] = &[
         reconciles: false,
         hotbar_bare_dispatch: false,
         slash_command: "fleet",
-        cli_invocation: "codewhale fleet resume <run-id>",
+        cli_invocation: "ghosty fleet resume <run-id>",
         summary: "Reconcile a durable Fleet run's orphaned leases after a manager restart.",
     },
 ];
@@ -1087,7 +1087,7 @@ pub struct ControlReceipt {
     pub runs: Option<RunListPage>,
     /// The raw durable Lane records this verb observed.
     ///
-    /// Deliberately **not** serialized: it exists so `codewhale lane
+    /// Deliberately **not** serialized: it exists so `ghosty lane
     /// list|status --json` can keep emitting the exact `LaneRecord` shape it
     /// has always emitted, without a second read of the registry and without
     /// leaking a Lane-shaped payload into the cross-domain receipt wire
@@ -1766,7 +1766,7 @@ pub fn lane_is_interruptible(status: LaneStatus) -> bool {
 
 /// Run a Lane control verb against the durable registry.
 ///
-/// `codewhale lane …`, `/lane …`, and the hotbar dispatch of `/lane` all call
+/// `ghosty lane …`, `/lane …`, and the hotbar dispatch of `/lane` all call
 /// exactly this function. There is no second implementation to drift: the
 /// availability check, the target parser, the lifecycle fence, the outcome,
 /// and the sanitized failure are decided here once.
@@ -1780,7 +1780,7 @@ pub fn execute_lane_control(
 }
 
 /// [`execute_lane_control`] against an explicit registry root (tests, and any
-/// caller that already resolved `$CODEWHALE_HOME/lanes`).
+/// caller that already resolved `$GHOSTY_HOME/lanes`).
 #[must_use]
 pub fn execute_lane_control_in(
     surface: ControlSurface,
@@ -1908,7 +1908,7 @@ fn lane_list(
     } else {
         warnings.push(
             "runtime reconciliation skipped on this surface; statuses are as last recorded. \
-             Run `codewhale lane list` for a reconciled view."
+             Run `ghosty lane list` for a reconciled view."
                 .to_string(),
         );
     }
@@ -1970,7 +1970,7 @@ fn lane_one(
     } else {
         detail.push(
             "runtime reconciliation skipped on this surface; status is as last recorded. \
-             Run `codewhale lane status <lane-id>` for a reconciled view."
+             Run `ghosty lane status <lane-id>` for a reconciled view."
                 .to_string(),
         );
     }
@@ -2376,7 +2376,7 @@ mod tests {
                 "hotbar binds the owning slash command; there is no second table"
             );
             assert!(
-                descriptor.cli_invocation.starts_with("codewhale "),
+                descriptor.cli_invocation.starts_with("ghosty "),
                 "{} needs an exact CLI invocation",
                 descriptor.id
             );
@@ -2544,7 +2544,7 @@ mod tests {
             assert!(
                 availability
                     .hint()
-                    .is_some_and(|hint| hint.contains("codewhale fleet restart")),
+                    .is_some_and(|hint| hint.contains("ghosty fleet restart")),
                 "an unavailable surface must point at the one that works"
             );
         }
@@ -3139,7 +3139,7 @@ mod tests {
 
     /// #4022: `lane.interrupt` is a real write on every surface, including the
     /// composer. Runtime teardown must not run on the composer thread, but the
-    /// answer is the off-loop executor in `codewhale-tui::lane_control` — not a
+    /// answer is the off-loop executor in `ghosty-tui::lane_control` — not a
     /// surface refusal. This executor is the shared, blocking body that both the
     /// CLI and that worker thread call, so the slash surface must transition
     /// durable state exactly like the CLI does.

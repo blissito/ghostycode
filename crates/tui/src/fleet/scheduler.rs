@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, SecondsFormat, Utc};
-use codewhale_protocol::fleet::*;
+use ghosty_protocol::fleet::*;
 use serde_json::Value;
 
 use super::ledger::{FleetLedger, FleetLedgerState, FleetTaskLedgerStatus, FleetTaskState};

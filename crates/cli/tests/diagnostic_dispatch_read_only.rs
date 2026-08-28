@@ -1,6 +1,6 @@
 //! Diagnostic dispatch must be read-only whether the command uses the real
 //! in-process TUI entry (`doctor`, `setup --status`) or stays in the CLI
-//! (`auth status --diagnostic`). The single `codewhale` binary has no sibling
+//! (`auth status --diagnostic`). The single `ghosty` binary has no sibling
 //! TUI executable to delegate to (#5259 single-binary argv0 dispatch). These
 //! invariants stay: the dispatcher must not migrate legacy secrets, must not
 //! rewrite legacy settings, and must not create any state under a sealed HOME.
@@ -13,7 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use codewhale_secrets::{FileKeyringStore, KeyringStore};
+use ghosty_secrets::{FileKeyringStore, KeyringStore};
 use tempfile::TempDir;
 
 #[test]
@@ -30,8 +30,8 @@ fn dispatcher_diagnostics_are_in_process_and_read_only() {
     ] {
         let fixture = TempDir::new().expect("fixture root");
         let sealed_home = fixture.path().join("sealed-home");
-        let codewhale_home = fixture.path().join("sealed-codewhale-home");
-        let primary_home = sealed_home.join(".codewhale");
+        let ghosty_home = fixture.path().join("sealed-ghosty-home");
+        let primary_home = sealed_home.join(".ghosty");
         let legacy = sealed_home
             .join(".deepseek")
             .join("secrets")
@@ -45,18 +45,18 @@ fn dispatcher_diagnostics_are_in_process_and_read_only() {
         let before_paths = relative_paths(&sealed_home);
         let before_legacy = fs::read(&legacy).expect("read synthetic legacy store");
 
-        // The diagnostic runs entirely in-process: the single `codewhale` binary
-        // dispatches through `run_tui_in_process` -> `codewhale_tui::run`. No
+        // The diagnostic runs entirely in-process: the single `ghosty` binary
+        // dispatches through `run_tui_in_process` -> `ghosty_tui::run`. No
         // `DEEPSEEK_TUI_BIN` sibling is spawned, so there is no receipt to read;
         // assert the in-process behavior and the read-only invariants instead.
-        let mut command = Command::new(codewhale_binary());
+        let mut command = Command::new(ghosty_binary());
         command
             .args(args)
             .env_clear()
             .env("HOME", &sealed_home)
             .env("USERPROFILE", &sealed_home)
-            .env("CODEWHALE_HOME", &codewhale_home)
-            .env("CODEWHALE_SECRET_BACKEND", "file");
+            .env("GHOSTY_HOME", &ghosty_home)
+            .env("GHOSTY_SECRET_BACKEND", "file");
         preserve_host_rustup_home(&mut command);
         let output = command.output().expect("run dispatcher diagnostic");
 
@@ -93,22 +93,22 @@ fn dispatcher_diagnostics_are_in_process_and_read_only() {
             );
             assert!(
                 stdout.contains(&format!(
-                    "codewhale home: {}",
-                    codewhale_config::quote_os_path(&codewhale_home)
+                    "ghosty home: {}",
+                    ghosty_config::quote_os_path(&ghosty_home)
                 )),
                 "{stdout}"
             );
             assert!(
                 stdout.contains(&format!(
                     "config: {}",
-                    codewhale_config::quote_os_path(&codewhale_home.join("config.toml"))
+                    ghosty_config::quote_os_path(&ghosty_home.join("config.toml"))
                 )),
                 "{stdout}"
             );
             assert!(
                 stdout.contains(&format!(
                     "settings: {}",
-                    codewhale_config::quote_os_path(&codewhale_home.join("settings.toml"))
+                    ghosty_config::quote_os_path(&ghosty_home.join("settings.toml"))
                 )),
                 "{stdout}"
             );
@@ -117,9 +117,8 @@ fn dispatcher_diagnostics_are_in_process_and_read_only() {
                 "{stdout}"
             );
             assert!(
-                stdout.contains(
-                    "legacy secret store: suppressed by explicit CODEWHALE_HOME isolation"
-                ),
+                stdout
+                    .contains("legacy secret store: suppressed by explicit GHOSTY_HOME isolation"),
                 "{stdout}"
             );
             assert!(!stdout.contains("synthetic-legacy-fixture"), "{stdout}");
@@ -142,11 +141,11 @@ fn dispatcher_diagnostics_are_in_process_and_read_only() {
         );
         assert!(
             !primary_home.exists(),
-            "dispatcher {args:?} must not create a primary Codewhale home or migrated state"
+            "dispatcher {args:?} must not create a primary Ghosty home or migrated state"
         );
         assert!(
-            !codewhale_home.exists(),
-            "dispatcher {args:?} must not create an explicit CODEWHALE_HOME"
+            !ghosty_home.exists(),
+            "dispatcher {args:?} must not create an explicit GHOSTY_HOME"
         );
     }
 }
@@ -174,11 +173,11 @@ fn collect_relative_paths(root: &Path, current: &Path, paths: &mut Vec<PathBuf>)
     }
 }
 
-fn codewhale_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale") {
+fn ghosty_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty") {
         return PathBuf::from(path);
     }
 
@@ -187,13 +186,13 @@ fn codewhale_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty{}", std::env::consts::EXE_SUFFIX));
     path
 }
 
 /// A rustup shim may initialize its own toolchain state below `$HOME` when
 /// `doctor` asks `rustc --version`. Preserve an already-configured toolchain
-/// root so this test isolates Codewhale's own state contract.
+/// root so this test isolates Ghosty's own state contract.
 fn preserve_host_rustup_home(command: &mut Command) {
     let rustup_home = std::env::var_os("RUSTUP_HOME")
         .map(PathBuf::from)

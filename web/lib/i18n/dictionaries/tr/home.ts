@@ -5,19 +5,19 @@ import type { HomeDict } from "../types";
  *
  * Güncel İngilizce yönünde özgün yeniden yazım: modelini kendin getir,
  * her şey senin makinende olur. Ürün sözlüğü TUI paketiyle aynı kalır:
- * Plan / Work / Operate, Ask / Auto-Review / Full Access, Codewhale, TUI,
- * `codewhale exec`, Runtime API + MCP, Fleet, Node 18+, Rust, MIT.
+ * Plan / Work / Operate, Ask / Auto-Review / Full Access, Ghosty, TUI,
+ * `ghosty exec`, Runtime API + MCP, Fleet, Node 18+, Rust, MIT.
  *
  * Bölüm mühürleri (法, 行, …) İngilizce baskıyla paylaşılan gliflerdir —
  * işaretlerdir, düzyazı değil.
  */
 export const home: HomeDict = {
-  metaTitle: "Codewhale — derinlere dalar, sen dalmak zorunda kalmazsın.",
+  metaTitle: "Ghosty — derinlere dalar, sen dalmak zorunda kalmazsın.",
   metaDescription:
-    "Codewhale derinlere dalar, sen dalmak zorunda kalmazsın — terminal için açık kaynak kodlama ajanı. Modelini kendin getir. Senin makineninde çalışır. Rust, MIT.",
+    "Ghosty derinlere dalar, sen dalmak zorunda kalmazsın — terminal için açık kaynak kodlama ajanı. Modelini kendin getir. Senin makineninde çalışır. Rust, MIT.",
 
   kicker: "Açık kaynak · Modelini kendin getir · Terminalinde çalışır",
-  heroTitleA: "Codewhale derinlere dalar,",
+  heroTitleA: "Ghosty derinlere dalar,",
   heroTitleB: "sen dalmak zorunda kalmazsın.",
   heroIntro:
     "{brand}, terminalin için açık kaynaklı bir kodlama ajanıdır. Ona bir model ve bir görev ver — kodunu okur, dosyaları düzenler, kendi denetimlerini çalıştırır ve iş bitince ya da sana ihtiyaç duyduğunda durur. İstediğin modeli getir ya da modelleri karıştır: her role ayrı bir model sabitle.",
@@ -40,8 +40,8 @@ export const home: HomeDict = {
 
   shotSession: "Geçerli oturum",
   screenshotAlt:
-    "Operate modu, balina, besteci ve alt bilgisi görünen geçerli Codewhale terminal oturumu",
-  figcaption: "Geçerli Codewhale oturumu · Operate modu · Ask izin duruşu",
+    "Operate modu, balina, besteci ve alt bilgisi görünen geçerli Ghosty terminal oturumu",
+  figcaption: "Geçerli Ghosty oturumu · Operate modu · Ask izin duruşu",
 
   proofHeading: "Bir su altı terminal kabuğu. İstediğin model. Senin makinen.",
   proofBody:
@@ -67,7 +67,7 @@ export const home: HomeDict = {
   receiptReport: "denetimler geçti · makbuz kaydedildi",
 
   sealStart: "起",
-  startHeading: "Codewhale’a yeni misin? Baştan sona dört adım.",
+  startHeading: "Ghosty’a yeni misin? Baştan sona dört adım.",
   startLede:
     "Kur → anahtarsız ilk oturum → bir sağlayıcı bağla → Fleet’ini kur. Terimler sözlük sayfasında tanımlı.",
   startGuideLink: "Başlangıç kılavuzunu oku →",
@@ -87,7 +87,7 @@ export const home: HomeDict = {
   surfacesHeading: "Çalışma zamanını işin olduğu yerde kullan.",
   surfaces: [
     ["TUI", "Terminalde etkileşimli iş"],
-    ["codewhale exec", "Betikler ve CI"],
+    ["ghosty exec", "Betikler ve CI"],
     ["Web istemcisi", "Yalnızca geri döngülü tarayıcı istemcisi"],
     ["Runtime API + MCP", "Yerel entegrasyonlar"],
     ["Fleet", "Kalıcı çok ajanlı iş"],

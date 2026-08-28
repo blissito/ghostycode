@@ -1,6 +1,6 @@
-# Contributing to codewhale
+# Contributing to ghosty
 
-Thank you for your interest in contributing to codewhale! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to ghosty! This document provides guidelines and instructions for contributing.
 
 ## Getting Started
 
@@ -14,8 +14,8 @@ Thank you for your interest in contributing to codewhale! This document provides
 
 1. Fork and clone the repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/CodeWhale.git
-   cd CodeWhale
+   git clone https://github.com/YOUR_USERNAME/GhostyCode.git
+   cd GhostyCode
    ```
 
 2. Build the project:
@@ -30,7 +30,7 @@ Thank you for your interest in contributing to codewhale! This document provides
 
 4. Run with development settings:
    ```bash
-   cargo run --bin codewhale
+   cargo run --bin ghosty
    ```
 
 ## Development Workflow
@@ -93,7 +93,7 @@ reasoning are in [`docs/BUILD_PERFORMANCE.md`](docs/BUILD_PERFORMANCE.md)):
 
 ```bash
 # 1. Type-check first (seconds after the first build; no codegen, no link).
-scripts/dev-cargo.sh check -p codewhale-tui
+scripts/dev-cargo.sh check -p ghosty-tui
 
 # 2. Run only the tests near your change (one crate, one filter).
 scripts/dev-test.sh tui fleet_setup
@@ -129,12 +129,12 @@ If you work in several worktrees, do **not** share one `CARGO_TARGET_DIR`
 by default: two cargos on the same target flock and serialize. Use
 `scripts/dev-cargo.sh` / `scripts/dev-test.sh`, which give each workspace
 its own Cargo `build-dir` (`{workspace-path-hash}` under
-`${CODEWHALE_CACHE_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/codewhale}`).
-`CODEWHALE_DEV_CACHE=local` keeps `./target` if you want that.
+`${GHOSTY_CACHE_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/ghosty}`).
+`GHOSTY_DEV_CACHE=local` keeps `./target` if you want that.
 `sccache` wraps rustc only when incremental compilation is already off
-(`CARGO_INCREMENTAL=0` or `CODEWHALE_SCCACHE=1`) and `sccache` is on
+(`CARGO_INCREMENTAL=0` or `GHOSTY_SCCACHE=1`) and `sccache` is on
 `PATH`; a missing binary is a printed fallback, not an error. Override
-the cache root with `CODEWHALE_CACHE_ROOT` — there is no machine-specific
+the cache root with `GHOSTY_CACHE_ROOT` — there is no machine-specific
 default. A single shared `CARGO_TARGET_DIR` remains valid only for
 serialized trunk work. See
 [`docs/BUILD_PERFORMANCE.md`](docs/BUILD_PERFORMANCE.md).
@@ -334,7 +334,7 @@ What this means for you:
 
 ## Contribution Gate
 
-Codewhale uses a maintainer-managed contribution gate for the community front
+Ghosty uses a maintainer-managed contribution gate for the community front
 door. Maintainers and collaborators bypass this gate automatically. The gate
 workflows default to dry-run / comment-only mode so maintainers can observe the
 signal before changing contributor flow.
@@ -345,7 +345,7 @@ keeping good-faith contributors seen, credited, and able to keep helping.
 
 Issues are never auto-closed by the contribution gate. Unapproved external
 issues receive a short welcome note that asks for reproduction details and then
-remain open for maintainer triage. Codewhale depends on real edge cases from
+remain open for maintainer triage. Ghosty depends on real edge cases from
 real users, so issue intake should stay warm and open.
 
 Pull requests are different because they can touch code, CI, release plumbing,
@@ -378,9 +378,9 @@ reopened, ask the contributor to resubmit after the allowlist PR is merged.
 
 ## Agent-Assisted Improvements
 
-Codewhale is allowed to help improve Codewhale, but the contribution still has
+Ghosty is allowed to help improve Ghosty, but the contribution still has
 to be shaped for human review. The recommended workflow is the recursive self-improvement prompt
-in the private `codewhale-ops` repo: run it
+in the private `ghosty-ops` repo: run it
 from a fresh fork or branch, let the agent find exactly one small friction point,
 and stop after one patch. DeepSeek V4 Pro is the reference path for this loop
 today, but any configured provider works — the review shape matters more than
@@ -399,14 +399,14 @@ branding, or global prompts without prior maintainer sign-off.
 
 ## Project Structure
 
-codewhale is a Cargo workspace. The live runtime and the majority of TUI,
+ghosty is a Cargo workspace. The live runtime and the majority of TUI,
 engine, and tool code currently live in `crates/tui/src/`. Smaller workspace
 crates provide shared abstractions that are being extracted incrementally.
 
 ```
 crates/
-├── tui/           codewhale-tui binary (interactive TUI + runtime API)
-├── cli/           codewhale binary (dispatcher facade)
+├── tui/           ghosty-tui binary (interactive TUI + runtime API)
+├── cli/           ghosty binary (dispatcher facade)
 ├── app-server/    HTTP/SSE + JSON-RPC transport
 ├── core/          Agent loop / session / turn management
 ├── protocol/      Request/response framing
@@ -484,7 +484,7 @@ Issue reports should include:
 
 - Operating system and version
 - Rust version (`rustc --version`)
-- codewhale version (`codewhale --version`)
+- ghosty version (`ghosty --version`)
 - Steps to reproduce the issue
 - Expected vs actual behavior
 - Relevant error messages or logs
@@ -503,7 +503,7 @@ code of conduct.
 
 ## License
 
-By contributing to codewhale, you agree that your contributions will be licensed under the MIT License.
+By contributing to ghosty, you agree that your contributions will be licensed under the MIT License.
 
 ## Questions?
 

@@ -21,6 +21,6 @@ impl RegisterCommand for LinksCmd {
     }
 
     fn execute(app: &mut App, _arg: Option<&str>) -> CommandResult {
-        super::core::codewhale_links(app)
+        super::core::ghosty_links(app)
     }
 }

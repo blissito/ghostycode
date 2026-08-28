@@ -30,7 +30,7 @@ fn format_status(app: &App) -> String {
     // available is a blank row. It is spent on the two group boundaries and
     // nowhere else: standing facts about the route and the machine first,
     // then everything that accumulates as the session runs.
-    let _ = writeln!(out, "codewhale {}", env!("CARGO_PKG_VERSION"));
+    let _ = writeln!(out, "ghosty {}", env!("CARGO_PKG_VERSION"));
     let _ = writeln!(out);
 
     push_row(
@@ -479,7 +479,7 @@ mod tests {
 
         let result = status(&mut app);
         let msg = result.message.expect("status message");
-        assert!(msg.starts_with(&format!("codewhale {}", env!("CARGO_PKG_VERSION"))));
+        assert!(msg.starts_with(&format!("ghosty {}", env!("CARGO_PKG_VERSION"))));
         assert!(msg.contains("Route:"));
         assert!(msg.contains("Directory:"));
         assert!(msg.contains("AGENTS.md"));

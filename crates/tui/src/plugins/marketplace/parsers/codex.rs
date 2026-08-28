@@ -26,7 +26,7 @@
 //! `INSTALLED_BY_DEFAULT` | `NOT_AVAILABLE`; `authentication`), optional
 //! `category`.
 //!
-//! `policy` is display-only in Codewhale: `INSTALLED_BY_DEFAULT` never
+//! `policy` is display-only in Ghosty: `INSTALLED_BY_DEFAULT` never
 //! triggers an install, and `NOT_AVAILABLE` only downgrades the install
 //! plan with an honest reason.
 
@@ -221,7 +221,7 @@ fn parse_codex_entry(
     entry_diags.extend(source_diags);
 
     // `policy.installation` is honored as display/availability metadata
-    // only. Codewhale never auto-installs and never auto-authenticates.
+    // only. Ghosty never auto-installs and never auto-authenticates.
     let installation = obj
         .get("policy")
         .and_then(|p| p.get("installation"))
@@ -238,7 +238,7 @@ fn parse_codex_entry(
         Some("INSTALLED_BY_DEFAULT") => {
             entry_diags.push(MarketplaceDiagnostic::warning(
                 "NO_AUTO_INSTALL",
-                "Codex policy `INSTALLED_BY_DEFAULT` is ignored: Codewhale installs only on an explicit operator action".to_string(),
+                "Codex policy `INSTALLED_BY_DEFAULT` is ignored: Ghosty installs only on an explicit operator action".to_string(),
                 Some(name.clone()),
                 Some(index),
             ));
@@ -350,7 +350,7 @@ fn normalize_codex_source(
                     if !owner.is_empty() && !repo.is_empty() {
                         diags.push(MarketplaceDiagnostic::warning(
                             "UNAPPLIED_PIN",
-                            "Codewhale's GitHub installer resolves the default branch; ref/sha pins are recorded but not yet applied".to_string(),
+                            "Ghosty's GitHub installer resolves the default branch; ref/sha pins are recorded but not yet applied".to_string(),
                             None,
                             None,
                         ));
@@ -390,7 +390,7 @@ fn normalize_codex_source(
             (
                 MarketplaceSourceSpec::Npm { package: package.to_string() },
                 MarketplaceInstallPlan::Unsupported {
-                    reason: "Codewhale does not execute npm; install the plugin from a GitHub repo, tarball, or local path".to_string(),
+                    reason: "Ghosty does not execute npm; install the plugin from a GitHub repo, tarball, or local path".to_string(),
                     raw: value.to_string(),
                 },
                 diags,

@@ -1,7 +1,7 @@
 //! Named fleet roster files for dogfood lanes (#4178).
 //!
 //! Format: TOML at `fleets/<name>.toml` (workspace) or
-//! `$CODEWHALE_HOME/fleets/<name>.toml`.
+//! `$GHOSTY_HOME/fleets/<name>.toml`.
 //!
 //! Two forms share this one store — there is no parallel fleet directory:
 //!
@@ -31,11 +31,11 @@ use crate::fleet_snapshot::QualifiedFleetId;
 /// One labelled place fleet files are looked up.
 ///
 /// The label is what makes a Fleet identity *qualified*: `workspace/glm-pair`
-/// and `codewhale_home/glm-pair` are different Fleets, and the loader refuses
+/// and `ghosty_home/glm-pair` are different Fleets, and the loader refuses
 /// to guess between them for exact definitions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FleetSearchRoot {
-    /// Non-secret origin label, e.g. `workspace` or `codewhale_home`.
+    /// Non-secret origin label, e.g. `workspace` or `ghosty_home`.
     pub origin: String,
     /// Directory that contains a `fleets/` subdirectory.
     pub root: PathBuf,
@@ -173,7 +173,7 @@ impl FleetDocument {
     /// Load a fleet document by name from labelled search roots.
     ///
     /// A bare `name` that exists under more than one origin is **ambiguous**
-    /// once any candidate is an exact fleet: a personal `~/.codewhale` Fleet
+    /// once any candidate is an exact fleet: a personal `~/.ghosty` Fleet
     /// silently shadowing (or being shadowed by) a project Fleet would change
     /// which exact provider/model actually runs, so the caller is asked for a
     /// qualified `origin/name` instead. Purely legacy collisions keep the

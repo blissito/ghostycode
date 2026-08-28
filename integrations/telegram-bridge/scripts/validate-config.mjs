@@ -82,7 +82,7 @@ function parseArgs(argv) {
 }
 
 async function appendFilesystemChecks(result, env, args) {
-  const workspace = envFirst(env, "CODEWHALE_WORKSPACE", "DEEPSEEK_WORKSPACE");
+  const workspace = envFirst(env, "GHOSTY_WORKSPACE", "DEEPSEEK_WORKSPACE");
   if (workspace) {
     await checkReadableDirectory(result, workspace, "workspace");
   }
@@ -157,7 +157,7 @@ Options:
   --runtime-env FILE        Read runtime env and verify the shared bearer token.
   --workspace-root DIR      Expected remote workspace root (default: /opt/whalebro).
   --check-filesystem        Verify workspace and thread-map paths are usable.
-  --allow-remote-runtime    Permit CODEWHALE_RUNTIME_URL to point outside localhost.
+  --allow-remote-runtime    Permit GHOSTY_RUNTIME_URL to point outside localhost.
   --json                    Print machine-readable JSON.
   -h, --help                Show this help.
 `);

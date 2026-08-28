@@ -40,7 +40,7 @@ fn sniffing_ignores_the_extension_and_believes_the_bytes() {
 fn lowercase_read_image_preparation_is_typed_and_bounded() {
     let prepared = prepare_tool_image_bytes(PNG_1X1, "image/png");
     assert_eq!(prepared.note, "Read image file [image/png]");
-    let codewhale_tools::ToolResultContentBlock::Image { mime_type, data } =
+    let ghosty_tools::ToolResultContentBlock::Image { mime_type, data } =
         prepared.block.expect("typed image");
     assert_eq!(mime_type, "image/png");
     assert_eq!(STANDARD.decode(data).expect("base64"), PNG_1X1);

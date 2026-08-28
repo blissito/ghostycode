@@ -1,4 +1,4 @@
-//! Terminal-native underwater field for the Codewhale transcript.
+//! Terminal-native underwater field for the Ghosty transcript.
 //!
 //! The field is atmosphere, never content: ordinary shell cells share its
 //! water column while semantic surfaces such as selections, errors, and code
@@ -379,7 +379,7 @@ impl OceanRamp {
             return None;
         }
 
-        // The canonical Whale pair gets the authored Codewhale water column.
+        // The canonical Whale pair gets the authored Ghosty water column.
         // Match both name and surface so a user-supplied `background_color`
         // remains the source of truth and still receives the generic ramp.
         if theme.name == crate::palette::UI_THEME.name

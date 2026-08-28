@@ -6,7 +6,7 @@
 //! such as `"ANTHROPIC_API_KEY"`, `"OAuth"`, or `"~/.aws/credentials"` from
 //! every resolution so a status surface can say which place won.
 //!
-//! CodeWhale adds the negative half, because that is where its picker was
+//! GhostyCode adds the negative half, because that is where its picker was
 //! useless: a failed resolution carries the ordered list of places that were
 //! actually probed, so "missing key" can name them and say what would fix it.
 //!
@@ -63,13 +63,13 @@ pub(crate) enum CredentialSource {
     ProviderConfigEnv { var: String },
     /// An ambient provider environment variable.
     AmbientEnv { var: String },
-    /// CodeWhale's own durable secret store.
+    /// GhostyCode's own durable secret store.
     SecretStore { slot: String },
     /// A read-only, explicitly consented credential file owned by another CLI.
     ExternalGrant { cli: String, path: String },
-    /// CodeWhale-owned OAuth device-login storage (xAI today).
+    /// GhostyCode-owned OAuth device-login storage (xAI today).
     OAuth { flow: String },
-    /// The user-global `~/.codewhale/config.toml`, consulted last so a key
+    /// The user-global `~/.ghosty/config.toml`, consulted last so a key
     /// saved there survives loading a workspace config.
     UserGlobalConfig,
     /// Nothing had a credential. `probed` is in precedence order.
@@ -97,7 +97,7 @@ impl CredentialSource {
                 Cow::Owned(format!("{cli} credentials (read-only) {path}"))
             }
             Self::OAuth { flow } => Cow::Owned(format!("{flow} OAuth")),
-            Self::UserGlobalConfig => Cow::Borrowed("~/.codewhale/config.toml api_key"),
+            Self::UserGlobalConfig => Cow::Borrowed("~/.ghosty/config.toml api_key"),
             Self::Missing { .. } => Cow::Borrowed("not found"),
         }
     }

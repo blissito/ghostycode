@@ -131,7 +131,7 @@ describe("fetchFeed", () => {
     {
       number: 4901,
       title: "Ticker shows nothing on first paint",
-      html_url: "https://github.com/Hmbown/CodeWhale/issues/4901",
+      html_url: "https://github.com/blissito/ghostycode/issues/4901",
       state: "open",
       user: { login: "asto18089", avatar_url: "https://avatars/1" },
       created_at: "2026-06-01T09:00:00Z",
@@ -143,7 +143,7 @@ describe("fetchFeed", () => {
     {
       number: 4880,
       title: "Fixed upstream",
-      html_url: "https://github.com/Hmbown/CodeWhale/issues/4880",
+      html_url: "https://github.com/blissito/ghostycode/issues/4880",
       state: "closed",
       user: { login: "Inference1", avatar_url: "https://avatars/2" },
       created_at: "2026-03-02T09:00:00Z",
@@ -157,7 +157,7 @@ describe("fetchFeed", () => {
       // The issues endpoint returns pull requests too; they must not double up.
       number: 4899,
       title: "PR echoed by the issues endpoint",
-      html_url: "https://github.com/Hmbown/CodeWhale/pull/4899",
+      html_url: "https://github.com/blissito/ghostycode/pull/4899",
       state: "open",
       user: { login: "bistack", avatar_url: "https://avatars/3" },
       created_at: "2026-06-01T08:00:00Z",
@@ -172,7 +172,7 @@ describe("fetchFeed", () => {
     {
       number: 4899,
       title: "fix(tui): keep the composer caret on resize",
-      html_url: "https://github.com/Hmbown/CodeWhale/pull/4899",
+      html_url: "https://github.com/blissito/ghostycode/pull/4899",
       state: "closed",
       user: { login: "shenjackyuanjie", avatar_url: "https://avatars/4" },
       created_at: "2026-05-29T09:00:00Z",
@@ -186,7 +186,7 @@ describe("fetchFeed", () => {
     {
       number: 4902,
       title: "wip: sandbox notes",
-      html_url: "https://github.com/Hmbown/CodeWhale/pull/4902",
+      html_url: "https://github.com/blissito/ghostycode/pull/4902",
       state: "open",
       user: { login: "h3c-hexin", avatar_url: "https://avatars/5" },
       created_at: "2026-06-01T07:00:00Z",
@@ -202,7 +202,7 @@ describe("fetchFeed", () => {
     {
       tag_name: "v0.9.4",
       name: "v0.9.4",
-      html_url: "https://github.com/Hmbown/CodeWhale/releases/tag/v0.9.4",
+      html_url: "https://github.com/blissito/ghostycode/releases/tag/v0.9.4",
       created_at: "2026-05-28T09:00:00Z",
       published_at: "2026-05-28T12:00:00Z",
       author: { login: "Hmbown", avatar_url: "https://avatars/6" },
@@ -210,7 +210,7 @@ describe("fetchFeed", () => {
     {
       tag_name: "v0.9.5-rc1",
       name: "v0.9.5-rc1",
-      html_url: "https://github.com/Hmbown/CodeWhale/releases/tag/v0.9.5-rc1",
+      html_url: "https://github.com/blissito/ghostycode/releases/tag/v0.9.5-rc1",
       created_at: "2026-06-01T09:00:00Z",
       published_at: null,
       draft: true,
@@ -338,7 +338,7 @@ describe("fetchFeed — bot authors", () => {
     {
       number: 101,
       title: "Automated close sweep",
-      html_url: "https://github.com/Hmbown/CodeWhale/issues/101",
+      html_url: "https://github.com/blissito/ghostycode/issues/101",
       state: "closed",
       user: { login: "github-actions[bot]", avatar_url: "https://avatars/bot1" },
       created_at: "2026-06-01T09:00:00Z",
@@ -351,7 +351,7 @@ describe("fetchFeed — bot authors", () => {
     {
       number: 102,
       title: "Real report",
-      html_url: "https://github.com/Hmbown/CodeWhale/issues/102",
+      html_url: "https://github.com/blissito/ghostycode/issues/102",
       state: "open",
       user: { login: "vFONGv", avatar_url: "https://avatars/h1" },
       created_at: "2026-06-01T08:00:00Z",
@@ -366,7 +366,7 @@ describe("fetchFeed — bot authors", () => {
     {
       number: 103,
       title: "chore(deps): bump serde from 1.0.219 to 1.0.220",
-      html_url: "https://github.com/Hmbown/CodeWhale/pull/103",
+      html_url: "https://github.com/blissito/ghostycode/pull/103",
       state: "closed",
       user: { login: "dependabot[bot]", avatar_url: "https://avatars/bot2" },
       created_at: "2026-05-31T09:00:00Z",
@@ -379,7 +379,7 @@ describe("fetchFeed — bot authors", () => {
     {
       number: 104,
       title: "fix(tui): keep the whale rail steady",
-      html_url: "https://github.com/Hmbown/CodeWhale/pull/104",
+      html_url: "https://github.com/blissito/ghostycode/pull/104",
       state: "closed",
       user: { login: "bistack", avatar_url: "https://avatars/h2" },
       created_at: "2026-05-30T09:00:00Z",
@@ -395,7 +395,7 @@ describe("fetchFeed — bot authors", () => {
     {
       tag_name: "v0.9.4",
       name: "v0.9.4",
-      html_url: "https://github.com/Hmbown/CodeWhale/releases/tag/v0.9.4",
+      html_url: "https://github.com/blissito/ghostycode/releases/tag/v0.9.4",
       created_at: "2026-05-28T09:00:00Z",
       published_at: "2026-05-28T12:00:00Z",
       author: { login: "release-train[bot]", avatar_url: "https://avatars/bot3" },
@@ -448,21 +448,21 @@ describe("lastPageFromLink", () => {
 
   it("extracts page from Link header with last rel", () => {
     const link =
-      '<https://api.github.com/repos/Hmbown/CodeWhale/issues?page=5>; rel="last"';
+      '<https://api.github.com/repos/blissito/ghostycode/issues?page=5>; rel="last"';
     expect(lastPageFromLink(link)).toBe(5);
   });
 
   it("extracts page from multi-part Link header", () => {
     const link = [
-      '<https://api.github.com/repos/Hmbown/CodeWhale/issues?page=1>; rel="prev"',
-      '<https://api.github.com/repos/Hmbown/CodeWhale/issues?page=3>; rel="last"',
+      '<https://api.github.com/repos/blissito/ghostycode/issues?page=1>; rel="prev"',
+      '<https://api.github.com/repos/blissito/ghostycode/issues?page=3>; rel="last"',
     ].join(", ");
     expect(lastPageFromLink(link)).toBe(3);
   });
 
   it("returns undefined when no last rel present", () => {
     const link =
-      '<https://api.github.com/repos/Hmbown/CodeWhale/issues?page=1>; rel="prev"';
+      '<https://api.github.com/repos/blissito/ghostycode/issues?page=1>; rel="prev"';
     expect(lastPageFromLink(link)).toBeUndefined();
   });
 

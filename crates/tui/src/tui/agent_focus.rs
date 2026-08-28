@@ -794,7 +794,7 @@ mod tests {
                 nickname: None,
                 status: SubAgentStatus::Running,
                 worker_status: None,
-                runtime_permissions: Some(codewhale_protocol::fleet::FleetEffectivePermissions {
+                runtime_permissions: Some(ghosty_protocol::fleet::FleetEffectivePermissions {
                     write: false,
                     network: true,
                     shell: "read_only".to_string(),

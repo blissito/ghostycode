@@ -1,8 +1,8 @@
 # Command Dispatch Architecture
 
 **Target branch:** `main`
-**Related EPIC:** [#2870](https://github.com/Hmbown/CodeWhale/issues/2870)
-**Related issue:** [#2791](https://github.com/Hmbown/CodeWhale/issues/2791)
+**Related EPIC:** [#2870](https://github.com/blissito/ghostycode/issues/2870)
+**Related issue:** [#2791](https://github.com/blissito/ghostycode/issues/2791)
 **EPIC-002 (Command Single Responsibility Extraction):** Layer 4.x (FEAT-006 through FEAT-008)
 
 This document records the command-dispatch ownership model after the
@@ -59,11 +59,11 @@ intentional:
 User commands are markdown files loaded from these locations in precedence
 order:
 
-1. `<workspace>/.codewhale/commands/`
+1. `<workspace>/.ghosty/commands/`
 2. `<workspace>/.deepseek/commands/`
 3. `<workspace>/.claude/commands/`
 4. `<workspace>/.cursor/commands/`
-5. `~/.codewhale/commands/`
+5. `~/.ghosty/commands/`
 6. `~/.deepseek/commands/`
 
 Supported frontmatter fields:

@@ -73,7 +73,7 @@ def write_budget(total: int, per_crate: dict[str, int]) -> None:
             "go down freely; raising it needs a reviewer to say why in the PR. "
             "Regenerate with: python3 scripts/check-dead-code-budget.py --update"
         ),
-        "_issue": "https://github.com/Hmbown/CodeWhale/issues/4785",
+        "_issue": "https://github.com/blissito/ghostycode/issues/4785",
         "total": total,
         "per_crate": dict(sorted(per_crate.items())),
     }

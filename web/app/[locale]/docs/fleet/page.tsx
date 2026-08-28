@@ -6,7 +6,7 @@ import { buildPageMetadata } from "@/lib/page-meta";
 const CODE_SPANS: Record<string, string> = {
   fleetStatusTui: "/fleet status",
   subagents: "/subagents",
-  fleetStatusShell: "codewhale fleet status",
+  fleetStatusShell: "ghosty fleet status",
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
@@ -46,13 +46,13 @@ export default async function FleetPage({ params }: { params: Promise<{ locale: 
       <section id="cli" className="scroll-mt-32">
         <h2 className="font-display text-2xl mb-1">{t.runTitle}</h2>
         <p className={`${t.bodyClassName} mt-3`}>{t.runLead}</p>
-        <pre className="code-block mt-4">{`codewhale fleet run tasks.json --max-workers 4
-codewhale fleet status
-codewhale fleet inspect <worker-id>
-codewhale fleet logs <worker-id>
-codewhale fleet interrupt <worker-id>
-codewhale fleet resume <run-id>
-codewhale fleet stop --all`}</pre>
+        <pre className="code-block mt-4">{`ghosty fleet run tasks.json --max-workers 4
+ghosty fleet status
+ghosty fleet inspect <worker-id>
+ghosty fleet logs <worker-id>
+ghosty fleet interrupt <worker-id>
+ghosty fleet resume <run-id>
+ghosty fleet stop --all`}</pre>
         <p className={`${t.bodyClassName} mt-3`}>
           {splitTokens(t.statusLead).map((part, i) =>
             "token" in part ? (

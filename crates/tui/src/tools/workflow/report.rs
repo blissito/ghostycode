@@ -1,7 +1,7 @@
 use super::{SCHEMA_RAW_PREVIEW_CHARS, WorkflowRunRecord, WorkflowRunStatus};
 use std::path::Path;
 
-/// Persist a durable per-run report under `.codewhale/reports/<run_id>.md`
+/// Persist a durable per-run report under `.ghosty/reports/<run_id>.md`
 /// so a settled background run leaves one synthesized artifact even after
 /// the session ends. Best-effort: report IO never affects the run outcome.
 pub(super) fn write_run_report_artifact(workspace: &Path, record: &WorkflowRunRecord) {
@@ -23,7 +23,7 @@ pub(super) fn write_run_report_artifact(workspace: &Path, record: &WorkflowRunRe
     if safe_id.is_empty() {
         return;
     }
-    let dir = workspace.join(".codewhale").join("reports");
+    let dir = workspace.join(".ghosty").join("reports");
     if let Err(err) = std::fs::create_dir_all(&dir) {
         crate::logging::warn(format!(
             "workflow report dir {} not created: {err}",
@@ -72,7 +72,7 @@ pub(super) fn write_schema_raw_artifact(
     if safe_run.is_empty() || safe_task.is_empty() {
         return None;
     }
-    let dir = workspace.join(".codewhale").join("reports");
+    let dir = workspace.join(".ghosty").join("reports");
     if let Err(err) = std::fs::create_dir_all(&dir) {
         crate::logging::warn(format!(
             "workflow schema artifact dir {} not created: {err}",

@@ -1,7 +1,7 @@
 //! Versioned plugin activation policy.
 //!
 //! This is the single source of truth for which reviewed component adapters
-//! this Codewhale build will execute. Compatibility, `active()` decisions,
+//! this Ghosty build will execute. Compatibility, `active()` decisions,
 //! consumption-boundary checks, and the capability hash all read this policy.
 //! Enabling a new adapter later must change the policy (version and/or mask)
 //! so existing trust receipts fail closed as `CapabilitiesChanged`.
@@ -9,15 +9,15 @@
 use sha2::Digest;
 
 /// Capability-hash domain for the current activation-policy binding.
-pub const CAPABILITY_HASH_DOMAIN_V3: &[u8] = b"codewhale-plugin-capabilities-v3\0";
+pub const CAPABILITY_HASH_DOMAIN_V3: &[u8] = b"ghosty-plugin-capabilities-v3\0";
 
 /// Historical policy domain kept so persisted v2 receipts are intentionally
 /// invalidated when the declarative Commands, Agents, and Hooks adapters ship.
-pub const CAPABILITY_HASH_DOMAIN_V2: &[u8] = b"codewhale-plugin-capabilities-v2\0";
+pub const CAPABILITY_HASH_DOMAIN_V2: &[u8] = b"ghosty-plugin-capabilities-v2\0";
 
 /// Historical domain used before the activation policy was bound into the
 /// receipt. Kept so discovery can prove a v1 receipt no longer matches.
-pub const CAPABILITY_HASH_DOMAIN_V1: &[u8] = b"codewhale-plugin-capabilities-v1\0";
+pub const CAPABILITY_HASH_DOMAIN_V1: &[u8] = b"ghosty-plugin-capabilities-v1\0";
 
 pub const ACTIVATION_POLICY_VERSION: u32 = 3;
 
@@ -67,7 +67,7 @@ impl PluginActivationCapability {
     }
 }
 
-/// The adapters this exact Codewhale build will activate, plus the inventoried
+/// The adapters this exact Ghosty build will activate, plus the inventoried
 /// surfaces that stay inactive. Fields are public so tests can construct a
 /// mutated policy and prove the capability hash moves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

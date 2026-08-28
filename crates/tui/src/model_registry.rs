@@ -1,4 +1,4 @@
-//! Single source of model facts for CodeWhale (#3071, #3073).
+//! Single source of model facts for GhostyCode (#3071, #3073).
 //!
 //! Historically, "what is this model's context window / max output / does it
 //! reason?" was answered by several hard-coded sites:

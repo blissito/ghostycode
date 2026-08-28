@@ -41,8 +41,9 @@ pub fn header_status_indicator_frame(
         "dots" | "dot" => STATUS_INDICATOR_DOT_FRAMES,
         // Canonical mark, legacy whale opt-ins, and unknown values all land
         // on the static typographic mark so the header never reintroduces
-        // an emoji chip beside the model/mode cluster.
-        _ => return Some("cw"),
+        // an emoji chip beside the model/mode cluster. The setting keeps its
+        // `"cw"` value for compatibility; what it paints is the Ghosty mark.
+        _ => return Some("ghosty"),
     };
     let elapsed_ms = turn_started_at
         .map(|t| t.elapsed().as_millis())
@@ -61,12 +62,12 @@ mod tests {
         for legacy in ["whale", "🐳", "🐋"] {
             assert_eq!(
                 super::header_status_indicator_frame(None, legacy),
-                Some("cw"),
+                Some("ghosty"),
                 "legacy mode {legacy:?} must normalize to the cw mark"
             );
             assert_eq!(
                 super::header_status_indicator_frame(Some(std::time::Instant::now()), legacy),
-                Some("cw"),
+                Some("ghosty"),
                 "legacy mode {legacy:?} must stay static mid-turn"
             );
         }
@@ -74,10 +75,13 @@ mod tests {
 
     #[test]
     fn cw_indicator_is_static_and_typographic() {
-        assert_eq!(super::header_status_indicator_frame(None, "cw"), Some("cw"));
+        assert_eq!(
+            super::header_status_indicator_frame(None, "cw"),
+            Some("ghosty")
+        );
         assert_eq!(
             super::header_status_indicator_frame(Some(std::time::Instant::now()), "cw"),
-            Some("cw")
+            Some("ghosty")
         );
     }
 
@@ -99,7 +103,7 @@ mod tests {
     #[test]
     fn unknown_indicator_mode_defaults_to_cw() {
         let frame = super::header_status_indicator_frame(None, "wahel-typo");
-        assert_eq!(frame, Some("cw"));
+        assert_eq!(frame, Some("ghosty"));
     }
 
     #[test]

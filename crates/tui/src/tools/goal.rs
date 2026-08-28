@@ -560,7 +560,7 @@ fn gap_fingerprint(gaps: &[String]) -> Option<String> {
     }
 
     let mut hasher = Sha256::new();
-    hasher.update(b"codewhale-goal-gaps-v1\0");
+    hasher.update(b"ghosty-goal-gaps-v1\0");
     for gap in normalized {
         hasher.update(gap.as_bytes());
         hasher.update([0]);
@@ -581,7 +581,7 @@ impl GoalSnapshot {
     }
 
     #[must_use]
-    pub fn from_thread_goal(goal: &codewhale_protocol::ThreadGoal) -> Self {
+    pub fn from_thread_goal(goal: &ghosty_protocol::ThreadGoal) -> Self {
         let (status, pause_reason) = thread_goal_status_projection(goal.status.clone());
         Self {
             objective: Some(goal.objective.clone()),
@@ -606,19 +606,19 @@ impl GoalSnapshot {
 
 #[must_use]
 pub fn thread_goal_status_projection(
-    status: codewhale_protocol::ThreadGoalStatus,
+    status: ghosty_protocol::ThreadGoalStatus,
 ) -> (GoalStatus, Option<GoalPauseReason>) {
     match status {
-        codewhale_protocol::ThreadGoalStatus::Active => (GoalStatus::Active, None),
-        codewhale_protocol::ThreadGoalStatus::Paused => {
+        ghosty_protocol::ThreadGoalStatus::Active => (GoalStatus::Active, None),
+        ghosty_protocol::ThreadGoalStatus::Paused => {
             (GoalStatus::Paused, Some(GoalPauseReason::User))
         }
-        codewhale_protocol::ThreadGoalStatus::Complete => (GoalStatus::Complete, None),
-        codewhale_protocol::ThreadGoalStatus::Blocked => (GoalStatus::Blocked, None),
-        codewhale_protocol::ThreadGoalStatus::UsageLimited => {
+        ghosty_protocol::ThreadGoalStatus::Complete => (GoalStatus::Complete, None),
+        ghosty_protocol::ThreadGoalStatus::Blocked => (GoalStatus::Blocked, None),
+        ghosty_protocol::ThreadGoalStatus::UsageLimited => {
             (GoalStatus::Paused, Some(GoalPauseReason::UsageLimit))
         }
-        codewhale_protocol::ThreadGoalStatus::BudgetLimited => {
+        ghosty_protocol::ThreadGoalStatus::BudgetLimited => {
             (GoalStatus::Paused, Some(GoalPauseReason::BudgetLimit))
         }
     }
@@ -750,7 +750,7 @@ impl ToolSpec for CreateGoalTool {
     }
 
     fn description(&self) -> &'static str {
-        "Create the session's one persistent goal: a completion objective Codewhale keeps working toward across turns until it is verified complete, blocked, or the user stops it. Call this only when the user explicitly asks to use `/goal`, make an objective the goal, or otherwise explicitly requests persistent goal tracking. When the request is explicit, call `create_goal` before doing the rest of the work; acknowledging it in prose is not sufficient. Never infer a goal from an ordinary task, its apparent length, a question, or a one-file edit. Keep the user's full objective, not a shortened one-turn version. Set token_budget only when the user explicitly provides one. Creating a goal shows the user a one-line receipt (they can /goal pause or /goal clear); do not also ask for confirmation. Only one unfinished goal exists at a time: complete or clear it before creating another."
+        "Create the session's one persistent goal: a completion objective Ghosty keeps working toward across turns until it is verified complete, blocked, or the user stops it. Call this only when the user explicitly asks to use `/goal`, make an objective the goal, or otherwise explicitly requests persistent goal tracking. When the request is explicit, call `create_goal` before doing the rest of the work; acknowledging it in prose is not sufficient. Never infer a goal from an ordinary task, its apparent length, a question, or a one-file edit. Keep the user's full objective, not a shortened one-turn version. Set token_budget only when the user explicitly provides one. Creating a goal shows the user a one-line receipt (they can /goal pause or /goal clear); do not also ask for confirmation. Only one unfinished goal exists at a time: complete or clear it before creating another."
     }
 
     fn input_schema(&self) -> Value {
@@ -1139,7 +1139,7 @@ mod tests {
                     "evidence": "focused tests passed",
                     "verification": {
                         "status": "passed",
-                        "check": "cargo test -p codewhale-tui goal_loop",
+                        "check": "cargo test -p ghosty-tui goal_loop",
                         "summary": "focused tests passed"
                     }
                 }),
@@ -1648,11 +1648,11 @@ mod tests {
 
     #[test]
     fn protocol_thread_goal_converts_to_runtime_snapshot() {
-        let snapshot = GoalSnapshot::from_thread_goal(&codewhale_protocol::ThreadGoal {
+        let snapshot = GoalSnapshot::from_thread_goal(&ghosty_protocol::ThreadGoal {
             thread_id: "thread-1".to_string(),
             goal_id: "goal-1".to_string(),
             objective: "Bridge the goal models".to_string(),
-            status: codewhale_protocol::ThreadGoalStatus::Active,
+            status: ghosty_protocol::ThreadGoalStatus::Active,
             token_budget: Some(2_000),
             tokens_used: 750,
             time_used_seconds: 44,
@@ -1676,11 +1676,11 @@ mod tests {
     fn protocol_limit_statuses_keep_distinct_pause_reasons() {
         for (status, reason) in [
             (
-                codewhale_protocol::ThreadGoalStatus::UsageLimited,
+                ghosty_protocol::ThreadGoalStatus::UsageLimited,
                 GoalPauseReason::UsageLimit,
             ),
             (
-                codewhale_protocol::ThreadGoalStatus::BudgetLimited,
+                ghosty_protocol::ThreadGoalStatus::BudgetLimited,
                 GoalPauseReason::BudgetLimit,
             ),
         ] {

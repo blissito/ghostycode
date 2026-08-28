@@ -4,8 +4,8 @@
 # Usage: ./scripts/release/prepare-release.sh <new-version>
 #
 # Touches: Cargo.toml (workspace version), crates/*/Cargo.toml (internal
-# codewhale-* dependency pins), npm/codewhale/package.json (version +
-# codewhaleBinaryVersion), npm/runtime-sdk/package.json, the VS Code extension
+# ghosty-* dependency pins), npm/ghosty/package.json (version +
+# ghostyBinaryVersion), npm/runtime-sdk/package.json, the VS Code extension
 # package and lock, the root npm lock workspace records, the remote-smoke default
 # tag, README*.md install-tag examples when present, the public fact matrix's
 # source-candidate version, Cargo.lock, crates/tui/CHANGELOG.md (via
@@ -40,7 +40,7 @@ transaction_paths=(
   Cargo.toml
   Cargo.lock
   package-lock.json
-  npm/codewhale/package.json
+  npm/ghosty/package.json
   npm/runtime-sdk/package.json
   extensions/vscode/package.json
   extensions/vscode/package-lock.json
@@ -133,12 +133,12 @@ for readme in readmes:
 # 1) Workspace version.
 bump("Cargo.toml", rf'^version = "{old_re}"$', f'version = "{new}"', 1)
 
-# 2) Internal codewhale-* dependency pins in every crate manifest.
+# 2) Internal ghosty-* dependency pins in every crate manifest.
 total = 0
 for manifest in sorted(pathlib.Path("crates").glob("*/Cargo.toml")):
     text = manifest.read_text()
     out, n = re.subn(
-        rf'(codewhale-[a-z0-9-]+\s*=\s*\{{[^}}]*version = "){old_re}(")',
+        rf'(ghosty-[a-z0-9-]+\s*=\s*\{{[^}}]*version = "){old_re}(")',
         rf"\g<1>{new}\g<2>",
         text,
     )
@@ -151,8 +151,8 @@ if total == 0:
 
 # 3) npm wrapper.
 bump(
-    "npm/codewhale/package.json",
-    rf'("(?:version|codewhaleBinaryVersion)": "){old_re}(")',
+    "npm/ghosty/package.json",
+    rf'("(?:version|ghostyBinaryVersion)": "){old_re}(")',
     rf"\g<1>{new}\g<2>",
     2,
 )
@@ -197,14 +197,14 @@ version_doc_files = [
 for doc in version_doc_files:
     p = pathlib.Path(doc)
     text = p.read_text()
-    versions = sorted(set(re.findall(r"codewhale --version\s+#\s*([0-9]+\.[0-9]+\.[0-9]+)\b", text)))
+    versions = sorted(set(re.findall(r"ghosty --version\s+#\s*([0-9]+\.[0-9]+\.[0-9]+)\b", text)))
     stale = [version for version in versions if version != old]
     if stale:
         sys.exit(
             f"error: {doc} has version-comment value(s) {', '.join(stale)}; expected {old}"
         )
     out, n = re.subn(
-        rf"(codewhale --version\s+#\s*){old_re}\b", rf"\g<1>{new}", text
+        rf"(ghosty --version\s+#\s*){old_re}\b", rf"\g<1>{new}", text
     )
     if n:
         p.write_text(out)
@@ -232,14 +232,14 @@ if pointer_hits:
 lock = pathlib.Path("package-lock.json")
 lock_text = lock.read_text()
 lock_out, wrapper_lock_hits = re.subn(
-    rf'("npm/codewhale"\s*:\s*\{{[\s\S]*?"version"\s*:\s*"){old_re}(")',
+    rf'("npm/ghosty"\s*:\s*\{{[\s\S]*?"version"\s*:\s*"){old_re}(")',
     rf"\g<1>{new}\g<2>",
     lock_text,
     count=1,
 )
 if wrapper_lock_hits != 1:
     sys.exit(
-        "error: expected package-lock.json packages['npm/codewhale'].version "
+        "error: expected package-lock.json packages['npm/ghosty'].version "
         f"to be {old}; made {wrapper_lock_hits} replacement(s)"
     )
 lock_out, sdk_lock_hits = re.subn(

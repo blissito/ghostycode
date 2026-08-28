@@ -766,23 +766,23 @@ mod tests {
     fn inventory_ignores_unresolved_command_and_secret_auth_metadata() {
         let _env_lock = crate::test_support::lock_test_env();
         let temp = tempfile::tempdir().expect("isolated credential home");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-        let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
+        let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
         let _openai = crate::test_support::EnvVarGuard::remove("OPENAI_API_KEY");
         let _xai = crate::test_support::EnvVarGuard::remove("XAI_API_KEY");
         let mut providers = crate::config::ProvidersConfig::default();
-        providers.openai.auth = Some(codewhale_config::ProviderAuthSourceToml {
-            source: codewhale_config::AuthSourceKind::Command,
+        providers.openai.auth = Some(ghosty_config::ProviderAuthSourceToml {
+            source: ghosty_config::AuthSourceKind::Command,
             command: vec!["secret-tool".to_string(), "lookup".to_string()],
             timeout_ms: Some(2000),
             secret_id: None,
         });
-        providers.xai.auth = Some(codewhale_config::ProviderAuthSourceToml {
-            source: codewhale_config::AuthSourceKind::Secret,
+        providers.xai.auth = Some(ghosty_config::ProviderAuthSourceToml {
+            source: ghosty_config::AuthSourceKind::Secret,
             command: Vec::new(),
             timeout_ms: None,
-            secret_id: Some("codewhale/xai".to_string()),
+            secret_id: Some("ghosty/xai".to_string()),
         });
         let config = Config {
             provider: Some("openai".to_string()),

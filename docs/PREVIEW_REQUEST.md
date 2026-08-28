@@ -128,7 +128,7 @@ production path** up to (but not including) the send:
    constructor production uses (turn metadata, route stamp, and provenance),
    then resolves an `auto` reasoning tier against
    those messages the way the turn loop does. Production sends stored history
-   and nothing else — Codewhale does not re-state the To-do list on model
+   and nothing else — Ghosty does not re-state the To-do list on model
    steps — so the previewed outbound message list is exactly that list, and
    one estimate over stored messages plus system covers both the manifest
    number and the overflow decision.
@@ -165,7 +165,7 @@ or an enabled server is not connected — the `tools` section reports
 
 This manifest describes `LlmClient::create_message` /
 `create_message_stream` — the model turns the agent loop runs. It does **not**
-describe Codewhale's auxiliary provider calls, which have their own shapes:
+describe Ghosty's auxiliary provider calls, which have their own shapes:
 
 | Auxiliary call | Status |
 | --- | --- |
@@ -399,7 +399,7 @@ system text. The explicit `/preview-request base-prompt` mode separately prints
 only the exact effective base-prompt bytes:
 
 - **Origin** — where the base-prompt bytes came from:
-  - `bundled in this codewhale-tui build (BASE_PROMPT, compiled in)`
+  - `bundled in this ghosty-tui build (BASE_PROMPT, compiled in)`
   - `config-directory override installed at startup (prompts/constitution.md,
     opt-in enabled)`
 - **Assembly** — how the effective prompt was built on top of that base:
@@ -412,7 +412,7 @@ only the exact effective base-prompt bytes:
 In a live session the assembly is normally
 `base prompt + configured layers + runtime/session additions`, because the
 environment block, project context, skills, and memory are appended after the
-constitution. Codewhale does not claim the configured constitution is the
+constitution. Ghosty does not claim the configured constitution is the
 effective base prompt, and no diagnostic cites a source-tree path that does not
 exist on an installed binary.
 
@@ -500,5 +500,5 @@ bytes at all, rather than publishing numbers that are nearly right.
 The `dryrun` concept — preview the next request from the real request-building
 seam rather than a hand-rolled summary — was harvested from PR #1099 by
 [@GTC2080](https://github.com/GTC2080) (TaoMu). No code from that PR is
-reused; the implementation here is written against Codewhale's current
+reused; the implementation here is written against Ghosty's current
 multi-dialect client.

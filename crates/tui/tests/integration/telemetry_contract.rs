@@ -1,12 +1,12 @@
 //! Process-level telemetry contract.
 //!
-//! Everything here drives the real `codewhale-tui` binary inside a sealed
-//! `HOME`/`CODEWHALE_HOME`, with a loopback recorder standing in for the
-//! telemetry endpoint. The unit tests in `codewhale-telemetry` prove the
+//! Everything here drives the real `ghosty-tui` binary inside a sealed
+//! `HOME`/`GHOSTY_HOME`, with a loopback recorder standing in for the
+//! telemetry endpoint. The unit tests in `ghosty-telemetry` prove the
 //! predicate; these prove that the *emitting process* consults it — which is
 //! the thing v1 of this design got wrong, because `resolve_runtime_options`
 //! had no non-test caller and so neither `telemetry = false` in the config file
-//! nor `CODEWHALE_TELEMETRY=0` was ever read by a process that would have sent.
+//! nor `GHOSTY_TELEMETRY=0` was ever read by a process that would have sent.
 //!
 //! Two disciplines make the zero-request assertions non-vacuous:
 //!
@@ -28,7 +28,7 @@ use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
-use codewhale_config::{SetupState, TELEMETRY_NOTICE_VERSION};
+use ghosty_config::{SetupState, TELEMETRY_NOTICE_VERSION};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 use wait_timeout::ChildExt;
@@ -63,14 +63,14 @@ const EXEC_TIMEOUT: Duration = Duration::from_secs(90);
 
 struct Fixture {
     // The consolidated integration target runs tests in parallel. Each test in
-    // this module launches the full Codewhale binary, and low-resource CI
+    // this module launches the full Ghosty binary, and low-resource CI
     // runners can fail those children before they reach either loopback server.
     // These tests exercise telemetry contracts, not launch concurrency, so one
     // process fixture at a time keeps their non-vacuity assertions meaningful.
     _process_test_guard: MutexGuard<'static, ()>,
     _root: TempDir,
     home: PathBuf,
-    codewhale_home: PathBuf,
+    ghosty_home: PathBuf,
     workspace: PathBuf,
     config_path: PathBuf,
     endpoint: Option<String>,
@@ -83,9 +83,9 @@ impl Fixture {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let root = TempDir::new().expect("fixture root");
         let home = root.path().join("home");
-        let codewhale_home = root.path().join("codewhale-home");
+        let ghosty_home = root.path().join("ghosty-home");
         let workspace = root.path().join("workspace");
-        for dir in [&home, &codewhale_home, &workspace] {
+        for dir in [&home, &ghosty_home, &workspace] {
             std::fs::create_dir_all(dir).expect("create fixture dir");
         }
         let config_path = root.path().join("config.toml");
@@ -94,7 +94,7 @@ impl Fixture {
             _process_test_guard: process_test_guard,
             _root: root,
             home,
-            codewhale_home,
+            ghosty_home,
             workspace,
             config_path,
             endpoint: None,
@@ -114,26 +114,26 @@ impl Fixture {
     /// Record the answer a user would have given on a TTY.
     ///
     /// Machine-scoped consent: the notice is only ever *rendered* on a
-    /// terminal, but the decision it records lives on this `CODEWHALE_HOME` and
+    /// terminal, but the decision it records lives on this `GHOSTY_HOME` and
     /// authorizes later non-TTY runs against the same home.
     fn record_notice(&self, opt_in: bool) {
         let mut state = SetupState::default();
         state.record_telemetry_notice(TELEMETRY_NOTICE_VERSION, opt_in);
         state
-            .save_to(&self.codewhale_home.join("setup_state.json"))
+            .save_to(&self.ghosty_home.join("setup_state.json"))
             .expect("write setup state");
     }
 
     fn setup_state_path(&self) -> PathBuf {
-        self.codewhale_home.join("setup_state.json")
+        self.ghosty_home.join("setup_state.json")
     }
 
     fn telemetry_root(&self) -> PathBuf {
-        self.codewhale_home.join("telemetry")
+        self.ghosty_home.join("telemetry")
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new(codewhale_tui_binary());
+        let mut command = Command::new(ghosty_tui_binary());
         command
             .current_dir(&self.workspace)
             .env_clear()
@@ -143,21 +143,21 @@ impl Fixture {
             .env("XDG_CONFIG_HOME", self.home.join(".config"))
             .env("XDG_DATA_HOME", self.home.join(".local").join("share"))
             .env("XDG_CACHE_HOME", self.home.join(".cache"))
-            .env("CODEWHALE_HOME", &self.codewhale_home)
-            .env("CODEWHALE_SECRET_BACKEND", "file")
-            .env("CODEWHALE_MEMORY", "false")
+            .env("GHOSTY_HOME", &self.ghosty_home)
+            .env("GHOSTY_SECRET_BACKEND", "file")
+            .env("GHOSTY_MEMORY", "false")
             // A pinned mirror version keeps the release crate from issuing a
             // metadata request, so the only egress a test can observe is the
             // one this file is about.
             .env(
-                "CODEWHALE_RELEASE_BASE_URL",
+                "GHOSTY_RELEASE_BASE_URL",
                 "https://example.invalid/releases",
             )
             .env("DEEPSEEK_TUI_VERSION", env!("CARGO_PKG_VERSION"))
             .env("RUST_LOG", "warn")
             .stdin(Stdio::null());
         if let Some(endpoint) = &self.endpoint {
-            command.env("CODEWHALE_TELEMETRY_ENDPOINT", endpoint);
+            command.env("GHOSTY_TELEMETRY_ENDPOINT", endpoint);
         }
         command
     }
@@ -174,7 +174,7 @@ impl Fixture {
             "completions",
             "bash",
         ]);
-        let output = command.output().expect("run codewhale-tui completions");
+        let output = command.output().expect("run ghosty-tui completions");
         assert!(
             output.status.success(),
             "completions failed\nstdout:\n{}\nstderr:\n{}",
@@ -187,7 +187,7 @@ impl Fixture {
     /// Every regular file under the sealed roots, for leak scanning.
     fn written_files(&self) -> Vec<PathBuf> {
         let mut out = Vec::new();
-        for base in [&self.home, &self.codewhale_home, &self.workspace] {
+        for base in [&self.home, &self.ghosty_home, &self.workspace] {
             collect_files(base, &mut out);
         }
         out.push(self.config_path.clone());
@@ -214,11 +214,11 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
     let mut path = std::env::current_exe().expect("current test executable path");
@@ -226,7 +226,7 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }
 
@@ -345,7 +345,7 @@ async fn default_on_buffers_one_complete_session_without_network() {
 
 /// The only test that proves the emitting process reads the config *file*.
 ///
-/// No environment variable is set here on purpose. `CODEWHALE_TELEMETRY=0` and
+/// No environment variable is set here on purpose. `GHOSTY_TELEMETRY=0` and
 /// the config key travel different paths, and v1 of this design shipped a
 /// kill switch that only the env half ever reached.
 #[tokio::test(flavor = "current_thread")]
@@ -374,7 +374,7 @@ async fn telemetry_disabled_by_env_sends_zero_requests() {
 
     let mut command = fixture.command();
     command
-        .env("CODEWHALE_TELEMETRY", "0")
+        .env("GHOSTY_TELEMETRY", "0")
         .args([
             "--config",
             fixture.config_path.to_str().expect("config path"),
@@ -382,9 +382,9 @@ async fn telemetry_disabled_by_env_sends_zero_requests() {
             "bash",
         ])
         .output()
-        .expect("run codewhale-tui completions");
+        .expect("run ghosty-tui completions");
 
-    assert_no_batches(&server, "`CODEWHALE_TELEMETRY=0`").await;
+    assert_no_batches(&server, "`GHOSTY_TELEMETRY=0`").await;
     assert!(
         !fixture.telemetry_root().exists(),
         "a fresh run-scoped opt-out must create no telemetry state"
@@ -402,7 +402,7 @@ async fn an_unparseable_telemetry_env_value_sends_zero_requests() {
 
     fixture
         .command()
-        .env("CODEWHALE_TELEMETRY", "maybe")
+        .env("GHOSTY_TELEMETRY", "maybe")
         .args([
             "--config",
             fixture.config_path.to_str().expect("config path"),
@@ -410,9 +410,9 @@ async fn an_unparseable_telemetry_env_value_sends_zero_requests() {
             "bash",
         ])
         .output()
-        .expect("run codewhale-tui completions");
+        .expect("run ghosty-tui completions");
 
-    assert_no_batches(&server, "`CODEWHALE_TELEMETRY=maybe`").await;
+    assert_no_batches(&server, "`GHOSTY_TELEMETRY=maybe`").await;
     assert!(
         !fixture.telemetry_root().exists(),
         "a fresh forced-off run must create no telemetry state"
@@ -507,7 +507,7 @@ async fn forced_off_run_preserves_a_consenting_users_state() {
     let before = snapshot(&root);
     let mut command = fixture.command();
     command
-        .env("CODEWHALE_TELEMETRY", "not-a-bool")
+        .env("GHOSTY_TELEMETRY", "not-a-bool")
         .args([
             "--config",
             fixture.config_path.to_str().expect("config path"),
@@ -515,7 +515,7 @@ async fn forced_off_run_preserves_a_consenting_users_state() {
             "bash",
         ])
         .output()
-        .expect("run codewhale-tui completions");
+        .expect("run ghosty-tui completions");
 
     assert_no_batches(&server, "a forced-off run").await;
     assert_eq!(
@@ -528,7 +528,7 @@ async fn forced_off_run_preserves_a_consenting_users_state() {
 /// The documented one-command kill switch stops collection and destroys
 /// nothing.
 ///
-/// `CODEWHALE_TELEMETRY=0` used to resolve as an *answer*, so it took the
+/// `GHOSTY_TELEMETRY=0` used to resolve as an *answer*, so it took the
 /// destructive opt-out branch: an agent harness that set it for one command
 /// deleted the install id and truncated the dry-run records of the person who
 /// owns the machine, and the "permanent" tombstone it left was cleared by the
@@ -546,7 +546,7 @@ async fn a_run_scoped_kill_switch_preserves_a_consenting_users_state() {
     for value in ["0", "off", "false"] {
         fixture
             .command()
-            .env("CODEWHALE_TELEMETRY", value)
+            .env("GHOSTY_TELEMETRY", value)
             .args([
                 "--config",
                 fixture.config_path.to_str().expect("config path"),
@@ -554,17 +554,17 @@ async fn a_run_scoped_kill_switch_preserves_a_consenting_users_state() {
                 "bash",
             ])
             .output()
-            .expect("run codewhale-tui completions");
+            .expect("run ghosty-tui completions");
 
         assert_no_batches(&server, "a run-scoped kill switch").await;
         assert!(
             !root.join("disabled").exists(),
-            "`CODEWHALE_TELEMETRY={value}` tombstoned a machine nobody opted out"
+            "`GHOSTY_TELEMETRY={value}` tombstoned a machine nobody opted out"
         );
         assert_eq!(
             snapshot(&root),
             before,
-            "`CODEWHALE_TELEMETRY={value}` touched a consenting user's telemetry state"
+            "`GHOSTY_TELEMETRY={value}` touched a consenting user's telemetry state"
         );
     }
 
@@ -620,7 +620,7 @@ async fn skip_onboarding_writes_no_telemetry_decision() {
             "bash",
         ])
         .output()
-        .expect("run codewhale-tui completions");
+        .expect("run ghosty-tui completions");
     assert!(output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -718,10 +718,10 @@ async fn batch_contains_no_planted_sentinel() {
 
 /// The buffer file is an **untrusted input**, and this is the test that says so.
 ///
-/// Every bound in `codewhale-telemetry`'s schema is a property of how a payload
+/// Every bound in `ghosty-telemetry`'s schema is a property of how a payload
 /// is *built*: closed enums, `u32`s, `ProviderKind::as_str()`,
 /// `reduce_panic_site`. None of that survives the round trip, because `flush`
-/// re-reads `buffer.jsonl` and deserializes it — and `$CODEWHALE_HOME` is a
+/// re-reads `buffer.jsonl` and deserializes it — and `$GHOSTY_HOME` is a
 /// predictable path that anything running as the user can append to. The
 /// realistic writer is not an intruder: it is a `Bash` tool call this very
 /// session made on the model's behalf, or an MCP server, or a hook. Without a
@@ -740,7 +740,7 @@ async fn a_hostile_buffer_line_never_reaches_a_batch() {
     plant_sentinels(&fixture, &server.uri());
 
     let mut command = exec_command(&fixture, "hello");
-    let mut child = command.spawn().expect("spawn codewhale-tui exec");
+    let mut child = command.spawn().expect("spawn ghosty-tui exec");
     let stdout = read_in_background(child.stdout.take().expect("stdout pipe"));
     let stderr = read_in_background(child.stderr.take().expect("stderr pipe"));
 
@@ -775,8 +775,8 @@ async fn a_hostile_buffer_line_never_reaches_a_batch() {
 
     let status = child
         .wait_timeout(EXEC_TIMEOUT)
-        .expect("wait for codewhale-tui exec")
-        .expect("codewhale-tui exec must exit");
+        .expect("wait for ghosty-tui exec")
+        .expect("ghosty-tui exec must exit");
     let output = Output {
         status,
         stdout: stdout.join().expect("stdout reader"),
@@ -808,7 +808,7 @@ fn append_lines(path: &Path, lines: &[String]) {
     }
 }
 
-/// The documented mid-session opt-out — `codewhale config set telemetry false`,
+/// The documented mid-session opt-out — `ghosty config set telemetry false`,
 /// written by another process — must be observed by a session that is already
 /// running. The flush re-resolves from disk before it sends anything.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -821,7 +821,7 @@ async fn mid_session_opt_out_stops_the_shutdown_flush() {
     plant_sentinels(&fixture, &server.uri());
 
     let mut command = exec_command(&fixture, "hello");
-    let mut child = command.spawn().expect("spawn codewhale-tui exec");
+    let mut child = command.spawn().expect("spawn ghosty-tui exec");
     let stdout = read_in_background(child.stdout.take().expect("stdout pipe"));
     let stderr = read_in_background(child.stderr.take().expect("stderr pipe"));
 
@@ -843,8 +843,8 @@ async fn mid_session_opt_out_stops_the_shutdown_flush() {
 
     let status = child
         .wait_timeout(EXEC_TIMEOUT)
-        .expect("wait for codewhale-tui exec")
-        .expect("codewhale-tui exec must exit");
+        .expect("wait for ghosty-tui exec")
+        .expect("ghosty-tui exec must exit");
     let output = Output {
         status,
         stdout: stdout.join().expect("stdout reader"),
@@ -860,7 +860,7 @@ async fn mid_session_opt_out_stops_the_shutdown_flush() {
     );
 }
 
-/// Ctrl-C must not wait on a lock a second Codewhale process is holding.
+/// Ctrl-C must not wait on a lock a second Ghosty process is holding.
 ///
 /// This is why appends never take the compaction lock: `flock` is per-fd within
 /// a process, so a blocking acquisition on the signal path would hang exit for
@@ -873,7 +873,7 @@ async fn ctrl_c_exits_while_a_second_process_holds_the_lock() {
     plant_sentinels(&fixture, &server.uri());
 
     let mut command = exec_command(&fixture, "hello");
-    let mut child = command.spawn().expect("spawn codewhale-tui exec");
+    let mut child = command.spawn().expect("spawn ghosty-tui exec");
 
     let root = fixture.telemetry_root();
     let lock_path = root.join("buffer.jsonl.lock");
@@ -894,7 +894,7 @@ async fn ctrl_c_exits_while_a_second_process_holds_the_lock() {
     let started = Instant::now();
     let status = child
         .wait_timeout(Duration::from_secs(10))
-        .expect("wait for codewhale-tui exec");
+        .expect("wait for ghosty-tui exec");
     let status = status.unwrap_or_else(|| {
         let _ = child.kill();
         panic!(
@@ -1041,9 +1041,9 @@ fn plant_sentinels(fixture: &Fixture, base_url: &str) {
     )
     .expect("plant workspace file");
     std::fs::write(
-        fixture.codewhale_home.join("mcp.json"),
+        fixture.ghosty_home.join("mcp.json"),
         // Keep the MCP name in a real parsed config without starting a process
-        // that exits before CodeWhale can write its initialize request. The
+        // that exits before GhostyCode can write its initialize request. The
         // telemetry contract is about name redaction, not broken-pipe handling.
         json!({"mcpServers": {SENTINEL_MCP_SERVER: {
             "command": "/bin/true",
@@ -1058,10 +1058,7 @@ fn plant_sentinels(fixture: &Fixture, base_url: &str) {
 fn exec_command(fixture: &Fixture, prompt: &str) -> Command {
     let mut command = fixture.command();
     command
-        .env(
-            "CODEWHALE_MCP_CONFIG",
-            fixture.codewhale_home.join("mcp.json"),
-        )
+        .env("GHOSTY_MCP_CONFIG", fixture.ghosty_home.join("mcp.json"))
         .env(SENTINEL_API_KEY_ENV, SENTINEL_API_KEY)
         .args([
             "--config",
@@ -1084,14 +1081,14 @@ fn exec_command(fixture: &Fixture, prompt: &str) -> Command {
 
 fn run_exec(fixture: &Fixture, prompt: &str) -> Output {
     let mut command = exec_command(fixture, prompt);
-    let mut child = command.spawn().expect("spawn codewhale-tui exec");
+    let mut child = command.spawn().expect("spawn ghosty-tui exec");
     let stdout = read_in_background(child.stdout.take().expect("stdout pipe"));
     let stderr = read_in_background(child.stderr.take().expect("stderr pipe"));
     let status = match child.wait_timeout(EXEC_TIMEOUT).expect("wait for exec") {
         Some(status) => status,
         None => {
             let _ = child.kill();
-            panic!("codewhale-tui exec did not exit within {EXEC_TIMEOUT:?}");
+            panic!("ghosty-tui exec did not exit within {EXEC_TIMEOUT:?}");
         }
     };
     Output {

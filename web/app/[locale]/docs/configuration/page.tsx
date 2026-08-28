@@ -5,9 +5,9 @@ import { buildPageMetadata } from "@/lib/page-meta";
 const CODE_SPANS: Record<string, string> = {
   auditCommand: "/config audit",
   apiKey: "--api-key",
-  authStatus: "codewhale auth status",
+  authStatus: "ghosty auth status",
   providerConfig: 'provider = "<id>"',
-  providerFlag: "codewhale --provider <id>",
+  providerFlag: "ghosty --provider <id>",
 };
 
 function RichCopy({ text }: { text: string }) {
@@ -46,8 +46,8 @@ export default async function ConfigurationPage({
       <section id="overview" className="scroll-mt-32">
         <h1 className="font-display text-3xl mb-1">{t.overviewTitle}</h1>
         <p className={`${t.bodyClassName} mt-3`}>{t.overviewLead}</p>
-        <pre className="code-block mt-4">{`codewhale --config /path/to/config.toml
-CODEWHALE_CONFIG_PATH=/path/to/config.toml`}</pre>
+        <pre className="code-block mt-4">{`ghosty --config /path/to/config.toml
+GHOSTY_CONFIG_PATH=/path/to/config.toml`}</pre>
         <p className={`${t.bodyClassName} mt-3`}>
           <RichCopy text={t.auditLead} />
         </p>

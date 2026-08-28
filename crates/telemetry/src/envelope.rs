@@ -55,7 +55,7 @@ pub struct TelemetryState {
 /// The UUID check is not a formatting nicety. `install_id` is the one
 /// envelope field read verbatim off disk into a batch, so without it the file
 /// is a free-form string slot on the wire for anything that can write
-/// `$CODEWHALE_HOME/telemetry/install_id.json`. Minting a fresh random id is
+/// `$GHOSTY_HOME/telemetry/install_id.json`. Minting a fresh random id is
 /// always the safe direction — the cost is one rotation, and the docs already
 /// say no count derived from `install_id` is a user count.
 pub fn read_or_create_install_id(root: &Path) -> Result<InstallId> {
@@ -77,7 +77,7 @@ pub fn read_or_create_install_id(root: &Path) -> Result<InstallId> {
             install_id: uuid::Uuid::new_v4().to_string(),
             rotated_at: now_rfc3339(),
         };
-        codewhale_config::persistence::atomic_write_json(&path, &record)
+        ghosty_config::persistence::atomic_write_json(&path, &record)
             .with_context(|| format!("failed to write {}", path.display()))?;
         Ok(record)
     })?
@@ -110,7 +110,7 @@ pub fn write_state(root: &Path, state: &TelemetryState) -> Result<()> {
             anyhow::bail!("telemetry is disabled");
         }
         let path = buffer::state_path(root);
-        codewhale_config::persistence::atomic_write_json(&path, state)
+        ghosty_config::persistence::atomic_write_json(&path, state)
             .with_context(|| format!("failed to write {}", path.display()))
     })?
     .ok_or_else(|| anyhow::anyhow!("telemetry privacy lock is held"))
@@ -127,18 +127,18 @@ pub fn now_rfc3339() -> String {
 
 /// The build sha of a release-CI binary, or `None`.
 ///
-/// Sourced from `CODEWHALE_RELEASE_BUILD_SHA`, a rustc-env this crate's build
-/// script emits **only** when `CODEWHALE_BUILD_SHA`, its legacy build-only
+/// Sourced from `GHOSTY_RELEASE_BUILD_SHA`, a rustc-env this crate's build
+/// script emits **only** when `GHOSTY_BUILD_SHA`, its legacy build-only
 /// alias, or `GITHUB_SHA` was present in the build environment. `null` for
 /// every locally built binary, unconditionally, with no runtime lookup of any
 /// kind.
 ///
-/// Never `CODEWHALE_BUILD_COMMIT` — that falls back to the builder's own `HEAD`
+/// Never `GHOSTY_BUILD_COMMIT` — that falls back to the builder's own `HEAD`
 /// on a local build. Never `Thread.git_sha` — that is the *user's* workspace
 /// commit and a red line, one identifier away by name.
 #[must_use]
 pub fn release_build_sha() -> Option<String> {
-    option_env!("CODEWHALE_RELEASE_BUILD_SHA").and_then(short_hex_sha)
+    option_env!("GHOSTY_RELEASE_BUILD_SHA").and_then(short_hex_sha)
 }
 
 /// Reduce a full sha to the first 12 lowercase hex characters, rejecting

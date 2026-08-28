@@ -1,7 +1,7 @@
-//! `/update` — check for and install a new CodeWhale release without leaving
+//! `/update` — check for and install a new GhostyCode release without leaving
 //! the TUI.
 //!
-//! The updater itself is not reimplemented here. `codewhale update` (see
+//! The updater itself is not reimplemented here. `ghosty update` (see
 //! `crates/cli/src/update.rs`) already resolves the release, downloads the
 //! platform-correct asset, verifies its SHA256, and atomically replaces the
 //! running binary; this command finds that binary and runs it. Duplicating any
@@ -21,9 +21,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use codewhale_command_contract::handler::CommandHandler;
-use codewhale_command_contract::metadata::{CommandInfo, RegisterCommand};
-use codewhale_release::InstallMethod;
+use ghosty_command_contract::handler::CommandHandler;
+use ghosty_command_contract::metadata::{CommandInfo, RegisterCommand};
+use ghosty_release::InstallMethod;
 
 use crate::commands::CommandResult;
 
@@ -75,17 +75,17 @@ fn parse_mode(arg: Option<&str>) -> Result<UpdateMode, String> {
 /// How this install can be updated, resolved before anything runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum UpdaterPlan {
-    /// Run this `codewhale` binary's `update` subcommand.
+    /// Run this `ghosty` binary's `update` subcommand.
     Run(PathBuf),
     /// A package manager owns the binary; print its command instead.
     Managed(InstallMethod),
-    /// Self-update would be correct, but no `codewhale` CLI is reachable —
-    /// e.g. a bare `codewhale-tui` build with no sibling CLI.
+    /// Self-update would be correct, but no `ghosty` CLI is reachable —
+    /// e.g. a bare `ghosty-tui` build with no sibling CLI.
     NoUpdater { exe: PathBuf },
 }
 
 /// The binary name that carries the `update` subcommand.
-const UPDATER_BIN_STEM: &str = "codewhale";
+const UPDATER_BIN_STEM: &str = "ghosty";
 
 /// Resolve the update path without touching the process environment, so the
 /// decision is testable. `exists` answers whether a candidate path is a file.
@@ -107,7 +107,7 @@ pub(super) fn resolve_updater(
     if exe.file_stem().and_then(|stem| stem.to_str()) == Some(UPDATER_BIN_STEM) {
         return UpdaterPlan::Run(exe.to_path_buf());
     }
-    // A `codewhale-tui` build has no `update` subcommand, but the CLI that
+    // A `ghosty-tui` build has no `update` subcommand, but the CLI that
     // does is normally installed right next to it.
     if let Some(dir) = exe.parent() {
         let extension = exe.extension().and_then(|ext| ext.to_str());
@@ -127,8 +127,8 @@ pub(super) fn resolve_updater(
 /// Instructions for an install this command must not update in place.
 pub(super) fn managed_install_message(method: InstallMethod) -> String {
     format!(
-        "CodeWhale was installed with {label}, which owns this binary.\n\
-         Run `{command}` in a shell, then restart CodeWhale.\n\n\
+        "GhostyCode was installed with {label}, which owns this binary.\n\
+         Run `{command}` in a shell, then restart GhostyCode.\n\n\
          /update deliberately will not self-update here: replacing a binary {label} manages \
          leaves its metadata describing a version that is no longer on disk, and the next \
          upgrade silently reverts you.",
@@ -142,7 +142,7 @@ pub(super) fn no_updater_message(exe: &Path) -> String {
     format!(
         "No `{UPDATER_BIN_STEM}` updater was found for this install ({exe}).\n\
          The updater ships in the `{UPDATER_BIN_STEM}` CLI. Install or locate it, run \
-         `{UPDATER_BIN_STEM} update` in a shell, then restart CodeWhale.",
+         `{UPDATER_BIN_STEM} update` in a shell, then restart GhostyCode.",
         exe = exe.display(),
     )
 }
@@ -153,7 +153,7 @@ fn install_preamble(updater: &Path) -> String {
         "`/update install` will run `{updater} update`: it resolves the latest release, \
          downloads the binary for this platform, verifies its SHA256 checksum, and atomically \
          replaces {updater}.\n\
-         It does not restart CodeWhale — you will need to do that yourself once it finishes. \
+         It does not restart GhostyCode — you will need to do that yourself once it finishes. \
          The UI is paused while the updater runs.",
         updater = updater.display(),
     )
@@ -189,7 +189,7 @@ fn run_updater(updater: &Path, mode: UpdateMode) -> CommandResult {
         Ok(output) => output,
         Err(err) => {
             return CommandResult::error(format!(
-                "Failed to run `{} update`: {err}\nRun it in a shell instead, then restart CodeWhale.",
+                "Failed to run `{} update`: {err}\nRun it in a shell instead, then restart GhostyCode.",
                 updater.display()
             ));
         }
@@ -208,7 +208,7 @@ fn run_updater(updater: &Path, mode: UpdateMode) -> CommandResult {
             CommandResult::message(format!("{}\n\n{transcript}", install_preamble(updater)))
         }
         UpdateMode::Install => CommandResult::message(format!(
-            "{transcript}\n\nRestart CodeWhale to run the updated binary."
+            "{transcript}\n\nRestart GhostyCode to run the updated binary."
         )),
     }
 }
@@ -262,7 +262,7 @@ mod tests {
             InstallMethod::Omarchy,
         ] {
             let plan = resolve_updater(
-                Some(Path::new("/opt/whatever/codewhale")),
+                Some(Path::new("/opt/whatever/ghosty")),
                 method,
                 &|_: &Path| true,
             );
@@ -274,7 +274,7 @@ mod tests {
                 "{method:?} message must name its own update command: {message}"
             );
             assert!(
-                message.contains("restart CodeWhale"),
+                message.contains("restart GhostyCode"),
                 "{method:?} message must tell the user to restart: {message}"
             );
         }
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn a_tui_only_build_without_a_sibling_cli_falls_back_to_instructions() {
-        let exe = Path::new("/usr/local/bin/codewhale-tui");
+        let exe = Path::new("/usr/local/bin/ghosty-tui");
         let plan = resolve_updater(Some(exe), InstallMethod::Binary, &|_: &Path| false);
         assert_eq!(
             plan,
@@ -292,21 +292,21 @@ mod tests {
         );
 
         let message = no_updater_message(exe);
-        assert!(message.contains("codewhale update"), "{message}");
-        assert!(message.contains("restart CodeWhale"), "{message}");
-        assert!(message.contains("codewhale-tui"), "{message}");
+        assert!(message.contains("ghosty update"), "{message}");
+        assert!(message.contains("restart GhostyCode"), "{message}");
+        assert!(message.contains("ghosty-tui"), "{message}");
     }
 
     #[test]
     fn a_tui_build_next_to_the_cli_runs_the_sibling_updater() {
         let plan = resolve_updater(
-            Some(Path::new("/usr/local/bin/codewhale-tui")),
+            Some(Path::new("/usr/local/bin/ghosty-tui")),
             InstallMethod::Binary,
-            &|path: &Path| path == Path::new("/usr/local/bin/codewhale"),
+            &|path: &Path| path == Path::new("/usr/local/bin/ghosty"),
         );
         assert_eq!(
             plan,
-            UpdaterPlan::Run(PathBuf::from("/usr/local/bin/codewhale"))
+            UpdaterPlan::Run(PathBuf::from("/usr/local/bin/ghosty"))
         );
     }
 
@@ -314,22 +314,22 @@ mod tests {
     fn a_cli_install_runs_itself_including_the_windows_extension() {
         assert_eq!(
             resolve_updater(
-                Some(Path::new("/usr/local/bin/codewhale")),
+                Some(Path::new("/usr/local/bin/ghosty")),
                 InstallMethod::Binary,
                 &|_: &Path| false
             ),
-            UpdaterPlan::Run(PathBuf::from("/usr/local/bin/codewhale"))
+            UpdaterPlan::Run(PathBuf::from("/usr/local/bin/ghosty"))
         );
         // Forward slashes so the case is meaningful on the host running the
         // test: `\` is a plain filename character to a Unix `Path`, which
         // would make this assert about nothing.
         assert_eq!(
             resolve_updater(
-                Some(Path::new("C:/tools/codewhale.exe")),
+                Some(Path::new("C:/tools/ghosty.exe")),
                 InstallMethod::Binary,
                 &|_: &Path| false
             ),
-            UpdaterPlan::Run(PathBuf::from("C:/tools/codewhale.exe"))
+            UpdaterPlan::Run(PathBuf::from("C:/tools/ghosty.exe"))
         );
     }
 
@@ -337,11 +337,11 @@ mod tests {
     fn a_windows_tui_build_finds_the_sibling_cli_with_its_extension() {
         assert_eq!(
             resolve_updater(
-                Some(Path::new("C:/tools/codewhale-tui.exe")),
+                Some(Path::new("C:/tools/ghosty-tui.exe")),
                 InstallMethod::Binary,
-                &|path: &Path| path == Path::new("C:/tools/codewhale.exe"),
+                &|path: &Path| path == Path::new("C:/tools/ghosty.exe"),
             ),
-            UpdaterPlan::Run(PathBuf::from("C:/tools/codewhale.exe"))
+            UpdaterPlan::Run(PathBuf::from("C:/tools/ghosty.exe"))
         );
     }
 
@@ -350,16 +350,16 @@ mod tests {
         assert_eq!(
             resolve_updater(None, InstallMethod::Binary, &|_: &Path| true),
             UpdaterPlan::NoUpdater {
-                exe: PathBuf::from("codewhale")
+                exe: PathBuf::from("ghosty")
             }
         );
     }
 
     #[test]
     fn the_check_preamble_states_what_install_would_do() {
-        let preamble = install_preamble(Path::new("/usr/local/bin/codewhale"));
+        let preamble = install_preamble(Path::new("/usr/local/bin/ghosty"));
         assert!(
-            preamble.contains("/usr/local/bin/codewhale update"),
+            preamble.contains("/usr/local/bin/ghosty update"),
             "{preamble}"
         );
         assert!(preamble.contains("SHA256"), "{preamble}");

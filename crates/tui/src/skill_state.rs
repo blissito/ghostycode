@@ -6,7 +6,7 @@
 //! tools, TUI surfaces, sub-agents, and the API. Plugin trust/enablement stays
 //! a separate bundle lifecycle gate.
 //!
-//! Storage shape (TOML at `~/.codewhale/skills_state.toml`, legacy `~/.deepseek/skills_state.toml`):
+//! Storage shape (TOML at `~/.ghosty/skills_state.toml`, legacy `~/.deepseek/skills_state.toml`):
 //!
 //! ```toml
 //! disabled = ["skill-name-1", "skill-name-2"]
@@ -58,7 +58,7 @@ impl SkillStateStore {
     }
 
     /// Refresh the in-memory snapshot under the same shared lock used by
-    /// other Codewhale processes. Long-running Runtime API servers call this
+    /// other Ghosty processes. Long-running Runtime API servers call this
     /// before listing Skills so an external toggle becomes visible without a
     /// restart.
     pub fn refresh(&mut self) -> Result<()> {
@@ -117,8 +117,8 @@ impl SkillStateStore {
 fn default_state_path() -> Result<PathBuf> {
     // Listing, prompt construction, and doctor are read-only. The explicit
     // mutation path creates the parent from `persist` when needed.
-    Ok(codewhale_config::codewhale_home()
-        .context("could not resolve Codewhale state directory")?
+    Ok(ghosty_config::ghosty_home()
+        .context("could not resolve Ghosty state directory")?
         .join(STATE_FILE_NAME))
 }
 
@@ -155,7 +155,7 @@ fn persist_disabled(path: &Path, disabled: &BTreeSet<String>) -> Result<()> {
         disabled: disabled.iter().cloned().collect(),
     };
     let body = toml::to_string_pretty(&on_disk).context("serialize skill state")?;
-    codewhale_config::persistence::atomic_write(path, body.as_bytes())
+    ghosty_config::persistence::atomic_write(path, body.as_bytes())
         .with_context(|| format!("atomically persist skill state at {}", path.display()))
 }
 
@@ -381,8 +381,8 @@ mod tests {
 
     #[test]
     fn cross_process_toggles_serialize_and_merge() {
-        const CHILD_PATH: &str = "CODEWHALE_TEST_SKILL_STATE_PATH";
-        const CHILD_NAME: &str = "CODEWHALE_TEST_SKILL_STATE_NAME";
+        const CHILD_PATH: &str = "GHOSTY_TEST_SKILL_STATE_PATH";
+        const CHILD_NAME: &str = "GHOSTY_TEST_SKILL_STATE_NAME";
         const TEST_NAME: &str = "skill_state::tests::cross_process_toggles_serialize_and_merge";
 
         if let (Some(path), Some(name)) =

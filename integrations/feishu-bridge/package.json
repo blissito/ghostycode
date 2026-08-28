@@ -1,9 +1,9 @@
 {
-  "name": "@codewhale/feishu-bridge",
+  "name": "@ghosty/feishu-bridge",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Feishu/Lark mobile bridge for a local codewhale serve --http runtime.",
+  "description": "Feishu/Lark mobile bridge for a local ghosty serve --http runtime.",
   "main": "src/index.mjs",
   "scripts": {
     "start": "node src/index.mjs",

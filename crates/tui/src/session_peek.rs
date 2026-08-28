@@ -490,12 +490,12 @@ mod tests {
             assert_eq!(peek.entries[0].text, "ship the release");
             for entry in &peek.entries {
                 assert!(
-                    !entry.text.contains("<codewhale:runtime_event"),
+                    !entry.text.contains("<ghosty:runtime_event"),
                     "{kind} leaked its envelope into a peek entry: {}",
                     entry.text
                 );
                 assert!(
-                    !entry.text.contains("[Codewhale restored"),
+                    !entry.text.contains("[Ghosty restored"),
                     "{kind} leaked a restore checkpoint into a peek entry: {}",
                     entry.text
                 );
@@ -525,7 +525,7 @@ mod tests {
         // its metadata carries no provenance line — which is what keeps the
         // second shape here visible even though it is block-for-block what a
         // handoff looks like.
-        let question = "why did I get <codewhale:runtime_event \
+        let question = "why did I get <ghosty:runtime_event \
                         kind=\"waiting_for_subagents\" visibility=\"internal\"> \
                         in my transcript?";
         let pastes = [

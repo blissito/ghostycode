@@ -1,4 +1,4 @@
-//! Typed Workflow IR and validation for CodeWhale.
+//! Typed Workflow IR and validation for GhostyCode.
 //!
 //! This crate deliberately stops at the Rust-owned IR boundary. Runtime tool
 //! exposure, worktree application, replay, and model execution are layered on
@@ -10,7 +10,7 @@ pub mod experimental_search;
 ///
 /// Deliberately **not** re-exported from the crate root. The setup wizard uses
 /// it by its explicit module path
-/// (`codewhale_workflow::fleet_composition::…`), keeping the advisory boundary
+/// (`ghosty_workflow::fleet_composition::…`), keeping the advisory boundary
 /// visible instead of making the schema look like runtime Fleet authority.
 pub mod fleet_composition;
 pub mod fleet_exact;
@@ -3836,7 +3836,7 @@ mod tests {
                     cost_microusd: 12,
                 },
                 required_tests: vec![StudentReplayTestResult {
-                    name: "cargo test -p codewhale-workflow".to_string(),
+                    name: "cargo test -p ghosty-workflow".to_string(),
                     passed: true,
                 }],
                 policy_violations: Vec::new(),

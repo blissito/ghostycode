@@ -23,7 +23,7 @@ describe("Organization and WebSite structured data", () => {
       logo: { "@type": "ImageObject", url: ORGANIZATION_LOGO_URL },
       sameAs: [REPO_URL, DISCORD_URL],
     });
-    expect(organization?.["@id"]).toBe("https://codewhale.net/#organization");
+    expect(organization?.["@id"]).toBe("https://ghosty.net/#organization");
     expect(website).toMatchObject({
       "@type": "WebSite",
       "@id": WEBSITE_ID,

@@ -20,7 +20,7 @@ function Assert-Equal {
     }
 }
 
-$entry = 'C:\CodeWhalePathTest\bin'
+$entry = 'C:\GhostyCodePathTest\bin'
 $longPath = ((1..80) | ForEach-Object { 'C:\CWCanary\DevelopmentTool{0:D4}\bin' -f $_ }) -join ';'
 if ($longPath.Length -le 1800) {
     throw "The long-PATH fixture is too short: $($longPath.Length)."
@@ -52,7 +52,7 @@ $unchanged = Get-UpdatedUserPath `
     -RequestedEntry $entry
 Assert-Equal $alreadyPresent $unchanged 'Adding must be idempotent across case and a trailing slash.'
 
-$substringPath = 'C:\CodeWhalePathTest\bin-tools;C:\Other'
+$substringPath = 'C:\GhostyCodePathTest\bin-tools;C:\Other'
 $substringAdded = Get-UpdatedUserPath `
     -Current $substringPath `
     -RequestedOperation Add `
@@ -71,16 +71,16 @@ $removed = Get-UpdatedUserPath `
     -Current $removalSource `
     -RequestedOperation Remove `
     -RequestedEntry $entry
-Assert-Equal 'C:\Before;C:\After' $removed 'Removing must delete only the exact CodeWhale entry.'
+Assert-Equal 'C:\Before;C:\After' $removed 'Removing must delete only the exact GhostyCode entry.'
 
 $duplicateSource = "$entry;C:\Keep;$($entry.ToUpperInvariant())\"
 $duplicatesRemoved = Get-UpdatedUserPath `
     -Current $duplicateSource `
     -RequestedOperation Remove `
     -RequestedEntry $entry
-Assert-Equal 'C:\Keep' $duplicatesRemoved 'Uninstall must remove all equivalent CodeWhale entries.'
+Assert-Equal 'C:\Keep' $duplicatesRemoved 'Uninstall must remove all equivalent GhostyCode entries.'
 
-$unrelated = 'C:\One;C:\CodeWhalePathTest\bin-tools;C:\Two'
+$unrelated = 'C:\One;C:\GhostyCodePathTest\bin-tools;C:\Two'
 $unrelatedResult = Get-UpdatedUserPath `
     -Current $unrelated `
     -RequestedOperation Remove `
@@ -88,7 +88,7 @@ $unrelatedResult = Get-UpdatedUserPath `
 Assert-Equal $unrelated $unrelatedResult 'Removing an absent entry must leave the PATH byte-for-byte unchanged.'
 
 if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
-    $testKeyPath = "Software\CodeWhale\Tests\UserPath-$PID-$([guid]::NewGuid().ToString('N'))"
+    $testKeyPath = "Software\GhostyCode\Tests\UserPath-$PID-$([guid]::NewGuid().ToString('N'))"
     $testKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($testKeyPath)
     if ($null -eq $testKey) {
         throw 'Could not create the isolated registry test key.'

@@ -12,11 +12,11 @@ import tempfile
 from pathlib import Path
 
 
-RECEIPT_ENV = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_RECEIPT_PATH"
-SOURCE_SHA_ENV = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_SOURCE_SHA"
-SOURCE_DIRTY_ENV = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_SOURCE_DIRTY"
-RUSTC_VERSION_ENV = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_RUSTC_VERSION"
-CARGO_VERSION_ENV = "CODEWHALE_TEST_PERSISTENCE_BACKLOG_CARGO_VERSION"
+RECEIPT_ENV = "GHOSTY_TEST_PERSISTENCE_BACKLOG_RECEIPT_PATH"
+SOURCE_SHA_ENV = "GHOSTY_TEST_PERSISTENCE_BACKLOG_SOURCE_SHA"
+SOURCE_DIRTY_ENV = "GHOSTY_TEST_PERSISTENCE_BACKLOG_SOURCE_DIRTY"
+RUSTC_VERSION_ENV = "GHOSTY_TEST_PERSISTENCE_BACKLOG_RUSTC_VERSION"
+CARGO_VERSION_ENV = "GHOSTY_TEST_PERSISTENCE_BACKLOG_CARGO_VERSION"
 ROOT = Path(__file__).resolve().parent.parent
 TEST_NAME = (
     "tui::persistence_actor::backlog_measurement_tests::"
@@ -41,7 +41,7 @@ def measurement_command() -> list[str]:
         # recompiling artifacts the previous step had already produced.
         "--all-features",
         "-p",
-        "codewhale-tui",
+        "ghosty-tui",
         "--lib",
         TEST_NAME,
         "--",
@@ -102,7 +102,7 @@ def main() -> int:
     cargo_version = subprocess.run(
         ["cargo", "--version"], text=True, capture_output=True, check=True
     ).stdout.strip()
-    with tempfile.TemporaryDirectory(prefix="codewhale-persistence-backlog-") as root:
+    with tempfile.TemporaryDirectory(prefix="ghosty-persistence-backlog-") as root:
         receipt_path = Path(root) / "receipt.json"
         env = os.environ.copy()
         env["CARGO_NET_OFFLINE"] = "true"

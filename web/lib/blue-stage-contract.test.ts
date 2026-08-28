@@ -40,7 +40,7 @@ describe("Blue Stage public-surface contract", () => {
   });
 
   it("reserves Signal Gold for the whale while controls use action blue", () => {
-    expect(CSS).toMatch(/\.codewhale-mark-primary \{ fill: var\(--signal-gold\); \}/);
+    expect(CSS).toMatch(/\.ghosty-mark-primary \{ fill: var\(--signal-gold\); \}/);
     expect(CSS).toMatch(/\.portal-button-primary[\s\S]*background: var\(--indigo-deep\)/);
     expect(CSS).toMatch(/\.nav-link::after[\s\S]*background: var\(--indigo\)/);
   });

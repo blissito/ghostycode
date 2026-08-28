@@ -421,7 +421,7 @@ pub const DRACULA_UI_THEME: UiTheme = UiTheme {
 /// (the terminal's own default bg) and most text uses `Color::Reset`
 /// (terminal's own default fg). Accents are ANSI named colors so they
 /// also inherit the user's terminal palette (Solarized, Nord, custom
-/// schemes, etc.) rather than Codewhale brand RGB.
+/// schemes, etc.) rather than Ghosty brand RGB.
 pub const TERMINAL_UI_THEME: UiTheme = UiTheme {
     name: "terminal",
     // Mode is reported as Dark to avoid the dark→light cell remap kicking
@@ -1002,7 +1002,7 @@ mod tests {
     }
 
     #[test]
-    fn whale_pair_uses_codewhale_semantic_grammar() {
+    fn whale_pair_uses_ghosty_semantic_grammar() {
         assert_eq!(UI_THEME.accent_primary, WHALE_ACTION);
         assert_eq!(UI_THEME.status_working, WHALE_LIVE);
         assert_eq!(UI_THEME.accent_action, WHALE_HUMAN);

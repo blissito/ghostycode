@@ -1,4 +1,4 @@
-use codewhale_config::route::RouteLimits;
+use ghosty_config::route::RouteLimits;
 
 use crate::config::{ApiProvider, provider_capability};
 use crate::context_budget::ContextBudget;
@@ -57,7 +57,7 @@ pub(crate) fn route_input_limit_tokens(route_limits: Option<RouteLimits>) -> Opt
 /// sent.
 #[must_use]
 fn explicit_max_output_tokens_override() -> Option<u32> {
-    match std::env::var("CODEWHALE_MAX_OUTPUT_TOKENS") {
+    match std::env::var("GHOSTY_MAX_OUTPUT_TOKENS") {
         Ok(raw) if !raw.trim().is_empty() => {
             // A non-blank canonical value is authoritative. Invalid/zero
             // values deliberately fall back to the safe automatic default;
@@ -81,7 +81,7 @@ pub(crate) fn effective_max_output_tokens(model: &str) -> u32 {
 
     // A documented catalogue value is a capability ceiling, not necessarily a
     // sensible default request size. In particular, DeepSeek V4 advertises a
-    // 384K maximum. Treating that maximum as the default made Codewhale ask a
+    // 384K maximum. Treating that maximum as the default made Ghosty ask a
     // 262K/327K self-hosted route for almost its whole context as output before
     // it had counted a single input token (#5516/#5518). Keep documented
     // ceilings through the normal compatibility intersection, but automatic
@@ -359,7 +359,7 @@ mod tests {
     #[test]
     fn concrete_route_output_limit_outranks_uncatalogued_guess() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
         let model = "totally-unknown-alias-v9";
 
@@ -520,14 +520,14 @@ mod tests {
     /// The assertion values here depend on `explicit_max_output_tokens_override`
     /// seeing no ambient env override, and sibling tests in this binary
     /// (this module, `client`, `vision/tools`, `core/engine`) set
-    /// `CODEWHALE_MAX_OUTPUT_TOKENS`/`DEEPSEEK_MAX_OUTPUT_TOKENS` while holding
+    /// `GHOSTY_MAX_OUTPUT_TOKENS`/`DEEPSEEK_MAX_OUTPUT_TOKENS` while holding
     /// `lock_test_env`. Without the lock and guards this test could read a
     /// concurrent writer's value mid-assertion (process-global env, parallel
     /// threads), which is the order-dependent flake this guards against.
     #[test]
     fn v4_trigger_uses_window_percent_when_it_fits_spendable_input() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
 
         let budget = route_context_budget(ApiProvider::Deepseek, "deepseek-v4-pro", None, 0)
@@ -591,7 +591,7 @@ mod tests {
     fn explicit_route_output_limit_beats_unknown_model_name_fallback() {
         let _lock = crate::test_support::lock_test_env();
         let _max_output =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", "65536");
+            crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", "65536");
         let limits = RouteLimits {
             context_tokens: Some(262_144),
             output_tokens: Some(24_576),
@@ -637,7 +637,7 @@ mod tests {
     #[test]
     fn kimi_membership_unknown_output_cap_does_not_clamp_to_4k() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
 
         for model in ["kimi-for-coding", "kimi-for-coding-highspeed"] {
@@ -665,7 +665,7 @@ mod tests {
     #[test]
     fn kimi_membership_route_limit_still_caps_output() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
 
         let limits = RouteLimits {
@@ -688,7 +688,7 @@ mod tests {
     #[test]
     fn known_glm_and_minimax_output_caps_remain_authoritative() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
 
         // GLM 5.2: 1M window, documented 131K output. The capability remains
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn documented_ceiling_is_a_bound_not_an_unbounded_default_request() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
 
         assert_eq!(
@@ -734,7 +734,7 @@ mod tests {
     #[test]
     fn deepseek_v4_explicit_mid_windows_share_one_safe_no_config_budget() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
 
         for window in [262_144, 327_680, 393_216] {
@@ -775,8 +775,7 @@ mod tests {
     #[test]
     fn explicit_output_override_is_preserved_and_reserved_on_mid_windows() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", "100000");
+        let _ghosty = crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", "100000");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
         let limits = RouteLimits {
             context_tokens: Some(327_680),
@@ -807,8 +806,7 @@ mod tests {
     #[test]
     fn oversized_explicit_override_is_clamped_and_reserved_to_the_route_window() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", "384000");
+        let _ghosty = crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", "384000");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
         let limits = RouteLimits {
             context_tokens: Some(327_680),
@@ -834,8 +832,7 @@ mod tests {
     #[test]
     fn explicit_override_on_large_window_stays_unified() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale =
-            crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", "384000");
+        let _ghosty = crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", "384000");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
         let limits = RouteLimits {
             context_tokens: Some(1_000_000),
@@ -861,7 +858,7 @@ mod tests {
     #[test]
     fn automatic_wire_cap_and_reservation_have_no_large_window_cliff() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
 
         for window in [499_999, 500_000, 1_000_000] {
@@ -884,7 +881,7 @@ mod tests {
     #[test]
     fn concrete_route_input_limit_clamps_preflight_and_compaction() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
         let limits = RouteLimits {
             context_tokens: Some(1_000_000),
@@ -912,12 +909,12 @@ mod tests {
 
         {
             let _canonical =
-                crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", "   ");
+                crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", "   ");
             assert_eq!(explicit_max_output_tokens_override(), Some(100_000));
         }
         for invalid in ["not-a-number", "0"] {
             let _canonical =
-                crate::test_support::EnvVarGuard::set("CODEWHALE_MAX_OUTPUT_TOKENS", invalid);
+                crate::test_support::EnvVarGuard::set("GHOSTY_MAX_OUTPUT_TOKENS", invalid);
             assert_eq!(explicit_max_output_tokens_override(), None, "{invalid}");
             assert_eq!(
                 effective_max_output_tokens("deepseek-v4-pro"),
@@ -929,7 +926,7 @@ mod tests {
     #[test]
     fn mid_window_internal_reservation_stays_on_the_ordinary_request_floor() {
         let _lock = crate::test_support::lock_test_env();
-        let _codewhale = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _ghosty = crate::test_support::EnvVarGuard::remove("GHOSTY_MAX_OUTPUT_TOKENS");
         let _deepseek = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
         let reservation =
             route_output_reservation(ApiProvider::Arcee, "trinity-large-thinking", None);

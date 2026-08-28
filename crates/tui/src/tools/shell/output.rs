@@ -48,7 +48,7 @@ impl BoundedOutputAccumulator {
     /// pass a nonexistent dir to fault-inject the failure.
     pub(super) fn new_in(spill_dir: Option<&std::path::Path>) -> Self {
         let mut builder = tempfile::Builder::new();
-        builder.prefix("codewhale-bash-");
+        builder.prefix("ghosty-bash-");
         let temp = match spill_dir {
             Some(dir) => builder.tempfile_in(dir),
             None => builder.tempfile(),
@@ -802,7 +802,7 @@ mod tests {
         // stream still runs, the tail is still delivered, and the notice says
         // why "Full output: <path>" is absent instead of failing the command.
         let missing =
-            std::env::temp_dir().join(format!("codewhale-missing-spill-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ghosty-missing-spill-{}", std::process::id()));
         let mut output = BoundedOutputAccumulator::new_in(Some(&missing));
         let reason = output.spill_unavailable().expect("spill unavailable");
         assert!(!reason.is_empty(), "reason must name the io error");

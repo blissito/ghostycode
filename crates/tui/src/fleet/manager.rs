@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, SecondsFormat, Utc};
-use codewhale_protocol::fleet::*;
+use ghosty_protocol::fleet::*;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -41,11 +41,11 @@ pub struct FleetManager {
     workspace: PathBuf,
     ledger: FleetLedger,
     stale_after: Duration,
-    exec_config: codewhale_config::FleetExecConfig,
+    exec_config: ghosty_config::FleetExecConfig,
     /// `[fleet]` table used to build the agent roster for dispatch
     /// (#fleet-roster cutover (v0.8.67)). Defaults keep built-in + workspace
     /// members resolvable even when the caller has no parsed config.
-    fleet_config: codewhale_config::FleetConfigToml,
+    fleet_config: ghosty_config::FleetConfigToml,
     /// Optional sub-agent manager for headless worker execution.
     /// When set, fleet workers spawn real sub-agents; when None,
     /// the manager falls back to local simulation.
@@ -232,8 +232,8 @@ impl FleetManager {
             workspace,
             ledger,
             stale_after: Duration::from_secs(DEFAULT_STALE_AFTER_SECONDS),
-            exec_config: codewhale_config::FleetExecConfig::default(),
-            fleet_config: codewhale_config::FleetConfigToml::default(),
+            exec_config: ghosty_config::FleetExecConfig::default(),
+            fleet_config: ghosty_config::FleetConfigToml::default(),
             sub_agent_manager: None,
             session_model: None,
             route_config: None,
@@ -270,14 +270,14 @@ impl FleetManager {
     }
 
     /// Apply fleet headless-worker execution policy from config.
-    pub fn with_exec_config(mut self, exec_config: codewhale_config::FleetExecConfig) -> Self {
+    pub fn with_exec_config(mut self, exec_config: ghosty_config::FleetExecConfig) -> Self {
         self.exec_config = exec_config;
         self
     }
 
     /// Apply the parsed `[fleet]` table so `[fleet.profiles]` members join
     /// the dispatch roster (#fleet-roster cutover (v0.8.67)).
-    pub fn with_fleet_config(mut self, fleet_config: codewhale_config::FleetConfigToml) -> Self {
+    pub fn with_fleet_config(mut self, fleet_config: ghosty_config::FleetConfigToml) -> Self {
         self.fleet_config = fleet_config;
         self
     }
@@ -302,7 +302,7 @@ impl FleetManager {
 
     fn manager_lock_path(&self, run_id: &FleetRunId) -> PathBuf {
         self.workspace
-            .join(".codewhale")
+            .join(".ghosty")
             .join("fleet")
             .join(format!("manager-{}.lock", safe_path_segment(&run_id.0)))
     }
@@ -389,7 +389,7 @@ impl FleetManager {
         // here, so counting at either of those would double-count a plain
         // `fleet run`. Count only after author input, member selection, and
         // route validation succeed; a rejected spec is not a dispatch.
-        codewhale_telemetry::session_counters().bump(codewhale_telemetry::Counter::FleetDispatch);
+        ghosty_telemetry::session_counters().bump(ghosty_telemetry::Counter::FleetDispatch);
         let warnings = doc
             .tasks
             .iter()
@@ -719,7 +719,7 @@ impl FleetManager {
         run_id: &FleetRunId,
         max_workers: usize,
         executor: &mut FleetExecutor,
-        codewhale_binary: &str,
+        ghosty_binary: &str,
         model: Option<&str>,
         tick_interval: Duration,
     ) -> Result<FleetStatusSnapshot> {
@@ -787,7 +787,7 @@ impl FleetManager {
             let scheduling_error = self
                 .schedule_run_excluding(run_id, max_workers, &unavailable_workers)
                 .err();
-            self.drive_executor_tick(run_id, executor, codewhale_binary, model)?;
+            self.drive_executor_tick(run_id, executor, ghosty_binary, model)?;
             self.refresh_run_status(run_id)?;
             if let Some(error) = scheduling_error {
                 if executor.worker_ids().is_empty() {
@@ -819,11 +819,11 @@ impl FleetManager {
         &self,
         run_id: &FleetRunId,
         executor: &mut FleetExecutor,
-        codewhale_binary: &str,
+        ghosty_binary: &str,
         model: Option<&str>,
     ) -> Result<FleetExecutorTickReport> {
         let mut report = FleetExecutorTickReport::default();
-        report.started += self.start_leased_workers(run_id, executor, codewhale_binary, model)?;
+        report.started += self.start_leased_workers(run_id, executor, ghosty_binary, model)?;
 
         for worker_id in executor.worker_ids() {
             let tracked_attempt = executor.tracked_attempt(&worker_id);
@@ -1398,7 +1398,7 @@ impl FleetManager {
         &self,
         run_id: &FleetRunId,
         executor: &mut FleetExecutor,
-        codewhale_binary: &str,
+        ghosty_binary: &str,
         model: Option<&str>,
     ) -> Result<usize> {
         let state = self.ledger.rebuild_state()?;
@@ -1469,7 +1469,7 @@ impl FleetManager {
                     None => expected_launch_spec,
                 };
                 let command = build_worker_exec_command_with_launch_spec(
-                    codewhale_binary,
+                    ghosty_binary,
                     &task_spec,
                     &launch_spec,
                     &self.exec_config,
@@ -1962,7 +1962,7 @@ impl FleetManager {
         worker_id: &str,
         task_spec: &FleetTaskSpec,
     ) -> Result<FleetArtifactRef> {
-        let rel_path = PathBuf::from(".codewhale")
+        let rel_path = PathBuf::from(".ghosty")
             .join("fleet")
             .join(safe_path_segment(&run_id.0))
             .join(safe_path_segment(&task_spec.id))
@@ -2641,9 +2641,9 @@ mod tests {
             identity: None,
             known_hosts: None,
             host_key_fingerprint: None,
-            working_directory: Some(PathBuf::from("/srv/codewhale")),
+            working_directory: Some(PathBuf::from("/srv/ghosty")),
             env_allowlist: Vec::new(),
-            codewhale_binary: Some("/usr/local/bin/codewhale".to_string()),
+            ghosty_binary: Some("/usr/local/bin/ghosty".to_string()),
         };
 
         let error = validate_task_cwd_for_host(tmp.path(), &ssh, &nested_cwd)
@@ -2689,9 +2689,9 @@ mod tests {
                 identity: None,
                 known_hosts: None,
                 host_key_fingerprint: None,
-                working_directory: Some(PathBuf::from("/srv/codewhale")),
+                working_directory: Some(PathBuf::from("/srv/ghosty")),
                 env_allowlist: Vec::new(),
-                codewhale_binary: Some("/usr/local/bin/codewhale".to_string()),
+                ghosty_binary: Some("/usr/local/bin/ghosty".to_string()),
             },
             trust_level: None,
             labels: BTreeMap::new(),
@@ -3092,10 +3092,10 @@ mod tests {
 
         let mut executor = FleetExecutor::new(tmp.path());
         manager
-            .drive_executor_tick(&report.run_id, &mut executor, "unused-codewhale", None)
+            .drive_executor_tick(&report.run_id, &mut executor, "unused-ghosty", None)
             .expect("missing restored launch state must become a durable task failure");
         manager
-            .drive_executor_tick(&report.run_id, &mut executor, "unused-codewhale", None)
+            .drive_executor_tick(&report.run_id, &mut executor, "unused-ghosty", None)
             .expect("the next scheduler tick must not remain poisoned");
 
         let state = manager.rebuild_state().unwrap();
@@ -3221,10 +3221,10 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn fake_codewhale(dir: &TempDir, body: &str) -> PathBuf {
+    fn fake_ghosty(dir: &TempDir, body: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
 
-        let path = dir.path().join("fake-codewhale");
+        let path = dir.path().join("fake-ghosty");
         std::fs::write(&path, body).unwrap();
         let mut permissions = std::fs::metadata(&path).unwrap().permissions();
         permissions.set_mode(0o755);
@@ -3233,7 +3233,7 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn complete_with_fake_codewhale(
+    fn complete_with_fake_ghosty(
         manager: &FleetManager,
         run_id: &FleetRunId,
         max_workers: usize,
@@ -3737,7 +3737,7 @@ mod tests {
         let pid_path = tmp.path().join("live-worker.pid");
         let first_worker_marker = tmp.path().join("first-worker-started");
         let stopped_marker = tmp.path().join("first-worker-stopped");
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             &format!(
                 r#"#!/bin/sh
@@ -3830,7 +3830,7 @@ sleep 30
         let path = task_spec_file(&tmp, vec![task("task-a")]);
         let first_worker_marker = tmp.path().join("first-attempt-started");
         let stopped_marker = tmp.path().join("first-attempt-stopped");
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             &format!(
                 r#"#!/bin/sh
@@ -3941,7 +3941,7 @@ while :; do sleep 1; done
             .with_sub_agent_manager(coordination.clone());
         let path = task_spec_file(&tmp, vec![task("task-a")]);
         let marker = tmp.path().join("replacement-attempt-ran");
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             &format!(
                 r#"#!/bin/sh
@@ -4138,7 +4138,7 @@ exit 0
         let report = manager.create_run_from_task_spec_path(&path, 1).unwrap();
         let worker_id = report.worker_ids[0].clone();
         let marker = tmp.path().join("resumed-attempt-ran");
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             &format!(
                 r#"#!/bin/sh
@@ -4183,7 +4183,7 @@ exit 0
             2
         );
 
-        let status = complete_with_fake_codewhale(&reloaded, &report.run_id, 1, &fake);
+        let status = complete_with_fake_ghosty(&reloaded, &report.run_id, 1, &fake);
         assert!(marker.is_file(), "the recovered replacement never launched");
         assert_eq!(status.completed, 1);
         assert_eq!(status.restarted, 1);
@@ -4202,7 +4202,7 @@ exit 0
         let standby = test_manager(tmp.path()).unwrap();
         let path = task_spec_file(&tmp, vec![task("task-a")]);
         let starts = tmp.path().join("worker-starts");
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             &format!(
                 r#"#!/bin/sh
@@ -4262,7 +4262,7 @@ exit 0
         let tmp = TempDir::new().unwrap();
         let manager = test_manager(tmp.path()).unwrap();
         let path = task_spec_file(&tmp, vec![task("task-a"), task("task-b"), task("task-c")]);
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             r#"#!/bin/sh
 printf '{"type":"tool_use","name":"read_file","id":"fake","input":{}}\n'
@@ -4275,7 +4275,7 @@ exit 0
 
         assert_eq!(report.leased, 1);
         assert_eq!(report.queued, 2);
-        let status = complete_with_fake_codewhale(&manager, &report.run_id, 1, &fake);
+        let status = complete_with_fake_ghosty(&manager, &report.run_id, 1, &fake);
         assert_eq!(status.completed, 3);
         assert_eq!(status.running, 0);
         let state = manager.ledger.rebuild_state().unwrap();
@@ -4327,7 +4327,7 @@ exit 0
         let mut completed = task("task-a");
         completed.scorer = Some(FleetScorerSpec::ExitCode);
         let path = task_spec_file(&tmp, vec![completed]);
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             r#"#!/bin/sh
 printf '{"type":"done"}\n'
@@ -4336,7 +4336,7 @@ exit 0
         );
 
         let report = manager.create_run_from_task_spec_path(&path, 1).unwrap();
-        let status = complete_with_fake_codewhale(&manager, &report.run_id, 1, &fake);
+        let status = complete_with_fake_ghosty(&manager, &report.run_id, 1, &fake);
 
         assert_eq!(status.completed, 1);
         assert_eq!(status.failed, 0);
@@ -4364,7 +4364,7 @@ exit 0
         let tmp = TempDir::new().unwrap();
         let manager = test_manager(tmp.path()).unwrap();
         let path = task_spec_file(&tmp, vec![task("task-a")]);
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             r#"#!/bin/sh
 printf '{"type":"done"}\n'
@@ -4374,7 +4374,7 @@ exit 0
 
         let report = manager.create_run_from_task_spec_path(&path, 1).unwrap();
         let worker_id = report.worker_ids[0].clone();
-        let status = complete_with_fake_codewhale(&manager, &report.run_id, 1, &fake);
+        let status = complete_with_fake_ghosty(&manager, &report.run_id, 1, &fake);
 
         assert_eq!(status.completed, 1);
         assert_eq!(status.partial, 1);
@@ -4409,7 +4409,7 @@ exit 0
         let tmp = TempDir::new().unwrap();
         let manager = test_manager(tmp.path()).unwrap();
         let path = task_spec_file(&tmp, vec![task("task-a")]);
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             r#"#!/bin/sh
 printf '{"type":"error","error":"tool failed"}\n'
@@ -4418,7 +4418,7 @@ exit 7
         );
 
         let report = manager.create_run_from_task_spec_path(&path, 1).unwrap();
-        let status = complete_with_fake_codewhale(&manager, &report.run_id, 1, &fake);
+        let status = complete_with_fake_ghosty(&manager, &report.run_id, 1, &fake);
 
         assert_eq!(status.completed, 0);
         assert_eq!(status.partial, 0);
@@ -4445,7 +4445,7 @@ exit 7
             path: PathBuf::from("missing.log"),
             pattern: "[".to_string(),
         });
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             r#"#!/bin/sh
 case "$*" in
@@ -4485,7 +4485,7 @@ esac
         };
 
         let report = manager.create_run(doc, 3).unwrap();
-        let status = complete_with_fake_codewhale(&manager, &report.run_id, 3, &fake);
+        let status = complete_with_fake_ghosty(&manager, &report.run_id, 3, &fake);
 
         assert_eq!(status.failed, 3);
         assert_eq!(status.transport_failed, 1);
@@ -4520,7 +4520,7 @@ esac
             .unwrap()
             .with_session_model("manager-model-y")
             .with_route_config(manager_config);
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             r#"#!/bin/sh
 printf '%s\n' '{"type":"metadata","meta":{"receipt_kind":"terminal","provider":"custom","provider_id":"remote-x","model":"worker-model-x","base_url":"https://remote-x.invalid/v1","api_key":"sk-remote-x-must-not-leak"}}'
@@ -4541,7 +4541,7 @@ printf '%s\n' '{"type":"done"}'
             )
             .unwrap();
 
-        let status = complete_with_fake_codewhale(&manager, &report.run_id, 1, &fake);
+        let status = complete_with_fake_ghosty(&manager, &report.run_id, 1, &fake);
         assert_eq!(status.completed, 1);
         let state = manager.ledger.rebuild_state().unwrap();
         let receipt = &state.receipts[&format!("{}:route-drift", report.run_id.0)];
@@ -4599,7 +4599,7 @@ printf '%s\n' '{"type":"done"}'
                 }),
                 ..Default::default()
             });
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             r#"#!/bin/sh
 printf '%s\n' '{"type":"metadata","meta":{"receipt_kind":"terminal","provider":"deepseek","provider_id":"custom-x","model":"deepseek-v4-pro"}}'
@@ -4620,7 +4620,7 @@ printf '%s\n' '{"type":"done"}'
             )
             .unwrap();
 
-        let status = complete_with_fake_codewhale(&manager, &report.run_id, 1, &fake);
+        let status = complete_with_fake_ghosty(&manager, &report.run_id, 1, &fake);
         assert_eq!(status.completed, 1);
         let state = manager.ledger.rebuild_state().unwrap();
         let receipt = &state.receipts[&format!("{}:invalid-route", report.run_id.0)];
@@ -4636,7 +4636,7 @@ printf '%s\n' '{"type":"done"}'
     fn fleet_smoke_runs_three_roles_ten_tasks_with_receipts_and_failure() {
         let tmp = TempDir::new().unwrap();
         let manager = test_manager(tmp.path()).unwrap();
-        let fake = fake_codewhale(
+        let fake = fake_ghosty(
             &tmp,
             r#"#!/bin/sh
 case "$*" in
@@ -4673,7 +4673,7 @@ esac
             });
             if role == "builder" {
                 task.workspace = Some(FleetWorkspaceRequirements {
-                    writable_paths: vec![PathBuf::from(".codewhale/fleet")],
+                    writable_paths: vec![PathBuf::from(".ghosty/fleet")],
                     ..FleetWorkspaceRequirements::default()
                 });
             }
@@ -4756,7 +4756,7 @@ esac
         #[cfg(target_os = "linux")]
         let rss_baseline_kb = rss_kb();
 
-        let status = complete_with_fake_codewhale(&manager, &report.run_id, 3, &fake);
+        let status = complete_with_fake_ghosty(&manager, &report.run_id, 3, &fake);
 
         // #3885 / item 3: RSS after fleet completes — logged so memory
         // regressions produce numbers, not user reports.
@@ -5067,7 +5067,7 @@ esac
                 workspace: Some(FleetWorkspaceRequirements {
                     root: None,
                     required_files: vec![PathBuf::from("Cargo.toml")],
-                    writable_paths: vec![PathBuf::from(".codewhale/fleet")],
+                    writable_paths: vec![PathBuf::from(".ghosty/fleet")],
                     environment: Some(FleetEnvironmentRequirements {
                         required: vec!["PATH".to_string()],
                         allowlist: vec![],
@@ -5191,7 +5191,7 @@ esac
     #[test]
     fn invalid_explicit_fleet_selection_blocks_run_creation() {
         let tmp = TempDir::new().unwrap();
-        let fleets = tmp.path().join(".codewhale/fleets");
+        let fleets = tmp.path().join(".ghosty/fleets");
         std::fs::create_dir_all(&fleets).unwrap();
         std::fs::write(fleets.join("selected"), "Broken\n").unwrap();
         std::fs::write(

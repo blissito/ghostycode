@@ -84,7 +84,7 @@ export function extractText(itemList) {
 
 export function helpText() {
   return [
-    "CodeWhale Weixin Bot 命令:",
+    "GhostyCode Weixin Bot 命令:",
     "/help - 显示此帮助",
     "/status - 运行时和工作区状态",
     "/threads - 最近运行时线程",
@@ -96,7 +96,7 @@ export function helpText() {
     "/allow <approval_id> [remember] - 批准工具调用",
     "/deny <approval_id> - 拒绝工具调用",
     "",
-    "其他所有内容均作为 CodeWhale 提示发送。",
+    "其他所有内容均作为 GhostyCode 提示发送。",
   ].join("\n");
 }
 
@@ -262,7 +262,7 @@ export async function getUpdates({ baseUrl, token, get_updates_buf = "", timeout
     endpoint: "ilink/bot/getupdates",
     body: JSON.stringify({
       get_updates_buf,
-      base_info: { bot_agent: "CodeWhale/1.0" },
+      base_info: { bot_agent: "GhostyCode/1.0" },
     }),
     token,
     timeoutMs,
@@ -280,7 +280,7 @@ export async function sendMessage({ baseUrl, token, body, timeoutMs }) {
     endpoint: "ilink/bot/sendmessage",
     body: JSON.stringify({
       ...body,
-      base_info: { bot_agent: "CodeWhale/1.0" },
+      base_info: { bot_agent: "GhostyCode/1.0" },
     }),
     token,
     timeoutMs,
@@ -298,7 +298,7 @@ export async function sendTyping({ baseUrl, token, ilinkUserId, typingTicket, st
       ilink_user_id: ilinkUserId,
       typing_ticket: typingTicket,
       status,
-      base_info: { bot_agent: "CodeWhale/1.0" },
+      base_info: { bot_agent: "GhostyCode/1.0" },
     }),
     token,
   });
@@ -314,7 +314,7 @@ export async function getConfig({ baseUrl, token, ilinkUserId, contextToken }) {
     body: JSON.stringify({
       ilink_user_id: ilinkUserId,
       context_token: contextToken,
-      base_info: { bot_agent: "CodeWhale/1.0" },
+      base_info: { bot_agent: "GhostyCode/1.0" },
     }),
     token,
   });
@@ -328,7 +328,7 @@ export async function notifyStart({ baseUrl, token }) {
   const raw = await apiPost({
     baseUrl,
     endpoint: "ilink/bot/msg/notifystart",
-    body: JSON.stringify({ base_info: { bot_agent: "CodeWhale/1.0" } }),
+    body: JSON.stringify({ base_info: { bot_agent: "GhostyCode/1.0" } }),
     token,
   });
   return JSON.parse(raw);
@@ -341,7 +341,7 @@ export async function notifyStop({ baseUrl, token }) {
   const raw = await apiPost({
     baseUrl,
     endpoint: "ilink/bot/msg/notifystop",
-    body: JSON.stringify({ base_info: { bot_agent: "CodeWhale/1.0" } }),
+    body: JSON.stringify({ base_info: { bot_agent: "GhostyCode/1.0" } }),
     token,
   });
   return JSON.parse(raw);

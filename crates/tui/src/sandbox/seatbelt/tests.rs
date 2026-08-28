@@ -13,7 +13,7 @@ fn file_provider_extensions_intersect_each_workspace_root_and_exclusions() {
     let fixture = tempfile::tempdir().expect("create policy fixture");
     let workspace = fixture.path().join("workspace");
     let additional_root = fixture.path().join("additional-root");
-    std::fs::create_dir_all(workspace.join(".codewhale")).expect("create protected workspace path");
+    std::fs::create_dir_all(workspace.join(".ghosty")).expect("create protected workspace path");
     std::fs::create_dir_all(additional_root.join(".deepseek"))
         .expect("create protected additional-root path");
 

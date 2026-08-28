@@ -1,11 +1,11 @@
 [package]
-name = "codewhale-workflow-js"
+name = "ghosty-workflow-js"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Dynamic Workflow runtime: sandboxed rquickjs scripts that dispatch Codewhale subagents"
+description = "Dynamic Workflow runtime: sandboxed rquickjs scripts that dispatch Ghosty subagents"
 
 [lints]
 workspace = true

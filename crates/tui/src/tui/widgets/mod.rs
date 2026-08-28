@@ -856,7 +856,7 @@ impl Renderable for ChatWidget {
         );
 
         let area = _area;
-        // Repaint the full chat area with the codewhale-ink background each
+        // Repaint the full chat area with the ghosty-ink background each
         // frame. Ratatui's `Paragraph` only writes cells that contain text,
         // so cells the current frame's paragraph doesn't touch would
         // otherwise hold the *previous* frame's contents (the `:24Z`
@@ -5187,7 +5187,7 @@ mod tests {
     fn slash_completion_hints_exclude_set_and_deepseek_commands() {
         let hints = slash_completion_hints("/", 128, &[], Locale::En, None, ApiProvider::Deepseek);
         assert!(!hints.iter().any(|hint| hint.name == "/set"));
-        assert!(!hints.iter().any(|hint| hint.name == "/codewhale"));
+        assert!(!hints.iter().any(|hint| hint.name == "/ghosty"));
     }
 
     #[test]
@@ -5275,7 +5275,7 @@ mod tests {
     #[test]
     fn slash_completion_uses_frontmatter_name_and_usage() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let commands_dir = tmp.path().join(".codewhale").join("commands");
+        let commands_dir = tmp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("workflow-file.md"),
@@ -5303,7 +5303,7 @@ mod tests {
     #[test]
     fn slash_completion_uses_arguments_when_usage_and_legacy_hint_are_absent() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let commands_dir = tmp.path().join(".codewhale").join("commands");
+        let commands_dir = tmp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("deploy.md"),
@@ -5330,7 +5330,7 @@ mod tests {
     #[test]
     fn slash_completion_hints_exclude_hidden_user_commands() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let commands_dir = tmp.path().join(".codewhale").join("commands");
+        let commands_dir = tmp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("secret.md"),
@@ -5353,7 +5353,7 @@ mod tests {
     #[test]
     fn hidden_name_override_filters_shadowed_builtin_from_slash_completion() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let commands_dir = tmp.path().join(".codewhale").join("commands");
+        let commands_dir = tmp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("private-help.md"),
@@ -5376,7 +5376,7 @@ mod tests {
     #[test]
     fn slash_completion_hints_match_user_command_aliases() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let commands_dir = tmp.path().join(".codewhale").join("commands");
+        let commands_dir = tmp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("deploy-target.md"),
@@ -5404,7 +5404,7 @@ mod tests {
     #[test]
     fn slash_completion_omits_rejected_user_alias_collisions() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let commands_dir = tmp.path().join(".codewhale").join("commands");
+        let commands_dir = tmp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("alpha.md"),
@@ -5436,7 +5436,7 @@ mod tests {
     #[test]
     fn slash_completion_hints_keep_builtin_canonical_when_only_builtin_alias_is_shadowed() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let commands_dir = tmp.path().join(".codewhale").join("commands");
+        let commands_dir = tmp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("attach-review.md"),
@@ -5489,7 +5489,7 @@ mod tests {
         // canonical token must own that token in completion: the built-in
         // suggestion is absent and the user command appears for the alias.
         let tmp = tempfile::TempDir::new().unwrap();
-        let commands_dir = tmp.path().join(".codewhale").join("commands");
+        let commands_dir = tmp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("assistant.md"),
@@ -5519,7 +5519,7 @@ mod tests {
     #[test]
     fn slash_completion_hints_prefer_user_metadata_for_shadowed_builtin() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let commands_dir = tmp.path().join(".codewhale").join("commands");
+        let commands_dir = tmp.path().join(".ghosty").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
         std::fs::write(
             commands_dir.join("help.md"),
@@ -6650,7 +6650,7 @@ mod tests {
     fn empty_state_shows_startup_context() {
         let mut app = create_test_app();
         app.onboarding_needs_api_key = false;
-        app.workspace = PathBuf::from("/tmp/codewhale-test-workspace");
+        app.workspace = PathBuf::from("/tmp/ghosty-test-workspace");
         app.mcp_configured_count = 2;
 
         let lines = build_empty_state_lines(&app, Rect::new(0, 0, 100, 20));
@@ -6665,8 +6665,8 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("Codewhale"));
-        assert!(rendered.contains("/tmp/codewhale-test-workspace · no git · mcp 2"));
+        assert!(rendered.contains("Ghosty"));
+        assert!(rendered.contains("/tmp/ghosty-test-workspace · no git · mcp 2"));
         assert!(rendered.contains("What do you want to accomplish?"));
         assert!(!rendered.contains("/workflow /goal /auto"));
     }
@@ -6674,7 +6674,7 @@ mod tests {
     #[test]
     fn empty_state_centers_startup_block_by_actual_text_width() {
         let mut app = create_test_app();
-        app.workspace = PathBuf::from("/tmp/codewhale-test-workspace");
+        app.workspace = PathBuf::from("/tmp/ghosty-test-workspace");
 
         let lines = build_empty_state_lines(&app, Rect::new(0, 0, 100, 20));
         let text_lines = lines
@@ -6686,7 +6686,7 @@ mod tests {
                     .collect::<String>()
             })
             .collect::<Vec<_>>();
-        let context = "/tmp/codewhale-test-workspace · no git · mcp 0";
+        let context = "/tmp/ghosty-test-workspace · no git · mcp 0";
         let context_line = text_lines
             .iter()
             .find(|line| line.trim_start() == context)
@@ -6708,7 +6708,7 @@ mod tests {
         app.ocean_treatment = crate::tui::ocean::OceanTreatment::Ombre;
         app.low_motion = false;
         app.fancy_animations = true;
-        app.workspace = PathBuf::from("codewhale-test-workspace");
+        app.workspace = PathBuf::from("ghosty-test-workspace");
         app.model = "deepseek-v4-pro".to_string();
 
         let area = Rect::new(0, 0, 100, 20);
@@ -6740,7 +6740,8 @@ mod tests {
 
         let context_x = ((100usize - UnicodeWidthStr::width(context.as_str())) / 2) as u16;
         let context_cell = (0..area.height)
-            .find_map(|y| (buf[(context_x, y)].symbol() == "c").then_some((context_x, y)))
+            // Primera letra del workspace de prueba ("ghosty-test-workspace").
+            .find_map(|y| (buf[(context_x, y)].symbol() == "g").then_some((context_x, y)))
             .expect("context line");
         assert_eq!(
             buf[context_cell].bg,
@@ -6845,7 +6846,7 @@ mod tests {
         );
     }
 
-    /// #4208: `CODEWHALE_ASCII_SAFE=1` must narrow every CodeWhale-authored
+    /// #4208: `GHOSTY_ASCII_SAFE=1` must narrow every GhostyCode-authored
     /// decorative glyph — whale mark, fish, bubble, context meter, borders,
     /// braille state markers — across real rendered surfaces, not a
     /// hand-picked symbol list.
@@ -7661,7 +7662,7 @@ mod tests {
         let request = crate::tui::approval::ApprovalRequest::new(
             "approval-law",
             "edit_file",
-            "Repo law holds this write: \"manifest review\" protects Cargo.toml (matched Cargo.toml, .codewhale/constitution.json)",
+            "Repo law holds this write: \"manifest review\" protects Cargo.toml (matched Cargo.toml, .ghosty/constitution.json)",
             &serde_json::json!({ "path": "Cargo.toml", "old": "a", "new": "b" }),
             "edit_file:Cargo.toml",
         );
@@ -8153,12 +8154,12 @@ diff --git a/src/b.rs b/src/b.rs\n\
             "exec_shell",
             "Built-in safety gate requires approval: destructive background/headless actions cannot auto-approve",
             &serde_json::json!({
-                "command": "cd /Volumes/VIXinSSD/codewhale; cargo clippy -p codewhale-tui --all-targets --locked -- -D warnings 2>&1 | tee /tmp/codewhale-clippy.log",
-                "cwd": "/Volumes/VIXinSSD/codewhale",
+                "command": "cd /Volumes/VIXinSSD/ghosty; cargo clippy -p ghosty-tui --all-targets --locked -- -D warnings 2>&1 | tee /tmp/ghosty-clippy.log",
+                "cwd": "/Volumes/VIXinSSD/ghosty",
             }),
             "exec_shell:cargo-clippy",
             Some("Confirmed - passes in isolation, so this is the documentation gate."),
-            std::path::Path::new("/Volumes/VIXinSSD/codewhale"),
+            std::path::Path::new("/Volumes/VIXinSSD/ghosty"),
         );
         let view = crate::tui::approval::ApprovalView::new(request.clone());
         let widget = ApprovalWidget::new(&request, &view);

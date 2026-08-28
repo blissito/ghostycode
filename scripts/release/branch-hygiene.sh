@@ -210,7 +210,7 @@ fi
 
 main_sha="$(git rev-parse --short "${main_ref}")"
 
-echo "== CodeWhale branch hygiene =="
+echo "== GhostyCode branch hygiene =="
 echo "Current checkout : ${current_branch:-<detached>} ($(git rev-parse --short HEAD))"
 echo "Main ref         : ${main_ref} (${main_sha})"
 

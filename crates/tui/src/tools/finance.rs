@@ -30,10 +30,10 @@ struct FinanceEndpoints {
 impl Default for FinanceEndpoints {
     fn default() -> Self {
         Self {
-            quote_base: std::env::var("CODEWHALE_FINANCE_QUOTE_BASE_URL")
+            quote_base: std::env::var("GHOSTY_FINANCE_QUOTE_BASE_URL")
                 .or_else(|_| std::env::var("DEEPSEEK_FINANCE_QUOTE_BASE_URL"))
                 .unwrap_or_else(|_| "https://query1.finance.yahoo.com/v7/finance/quote".into()),
-            chart_base: std::env::var("CODEWHALE_FINANCE_CHART_BASE_URL")
+            chart_base: std::env::var("GHOSTY_FINANCE_CHART_BASE_URL")
                 .or_else(|_| std::env::var("DEEPSEEK_FINANCE_CHART_BASE_URL"))
                 .unwrap_or_else(|_| "https://query1.finance.yahoo.com/v8/finance/chart".into()),
         }

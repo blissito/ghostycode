@@ -8,13 +8,13 @@ import type { DocsConstitutionDict } from "../types";
  * 让这次迁移在渲染上是纯粹的 no-op。
  */
 export const docsConstitution: DocsConstitutionDict = {
-  metaTitle: "宪章与 /constitution · Codewhale 文档",
+  metaTitle: "宪章与 /constitution · Ghosty 文档",
   metaDescription: "用户全局宪章、仓库本地法、项目说明和运行时边界。",
   bodyClassName: "text-ink-soft leading-[1.9] tracking-wide",
   overviewTitle: "宪章与 /constitution",
   overviewTitleAside: "Constitution",
   overviewLead:
-    "Codewhale 先给 Agent 一个可追责的地址，再给上下文冲突一套法律。{constitutionCommand} 是管理个人常驻宪章的主入口： 它把结构化的用户全局设置保存在 {homeConfig}， 再渲染成模型可读的 prose block。仓库仍可通过 {repoConfig} 增加本地 law；runtime policy 独立负责模式、审批、沙箱、成本和工具边界。",
+    "Ghosty 先给 Agent 一个可追责的地址，再给上下文冲突一套法律。{constitutionCommand} 是管理个人常驻宪章的主入口： 它把结构化的用户全局设置保存在 {homeConfig}， 再渲染成模型可读的 prose block。仓库仍可通过 {repoConfig} 增加本地 law；runtime policy 独立负责模式、审批、沙箱、成本和工具边界。",
   principles: [
     [
       "userGlobal",
@@ -22,7 +22,7 @@ export const docsConstitution: DocsConstitutionDict = {
     ],
     [
       "repoLocal",
-      ".codewhale/constitution.json 是可选项目 law，用于不变量、分支规则、验证和升级条件。",
+      ".ghosty/constitution.json 是可选项目 law，用于不变量、分支规则、验证和升级条件。",
     ],
     [
       "runtime",

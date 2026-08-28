@@ -1,4 +1,4 @@
-# cargo-deny configuration for CodeWhale
+# cargo-deny configuration for GhostyCode
 # https://embarkstudios.github.io/cargo-deny/
 
 [graph]
@@ -83,7 +83,7 @@ allow-git = []
 [licenses]
 # Confidence threshold for license inference from text
 confidence-threshold = 0.93
-# Allowed licenses (MIT for CodeWhale, plus common transitive deps)
+# Allowed licenses (MIT for GhostyCode, plus common transitive deps)
 allow = [
     "MIT",
     "MIT-0",

@@ -31,20 +31,20 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use codewhale_command_contract::facets::{
+use ghosty_command_contract::facets::{
     CommandCostContext, CommandMediaContext, CommandModePolicyContext, CommandModelContext,
     CommandPresentationContext, CommandSessionContext, CommandSkillsContext,
     CommandSystemPromptContext, CommandWorkspaceContext, MediaAttachmentReceipt,
 };
-use codewhale_command_contract::handler::CommandContexts;
+use ghosty_command_contract::handler::CommandContexts;
 #[cfg(test)]
-use codewhale_command_contract::handler::ContextParts;
-use codewhale_command_contract::types::{
+use ghosty_command_contract::handler::ContextParts;
+use ghosty_command_contract::types::{
     CommandApprovalMode, CommandCurrency, CommandMode, CommandProviderId, CommandReasoningEffort,
 };
-use codewhale_config::AppMode;
-use codewhale_core::request::{Message, SystemPrompt};
-use codewhale_execpolicy::ApprovalMode;
+use ghosty_config::AppMode;
+use ghosty_core::request::{Message, SystemPrompt};
+use ghosty_execpolicy::ApprovalMode;
 
 use crate::localization::{MessageId, tr};
 use crate::pricing::CostCurrency;

@@ -11,7 +11,7 @@
 //! **deserialization target**: `flush` reads `buffer.jsonl` back off disk and
 //! hands the lines to `serde`, which will fill `site`, `previous_version`, and
 //! `providers` with any string the file contains. Anything running as the user
-//! can append to that file, `$CODEWHALE_HOME` is a predictable path, and this
+//! can append to that file, `$GHOSTY_HOME` is a predictable path, and this
 //! product executes model-authored shell commands. [`Event::is_bounded`] is
 //! therefore checked on the drain path, and it is the reason the guarantee
 //! above survives contact with the filesystem.
@@ -19,7 +19,7 @@
 //! Three standing rules for anyone extending this file:
 //!
 //! 1. **Never `#[derive(Serialize)]` over an existing state type.**
-//!    `codewhale_state::Thread` carries `git_sha`, `git_branch`,
+//!    `ghosty_state::Thread` carries `git_sha`, `git_branch`,
 //!    `git_origin_url`, `cwd`, and `path`. A payload builder that accepts one
 //!    and derives breaches the red lines in a single line. Every struct here is
 //!    built from scratch with explicit fields.
@@ -37,8 +37,8 @@ pub const SCHEMA_VERSION: u32 = 1;
 
 /// Which product surface produced a batch.
 ///
-/// Deliberately **not** derived from the executable: `codewhale-tui` serves at
-/// least five surfaces, and app-server runs in-process inside `codewhale`, so
+/// Deliberately **not** derived from the executable: `ghosty-tui` serves at
+/// least five surfaces, and app-server runs in-process inside `ghosty`, so
 /// `current_exe()` would report every app-server session as CLI. Each
 /// subcommand dispatch names its own surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,15 +46,15 @@ pub const SCHEMA_VERSION: u32 = 1;
 pub enum Surface {
     /// The interactive terminal UI.
     Tui,
-    /// `codewhale exec` — one non-interactive run.
+    /// `ghosty exec` — one non-interactive run.
     Exec,
     /// Terminal `config` / `auth` / `update` subcommands.
     Cli,
-    /// The app-server protocol surface (in-process inside `codewhale`).
+    /// The app-server protocol surface (in-process inside `ghosty`).
     AppServer,
     /// The MCP server surface.
     McpServer,
-    /// `codewhale serve`.
+    /// `ghosty serve`.
     Serve,
 }
 
@@ -214,7 +214,7 @@ impl InstallKind {
 
 /// How a session was started.
 ///
-/// Mirrors `codewhale_state::SessionSource` by value, deliberately re-declared
+/// Mirrors `ghosty_state::SessionSource` by value, deliberately re-declared
 /// here rather than imported: this crate must not depend on the thread store,
 /// which is the one crate whose types carry paths and git identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -669,7 +669,7 @@ pub fn is_reduced_panic_site(value: &str) -> bool {
 /// it. Narrowing to the catalog would silently drop a real user's route.
 #[must_use]
 pub fn is_known_provider_id(value: &str) -> bool {
-    codewhale_config::provider::all_providers()
+    ghosty_config::provider::all_providers()
         .iter()
         .any(|provider| provider.id() == value)
 }

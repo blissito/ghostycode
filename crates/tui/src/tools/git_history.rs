@@ -643,10 +643,7 @@ mod tests {
         let tmp = tempdir().expect("tempdir");
         let ctx = ToolContext::new(tmp.path());
         let err = GitShowTool
-            .execute(
-                json!({ "rev": "HEAD --output=/tmp/codewhale-git-show" }),
-                &ctx,
-            )
+            .execute(json!({ "rev": "HEAD --output=/tmp/ghosty-git-show" }), &ctx)
             .await
             .expect_err("whitespace rev payload should fail before git runs");
         assert!(matches!(err, ToolError::InvalidInput { .. }));
@@ -710,7 +707,7 @@ mod tests {
         let ctx = ToolContext::new(tmp.path());
         let err = GitBlameTool
             .execute(
-                json!({ "path": "file.txt", "rev": "HEAD --contents=/tmp/codewhale-git-blame" }),
+                json!({ "path": "file.txt", "rev": "HEAD --contents=/tmp/ghosty-git-blame" }),
                 &ctx,
             )
             .await

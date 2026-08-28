@@ -13,7 +13,7 @@ make_fixture() {
     "${root}/crates/tui" \
     "${root}/docs" \
     "${root}/extensions/vscode" \
-    "${root}/npm/codewhale" \
+    "${root}/npm/ghosty" \
     "${root}/npm/runtime-sdk" \
     "${root}/scripts/remote-smoke" \
     "${root}/scripts/release" \
@@ -33,43 +33,43 @@ EOF
 
   cat >"${root}/crates/example/Cargo.toml" <<'EOF'
 [package]
-name = "codewhale-example"
+name = "ghosty-example"
 version.workspace = true
 
 [dependencies]
-codewhale-core = { path = "../core", version = "0.8.68" }
+ghosty-core = { path = "../core", version = "0.8.68" }
 EOF
 
-  cat >"${root}/npm/codewhale/package.json" <<'EOF'
+  cat >"${root}/npm/ghosty/package.json" <<'EOF'
 {
-  "name": "codewhale",
+  "name": "ghosty",
   "version": "0.8.68",
-  "codewhaleBinaryVersion": "0.8.68"
+  "ghostyBinaryVersion": "0.8.68"
 }
 EOF
 
   cat >"${root}/npm/runtime-sdk/package.json" <<'EOF'
 {
-  "name": "@codewhale/runtime-sdk",
+  "name": "@ghosty/runtime-sdk",
   "version": "0.8.68"
 }
 EOF
 
   cat >"${root}/extensions/vscode/package.json" <<'EOF'
 {
-  "name": "codewhale-vscode",
+  "name": "ghosty-vscode",
   "version": "0.8.68"
 }
 EOF
 
   cat >"${root}/extensions/vscode/package-lock.json" <<'EOF'
 {
-  "name": "codewhale-vscode",
+  "name": "ghosty-vscode",
   "version": "0.8.68",
   "lockfileVersion": 3,
   "packages": {
     "": {
-      "name": "codewhale-vscode",
+      "name": "ghosty-vscode",
       "version": "0.8.68"
     }
   }
@@ -82,7 +82,7 @@ EOF
   "lockfileVersion": 3,
   "packages": {
     "": { "name": "fixture" },
-    "npm/codewhale": {
+    "npm/ghosty": {
       "version": "0.8.68",
       "license": "MIT"
     },
@@ -111,7 +111,7 @@ EOF
   cat >"${root}/docs/INSTALL.md" <<'EOF'
 The npm wrapper installs the matching published binaries.
 
-codewhale --version   # prints the published version that was installed
+ghosty --version   # prints the published version that was installed
 EOF
 
   cat >"${root}/docs/public-surface-facts.json" <<'EOF'
@@ -135,7 +135,7 @@ EOF
   printf 'fixture generated facts\n' >"${root}/web/lib/facts.generated.ts"
 
   for readme in README.md README.zh-CN.md README.ja-JP.md README.vi.md README.ko-KR.md; do
-    printf 'Install Codewhale from the package manager.\n' >"${root}/${readme}"
+    printf 'Install Ghosty from the package manager.\n' >"${root}/${readme}"
   done
 
   cat >"${root}/bin/cargo" <<'EOF'
@@ -188,9 +188,9 @@ PREPARE_RELEASE_TEST_MARKERS="${success_markers}" \
 
 grep -Fq 'version = "0.9.0"' "${success_root}/Cargo.toml"
 grep -Fq 'version = "0.9.0"' "${success_root}/crates/example/Cargo.toml"
-grep -Fq '"version": "0.9.0"' "${success_root}/npm/codewhale/package.json"
-grep -Fq '"codewhaleBinaryVersion": "0.9.0"' \
-  "${success_root}/npm/codewhale/package.json"
+grep -Fq '"version": "0.9.0"' "${success_root}/npm/ghosty/package.json"
+grep -Fq '"ghostyBinaryVersion": "0.9.0"' \
+  "${success_root}/npm/ghosty/package.json"
 grep -Fq '"version": "0.9.0"' "${success_root}/npm/runtime-sdk/package.json"
 grep -Fq '"version": "0.9.0"' "${success_root}/extensions/vscode/package.json"
 [[ "$(grep -Fc '"version": "0.9.0"' "${success_root}/extensions/vscode/package-lock.json")" == "2" ]]
@@ -256,7 +256,7 @@ if [[ -f "${same_markers}/cargo" ]]; then
 fi
 grep -Fq 'version = "0.8.68"' "${same_root}/Cargo.toml"
 grep -Fq 'version = "0.8.68"' "${same_root}/crates/example/Cargo.toml"
-grep -Fq '"version": "0.8.68"' "${same_root}/npm/codewhale/package.json"
+grep -Fq '"version": "0.8.68"' "${same_root}/npm/ghosty/package.json"
 
 same_stale_root="${tmp_dir}/same-stale"
 same_stale_markers="${tmp_dir}/same-stale-markers"
@@ -294,7 +294,7 @@ make_fixture "${legacy_root}"
 mkdir -p "${legacy_markers}"
 cat >"${legacy_root}/docs/INSTALL.md" <<'EOF'
 The npm wrapper is published at v0.8.68.
-codewhale --version   # 0.8.68
+ghosty --version   # 0.8.68
 EOF
 
 PREPARE_RELEASE_TEST_MARKERS="${legacy_markers}" \
@@ -302,7 +302,7 @@ PREPARE_RELEASE_TEST_MARKERS="${legacy_markers}" \
   "${legacy_root}/scripts/release/prepare-release.sh" 0.9.0 >/dev/null
 
 grep -Fq 'wrapper is published at v0.9.0' "${legacy_root}/docs/INSTALL.md"
-grep -Fq 'codewhale --version   # 0.9.0' "${legacy_root}/docs/INSTALL.md"
+grep -Fq 'ghosty --version   # 0.9.0' "${legacy_root}/docs/INSTALL.md"
 
 stale_root="${tmp_dir}/stale"
 stale_markers="${tmp_dir}/stale-markers"
@@ -324,7 +324,7 @@ grep -Fq \
   "${stale_log}"
 grep -Fq 'version = "0.8.68"' "${stale_root}/Cargo.toml"
 grep -Fq 'version = "0.8.68"' "${stale_root}/crates/example/Cargo.toml"
-grep -Fq '"version": "0.8.68"' "${stale_root}/npm/codewhale/package.json"
+grep -Fq '"version": "0.8.68"' "${stale_root}/npm/ghosty/package.json"
 if find "${stale_markers}" -type f -print -quit | grep -q .; then
   echo "stale README validation mutated downstream release state" >&2
   exit 1

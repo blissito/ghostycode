@@ -63,7 +63,7 @@ use crate::request_manifest::{
 };
 use crate::route_runtime::ResolvedRuntimeRoute;
 use crate::safe_label::SafeLabel;
-use codewhale_core::request::{PrimaryTurnRequest, prepare_primary_turn_request};
+use ghosty_core::request::{PrimaryTurnRequest, prepare_primary_turn_request};
 
 /// Everything the host must supply for the engine to describe the next
 /// request. These are the same posture fields a `SendMessage` would carry, so

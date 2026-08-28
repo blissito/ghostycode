@@ -1,6 +1,6 @@
 # Delegated coordination contract
 
-Codewhale records the small amount of shared state that parallel work needs to
+Ghosty records the small amount of shared state that parallel work needs to
 remain attributable. This is coordination metadata, not an approval system and
 not a store for model reasoning or transcripts.
 
@@ -13,7 +13,7 @@ fail validation.
 
 A prompt-only general child starts read-only. Callers that want a writer must
 declare at least one `write_roots`, `exact_files`, or
-`coordination_contracts` value. Codewhale does not infer a repo-wide `.` claim.
+`coordination_contracts` value. Ghosty does not infer a repo-wide `.` claim.
 An active shared-workspace claim blocks another active owner when either tree
 contains the other, exact files collide, or a named contract matches. A real
 isolated worktree may proceed concurrently. Scope expansion uses
@@ -28,7 +28,7 @@ resolved values are persisted in their launch manifest.
 ### Embedding state boundary
 
 By default, delegated control-plane state remains workspace-scoped at
-`<workspace>/.codewhale/state`: the worker ledger, complete transcript
+`<workspace>/.ghosty/state`: the worker ledger, complete transcript
 artifacts, and coordination lock share that root. An embedding host may set
 `EngineConfig::subagent_state_root` to keep those files under a session-owned
 root without changing child cwd, tool path authority, or the execution
@@ -40,11 +40,11 @@ workspace is the same. A host choosing that layout must serialize conflicting
 writes itself or give writers isolated worktrees; the state-root override is a
 storage and lifecycle boundary, not cross-session write arbitration.
 
-This record is a cooperative Codewhale coordination boundary, not an operating
+This record is a cooperative Ghosty coordination boundary, not an operating
 system sandbox. Fleet carries a machine-readable outer cap into each worker,
 rechecks structured mutation targets, rejects symlink aliases, and denies
 unbounded shell, Git, code, plugin, and mutating MCP execution. Those checks
-prevent one Codewhale worker from silently exceeding its declared claim; they
+prevent one Ghosty worker from silently exceeding its declared claim; they
 do not promise containment against a separate hostile process racing filesystem
 paths. Use an OS sandbox or an isolated host when that adversarial boundary is
 required.
@@ -62,7 +62,7 @@ concise constraints, evidence handles, version, and sequence. Only the owner
 may change a decision's status. A second accepted decision for the same subject
 cannot silently replace the first.
 
-At child launch, Codewhale projects only accepted decisions whose scope matches
+At child launch, Ghosty projects only accepted decisions whose scope matches
 the child's declared paths, contracts, role, or tool capabilities. The
 projection is deduplicated, limited to eight decisions and 4096 UTF-8 bytes,
 and receipted by child id and decision ids. The task prompt may separately
@@ -109,14 +109,14 @@ that had no equivalent, write-scope expansion.
 
 ## The workspace lock, and what losing it does and does not mean
 
-The ledger lives in one file, `.codewhale/state/subagents.v1.json`, written as a
+The ledger lives in one file, `.ghosty/state/subagents.v1.json`, written as a
 whole-document atomic replace. Two processes rewriting that file would be
 last-rename-wins, and the loser's `write_claims` would vanish — which silently
 re-opens concurrent overlapping mutation of the same paths after a restart. So
 one per-workspace advisory flock (`subagents.v1.lock`) decides who may *write*
 the file. That is the whole of its job.
 
-Opening a second Codewhale session in the same workspace is ordinary usage, so
+Opening a second Ghosty session in the same workspace is ordinary usage, so
 losing that flock is an ordinary state, not a failure:
 
 - **It does not affect liveness.** A session that cannot write the ledger runs

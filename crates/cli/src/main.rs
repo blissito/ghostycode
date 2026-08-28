@@ -2,8 +2,8 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() -> std::process::ExitCode {
-    // Reset SIGPIPE to SIG_DFL so piping codewhale output into a command that
-    // exits early (e.g. `codewhale doctor | head`) terminates the process
+    // Reset SIGPIPE to SIG_DFL so piping ghosty output into a command that
+    // exits early (e.g. `ghosty doctor | head`) terminates the process
     // cleanly with exit code 141 instead of panicking on the broken-pipe
     // write. Many execution environments (systemd, Docker, some shells)
     // inherit SIGPIPE set to SIG_IGN, which makes write(2) return EPIPE;
@@ -14,7 +14,7 @@ fn main() -> std::process::ExitCode {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 
-    // Single-binary argv0 dispatch: `codew` is now an alias for `codewhale`
+    // Single-binary argv0 dispatch: `ghosty-tui` is now an alias for `ghosty`
     // without a second compiled artifact. Checking the binary basename keeps
     // the install surface at one file while preserving the six-keystroke save.
     let _ = std::env::args().next().and_then(|argv0| {
@@ -25,11 +25,11 @@ fn main() -> std::process::ExitCode {
         let trimmed = base
             .strip_suffix(std::env::consts::EXE_SUFFIX)
             .unwrap_or(base);
-        if trimmed == "codew" {
-            // No-op: the single `codewhale` binary handles both names.
+        if trimmed == "ghosty-tui" {
+            // No-op: the single `ghosty` binary handles both names.
         }
         None::<()>
     });
 
-    codewhale_cli::run_cli()
+    ghosty_cli::run_cli()
 }

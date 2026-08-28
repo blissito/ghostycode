@@ -1,24 +1,24 @@
 # Klien Peramban Lokal (Local Browser Client)
 
-Perintah `codewhale web` membuka klien peramban (*browser client*) bawaan Codewhale melalui Runtime API kanonik. Klien ini merupakan permukaan lokal: server selalu terikat pada `127.0.0.1`, tidak dapat diikat ke alamat LAN, dan tidak dapat berjalan tanpa autentikasi Runtime.
+Perintah `ghosty web` membuka klien peramban (*browser client*) bawaan Ghosty melalui Runtime API kanonik. Klien ini merupakan permukaan lokal: server selalu terikat pada `127.0.0.1`, tidak dapat diikat ke alamat LAN, dan tidak dapat berjalan tanpa autentikasi Runtime.
 
 ---
 
 ## Cara Menjalankan
 
-Dari ruang kerja yang ingin Anda kelola dengan Codewhale, jalankan:
+Dari ruang kerja yang ingin Anda kelola dengan Ghosty, jalankan:
 
 ```bash
-codewhale web
+ghosty web
 ```
 
 Alamat bawaan adalah `http://127.0.0.1:7878`. Untuk menghindari bentrokan port lokal, pilih port loopback lain:
 
 ```bash
-codewhale web --port 8788
+ghosty web --port 8788
 ```
 
-Codewhale akan mengaktifkan Runtime API, menyajikan klien bawaan yang tersemat di dalam biner, dan meminta sistem operasi untuk membuka URL di peramban bawaan Anda. Hentikan proses dengan `Ctrl+C`.
+Ghosty akan mengaktifkan Runtime API, menyajikan klien bawaan yang tersemat di dalam biner, dan meminta sistem operasi untuk membuka URL di peramban bawaan Anda. Hentikan proses dengan `Ctrl+C`.
 
 ---
 

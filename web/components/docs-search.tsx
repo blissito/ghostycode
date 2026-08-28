@@ -225,7 +225,7 @@ export function DocsSearch({ locale }: { locale: string }) {
               : "Try a different keyword, or browse the full docs on GitHub."}
           </p>
           <Link
-            href="https://github.com/Hmbown/CodeWhale/tree/main/docs"
+            href="https://github.com/blissito/ghostycode/tree/main/docs"
             target="_blank"
             rel="noreferrer"
             className="portal-button portal-button-secondary"
@@ -241,7 +241,7 @@ export function DocsSearch({ locale }: { locale: string }) {
           <p>
             {isZh
               ? "“网页”条目提供站内指南；“源文档”条目直接打开 GitHub 仓库中的完整参考资料。文档索引由仓库中的 docs-map.ts 注册表维护。"
-              : "Web guides stay on codewhale.net. Source docs open the complete reference in the GitHub repository. The index is maintained from the docs-map.ts registry in the repository."}
+              : "Web guides stay on ghosty.net. Source docs open the complete reference in the GitHub repository. The index is maintained from the docs-map.ts registry in the repository."}
           </p>
         </section>
       )}

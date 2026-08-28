@@ -1,11 +1,11 @@
-//! Dynamic Workflow runtime for CodeWhale.
+//! Dynamic Workflow runtime for GhostyCode.
 //!
 //! This crate is the imperative half of Workflow: a sandboxed QuickJS
 //! (rquickjs) runtime that executes a model-authored JS program which
 //! dispatches fleet-routed subagents via `task()`, fans out with
 //! `parallel()`/`pipeline()`, reports progress with `log()`/`phase()`, and
 //! scales itself to a token pool via the `budget` global. The static,
-//! declarative IR (record/replay, model policy) stays in `codewhale-workflow`;
+//! declarative IR (record/replay, model policy) stays in `ghosty-workflow`;
 //! this crate only speaks to the outside world through the
 //! [`WorkflowDriver`] seam, so it is fully testable without spawning a real
 //! subagent (see [`testing::FakeDriver`]).

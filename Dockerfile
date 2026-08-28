@@ -1,16 +1,16 @@
 # syntax=docker/dockerfile:1
-# Codewhale multi-arch Docker image (#501)
+# Ghosty multi-arch Docker image (#501)
 #
-# Build:  docker buildx build --platform linux/amd64,linux/arm64 -t codewhale:latest .
-# Run:    docker run --rm -it -e DEEPSEEK_API_KEY -v codewhale-home:/home/codewhale/.codewhale codewhale
+# Build:  docker buildx build --platform linux/amd64,linux/arm64 -t ghosty:latest .
+# Run:    docker run --rm -it -e DEEPSEEK_API_KEY -v ghosty-home:/home/ghosty/.ghosty ghosty
 #
-# The image ships the canonical `codewhale` and `codew` command names in a
+# The image ships the canonical `ghosty` and `ghosty-tui` command names in a
 # minimal runtime layer.
 #
 # API keys MUST be passed at runtime (never baked into the image):
-#   docker run --rm -it -e DEEPSEEK_API_KEY codewhale
+#   docker run --rm -it -e DEEPSEEK_API_KEY ghosty
 # Or mount an env file:
-#   docker run --rm -it --env-file .env codewhale
+#   docker run --rm -it --env-file .env ghosty
 
 ARG RUST_VERSION=1.88
 
@@ -19,13 +19,13 @@ FROM --platform=$BUILDPLATFORM rust:${RUST_VERSION}-slim-bookworm AS builder
 ARG TARGETPLATFORM
 ARG TARGETARCH
 ARG BUILDPLATFORM
-ARG CODEWHALE_BUILD_SHA
+ARG GHOSTY_BUILD_SHA
 
 ENV CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc \
     CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
     PKG_CONFIG_ALLOW_CROSS=1 \
     PKG_CONFIG_LIBDIR_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig \
-    CODEWHALE_BUILD_SHA=${CODEWHALE_BUILD_SHA}
+    GHOSTY_BUILD_SHA=${GHOSTY_BUILD_SHA}
 
 RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDPLATFORM}" != "${TARGETPLATFORM}" ]; then \
       dpkg --add-architecture arm64; \
@@ -56,15 +56,15 @@ COPY . .
 # Build the one runtime for the target platform. Expose the same verified
 # bytes under both supported command names. --locked keeps the build
 # reproducible from the committed lockfile.
-RUN --mount=type=cache,id=codewhale-target-${TARGETARCH},target=/build/target,sharing=locked \
-    --mount=type=cache,id=codewhale-cargo-registry-${TARGETARCH},target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,id=codewhale-cargo-git-${TARGETARCH},target=/usr/local/cargo/git,sharing=locked \
+RUN --mount=type=cache,id=ghosty-target-${TARGETARCH},target=/build/target,sharing=locked \
+    --mount=type=cache,id=ghosty-cargo-registry-${TARGETARCH},target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=ghosty-cargo-git-${TARGETARCH},target=/usr/local/cargo/git,sharing=locked \
     rustup target add "$(cat /rust-target)" \
     && cargo build --release --locked --target "$(cat /rust-target)" \
-      -p codewhale-cli \
+      -p ghosty-cli \
     && mkdir -p /out \
-    && cp target/$(cat /rust-target)/release/codewhale /out/ \
-    && cp target/$(cat /rust-target)/release/codewhale /out/codew
+    && cp target/$(cat /rust-target)/release/ghosty /out/ \
+    && cp target/$(cat /rust-target)/release/ghosty /out/ghosty-tui
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────
 FROM debian:bookworm-slim
@@ -77,17 +77,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Non-root user with explicit UID/GID for filesystem ownership clarity. Keep
 # the legacy state directory for read-fallback migration; v0.9.0 no longer
 # ships legacy deepseek command shims.
-RUN groupadd --gid 1000 codewhale \
-    && useradd --create-home --shell /bin/bash --uid 1000 --gid 1000 codewhale \
-    && install -d -m 0700 -o codewhale -g codewhale /home/codewhale/.codewhale \
-    && install -d -m 0700 -o codewhale -g codewhale /home/codewhale/.deepseek
-USER codewhale
-WORKDIR /home/codewhale
+RUN groupadd --gid 1000 ghosty \
+    && useradd --create-home --shell /bin/bash --uid 1000 --gid 1000 ghosty \
+    && install -d -m 0700 -o ghosty -g ghosty /home/ghosty/.ghosty \
+    && install -d -m 0700 -o ghosty -g ghosty /home/ghosty/.deepseek
+USER ghosty
+WORKDIR /home/ghosty
 
-COPY --from=builder --chown=codewhale:codewhale /out/codewhale /usr/local/bin/codewhale
-COPY --from=builder --chown=codewhale:codewhale /out/codew /usr/local/bin/codew
+COPY --from=builder --chown=ghosty:ghosty /out/ghosty /usr/local/bin/ghosty
+COPY --from=builder --chown=ghosty:ghosty /out/ghosty-tui /usr/local/bin/ghosty-tui
 
-# `codewhale` and `codew` are two command names for the same runtime.
+# `ghosty` and `ghosty-tui` are two command names for the same runtime.
 
-ENTRYPOINT ["codewhale"]
+ENTRYPOINT ["ghosty"]
 CMD []

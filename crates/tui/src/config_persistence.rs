@@ -24,14 +24,14 @@ pub(crate) fn mutate_config_document<F>(path: &Path, mutate: F) -> anyhow::Resul
 where
     F: FnOnce(&mut toml_edit::DocumentMut) -> anyhow::Result<()>,
 {
-    codewhale_config::mutate_config_document(path, mutate)
+    ghosty_config::mutate_config_document(path, mutate)
 }
 
 /// Atomically replace `path` with `body` via a same-directory temp file and
 /// rename. On Unix the file lands with 0o600 permissions: config.toml can
 /// hold API keys, so this matches `ConfigStore::save` and the auth save path.
 pub(crate) fn write_config_toml_atomic(path: &Path, body: &str) -> anyhow::Result<()> {
-    codewhale_config::create_config_document(path, body)
+    ghosty_config::create_config_document(path, body)
 }
 
 /// Set the value at `segments` (parent tables plus the final key), creating
@@ -45,7 +45,7 @@ pub(crate) fn set_document_value(
     segments: &[&str],
     value: impl Into<toml_edit::Value>,
 ) -> anyhow::Result<()> {
-    codewhale_config::set_config_document_value(doc, segments, value)
+    ghosty_config::set_config_document_value(doc, segments, value)
 }
 
 /// Remove the value at `segments`. Returns `Ok(true)` when an entry was
@@ -54,7 +54,7 @@ pub(crate) fn unset_document_value(
     doc: &mut toml_edit::DocumentMut,
     segments: &[&str],
 ) -> anyhow::Result<bool> {
-    codewhale_config::unset_config_document_value(doc, segments)
+    ghosty_config::unset_config_document_value(doc, segments)
 }
 
 /// Remove every entry named `key` from `table` and, recursively, from nested
@@ -264,7 +264,10 @@ pub(crate) fn persist_provider_model_key(
     provider_identity: &str,
     value: &str,
 ) -> anyhow::Result<PathBuf> {
-    if matches!(provider, ApiProvider::Deepseek | ApiProvider::DeepseekCN) {
+    if matches!(
+        provider,
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits
+    ) {
         return persist_root_string_key(config_path, "default_text_model", value);
     }
 
@@ -286,7 +289,7 @@ pub(crate) fn persist_provider_model_key(
 
 fn provider_base_url_table_key(provider: ApiProvider) -> anyhow::Result<&'static str> {
     match provider {
-        ApiProvider::Deepseek | ApiProvider::DeepseekCN => {
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN | ApiProvider::Easybits => {
             anyhow::bail!("DeepSeek uses the root base_url setting")
         }
         ApiProvider::DeepseekAnthropic => Ok("deepseek_anthropic"),
@@ -435,7 +438,7 @@ fn normalize_optional_custom_provider_field(raw: &str) -> Option<String> {
 
 pub(crate) fn persist_hotbar_bindings(
     config_path: Option<&Path>,
-    bindings: &[codewhale_config::HotbarBindingToml],
+    bindings: &[ghosty_config::HotbarBindingToml],
 ) -> anyhow::Result<PathBuf> {
     let path = config_toml_path(config_path)?;
     mutate_config_document(&path, |doc| {
@@ -484,8 +487,8 @@ mod tests {
     struct EnvGuard {
         _home: crate::test_support::EnvVarGuard,
         _userprofile: crate::test_support::EnvVarGuard,
-        _codewhale_home: crate::test_support::EnvVarGuard,
-        _codewhale_config_path: crate::test_support::EnvVarGuard,
+        _ghosty_home: crate::test_support::EnvVarGuard,
+        _ghosty_config_path: crate::test_support::EnvVarGuard,
         _deepseek_config_path: crate::test_support::EnvVarGuard,
         _lock: crate::test_support::TestEnvLock,
     }
@@ -497,10 +500,8 @@ mod tests {
             Self {
                 _home: crate::test_support::EnvVarGuard::set("HOME", home),
                 _userprofile: crate::test_support::EnvVarGuard::set("USERPROFILE", home),
-                _codewhale_home: crate::test_support::EnvVarGuard::remove("CODEWHALE_HOME"),
-                _codewhale_config_path: crate::test_support::EnvVarGuard::remove(
-                    "CODEWHALE_CONFIG_PATH",
-                ),
+                _ghosty_home: crate::test_support::EnvVarGuard::remove("GHOSTY_HOME"),
+                _ghosty_config_path: crate::test_support::EnvVarGuard::remove("GHOSTY_CONFIG_PATH"),
                 _deepseek_config_path: crate::test_support::EnvVarGuard::set(
                     "DEEPSEEK_CONFIG_PATH",
                     &config_path,
@@ -520,7 +521,7 @@ mod tests {
 
     #[test]
     fn persist_status_items_writes_tui_section_to_config_toml() {
-        let temp_root = temp_root("codewhale-statusline-persist");
+        let temp_root = temp_root("ghosty-statusline-persist");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
@@ -542,8 +543,8 @@ mod tests {
     }
 
     #[test]
-    fn config_toml_path_uses_codewhale_home_for_fresh_installs() {
-        let temp_root = temp_root("codewhale-config-path-fresh");
+    fn config_toml_path_uses_ghosty_home_for_fresh_installs() {
+        let temp_root = temp_root("ghosty-config-path-fresh");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
@@ -553,13 +554,13 @@ mod tests {
 
         assert_eq!(
             config_toml_path(None).unwrap(),
-            temp_root.join(".codewhale").join("config.toml")
+            temp_root.join(".ghosty").join("config.toml")
         );
     }
 
     #[test]
     fn config_toml_path_preserves_legacy_config_when_it_exists() {
-        let temp_root = temp_root("codewhale-config-path-legacy");
+        let temp_root = temp_root("ghosty-config-path-legacy");
         let legacy_config = temp_root.join(".deepseek").join("config.toml");
         fs::create_dir_all(legacy_config.parent().unwrap()).unwrap();
         fs::write(&legacy_config, "").unwrap();
@@ -573,9 +574,9 @@ mod tests {
     }
 
     #[test]
-    fn config_toml_path_ignores_legacy_config_when_codewhale_home_is_explicit() {
-        let temp_root = temp_root("codewhale-config-path-explicit-home");
-        let explicit_home = temp_root.join("isolated-codewhale");
+    fn config_toml_path_ignores_legacy_config_when_ghosty_home_is_explicit() {
+        let temp_root = temp_root("ghosty-config-path-explicit-home");
+        let explicit_home = temp_root.join("isolated-ghosty");
         let legacy_config = temp_root.join(".deepseek").join("config.toml");
         fs::create_dir_all(legacy_config.parent().unwrap()).unwrap();
         fs::write(&legacy_config, "").unwrap();
@@ -583,7 +584,7 @@ mod tests {
 
         unsafe {
             env::remove_var("DEEPSEEK_CONFIG_PATH");
-            env::set_var("CODEWHALE_HOME", &explicit_home);
+            env::set_var("GHOSTY_HOME", &explicit_home);
         }
 
         assert_eq!(
@@ -593,15 +594,15 @@ mod tests {
     }
 
     #[test]
-    fn config_toml_path_prefers_codewhale_env_over_legacy_env() {
-        let temp_root = temp_root("codewhale-config-path-env");
+    fn config_toml_path_prefers_ghosty_env_over_legacy_env() {
+        let temp_root = temp_root("ghosty-config-path-env");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
         let preferred = temp_root.join("preferred.toml");
         let legacy = temp_root.join("legacy.toml");
 
         unsafe {
-            env::set_var("CODEWHALE_CONFIG_PATH", &preferred);
+            env::set_var("GHOSTY_CONFIG_PATH", &preferred);
             env::set_var("DEEPSEEK_CONFIG_PATH", &legacy);
         }
 
@@ -616,8 +617,8 @@ mod tests {
 
     #[test]
     fn config_toml_path_keeps_missing_env_target_authoritative() {
-        let temp_root = temp_root("codewhale-config-path-missing-env-fallback");
-        let home_config = temp_root.join(".codewhale").join("config.toml");
+        let temp_root = temp_root("ghosty-config-path-missing-env-fallback");
+        let home_config = temp_root.join(".ghosty").join("config.toml");
         fs::create_dir_all(home_config.parent().unwrap()).unwrap();
         fs::write(&home_config, "# existing fallback\n").unwrap();
         let _guard = EnvGuard::new(&temp_root);
@@ -634,7 +635,7 @@ mod tests {
 
     #[test]
     fn persist_status_items_preserves_existing_unrelated_keys() {
-        let temp_root = temp_root("codewhale-statusline-preserve");
+        let temp_root = temp_root("ghosty-statusline-preserve");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
@@ -665,7 +666,7 @@ mod tests {
 
     #[test]
     fn persist_bool_key_preserves_comments() {
-        let temp_root = temp_root("codewhale-persist-comments");
+        let temp_root = temp_root("ghosty-persist-comments");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
@@ -693,7 +694,7 @@ mod tests {
 
     #[test]
     fn persist_table_bool_key_updates_existing_memory_enabled() {
-        let temp_root = temp_root("codewhale-persist-memory-update");
+        let temp_root = temp_root("ghosty-persist-memory-update");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
@@ -716,7 +717,7 @@ mod tests {
 
     #[test]
     fn persist_memory_enabled_round_trips_through_config_load() {
-        let temp_root = temp_root("codewhale-persist-memory-roundtrip");
+        let temp_root = temp_root("ghosty-persist-memory-roundtrip");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
@@ -745,11 +746,11 @@ mod tests {
 
     #[test]
     fn persist_custom_provider_writes_named_openai_compatible_table() {
-        let temp_root = temp_root("codewhale-custom-provider-persist");
+        let temp_root = temp_root("ghosty-custom-provider-persist");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
-        let path = temp_root.join(".codewhale").join("config.toml");
+        let path = temp_root.join(".ghosty").join("config.toml");
         let written = persist_custom_provider(
             Some(&path),
             "acme_ai",
@@ -791,21 +792,21 @@ mod tests {
         assert_eq!(entry.model.as_deref(), Some("acme/code-1"));
         assert_eq!(entry.api_key_env.as_deref(), Some("ACME_API_KEY"));
 
-        let dispatcher = codewhale_config::ConfigStore::load(Some(written))
+        let dispatcher = ghosty_config::ConfigStore::load(Some(written))
             .expect("the dispatcher must parse the exact config written by the TUI");
         assert_eq!(
             dispatcher.config.provider,
-            codewhale_config::ProviderKind::Custom
+            ghosty_config::ProviderKind::Custom
         );
         assert_eq!(dispatcher.config.provider_id(), "acme_ai");
     }
 
     #[test]
     fn persist_custom_provider_rejects_builtin_or_invalid_names() {
-        let temp_root = temp_root("codewhale-custom-provider-invalid");
+        let temp_root = temp_root("ghosty-custom-provider-invalid");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
-        let path = temp_root.join(".codewhale").join("config.toml");
+        let path = temp_root.join(".ghosty").join("config.toml");
 
         let builtin = persist_custom_provider(
             Some(&path),
@@ -830,10 +831,10 @@ mod tests {
 
     #[test]
     fn persist_local_custom_provider_records_keyless_auth() {
-        let temp_root = temp_root("codewhale-custom-provider-local-keyless");
+        let temp_root = temp_root("ghosty-custom-provider-local-keyless");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
-        let path = temp_root.join(".codewhale").join("config.toml");
+        let path = temp_root.join(".ghosty").join("config.toml");
 
         let written = persist_custom_provider(
             Some(&path),
@@ -853,7 +854,7 @@ mod tests {
 
     #[test]
     fn persist_hotbar_bindings_writes_primary_config_path_for_fresh_installs() {
-        let temp_root = temp_root("codewhale-hotbar-persist-fresh");
+        let temp_root = temp_root("ghosty-hotbar-persist-fresh");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
@@ -861,17 +862,17 @@ mod tests {
             env::remove_var("DEEPSEEK_CONFIG_PATH");
         }
 
-        let bindings = vec![codewhale_config::HotbarBindingToml {
+        let bindings = vec![ghosty_config::HotbarBindingToml {
             slot: 1,
             action: "mode.plan".to_string(),
             label: Some("Plan".to_string()),
         }];
         let path = persist_hotbar_bindings(None, &bindings).expect("persist should succeed");
 
-        assert_eq!(path, temp_root.join(".codewhale").join("config.toml"));
+        assert_eq!(path, temp_root.join(".ghosty").join("config.toml"));
         let body = fs::read_to_string(&path).expect("written file should be readable");
         assert!(body.contains("[[hotbar]]"), "hotbar table missing: {body}");
-        let parsed: codewhale_config::ConfigToml =
+        let parsed: ghosty_config::ConfigToml =
             toml::from_str(&body).expect("written hotbar config should parse");
         assert_eq!(parsed.hotbar, Some(bindings));
     }
@@ -880,36 +881,33 @@ mod tests {
     fn persist_default_hotbar_bindings_round_trips_for_hotbar_on() {
         // #3807: `/hotbar on` persists the explicit default slots (an absent key
         // now means hidden), and they read back as the eight recommended slots.
-        let temp_root = temp_root("codewhale-hotbar-on-defaults");
+        let temp_root = temp_root("ghosty-hotbar-on-defaults");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
-        let defaults = codewhale_config::default_hotbar_bindings_toml();
-        assert_eq!(defaults.len(), codewhale_config::HOTBAR_SLOT_COUNT as usize);
+        let defaults = ghosty_config::default_hotbar_bindings_toml();
+        assert_eq!(defaults.len(), ghosty_config::HOTBAR_SLOT_COUNT as usize);
 
         let path = persist_hotbar_bindings(None, &defaults).expect("persist should succeed");
         let body = fs::read_to_string(&path).expect("written file should be readable");
         assert!(body.contains("[[hotbar]]"), "hotbar table missing: {body}");
 
-        let parsed: codewhale_config::ConfigToml =
+        let parsed: ghosty_config::ConfigToml =
             toml::from_str(&body).expect("written hotbar config should parse");
         assert_eq!(parsed.hotbar, Some(defaults));
 
         // The persisted defaults resolve back to all eight recommended slots.
-        let resolved = parsed.resolve_hotbar_bindings(&codewhale_config::DEFAULT_HOTBAR_ACTIONS);
-        assert_eq!(
-            resolved.bindings,
-            codewhale_config::default_hotbar_bindings()
-        );
+        let resolved = parsed.resolve_hotbar_bindings(&ghosty_config::DEFAULT_HOTBAR_ACTIONS);
+        assert_eq!(resolved.bindings, ghosty_config::default_hotbar_bindings());
     }
 
     #[test]
     fn persist_hotbar_bindings_preserves_comments_and_replaces_existing_tables() {
-        let temp_root = temp_root("codewhale-hotbar-persist-comments");
+        let temp_root = temp_root("ghosty-hotbar-persist-comments");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
-        let path = temp_root.join(".codewhale").join("config.toml");
+        let path = temp_root.join(".ghosty").join("config.toml");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(
             &path,
@@ -928,7 +926,7 @@ enabled = true
         )
         .unwrap();
 
-        let bindings = vec![codewhale_config::HotbarBindingToml {
+        let bindings = vec![ghosty_config::HotbarBindingToml {
             slot: 2,
             action: "session.compact".to_string(),
             label: Some("Compact".to_string()),
@@ -951,25 +949,25 @@ enabled = true
             body.contains("action = \"session.compact\""),
             "new action missing: {body}"
         );
-        let parsed: codewhale_config::ConfigToml =
+        let parsed: ghosty_config::ConfigToml =
             toml::from_str(&body).expect("written hotbar config should parse");
         assert_eq!(parsed.hotbar, Some(bindings));
     }
 
     #[test]
     fn persist_hotbar_bindings_writes_empty_array_to_disable_defaults() {
-        let temp_root = temp_root("codewhale-hotbar-persist-empty");
+        let temp_root = temp_root("ghosty-hotbar-persist-empty");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
 
-        let path = temp_root.join(".codewhale").join("config.toml");
+        let path = temp_root.join(".ghosty").join("config.toml");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
 
         let written = persist_hotbar_bindings(Some(&path), &[]).expect("persist should succeed");
         let body = fs::read_to_string(&written).expect("written file should be readable");
 
         assert!(body.contains("hotbar = []"), "empty hotbar missing: {body}");
-        let parsed: codewhale_config::ConfigToml =
+        let parsed: ghosty_config::ConfigToml =
             toml::from_str(&body).expect("written hotbar config should parse");
         assert_eq!(parsed.hotbar, Some(Vec::new()));
     }
@@ -980,7 +978,7 @@ enabled = true
     // provider tables must survive every supported mutation.
     // ------------------------------------------------------------------
 
-    const GOLDEN_CONFIG: &str = r#"# CodeWhale golden config fixture, top note.
+    const GOLDEN_CONFIG: &str = r#"# GhostyCode golden config fixture, top note.
 # api_key = "sk-placeholder" (uncomment to set the key by hand)
 model = "deepseek-v4-pro" # pinned for release QA
 
@@ -1007,7 +1005,7 @@ action = "mode.plan"
 
     #[test]
     fn golden_replacing_existing_root_value_only_touches_that_value() {
-        let temp_root = temp_root("codewhale-golden-root-value");
+        let temp_root = temp_root("ghosty-golden-root-value");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
         let path = temp_root.join(".deepseek").join("config.toml");
@@ -1026,7 +1024,7 @@ action = "mode.plan"
 
     #[test]
     fn golden_mutations_preserve_unrelated_comments_order_and_quoted_tables() {
-        let temp_root = temp_root("codewhale-golden-mutations");
+        let temp_root = temp_root("ghosty-golden-mutations");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
         let path = temp_root.join(".deepseek").join("config.toml");
@@ -1045,7 +1043,7 @@ action = "mode.plan"
         persist_status_items(&[crate::config::StatusItem::Mode]).unwrap();
         persist_hotbar_bindings(
             Some(&path),
-            &[codewhale_config::HotbarBindingToml {
+            &[ghosty_config::HotbarBindingToml {
                 slot: 2,
                 action: "session.compact".to_string(),
                 label: None,
@@ -1055,7 +1053,7 @@ action = "mode.plan"
 
         let body = fs::read_to_string(&path).unwrap();
         for comment in [
-            "# CodeWhale golden config fixture, top note.",
+            "# GhostyCode golden config fixture, top note.",
             "# api_key = \"sk-placeholder\" (uncomment to set the key by hand)",
             "# pinned for release QA",
             "# workspace trust note",
@@ -1118,7 +1116,7 @@ action = "mode.plan"
         // Finding #20 at the primitive level: the old string scan treated a
         // comment mentioning api_key as an existing assignment and skipped
         // the insert entirely.
-        let temp_root = temp_root("codewhale-golden-api-key-comment");
+        let temp_root = temp_root("ghosty-golden-api-key-comment");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
         let path = temp_root.join(".deepseek").join("config.toml");
@@ -1207,10 +1205,10 @@ slot = 1
 
     #[test]
     fn persist_custom_provider_unsets_removed_optional_fields() {
-        let temp_root = temp_root("codewhale-custom-provider-unset");
+        let temp_root = temp_root("ghosty-custom-provider-unset");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
-        let path = temp_root.join(".codewhale").join("config.toml");
+        let path = temp_root.join(".ghosty").join("config.toml");
 
         persist_custom_provider(
             Some(&path),
@@ -1251,7 +1249,7 @@ slot = 1
     fn config_writes_land_with_owner_only_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
-        let temp_root = temp_root("codewhale-persist-perms");
+        let temp_root = temp_root("ghosty-persist-perms");
         fs::create_dir_all(&temp_root).unwrap();
         let _guard = EnvGuard::new(&temp_root);
         let path = temp_root.join(".deepseek").join("config.toml");
@@ -1273,7 +1271,7 @@ slot = 1
 
     impl ModelEnvGuard {
         const VARS: &'static [&'static str] = &[
-            "CODEWHALE_MODEL",
+            "GHOSTY_MODEL",
             "DEEPSEEK_MODEL",
             "DEEPSEEK_DEFAULT_TEXT_MODEL",
             "GLM_MODEL",
@@ -1319,8 +1317,8 @@ slot = 1
     ///
     /// The TUI resolves it with `Config::default_model()`, which is what
     /// `client.rs` puts on the wire and what `doctor` reports. The dispatcher
-    /// resolves it independently in `codewhale-config`'s
-    /// `resolve_runtime_options`, which is what `codewhale model resolve`
+    /// resolves it independently in `ghosty-config`'s
+    /// `resolve_runtime_options`, which is what `ghosty model resolve`
     /// reports and what the app-server and route descriptors consume. The two
     /// silently disagreed for every non-DeepSeek provider (#4832, #4838): the
     /// dispatcher gated root `default_text_model` behind `provider == Deepseek`
@@ -1382,7 +1380,7 @@ slot = 1
         ];
 
         for (case, body, expected) in cases {
-            let temp_root = temp_root("codewhale-model-chain-agreement");
+            let temp_root = temp_root("ghosty-model-chain-agreement");
             fs::create_dir_all(&temp_root).unwrap();
             let _guard = EnvGuard::new(&temp_root);
             let _model_guard = ModelEnvGuard::new();
@@ -1394,11 +1392,11 @@ slot = 1
                 .expect("the TUI must parse this config");
             let tui_model = tui.default_model();
 
-            let dispatcher = codewhale_config::ConfigStore::load(Some(path.clone()))
+            let dispatcher = ghosty_config::ConfigStore::load(Some(path.clone()))
                 .expect("the dispatcher must parse the same config");
             let runtime = dispatcher
                 .config
-                .resolve_runtime_options(&codewhale_config::CliRuntimeOverrides::default());
+                .resolve_runtime_options(&ghosty_config::CliRuntimeOverrides::default());
 
             assert_eq!(
                 tui_model, *expected,

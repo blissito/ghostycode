@@ -3,7 +3,7 @@
 use super::context::MapAuthContext;
 use super::store::{CredentialStore, InMemoryCredentialStore, SecretStoreCredentials};
 use super::{AuthContext, Credential, CredentialKind};
-use codewhale_secrets::{InMemoryKeyringStore, KeyringStore, Secrets, SecretsError};
+use ghosty_secrets::{InMemoryKeyringStore, KeyringStore, Secrets, SecretsError};
 use std::sync::Arc;
 
 #[test]

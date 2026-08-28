@@ -9,7 +9,7 @@ fn system_backend_diagnostic_is_literal_unknown_and_not_probed() {
     let _lock = env_lock();
     clear_known_envs();
     let tmp = tempfile::tempdir().unwrap();
-    let _home = EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
+    let _home = EnvVarGuard::set("GHOSTY_HOME", tmp.path());
     let _backend = EnvVarGuard::set(SECRET_BACKEND_ENV, "system");
 
     let diagnostic = diagnose_secret_backend();
@@ -26,15 +26,15 @@ fn file_backend_diagnostic_reads_metadata_not_secret_contents() {
     let _lock = env_lock();
     clear_known_envs();
     let tmp = tempfile::tempdir().unwrap();
-    let codewhale_home = std::fs::canonicalize(tmp.path())
+    let ghosty_home = std::fs::canonicalize(tmp.path())
         .unwrap()
         .join("isolated-home");
-    let path = codewhale_home.join("secrets").join("secrets.json");
+    let path = ghosty_home.join("secrets").join("secrets.json");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let sentinel = "diagnostic-must-not-emit-this-secret";
     let invalid_secret_blob = format!("not-json:{sentinel}");
     std::fs::write(&path, &invalid_secret_blob).unwrap();
-    let _home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let _home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let _backend = EnvVarGuard::set(SECRET_BACKEND_ENV, "file");
 
     let diagnostic = diagnose_secret_backend();
@@ -54,16 +54,16 @@ fn absent_file_backend_diagnostic_creates_no_state() {
     let _lock = env_lock();
     clear_known_envs();
     let tmp = tempfile::tempdir().unwrap();
-    let codewhale_home = tmp.path().join("never-created-home");
-    let path = codewhale_home.join("secrets").join("secrets.json");
-    let _home = EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let ghosty_home = tmp.path().join("never-created-home");
+    let path = ghosty_home.join("secrets").join("secrets.json");
+    let _home = EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let _backend = EnvVarGuard::set(SECRET_BACKEND_ENV, "file");
 
     let diagnostic = diagnose_secret_backend();
 
     assert_eq!(diagnostic.path.as_deref(), Some(path.as_path()));
     assert_eq!(diagnostic.presence, SecretBackendPresence::Absent);
-    assert!(!codewhale_home.exists());
+    assert!(!ghosty_home.exists());
 }
 
 #[cfg(unix)]
@@ -80,7 +80,7 @@ fn file_backend_diagnostic_rejects_a_symlinked_parent() {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, "parent-symlink-secret-sentinel").unwrap();
     symlink(&real_home, &linked_home).unwrap();
-    let _home = EnvVarGuard::set("CODEWHALE_HOME", &linked_home);
+    let _home = EnvVarGuard::set("GHOSTY_HOME", &linked_home);
     let _backend = EnvVarGuard::set(SECRET_BACKEND_ENV, "file");
 
     let diagnostic = diagnose_secret_backend();

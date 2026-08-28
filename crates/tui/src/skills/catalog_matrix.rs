@@ -2,7 +2,7 @@
 //!
 //! Scope, stated precisely so these assertions are not over-read:
 //!
-//! * They validate **deterministic Codewhale behavior** — which skills install,
+//! * They validate **deterministic Ghosty behavior** — which skills install,
 //!   which parse, which become ambient catalogue entries, which stay explicitly
 //!   loadable, how aliases resolve, and how much prompt budget the catalogue
 //!   costs.
@@ -250,7 +250,7 @@ fn unrelated_and_unshipped_names_do_not_activate_a_bundled_skill() {
         "codereview",
         "checkwork",
         "gh-file-issue",
-        "codew-release-qa-sweep",
+        "ghosty-tui-release-qa-sweep",
         "totally-unknown-skill",
     ] {
         assert!(
@@ -304,7 +304,7 @@ fn aliases_resolve_to_their_canonical_skill_and_add_no_catalogue_entries() {
 }
 
 #[test]
-fn grok_compatibility_aliases_map_to_shipped_codewhale_workflows() {
+fn grok_compatibility_aliases_map_to_shipped_ghosty_workflows() {
     let (_tmp, registry) = installed_registry();
     for (alias, canonical) in [
         ("check-work", "verify"),
@@ -477,7 +477,7 @@ fn repository_maintenance_helpers_stay_out_of_the_end_user_starter_pack() {
         "gh-treasure-hunt",
         "gh-close-issues",
         "gh-credit-harvest",
-        "codew-release-qa-sweep",
+        "ghosty-tui-release-qa-sweep",
     ] {
         assert!(
             !bundled_skill_names().contains(&name),

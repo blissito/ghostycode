@@ -227,8 +227,8 @@ fn repository_name_from_common_dir(worktree_root: &Path, common_dir: &Path) -> O
         .map(|name| name.to_string_lossy().into_owned())
 }
 
-/// Compact chrome label: `CodeWhale · main* ↑2` or
-/// `CodeWhale/feature · feature*` for a linked worktree.
+/// Compact chrome label: `GhostyCode · main* ↑2` or
+/// `GhostyCode/feature · feature*` for a linked worktree.
 ///
 /// Omits the segment when Git has not named a location or ref. A known
 /// location without a branch still renders — the header must not invent a

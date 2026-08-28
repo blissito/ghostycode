@@ -10,7 +10,7 @@ the first place.
 `/plugin suggest <task>` is a local, read-only companion: it ranks already
 installed bundles by their validated name, description, bundled skill names,
 and declared hosts. It explains the match and gives the next review/enable
-step, but never installs, trusts, or enables a bundle. Codewhale deliberately
+step, but never installs, trusts, or enables a bundle. Ghosty deliberately
 does not treat arbitrary remote archives as a plugin marketplace; a remote
 catalog needs publisher and provenance policy before it can make suggestions.
 
@@ -32,10 +32,10 @@ a denied host aborts without touching disk.
 
 The fetched tree must contain **exactly one** bundle root — a directory
 holding a `plugin.json`, compatible `kimi.plugin.json`, or legacy `plugin.toml`
-manifest. Kimi bundles are accepted when they use Codewhale-compatible Skills,
+manifest. Kimi bundles are accepted when they use Ghosty-compatible Skills,
 commands, agents, and MCP declarations; unsupported Kimi runtime fields fail
 closed instead of being silently ignored. Bundles land in
-the user plugins root at `~/.codewhale/plugins/<name>/`, where `<name>` is the
+the user plugins root at `~/.ghosty/plugins/<name>/`, where `<name>` is the
 manifest's plugin name.
 
 ## The guided flow
@@ -45,7 +45,7 @@ you straight into the standard capability review:
 
 ```text
 /plugin install github:someone/neat-plugin
-→ Installed plugin 'neat-plugin' to ~/.codewhale/plugins/neat-plugin.
+→ Installed plugin 'neat-plugin' to ~/.ghosty/plugins/neat-plugin.
   It is disabled and untrusted. Review its requested authority below…
   <full inventory, permissions, MCP authority render>
   /plugin trust neat-plugin <content-hash>.<capability-hash>
@@ -79,7 +79,7 @@ matching and the plugin goes inactive until you review again.
 
 - Every install carries an `.installed-from` provenance marker. The installer
   **refuses to overwrite or delete** a bundle that lacks it — hand-placed
-  bundles under `~/.codewhale/plugins/` are never clobbered.
+  bundles under `~/.ghosty/plugins/` are never clobbered.
 - Tarballs are size-capped and extracted into a private staging directory
   first; path traversal (`..`, absolute paths) and symlinks/hard links inside
   the bundle are rejected, and the destination only appears via an atomic

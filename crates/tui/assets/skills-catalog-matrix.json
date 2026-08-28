@@ -1,6 +1,6 @@
 {
   "_doc": [
-    "Provider-free expectation matrix for the bundled Codewhale starter pack (#4698).",
+    "Provider-free expectation matrix for the bundled Ghosty starter pack (#4698).",
     "This file is an authored contract, not a generated snapshot: the catalog matrix",
     "tests assert a bijection between these entries and BUNDLED_SKILLS, so adding,",
     "removing, or re-flagging a shipped skill fails until this file is updated too.",

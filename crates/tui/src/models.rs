@@ -42,19 +42,19 @@ const COMPACTION_THRESHOLD_PERCENT: u32 = 80;
 // === Core Message Types ===
 
 // Keep the historical TUI path stable while the production request DTOs are
-// owned by `codewhale-core`. Existing transports and response decoders do not
+// owned by `ghosty-core`. Existing transports and response decoders do not
 // need a flag day, and headless callers can depend on core directly.
 // Some process-test crates include this module privately and exercise only a
 // subset of the compatibility surface, so their crate-local dead-import view
 // is not evidence that a re-export can be removed.
 #[allow(unused_imports)]
-pub use codewhale_core::request::{
+pub use ghosty_core::request::{
     CacheControl, ContentBlock, INTERRUPTED_ASSISTANT_CONTEXT_PREFIX, INTERRUPTED_ASSISTANT_ROLE,
     ImageUrlContent, Message, MessageRequest, OpaqueReasoningState, SystemBlock, SystemPrompt,
     Tool, ToolCaller,
 };
 #[allow(unused_imports)]
-pub use codewhale_core::role::Role;
+pub use ghosty_core::role::Role;
 
 /// Container metadata for code-execution style server tools.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -823,7 +823,7 @@ mod tests {
     fn historical_tui_request_path_is_the_core_request_type() {
         assert_eq!(
             TypeId::of::<MessageRequest>(),
-            TypeId::of::<codewhale_core::request::MessageRequest>()
+            TypeId::of::<ghosty_core::request::MessageRequest>()
         );
 
         let via_tui_path = MessageRequest {
@@ -840,7 +840,7 @@ mod tests {
             temperature: None,
             top_p: None,
         };
-        let via_core_path: codewhale_core::request::MessageRequest = via_tui_path.clone();
+        let via_core_path: ghosty_core::request::MessageRequest = via_tui_path.clone();
         assert_eq!(
             serde_json::to_vec(&via_tui_path).expect("serialize TUI path"),
             serde_json::to_vec(&via_core_path).expect("serialize core path")

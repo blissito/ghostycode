@@ -1,11 +1,11 @@
 # Configuration
 
-codewhale reads configuration from a TOML file plus environment variables.
+ghosty reads configuration from a TOML file plus environment variables.
 At process startup it may also load literal built-in-provider credentials from
 a workspace-local `.env` file. Use the tracked `.env.example` as the template;
 copy it to `.env`, then add only credential values.
 
-A workspace is not configuration authority. Codewhale therefore ignores
+A workspace is not configuration authority. Ghosty therefore ignores
 config/profile/home paths, provider/model/base-URL routing, MCP/plugin state,
 approval/sandbox/shell posture, executable paths, runtime settings, and every
 other non-credential `.env` entry. Variable expansion is rejected so a
@@ -17,20 +17,20 @@ linked files are rejected.
 
 ## Constitution, project instructions, and repo authority
 
-Codewhale has several instruction surfaces. They are deliberately separate so a
+Ghosty has several instruction surfaces. They are deliberately separate so a
 personal constitution, repo policy, project instructions, and runtime security
 controls do not blur together.
 
 - **Bundled global Constitution** — the compiled base law in the binary. It is
   the default floor for every session.
 - **User-global constitution** — the normal guided setup output. Manage it with
-  `/constitution` or `/setup`; Codewhale stores structured data at
-  `$CODEWHALE_HOME/constitution.json` (default `~/.codewhale/constitution.json`)
-  and renders it into a separate `<codewhale_user_constitution>` prose block.
+  `/constitution` or `/setup`; Ghosty stores structured data at
+  `$GHOSTY_HOME/constitution.json` (default `~/.ghosty/constitution.json`)
+  and renders it into a separate `<ghosty_user_constitution>` prose block.
   This can express preferences and stop conditions, but it does not change
   runtime approval policy, sandbox, shell, network, trust, or MCP permissions.
 - **Repo-local constitution** — optional project policy in
-  `.codewhale/constitution.json`, described below.
+  `.ghosty/constitution.json`, described below.
 - **`AGENTS.md`** — cross-agent **project instructions** (prose). This is the
   canonical file for "how should an agent work in this repo." Run `/init` to
   scaffold one. `CLAUDE.md` and `.claude/instructions.md` are read as
@@ -67,9 +67,9 @@ posture/config.
 Each repo can carry two distinct, complementary files:
 
 - **`AGENTS.md`** — ordinary project working instructions.
-- **`.codewhale/constitution.json`** — Codewhale-specific **repo authority /
-  prioritization policy**: when local sources conflict, which should Codewhale
-  trust first, and what to verify before claiming a task is done. `.codewhale/`
+- **`.ghosty/constitution.json`** — Ghosty-specific **repo authority /
+  prioritization policy**: when local sources conflict, which should Ghosty
+  trust first, and what to verify before claiming a task is done. `.ghosty/`
   lives inside the repo (like `.github/`). Example:
 
   ```json
@@ -105,9 +105,9 @@ Each repo can carry two distinct, complementary files:
   additionally **mechanically enforced** in the tool gate. See
   [Enforced repo-law invariants](#enforced-repo-law-invariants) below.
 
-  This is the **repo-local law** layer in Codewhale's hierarchy: *bundled global
-  Constitution* → *user-global constitution* (`$CODEWHALE_HOME/constitution.json`,
-  rendered as prose) → *repo constitution* (`.codewhale/constitution.json`, this
+  This is the **repo-local law** layer in Ghosty's hierarchy: *bundled global
+  Constitution* → *user-global constitution* (`$GHOSTY_HOME/constitution.json`,
+  rendered as prose) → *repo constitution* (`.ghosty/constitution.json`, this
   file) → *AGENTS/project instructions* → *memory and handoffs* → *current
   request and live evidence for the active turn*. Runtime policy
   (permissions/sandbox/cost limits enforced in code) is separate from all of
@@ -116,12 +116,12 @@ Each repo can carry two distinct, complementary files:
   the current user request.
 
 > **`WHALE.md` is deprecated.** It overlapped confusingly with `AGENTS.md`.
-> Codewhale no longer reads `WHALE.md` as project or global context. If one is
+> Ghosty no longer reads `WHALE.md` as project or global context. If one is
 > present, setup/context diagnostics report it as ignored so you can migrate it.
-> Move ordinary instructions to `AGENTS.md` and Codewhale-specific authority
-> policy to `.codewhale/constitution.json`. Personal standing guidance belongs
-> in `/constitution` / `$CODEWHALE_HOME/constitution.json`. (The global
-> Codewhale Constitution shipped in the model prompt is a separate thing and is
+> Move ordinary instructions to `AGENTS.md` and Ghosty-specific authority
+> policy to `.ghosty/constitution.json`. Personal standing guidance belongs
+> in `/constitution` / `$GHOSTY_HOME/constitution.json`. (The global
+> Ghosty Constitution shipped in the model prompt is a separate thing and is
 > unaffected.)
 
 ### Enforced repo-law invariants
@@ -170,7 +170,7 @@ Semantics:
   force-prompts in Ask and Auto-Review. Full Access never opens approval
   modals, so the same hold fails closed as a hard block; `block` always denies.
   Mode cannot turn a hold off.
-- **Repo-local only.** Only the repo's `.codewhale/constitution.json`
+- **Repo-local only.** Only the repo's `.ghosty/constitution.json`
   participates. The user-global constitution stays advisory prose and never
   reaches this mechanism.
 - **Fails safe.** A missing file, parse error, or invalid glob degrades to
@@ -197,9 +197,9 @@ an expert escape hatch, not the normal `/constitution` guided setup output.
 Because this is a prompt trust boundary, it takes **two deliberate steps** — a
 file alone is not enough:
 
-1. Drop the replacement at `~/.codewhale/prompts/constitution.md` (under
-   `$CODEWHALE_HOME` when set).
-2. Set the explicit opt-in flag `CODEWHALE_ALLOW_BASE_PROMPT_OVERRIDE=1`
+1. Drop the replacement at `~/.ghosty/prompts/constitution.md` (under
+   `$GHOSTY_HOME` when set).
+2. Set the explicit opt-in flag `GHOSTY_ALLOW_BASE_PROMPT_OVERRIDE=1`
    (`true`/`on`/`yes` also accepted).
 
 If the file exists but the flag is unset, the override is **ignored** (with a
@@ -211,23 +211,23 @@ is a no-op**, so existing installs keep the bundled prompt.
 
 Scope is deliberately narrow: only the byte-stable **base prompt segment** is
 overridable. Mode deltas, the approval policy, the tool taxonomy, Context
-Management, and the Compaction Relay are still owned by Codewhale's runtime
+Management, and the Compaction Relay are still owned by Ghosty's runtime
 assembly, so an override **cannot remove safety-relevant guidance** (sandbox,
 approvals) — it only swaps the task/voice framing. To customize ordinary
 personal behavior, prefer `/constitution`; to customize per-repo behavior,
-prefer `AGENTS.md` + `.codewhale/constitution.json` above.
+prefer `AGENTS.md` + `.ghosty/constitution.json` above.
 
 ## Where It Looks
 
 Default config path:
 
-- `~/.codewhale/config.toml`
+- `~/.ghosty/config.toml`
 - Legacy fallback: `~/.deepseek/config.toml`
 
 Overrides:
 
-- CLI: `codewhale --config /path/to/config.toml`
-- Env: `CODEWHALE_CONFIG_PATH=/path/to/config.toml`
+- CLI: `ghosty --config /path/to/config.toml`
+- Env: `GHOSTY_CONFIG_PATH=/path/to/config.toml`
 - Legacy env alias: `DEEPSEEK_CONFIG_PATH=/path/to/config.toml`
 
 If both are set, `--config` wins. Environment variable overrides are applied after the file is loaded.
@@ -263,19 +263,19 @@ The legacy `[projects."/absolute/path/to/project"]` table is also accepted for
 this user-owned override.
 
 In interactive mode, the per-project overlay
-`<workspace>/.codewhale/config.toml` is applied after this user entry. A
+`<workspace>/.ghosty/config.toml` is applied after this user entry. A
 project-level `allow_shell = false` can still tighten the session; project-level
 `allow_shell = true` is ignored.
 
 ### Per-project overlay (#485)
 
 When the TUI starts in a workspace that contains a regular-file
-`<workspace>/.codewhale/config.toml`, the safe values declared in that file are
+`<workspace>/.ghosty/config.toml`, the safe values declared in that file are
 merged on top of the global config. Legacy
-`<workspace>/.deepseek/config.toml` files are still read when the Codewhale path
+`<workspace>/.deepseek/config.toml` files are still read when the Ghosty path
 is absent. Symlinked project config files are rejected. This lets a repo suggest
 a model or tighten local safety posture without touching the user's
-`~/.codewhale/config.toml`. Pass `--no-project-config` to skip the overlay for
+`~/.ghosty/config.toml`. Pass `--no-project-config` to skip the overlay for
 one launch.
 
 Supported keys in the project overlay (top-level fields only):
@@ -296,34 +296,34 @@ Credential, endpoint, provider-selection, MCP config, hooks, skills,
 retry, hotbar bindings, and `instructions = [...]` settings stay user-global.
 If a repo-local config declares `api_key`, `base_url`, `provider`,
 `mcp_config_path`, `hotbar`, `allow_shell = true`, or `instructions`,
-Codewhale ignores that key and keeps the user's global setting.
+Ghosty ignores that key and keeps the user's global setting.
 
-The consolidated `codewhale` runtime uses one config file for DeepSeek auth
-and model defaults. `codewhale auth set --provider deepseek` saves
-the key to `~/.codewhale/config.toml` (migrating legacy `~/.deepseek/config.toml`
-on first launch when needed), and `codewhale --model deepseek-v4-flash` is
+The consolidated `ghosty` runtime uses one config file for DeepSeek auth
+and model defaults. `ghosty auth set --provider deepseek` saves
+the key to `~/.ghosty/config.toml` (migrating legacy `~/.deepseek/config.toml`
+on first launch when needed), and `ghosty --model deepseek-v4-flash` is
 forwarded to the TUI as `DEEPSEEK_MODEL`.
 
-`codewhale login` signs in to the Codewhale account — it is the same browser
-device flow as `codewhale account login`, not a provider-key command. Provider
-credentials are configured exclusively through `codewhale auth set
+`ghosty login` signs in to the Ghosty account — it is the same browser
+device flow as `ghosty account login`, not a provider-key command. Provider
+credentials are configured exclusively through `ghosty auth set
 --provider <provider>`.
 
 That provider credential is distinct from the optional managed-product
-account. `codewhale account login` starts the Codewhale browser device flow;
-`codewhale account status` and `codewhale account logout` inspect or remove the
+account. `ghosty account login` starts the Ghosty browser device flow;
+`ghosty account status` and `ghosty account logout` inspect or remove the
 session for the selected `--profile`. Account sessions prefer the OS
 credential manager and fall back automatically to the private `0600`
-Codewhale secrets file when no credential manager is available (headless
+Ghosty secrets file when no credential manager is available (headless
 hosts, SSH, containers); the former
-`CODEWHALE_CLOUD_ALLOW_FILE_SESSION_STORE` opt-in is deprecated and ignored.
-`codewhale account keys list|set|remove` manages the
+`GHOSTY_CLOUD_ALLOW_FILE_SESSION_STORE` opt-in is deprecated and ignored.
+`ghosty account keys list|set|remove` manages the
 signed-in account's BYOK vault without displaying secret values. The older
-`codewhale cloud ...` spelling remains a command alias.
+`ghosty cloud ...` spelling remains a command alias.
 
 ### Portable config bundles
 
-`codewhale config export --portable [--project] [--out FILE]` writes a
+`ghosty config export --portable [--project] [--out FILE]` writes a
 portable, secret-free bundle of your configuration: sorted TOML with
 credential and machine-specific keys (API keys, base URLs, socket paths)
 dropped, never a redacted placeholder in their place. Without `--out` the
@@ -333,9 +333,9 @@ trust overlays, credential readers, auto-running hooks, executable LSP
 definitions, and local path bindings are omitted rather than copied to a new
 host.
 
-`codewhale config import <FILE|HTTPS_URL|-> [--dry-run] [--yes] [--project]`
+`ghosty config import <FILE|HTTPS_URL|-> [--dry-run] [--yes] [--project]`
 applies a bundle. The envelope is strict (`schema_version = 1`, kind
-`codewhale.portable-config`; unknown fields fail). Import prints a
+`ghosty.portable-config`; unknown fields fail). Import prints a
 deterministic plan — added / changed / skipped / conflicting / rejected —
 then asks for consent unless `--yes` is given; headless use requires it.
 Credential-shaped entries are rejected by key name and by value shape;
@@ -367,7 +367,7 @@ user-global or process-scoped, so a key saved in one repo resolves identically
 in every other repo. Repo-local config never carries credential material — the
 project overlay above reads only its allowlisted keys and ignores `api_key`,
 and a credential write aimed at a workspace-scoped config is rescoped to the
-user-global `~/.codewhale/config.toml` (#5045, #5193).
+user-global `~/.ghosty/config.toml` (#5045, #5193).
 
 For the active provider, the runtime resolves the API key in this exact order
 (first match wins):
@@ -376,7 +376,7 @@ For the active provider, the runtime resolves the API key in this exact order
    keys stop here with no credential. OAuth routes use their explicitly
    consented token: `openai-codex` reads `OPENAI_CODEX_ACCESS_TOKEN` or the
    consent-granted Codex CLI login (read-only, never refreshed or rewritten);
-   `[providers.xai] auth_mode = "oauth"` reads Codewhale's own xAI
+   `[providers.xai] auth_mode = "oauth"` reads Ghosty's own xAI
    device-login store (or a consent-granted Grok CLI file).
 2. **Explicit CLI key.** `--api-key` forwarded with its source marker wins
    over every saved slot; for `deepseek`/`deepseek-CN` it also wins over the
@@ -391,7 +391,7 @@ For the active provider, the runtime resolves the API key in this exact order
    the named environment variable. For custom providers an unset or empty
    binding is a loud error, not a silent fallback (#5104).
 5. **Secret store.** The durable per-provider slot written by
-   `codewhale auth set` (file-backed under `~/.codewhale/secrets/` by
+   `ghosty auth set` (file-backed under `~/.ghosty/secrets/` by
    default; the OS keyring only when explicitly selected). Skipped for named
    custom routes, self-hosted providers, custom endpoints other than an
    explicitly authenticated loopback, and routes whose `auth_mode` needs no
@@ -405,18 +405,18 @@ For the active provider, the runtime resolves the API key in this exact order
    guidance.
 
 Legacy compatibility: `~/.deepseek/config.toml` is migrated into
-`~/.codewhale/config.toml` on first launch, `DEEPSEEK_*` environment
-variables remain accepted aliases for the `CODEWHALE_*` forms, and
-`DEEPSEEK_SECRET_BACKEND` is the legacy alias for `CODEWHALE_SECRET_BACKEND`.
+`~/.ghosty/config.toml` on first launch, `DEEPSEEK_*` environment
+variables remain accepted aliases for the `GHOSTY_*` forms, and
+`DEEPSEEK_SECRET_BACKEND` is the legacy alias for `GHOSTY_SECRET_BACKEND`.
 
-Run `codewhale auth status` to inspect the active provider's config
+Run `ghosty auth status` to inspect the active provider's config
 file, OS keyring backend, environment variable, winning source, and last-four
 label without printing the key itself. The command only probes the active
 provider's keyring entry.
 
 For hosted, generic OpenAI-compatible, self-hosted, OpenAI Responses, or native
 Anthropic providers, set `provider = "<id>"` or pass
-`codewhale --provider <id>`. The canonical provider IDs are `deepseek`,
+`ghosty --provider <id>`. The canonical provider IDs are `deepseek`,
 `nvidia-nim`, `openai`, `atlascloud`, `wanjie-ark`, `volcengine`,
 `openrouter`, `orcarouter`, `xiaomi-mimo`, `novita`, `fireworks`,
 `siliconflow`, `arcee`, `siliconflow-CN`, `moonshot`, `sglang`, `vllm`,
@@ -431,14 +431,14 @@ default base URLs, model IDs, and capability metadata, see
 [PROVIDERS.md](PROVIDERS.md).
 The facade saves provider credentials to the shared user config and forwards
 the resolved key, base URL, provider, and model to the TUI process. Use
-`codewhale auth set --provider nvidia-nim --api-key "YOUR_NVIDIA_API_KEY"` or
-`codewhale auth set --provider openai --api-key "YOUR_OPENAI_COMPATIBLE_API_KEY"` or
-`codewhale auth set --provider atlascloud --api-key "YOUR_ATLASCLOUD_API_KEY"` or
-`codewhale auth set --provider wanjie-ark --api-key "YOUR_WANJIE_API_KEY"` or
-`codewhale auth set --provider xiaomi-mimo --api-key "YOUR_XIAOMI_KEY"` or
-`codewhale auth set --provider fireworks --api-key "YOUR_FIREWORKS_API_KEY"` or
-`codewhale auth set --provider siliconflow --api-key "YOUR_SILICONFLOW_API_KEY"` or
-`codewhale auth set --provider arcee --api-key "YOUR_ARCEE_API_KEY"` or the
+`ghosty auth set --provider nvidia-nim --api-key "YOUR_NVIDIA_API_KEY"` or
+`ghosty auth set --provider openai --api-key "YOUR_OPENAI_COMPATIBLE_API_KEY"` or
+`ghosty auth set --provider atlascloud --api-key "YOUR_ATLASCLOUD_API_KEY"` or
+`ghosty auth set --provider wanjie-ark --api-key "YOUR_WANJIE_API_KEY"` or
+`ghosty auth set --provider xiaomi-mimo --api-key "YOUR_XIAOMI_KEY"` or
+`ghosty auth set --provider fireworks --api-key "YOUR_FIREWORKS_API_KEY"` or
+`ghosty auth set --provider siliconflow --api-key "YOUR_SILICONFLOW_API_KEY"` or
+`ghosty auth set --provider arcee --api-key "YOUR_ARCEE_API_KEY"` or the
 matching provider ID from [PROVIDERS.md](PROVIDERS.md) to save provider keys
 through the facade. The generic `openai` provider defaults
 to `https://api.openai.com/v1`, accepts `OPENAI_BASE_URL`, and defaults to
@@ -451,14 +451,14 @@ Wanjie Ark's OpenAI-compatible endpoint at
 and passes model IDs through unchanged because Wanjie model access is
 account-scoped. SGLang, vLLM, and Ollama are
 self-hosted and can run without an API key by default. Ollama defaults to
-`http://localhost:11434/v1` and sends model tags such as `codewhale-coder:1.3b`
+`http://localhost:11434/v1` and sends model tags such as `ghosty-coder:1.3b`
 or `qwen2.5-coder:7b` unchanged. Self-hosted providers and loopback custom
 URLs (`localhost`, `127.0.0.1`, `[::1]`, `0.0.0.0`) do not read the secret store
 unless API-key auth is explicitly requested; use an env var or config-file key
 when a local server does require bearer auth.
 Ollama Cloud is the separate hosted `ollama-cloud` provider. It defaults to
 `https://ollama.com/v1` and `gpt-oss:120b`; save its key with
-`codewhale auth set --provider ollama-cloud`. Ambient auth reads
+`ghosty auth set --provider ollama-cloud`. Ambient auth reads
 `OLLAMA_CLOUD_API_KEY` first, then Ollama's official `OLLAMA_API_KEY`.
 SiliconFlow defaults to `https://api.siliconflow.com/v1`, accepts
 `SILICONFLOW_BASE_URL`, and uses `deepseek-ai/DeepSeek-V4-Pro` by default.
@@ -466,7 +466,7 @@ SiliconFlow defaults to `https://api.siliconflow.com/v1`, accepts
 `https://api.siliconflow.cn/v1` with the `[providers.siliconflow_cn]` table and
 `SILICONFLOW_API_KEY` credential slot.
 Arcee AI defaults to `https://api.arcee.ai/api/v1`, accepts `ARCEE_BASE_URL`,
-and uses `trinity-large-thinking` by default for Codewhale agent work.
+and uses `trinity-large-thinking` by default for Ghosty agent work.
 `trinity-large-preview` is also listed as a direct Arcee API model; OpenRouter's
 `arcee-ai/trinity-large-thinking` remains the OpenRouter namespaced form, while
 the direct Arcee provider uses the bare `trinity-large-thinking` ID. Direct
@@ -527,7 +527,7 @@ pay-as-you-go (`https://api.stepfun.ai/v1`) or a Step Plan subscription
 (`https://api.stepfun.ai/step_plan/v1`) — and validates the key against the
 endpoint you pick before saving it. The answer is written to
 `[providers.stepfun].base_url` and nowhere else. If that key already holds a
-base URL Codewhale does not recognize as one of those two routes, the question
+base URL Ghosty does not recognize as one of those two routes, the question
 is skipped and your value is left untouched.
 
 Alibaba Bailian / Model Studio DashScope Qwen routes use the same OpenAI
@@ -544,13 +544,13 @@ context_window = 1000000
 ```
 
 Use the regional DashScope `compatible-mode/v1` base URL that matches the
-region of your API key. Codewhale keeps `qwen-plus` scoped to the `openai`
+region of your API key. Ghosty keeps `qwen-plus` scoped to the `openai`
 provider route and does not infer a different provider from the model prefix.
 The same rule applies to all provider-prefixed model strings: a prefix such as
 `deepseek-ai/...` or `deepseek/...` is a provider-owned wire ID under the
 selected provider, not an automatic switch to the DeepSeek provider.
 Set `context_window` to the gateway/model's real total context window when it
-differs from Codewhale's static model metadata. See
+differs from Ghosty's static model metadata. See
 [Context length (context window)](#context-length-context-window) for the full
 resolution order and for how to check which value is in effect.
 
@@ -569,7 +569,7 @@ does not accidentally rewrite `/models` or `/beta/completions`.
 
 For private gateways with broken or intercepted certificates, use
 `SSL_CERT_FILE` with a trusted CA bundle. The legacy provider-table key
-`insecure_skip_tls_verify = true` is still parsed so `codewhale doctor` can
+`insecure_skip_tls_verify = true` is still parsed so `ghosty doctor` can
 report stale configs, but provider clients reject it instead of disabling TLS
 certificate verification.
 
@@ -578,13 +578,13 @@ when they use localhost or loopback addresses. For a non-local `http://`
 gateway, launch with `DEEPSEEK_ALLOW_INSECURE_HTTP=1` only on a trusted network:
 
 ```bash
-DEEPSEEK_ALLOW_INSECURE_HTTP=1 codewhale
+DEEPSEEK_ALLOW_INSECURE_HTTP=1 ghosty
 ```
 
 Third-party OpenAI-compatible gateways that need extra request headers can set
 `http_headers = { "X-Model-Provider-Id" = "your-model-provider" }` at the top
 level or under a provider table such as `[providers.deepseek]`. When configured,
-codewhale sends those custom headers on model API requests. The equivalent
+ghosty sends those custom headers on model API requests. The equivalent
 environment override is `DEEPSEEK_HTTP_HEADERS`, using comma-separated
 `name=value` pairs such as
 `X-Model-Provider-Id=your-model-provider,X-Gateway-Route=dev`. `Authorization`
@@ -593,7 +593,7 @@ setting.
 
 ### Vision Model
 
-Codewhale's chat provider and `image_analyze` tool are configured separately.
+Ghosty's chat provider and `image_analyze` tool are configured separately.
 The main chat path remains the selected text/tool provider; image analysis runs
 through `[vision_model]` when the `vision_model` feature is enabled.
 
@@ -620,7 +620,7 @@ auto-select MiMo endpoints. Use
 
 ### Auto Model Routing (`[auto.router]`)
 
-With `model = "auto"`, Codewhale routes each turn between a strong and a cheap
+With `model = "auto"`, Ghosty routes each turn between a strong and a cheap
 model. The routing decision comes from a small classifier call, or from a local
 heuristic when no classifier route is available.
 
@@ -646,19 +646,19 @@ has a key — `router_available = router_configured && has_api_key_for(...)`
 the heuristic decides, not a failure. The turn's route receipt (`/status` →
 Auto) records which one it was.
 
-To bootstrap MCP and skills directories at their resolved paths, run `codewhale setup`.
-To only scaffold MCP, run `codewhale mcp init`.
+To bootstrap MCP and skills directories at their resolved paths, run `ghosty setup`.
+To only scaffold MCP, run `ghosty mcp init`.
 
 Note: `setup`, `doctor`, `mcp`, `features`, `sessions`, `resume`/`fork`, `exec`,
-`review`, and `eval` are all available from the installed `codewhale` command.
+`review`, and `eval` are all available from the installed `ghosty` command.
 The consolidated dispatcher also provides `auth`, `config`, `model`, `thread`, `sandbox`,
 `app-server`, `mcp-server`, `completions`, `login`/`logout`, `account`,
 `metrics`, `update`, `lane`, `workflow`, and `web`. Plain prompts enter the
-in-process TUI runtime. Release installers expose the same bytes as `codew`.
+in-process TUI runtime. Release installers expose the same bytes as `ghosty-tui`.
 
 ### Startup Update Checks
 
-By default, the TUI starts a background check for the latest stable Codewhale
+By default, the TUI starts a background check for the latest stable Ghosty
 release and shows a short toast only when a newer release is available and the
 official release assets are complete. The check never blocks startup, never
 blocks a turn, and fails silently when offline.
@@ -673,7 +673,7 @@ check_for_updates = false
 
 #### Throttling
 
-The answer is cached in `~/.codewhale/update-check.json` and reused for
+The answer is cached in `~/.ghosty/update-check.json` and reused for
 `check_interval_hours` (default `1`). Only the *network request* is throttled —
 the notice still appears on every launch while an update is outstanding. Set `0`
 to check on every launch.
@@ -693,7 +693,7 @@ a non-falsey value:
 
 | Variable | Why |
 | --- | --- |
-| `CODEWHALE_NO_UPDATE_CHECK` | Explicit opt-out. |
+| `GHOSTY_NO_UPDATE_CHECK` | Explicit opt-out. |
 | `NO_UPDATE_NOTIFIER` | The cross-CLI convention, honored for compatibility. |
 | `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, `GITLAB_CI`, `BUILDKITE`, `CIRCLECI`, `JENKINS_URL`, `TEAMCITY_VERSION`, `TF_BUILD` | Automated build; nobody is at the terminal. |
 
@@ -702,37 +702,37 @@ Values of `""`, `0`, `false`, `no`, and `off` do not count as set, so a
 
 #### Which update command is offered
 
-Codewhale never installs anything on its own — it only tells you an update
+Ghosty never installs anything on its own — it only tells you an update
 exists. The command it names depends on how the running binary was installed,
 detected from its path:
 
 | Install | Command offered |
 | --- | --- |
-| GitHub release binary (including Termux) | `codewhale update` |
-| npm (`node_modules` on the path) | `npm install -g codewhale@latest` |
-| Homebrew (`Cellar` / `linuxbrew` prefix) | `brew upgrade codewhale` |
-| `cargo install` (`~/.cargo/bin`) | `cargo install codewhale-cli --locked --force` |
+| GitHub release binary (including Termux) | `ghosty update` |
+| npm (`node_modules` on the path) | `npm install -g ghosty@latest` |
+| Homebrew (`Cellar` / `linuxbrew` prefix) | `brew upgrade ghosty` |
+| `cargo install` (`~/.cargo/bin`) | `cargo install ghosty-cli --locked --force` |
 
-For package-managed installs the notice also warns against `codewhale update`:
+For package-managed installs the notice also warns against `ghosty update`:
 replacing a binary Homebrew or npm owns leaves the manager describing a version
 that is no longer on disk, and the next upgrade silently reverts you.
 
-Override the detection with `CODEWHALE_INSTALL_METHOD=npm|homebrew|cargo|binary`
+Override the detection with `GHOSTY_INSTALL_METHOD=npm|homebrew|cargo|binary`
 if you relocated the binary somewhere the path heuristics cannot read.
 
 To redirect the startup check, set `update_uri` to an internal endpoint that
 returns GitHub-compatible latest-release JSON. Minimal mirror metadata with a
-`tag_name` field is accepted; if `assets` are present, Codewhale requires the
+`tag_name` field is accepted; if `assets` are present, Ghosty requires the
 same uploaded asset set as the official release before showing the toast.
 
 ```toml
 [update]
 check_for_updates = true
-update_uri = "https://internal.mirror.example/codewhale/releases/latest"
+update_uri = "https://internal.mirror.example/ghosty/releases/latest"
 ```
 
 When `update_uri` is not set, startup checks honor release mirror environment
-variables such as `CODEWHALE_RELEASE_BASE_URL` before falling back to the
+variables such as `GHOSTY_RELEASE_BASE_URL` before falling back to the
 official GitHub API endpoint. If a configured `update_uri` cannot be fetched or
 parsed and a release mirror env var is set, the TUI falls back to that mirror
 instead of failing startup.
@@ -754,9 +754,9 @@ and never lower it:
 ## Context length (context window)
 
 Also called context size, context limit, max context, or window. This is the
-total token window Codewhale budgets against, and it drives the header/footer
+total token window Ghosty budgets against, and it drives the header/footer
 context percent, the auto-compaction trigger, context-pressure checks, and the
-request output cap. If Codewhale compacts at 128K on a model you know serves a
+request output cap. If Ghosty compacts at 128K on a model you know serves a
 1M window, this is the setting to change (#5134).
 
 **See what is in effect, and where the value came from.** Every one of these
@@ -782,8 +782,8 @@ context_window = 1048576
 or from the CLI:
 
 ```bash
-codewhale config set providers.moonshot.context_window 1048576
-codewhale config unset providers.moonshot.context_window   # back to automatic
+ghosty config set providers.moonshot.context_window 1048576
+ghosty config unset providers.moonshot.context_window   # back to automatic
 ```
 
 Use the table for the provider you are actually on (`providers.openai`,
@@ -812,7 +812,7 @@ rung:
    sits *below* the catalog: any catalog row for the same id beats it (#5441).
 6. `fallback` — the static per-provider capability table: 200,000 for
    Anthropic-wire routes, 128,000 for `openai-codex`, 8,192 for Ollama,
-   otherwise Codewhale's static per-model metadata, and finally 128,000 when
+   otherwise Ghosty's static per-model metadata, and finally 128,000 when
    the model is unknown.
 
 ### What "(unverified)" means
@@ -837,7 +837,7 @@ it as a documented fact is not.
 There is no environment variable for the context window, and no per-model
 override key. The per-provider `context_window` is the only user knob, which is
 also why it is the right one to set when a gateway or self-hosted runtime
-serves a window Codewhale's catalog does not model. Codewhale will not invent a
+serves a window Ghosty's catalog does not model. Ghosty will not invent a
 window it cannot justify — it falls back to a conservative value, labels it
 `fallback`, and marks it `(unverified)` at every surface that shows it.
 
@@ -851,9 +851,9 @@ window it cannot justify — it falls back to a conservative value, labels it
   absolute compaction point along with it.
 - `auto_compact` (settings.toml, on/off): turns automatic compaction off
   entirely; `/compact` and Ctrl+L stay available.
-- `CODEWHALE_MAX_OUTPUT_TOKENS` (environment variable; legacy alias
+- `GHOSTY_MAX_OUTPUT_TOKENS` (environment variable; legacy alias
   `DEEPSEEK_MAX_OUTPUT_TOKENS`): overrides the requested output cap. Without an
-  override, Codewhale starts at the safe `65536` request cap and intersects it
+  override, Ghosty starts at the safe `65536` request cap and intersects it
   with any smaller documented model or route ceiling; a catalog `max_output`
   such as DeepSeek V4's 384K remains a capability ceiling, not the amount every
   response requests. Explicit overrides are preserved within the resolved
@@ -927,7 +927,7 @@ default_text_model = "deepseek-ai/DeepSeek-V4-Pro"
 [profiles.ollama]
 provider = "ollama"
 base_url = "http://localhost:11434/v1"
-default_text_model = "codewhale-coder:1.3b"
+default_text_model = "ghosty-coder:1.3b"
 
 [profiles.ollama-cloud]
 provider = "ollama-cloud"
@@ -939,10 +939,10 @@ model = "gpt-oss:120b"
 
 Select a profile with:
 
-- CLI: `codewhale --profile work`
+- CLI: `ghosty --profile work`
 - Env: `DEEPSEEK_PROFILE=work`
 
-If a profile is selected but missing, codewhale exits with an error listing available profiles.
+If a profile is selected but missing, ghosty exits with an error listing available profiles.
 
 ## Harness Profiles
 
@@ -978,16 +978,16 @@ The v0.9 implementation order and automatic-creator boundary are documented in
 Most runtime environment variables override config values. API-key variables are
 fallbacks after saved config and keyring credentials.
 
-The three user-facing slots — provider, model, base URL — expose `CODEWHALE_*`
-aliases. When both forms are set the `CODEWHALE_*` value wins; the
+The three user-facing slots — provider, model, base URL — expose `GHOSTY_*`
+aliases. When both forms are set the `GHOSTY_*` value wins; the
 `DEEPSEEK_*` form is kept for older shells:
 
-- `CODEWHALE_PROVIDER` (preferred) / `DEEPSEEK_PROVIDER` (legacy alias) —
+- `GHOSTY_PROVIDER` (preferred) / `DEEPSEEK_PROVIDER` (legacy alias) —
   `deepseek|deepseek-anthropic|nvidia-nim|openai|atlascloud|wanjie-ark|volcengine|openrouter|xiaomi-mimo|novita|fireworks|siliconflow|arcee|siliconflow-CN|moonshot|sglang|vllm|ollama|ollama-cloud|huggingface|together|qianfan|openai-codex|anthropic|openmodel|zai|stepfun|minimax|deepinfra|mistral`
-- `CODEWHALE_MODEL` (preferred) / `DEEPSEEK_MODEL` (legacy alias) — default model for the active provider
-- `CODEWHALE_BASE_URL` (preferred) / `DEEPSEEK_BASE_URL` (legacy alias) — base URL for the active provider
+- `GHOSTY_MODEL` (preferred) / `DEEPSEEK_MODEL` (legacy alias) — default model for the active provider
+- `GHOSTY_BASE_URL` (preferred) / `DEEPSEEK_BASE_URL` (legacy alias) — base URL for the active provider
 
-`CODEWHALE_BASE_URL` applies to the **active** route only. A request pinned to
+`GHOSTY_BASE_URL` applies to the **active** route only. A request pinned to
 another provider — a subagent or fleet child, a routed tool, the per-turn
 auto-router, a picker preview — resolves its endpoint from that provider's own
 `[providers.<table>]`, then its provider-scoped variable (`MOONSHOT_BASE_URL`,
@@ -1008,7 +1008,7 @@ Remaining variables:
 - `DEEPSEEK_DEFAULT_TEXT_MODEL` (extra legacy alias of `DEEPSEEK_MODEL`)
 - `DEEPSEEK_STREAM_IDLE_TIMEOUT_SECS` (stream idle timeout in seconds; default `900`, clamped to `1..=3600`)
 - `DEEPSEEK_STREAM_OPEN_TIMEOUT_SECS` (connection setup + response-header wait in seconds; default `45`, clamped to `5..=300`; distinct from the per-chunk idle timeout)
-- `CODEWHALE_CACHE_MAXIMAL` (`1`/`true`/`on`/`yes`) — cache-maximal context mode (#528). When on, the Repo Working Set block materializes the **full current contents** of the top active files into the system prompt each turn (deterministic order, byte-bounded), instead of only listing their paths. The block stays byte-stable while those files are unchanged so DeepSeek's KV prefix cache keeps hitting; editing a file cache-misses from its block onward. Off by default (path list only). Byte caps default to 24 KB per file / 96 KB total.
+- `GHOSTY_CACHE_MAXIMAL` (`1`/`true`/`on`/`yes`) — cache-maximal context mode (#528). When on, the Repo Working Set block materializes the **full current contents** of the top active files into the system prompt each turn (deterministic order, byte-bounded), instead of only listing their paths. The block stays byte-stable while those files are unchanged so DeepSeek's KV prefix cache keeps hitting; editing a file cache-misses from its block onward. Off by default (path list only). Byte caps default to 24 KB per file / 96 KB total.
 - `NVIDIA_API_KEY` or `NVIDIA_NIM_API_KEY` (when provider is `nvidia-nim`)
 - `NVIDIA_NIM_BASE_URL`, `NIM_BASE_URL`, or `NVIDIA_BASE_URL`
 - `NVIDIA_NIM_MODEL`
@@ -1090,61 +1090,61 @@ Remaining variables:
 - `OLLAMA_CLOUD_BASE_URL`
 - `OLLAMA_CLOUD_MODEL`
 - `OLLAMA_CLOUD_API_KEY` (preferred Cloud key; `OLLAMA_API_KEY` is the official fallback)
-For every product-level `CODEWHALE_*` variable below, the matching legacy
+For every product-level `GHOSTY_*` variable below, the matching legacy
 `DEEPSEEK_*` name is still read as a compatibility fallback; when both are set,
-the `CODEWHALE_*` value wins.
+the `GHOSTY_*` value wins.
 
-- `CODEWHALE_LOG_LEVEL` or `RUST_LOG` (`info`/`debug`/`trace` enables lightweight verbose logs)
-- `CODEWHALE_SKILLS_DIR`
-- `CODEWHALE_MCP_CONFIG`
-- `CODEWHALE_NOTES_PATH`
-- `CODEWHALE_MEMORY` (`1|on|true|yes|y|enabled` turns user memory on)
-- `CODEWHALE_MEMORY_PATH`
-- `CODEWHALE_TELEMETRY` / `DEEPSEEK_TELEMETRY` (legacy alias) — anonymous usage
+- `GHOSTY_LOG_LEVEL` or `RUST_LOG` (`info`/`debug`/`trace` enables lightweight verbose logs)
+- `GHOSTY_SKILLS_DIR`
+- `GHOSTY_MCP_CONFIG`
+- `GHOSTY_NOTES_PATH`
+- `GHOSTY_MEMORY` (`1|on|true|yes|y|enabled` turns user memory on)
+- `GHOSTY_MEMORY_PATH`
+- `GHOSTY_TELEMETRY` / `DEEPSEEK_TELEMETRY` (legacy alias) — anonymous usage
   counting, on by default and disclosed on first interactive launch. Accepts `0|1|true|false|yes|no|on|off|enabled|
   disabled`. An explicit "off" is a **floor**: it beats `--telemetry true` and
   `telemetry = true` in config, and a value this list cannot read also resolves
   to off, because a typo in a kill switch must never resolve to "on". See
   [`TELEMETRY.md`](TELEMETRY.md).
-- `CODEWHALE_TELEMETRY_ENDPOINT` / `DEEPSEEK_TELEMETRY_ENDPOINT` (legacy alias)
+- `GHOSTY_TELEMETRY_ENDPOINT` / `DEEPSEEK_TELEMETRY_ENDPOINT` (legacy alias)
   — `https://`, or plain `http://` only for loopback. Overrides the config file.
   Unset selects the shipped default,
-  `https://telemetry.codewhale.net/v1/telemetry`; setting it to the **empty
+  `https://telemetry.ghosty.net/v1/telemetry`; setting it to the **empty
   string** routes batches to a local dry-run file and contacts nobody. Either
   way it only decides where a session sends — it cannot override an opt-out.
-- `CODEWHALE_ALLOW_SHELL` (`1`/`true` enables)
-- `CODEWHALE_APPROVAL_POLICY` (`on-request|untrusted|never`)
-- `CODEWHALE_SANDBOX_MODE` (`read-only|workspace-write|danger-full-access|external-sandbox`)
-- `CODEWHALE_NO_NEW_PRIVS` (`0`/`false`/`no`/`off`/`disabled` opts out) — Linux only. The
+- `GHOSTY_ALLOW_SHELL` (`1`/`true` enables)
+- `GHOSTY_APPROVAL_POLICY` (`on-request|untrusted|never`)
+- `GHOSTY_SANDBOX_MODE` (`read-only|workspace-write|danger-full-access|external-sandbox`)
+- `GHOSTY_NO_NEW_PRIVS` (`0`/`false`/`no`/`off`/`disabled` opts out) — Linux only. The
   TUI process sets the kernel's irreversible no-new-privileges flag at startup
-  as defense-in-depth, which blocks `sudo`/`su`/setuid helpers for Codewhale's
+  as defense-in-depth, which blocks `sudo`/`su`/setuid helpers for Ghosty's
   whole process tree. Set this variable to a falsey value before launching if
-  you administer through Codewhale as a wheel-group user and need escalation
+  you administer through Ghosty as a wheel-group user and need escalation
   to work (#5413); the other startup hardening (no ptrace, no core dumps)
   stays on. Any other value keeps the default hardened posture.
-- `CODEWHALE_MANAGED_CONFIG_PATH`
-- `CODEWHALE_REQUIREMENTS_PATH`
-- `CODEWHALE_MAX_SUBAGENTS` (clamped to `1..=128`)
-- `CODEWHALE_TASKS_DIR` (runtime task queue/artifact storage, default
-  `~/.codewhale/tasks`, with legacy `~/.deepseek/tasks` fallback when only the
+- `GHOSTY_MANAGED_CONFIG_PATH`
+- `GHOSTY_REQUIREMENTS_PATH`
+- `GHOSTY_MAX_SUBAGENTS` (clamped to `1..=128`)
+- `GHOSTY_TASKS_DIR` (runtime task queue/artifact storage, default
+  `~/.ghosty/tasks`, with legacy `~/.deepseek/tasks` fallback when only the
   legacy directory exists)
-- `CODEWHALE_RUNTIME_DIR` (override the runtime thread store root). Interactive
-  sessions default to `$CODEWHALE_HOME/sessions/<session-id>/runtime` so each
-  Codewhale process owns its own store (#5630). The store is single-owner: a
+- `GHOSTY_RUNTIME_DIR` (override the runtime thread store root). Interactive
+  sessions default to `$GHOSTY_HOME/sessions/<session-id>/runtime` so each
+  Ghosty process owns its own store (#5630). The store is single-owner: a
   second process on the **same** root fails at startup. Set this variable to
   share one store across processes, or when the runtime API server should use a
   stable non-session path. Unset, the API/server path remains
-  `$CODEWHALE_HOME/tasks/runtime`. Legacy alias: `DEEPSEEK_RUNTIME_DIR`.
-- `CODEWHALE_ALLOW_INSECURE_HTTP` (`1`/`true` allows non-local `http://` base URLs; default is reject)
-- `CODEWHALE_FORCE_HTTP1` (`1|true|yes|on` pins the HTTP client to HTTP/1.1, disabling HTTP/2; useful on Windows or behind proxies that mishandle long-lived H2 streams)
-- `CODEWHALE_HOME` (override the base data directory; defaults to `~/.codewhale`).
-  If you previously exported `DEEPSEEK_HOME`, rename it to `CODEWHALE_HOME`;
-  the old env var is not used for new Codewhale state paths.
-- `CODEWHALE_RELEASE_BASE_URL` (release asset mirror used by `codewhale update`
+  `$GHOSTY_HOME/tasks/runtime`. Legacy alias: `DEEPSEEK_RUNTIME_DIR`.
+- `GHOSTY_ALLOW_INSECURE_HTTP` (`1`/`true` allows non-local `http://` base URLs; default is reject)
+- `GHOSTY_FORCE_HTTP1` (`1|true|yes|on` pins the HTTP client to HTTP/1.1, disabling HTTP/2; useful on Windows or behind proxies that mishandle long-lived H2 streams)
+- `GHOSTY_HOME` (override the base data directory; defaults to `~/.ghosty`).
+  If you previously exported `DEEPSEEK_HOME`, rename it to `GHOSTY_HOME`;
+  the old env var is not used for new Ghosty state paths.
+- `GHOSTY_RELEASE_BASE_URL` (release asset mirror used by `ghosty update`
   and by TUI startup update checks when `[update].update_uri` is not set, or as
   a fallback when that configured URI cannot be fetched)
-- `CODEWHALE_AUTOMATIONS_DIR` (override the automations storage directory; uses
-  `~/.codewhale/automations` by default, with legacy `~/.deepseek/automations`
+- `GHOSTY_AUTOMATIONS_DIR` (override the automations storage directory; uses
+  `~/.ghosty/automations` by default, with legacy `~/.deepseek/automations`
   fallback when only the legacy directory exists)
 - `NO_ANIMATIONS` (`1|true|yes|on` forces `low_motion = true` and
   `fancy_animations = false` at startup, regardless of the saved
@@ -1164,7 +1164,7 @@ concatenated, in declared order, alongside the auto-loaded
 ```toml
 instructions = [
     "./AGENTS.md",
-    "~/.codewhale/global.md",
+    "~/.ghosty/global.md",
     "~/team/agents-shared.md",
 ]
 ```
@@ -1177,19 +1177,19 @@ Rules:
 - Missing files are skipped with a tracing warning so a stale
   entry doesn't fail the launch.
 - Only user-owned config, profiles, and managed config may set this array.
-  Project config (`<workspace>/.codewhale/config.toml`, or legacy
+  Project config (`<workspace>/.ghosty/config.toml`, or legacy
   `<workspace>/.deepseek/config.toml`) ignores `instructions` so a cloned repo
   cannot choose arbitrary local files to place into the prompt.
 
 ### Hooks
 
 Hooks are a **TUI runtime feature**. They fire from the interactive TUI and
-the engine turn loop it drives; `codewhale exec`, the CLI subcommands, the
+the engine turn loop it drives; `ghosty exec`, the CLI subcommands, the
 app-server / ACP surfaces, and the `workflow` tool do not fire them.
 
 [`docs/HOOKS.md`](HOOKS.md) is the authoritative reference for all eleven hook
 events — their firing points, environment variables, stdin payloads, timeout
-and background semantics, and which three of them can steer Codewhale. The
+and background semantics, and which three of them can steer Ghosty. The
 sections below cover the configuration surface and the steering contracts in
 more depth.
 
@@ -1234,7 +1234,7 @@ submitted text.
 ```toml
 [[hooks.hooks]]
 event = "message_submit"
-command = "~/.codewhale/hooks/inject-context.sh"
+command = "~/.ghosty/hooks/inject-context.sh"
 timeout_secs = 2
 continue_on_error = true
 ```
@@ -1256,7 +1256,7 @@ The hook receives JSON on stdin:
 }
 ```
 
-The entire serialized document is capped at 32 KiB. Codewhale retains the
+The entire serialized document is capped at 32 KiB. Ghosty retains the
 largest UTF-8-safe `text` prefix that fits after JSON escaping and bounded
 metadata, and the three `text_*` fields make truncation explicit. Immediate
 messages, restored queue entries, merged steers, and prior-hook replacements
@@ -1363,7 +1363,7 @@ Example input rewrite:
 ```toml
 [[hooks.hooks]]
 event = "tool_call_before"
-command = "~/.codewhale/hooks/clamp-shell-timeout.sh"
+command = "~/.ghosty/hooks/clamp-shell-timeout.sh"
 condition = { type = "tool_name", name = "exec_shell" }
 ```
 
@@ -1377,10 +1377,10 @@ metacharacters in the pattern are matched literally.
 
 ### Project-local hooks
 
-Repositories can ship policy in `<workspace>/.codewhale/hooks.toml`,
+Repositories can ship policy in `<workspace>/.ghosty/hooks.toml`,
 using the same shape as the `[hooks]` table (top-level fields plus
 `[[hooks]]` entries). Project hooks are executable shell
-configuration, so Codewhale only loads them after the workspace has
+configuration, so Ghosty only loads them after the workspace has
 been trusted in user-owned config through the trust prompt or a
 `[projects."<workspace>"] trust_level = "trusted"` entry. Session
 `/trust on` mode does not enable repo-supplied hooks by itself, and
@@ -1391,7 +1391,7 @@ win ties. A malformed trusted project file logs a warning and startup
 falls back to global hooks only.
 
 ```toml
-# .codewhale/hooks.toml
+# .ghosty/hooks.toml
 [[hooks]]
 event = "tool_call_before"
 command = '''echo '{"decision":"deny","reason":"no shell in this repo"}' '''
@@ -1416,7 +1416,7 @@ status text.
 ```toml
 [[hooks.hooks]]
 event = "turn_end"
-command = "~/.codewhale/hooks/turn-audit.sh"
+command = "~/.ghosty/hooks/turn-audit.sh"
 timeout_secs = 2
 continue_on_error = true
 ```
@@ -1491,7 +1491,7 @@ earlier hook exits non-zero.
 ```toml
 [[hooks.hooks]]
 event = "subagent_complete"
-command = "~/.codewhale/hooks/subagent-audit.sh"
+command = "~/.ghosty/hooks/subagent-audit.sh"
 timeout_secs = 2
 continue_on_error = true
 ```
@@ -1552,7 +1552,7 @@ Composer shortcuts keep the same role throughout a session:
 ### Composer stash (`/stash`, Ctrl+G / Ctrl+S)
 
 Press **Ctrl+G** in the composer to park the current draft to
-`~/.codewhale/composer_stash.jsonl`. `/stash list` shows parked
+`~/.ghosty/composer_stash.jsonl`. `/stash list` shows parked
 drafts with one-line previews and timestamps; `/stash pop`
 restores the most recently parked draft (LIFO); `/stash clear`
 wipes the file. Capped at 200 entries; multiline drafts round-trip intact.
@@ -1561,9 +1561,9 @@ reserve Ctrl+S for Save, so Ctrl+G is the portable default.
 
 ## Settings File (Persistent UI Preferences)
 
-codewhale also stores user preferences in:
+ghosty also stores user preferences in:
 
-- `~/.codewhale/settings.toml` on new installs
+- `~/.ghosty/settings.toml` on new installs
 - `~/.deepseek/settings.toml` or the legacy platform config-dir
   `deepseek/settings.toml` when an existing settings file is present
 
@@ -1581,7 +1581,7 @@ Common settings keys:
 - `theme` (`system`, `terminal`, `dark`, `light`, `grayscale`,
   `catppuccin-mocha`, `tokyo-night`, `dracula`, `gruvbox-dark`, `claude`,
   `matrix`, `solarized-light`; default `system`): `system` follows terminal
-  background detection, `dark`/`light` use the Codewhale Whale pair,
+  background detection, `dark`/`light` use the Ghosty Whale pair,
   `terminal` inherits the host terminal, `grayscale` is the low-opinion
   black/white theme, and the named community presets apply across the TUI.
   Aliases such as `whale`, `mono`, `black-white`, `tokyonight`, and `gruvbox`
@@ -1590,8 +1590,8 @@ Common settings keys:
   rose owns danger, violet owns Operate, and green remains completed/verified.
   Text labels, markers, and motion policy carry the same states when color is
   unavailable; color is never the only cue.
-  User-authored overlays live only at `~/.codewhale/themes/<name>.json` (or
-  `$CODEWHALE_HOME/themes/<name>.json`) and are selected with
+  User-authored overlays live only at `~/.ghosty/themes/<name>.json` (or
+  `$GHOSTY_HOME/themes/<name>.json`) and are selected with
   `/theme custom:<name>`. The filename is a bounded slug, symlinks and files
   over 64 KiB are refused, colors must be `#RRGGBB`, and unknown fields fail
   validation. `/theme schema` prints the embedded JSON Schema and `/theme path`
@@ -1683,7 +1683,7 @@ Common settings keys:
 - `launch_screen` (`on`/`off`; default `off`): show the pre-session Work/Chat/
   Resume/Worktree menu. Work uses the current folder under the configured
   approval policy; Chat starts a read-only conversation. With the launch
-  screen off, Codewhale enters a new session directly; resume remains
+  screen off, Ghosty enters a new session directly; resume remains
   available in-session.
 - `sidebar_focus` (legacy, migration-only): the classic right sidebar this key
   configured was removed in the 0.9.4 rail unification. The key is still read
@@ -1703,13 +1703,13 @@ Common settings keys:
   session metadata — the rail never reads a transcript per frame, and never
   contacts a provider.
 - `session_auto_resume` (`on`/`off`; default `off`): reattach to this
-  workspace's most recent session when Codewhale starts. Off by default so
-  plain `codewhale` keeps starting fresh. `--resume`, `--continue`, and
+  workspace's most recent session when Ghosty starts. Off by default so
+  plain `ghosty` keeps starting fresh. `--resume`, `--continue`, and
   `--fresh` always take precedence. When it is on, startup still refuses to
   resume a session that is archived, fails to load, or is recorded against a
   different workspace; each of those falls back to a fresh transcript and says
   which session was skipped and why. It applies to the interactive launch only
-  — `codewhale "<prompt>"` and `codewhale exec` are never silently prefixed
+  — `ghosty "<prompt>"` and `ghosty exec` are never silently prefixed
   with a prior conversation.
 - `max_input_history` (number of submitted input history entries; cleared
   drafts are also kept locally for composer history search). Note the spelling:
@@ -1765,7 +1765,7 @@ ids remain opt-in.
 
 If you are upgrading from older releases:
 
-- Old: `/codewhale`
+- Old: `/ghosty`
   New: `/links` (aliases: `/dashboard`, `/api`)
 - Old: `/set model deepseek-reasoner`
   New: `/config` and edit the `model` row to `deepseek-v4-pro` or `deepseek-v4-flash`
@@ -1787,65 +1787,65 @@ reasoning contract, and all four membership ids omit generic sampling fields.
 ### Core keys (used by the TUI/engine)
 
 - `provider` (string, optional): `deepseek` (default), `deepseek-anthropic`, `nvidia-nim`, `openai`, `atlascloud`, `wanjie-ark`, `volcengine`, `openrouter`, `xiaomi-mimo`, `novita`, `fireworks`, `siliconflow`, `arcee`, `siliconflow-CN`, `moonshot`, `sglang`, `vllm`, `ollama`, `ollama-cloud`, `huggingface`, `together`, `qianfan`, `openai-codex`, `anthropic`, `openmodel`, `zai`, `stepfun`, `minimax`, `deepinfra`, `sakana`, `longcat`, `opencode-go`, `meta`, `mistral`, `telecomjs`, `xai`, `orcarouter`, `modelstudio-token-plan`, `google`, `antigravity`, `edenai`, or `custom`. Legacy `deepseek-cn` configs are still accepted as an alias for `deepseek`; DeepSeek uses the same official host [`https://api.deepseek.com`](https://api-docs.deepseek.com/) worldwide. `deepseek-anthropic` targets DeepSeek's Anthropic Messages-compatible endpoint at `https://api.deepseek.com/anthropic` using `DEEPSEEK_API_KEY`; `nvidia-nim` targets NVIDIA's NIM-hosted DeepSeek endpoints through `https://integrate.api.nvidia.com/v1`; `openai` targets a generic OpenAI-compatible endpoint, defaulting to `https://api.openai.com/v1`; `atlascloud` targets AtlasCloud's OpenAI-compatible endpoint at `https://api.atlascloud.ai/v1`; `wanjie-ark` targets Wanjie Ark's OpenAI-compatible endpoint at `https://maas-openapi.wanjiedata.com/api/v1`; `volcengine` targets Volcengine Ark's OpenAI-compatible coding endpoint at `https://ark.cn-beijing.volces.com/api/coding/v3`; `openrouter` targets `https://openrouter.ai/api/v1`; `xiaomi-mimo` targets Xiaomi MiMo's OpenAI-compatible endpoint, using `https://token-plan-sgp.xiaomimimo.com/v1` by default for Token Plan keys (`tp-...`) and `https://api.xiaomimimo.com/v1` for pay-as-you-go keys. For Token Plan accounts outside the Singapore default, set `base_url` explicitly or use `mode = "token-plan-cn"` for China and `mode = "token-plan-ams"` for Europe/Amsterdam; `novita` targets `https://api.novita.ai/openai/v1`; `fireworks` targets `https://api.fireworks.ai/inference/v1`; `siliconflow` targets SiliconFlow, defaulting to `https://api.siliconflow.com/v1`; `arcee` targets Arcee AI's OpenAI-compatible endpoint at `https://api.arcee.ai/api/v1`; `siliconflow-CN` targets the SiliconFlow China regional endpoint through `[providers.siliconflow_cn]`; `moonshot` targets Moonshot/Kimi, defaulting to `https://api.moonshot.ai/v1`; `sglang` targets a self-hosted OpenAI-compatible endpoint, defaulting to `http://localhost:30000/v1`; `vllm` targets a self-hosted vLLM OpenAI-compatible endpoint, defaulting to `http://localhost:8000/v1`; `ollama` targets Ollama's OpenAI-compatible endpoint, defaulting to `http://localhost:11434/v1`; `huggingface` targets Hugging Face Inference Providers at `https://router.huggingface.co/v1`; `together` targets Together AI at `https://api.together.xyz/v1`; `qianfan` targets Baidu Qianfan at `https://api.baiduqianfan.ai/v1`; `openai-codex` targets ChatGPT/Codex OAuth; `anthropic` targets Claude's native Messages API; `openmodel` targets OpenModel's Anthropic-compatible Messages API at `https://api.openmodel.ai`; `zai` targets Z.ai at `https://api.z.ai/api/coding/paas/v4`; `stepfun` targets StepFun at `https://api.stepfun.ai/v1`; `minimax` targets MiniMax at `https://api.minimax.io/v1`; `deepinfra` targets DeepInfra at `https://api.deepinfra.com/v1/openai`; `sakana` targets Sakana AI Fugu at `https://api.sakana.ai/v1`; `longcat` targets Meituan LongCat at `https://api.longcat.chat/openai/v1`; `opencode-go` targets the subscription-backed OpenCode Go Chat Completions route at `https://opencode.ai/zen/go/v1`; `meta` targets Meta Model API; `mistral` targets Mistral AI's OpenAI-compatible endpoint at `https://api.mistral.ai/v1`; `telecomjs` targets TelecomJS TokenHub at `https://aigw.telecomjs.com/v1`; and `xai` targets xAI's API-key or OAuth route.
-- `opencode-zen` (string provider value): selects the model-aware OpenCode Zen gateway through `[providers.opencode_zen]`. The default base URL is `https://opencode.ai/zen/v1`, the default model is `gpt-5.6`, and credentials come from `api_key`, `OPENCODE_ZEN_API_KEY`, or fallback `OPENCODE_API_KEY`—never ChatGPT/Codex OAuth. `OPENCODE_ZEN_BASE_URL` and `OPENCODE_ZEN_MODEL` are accepted. The selected model is resolved through the curated Zen catalog: GPT uses Responses, Claude/Qwen use Anthropic Messages, and the documented DeepSeek/MiniMax/GLM/Kimi/Grok/free rows use Chat Completions. Gemini and unknown models fail closed because Codewhale has no proven supported wire contract for them. See the exact current model groups in [`PROVIDERS.md`](PROVIDERS.md#opencode-zen-protocol-catalog).
-- `minimax-anthropic` (string provider value): selects MiniMax's Anthropic-compatible Messages route through `[providers.minimax_anthropic]`. The default Base URL is `https://api.minimax.io/anthropic`; set `https://api.minimaxi.com/anthropic` for China. Keep the `/anthropic` suffix because Codewhale appends `/v1/messages`. The route uses `MINIMAX_API_KEY` and defaults to `MiniMax-M3`; `MiniMax-M2.7` is also registered. Official M3 input modalities are text, image, and video, with adaptive or disabled thinking. M2.7 is text-only and always keeps thinking enabled.
+- `opencode-zen` (string provider value): selects the model-aware OpenCode Zen gateway through `[providers.opencode_zen]`. The default base URL is `https://opencode.ai/zen/v1`, the default model is `gpt-5.6`, and credentials come from `api_key`, `OPENCODE_ZEN_API_KEY`, or fallback `OPENCODE_API_KEY`—never ChatGPT/Codex OAuth. `OPENCODE_ZEN_BASE_URL` and `OPENCODE_ZEN_MODEL` are accepted. The selected model is resolved through the curated Zen catalog: GPT uses Responses, Claude/Qwen use Anthropic Messages, and the documented DeepSeek/MiniMax/GLM/Kimi/Grok/free rows use Chat Completions. Gemini and unknown models fail closed because Ghosty has no proven supported wire contract for them. See the exact current model groups in [`PROVIDERS.md`](PROVIDERS.md#opencode-zen-protocol-catalog).
+- `minimax-anthropic` (string provider value): selects MiniMax's Anthropic-compatible Messages route through `[providers.minimax_anthropic]`. The default Base URL is `https://api.minimax.io/anthropic`; set `https://api.minimaxi.com/anthropic` for China. Keep the `/anthropic` suffix because Ghosty appends `/v1/messages`. The route uses `MINIMAX_API_KEY` and defaults to `MiniMax-M3`; `MiniMax-M2.7` is also registered. Official M3 input modalities are text, image, and video, with adaptive or disabled thinking. M2.7 is text-only and always keeps thinking enabled.
 - `api_key` (string, required for hosted providers): must be non-empty for DeepSeek/hosted providers (or set the provider API key env var). Self-hosted SGLang, vLLM, and local `ollama` can omit it. `ollama-cloud` requires a key saved for that provider or supplied by `OLLAMA_CLOUD_API_KEY`, then `OLLAMA_API_KEY`.
-- `auth_mode` (string, optional provider-table key): selects a provider-specific authentication contract. Kimi Code membership uses `auth_mode = "api_key"` (or omit the field), a key created in the [Kimi Code console](https://www.kimi.com/code/console), `base_url = "https://api.kimi.com/coding/v1"`, and bare `model = "k3"` for K3. Codewhale gives that route a safe 262,144-token baseline; set `context_window = 1048576` only when the Kimi Code plan includes 1M access (Allegretto and above). `k3[1m]` is a Claude Code-only convention, not an API model ID, and Codewhale rejects it instead of silently changing the wire model or assuming an entitlement. `model = "kimi-for-coding"` remains the valid K2.7 compatibility route available to all Kimi Code members. Legacy `auth_mode = "kimi_oauth"` fails closed with API-key guidance and never probes, reads, refreshes, or rewrites `kimi_cli`/`kimi_code_cli` credential files. First-class OAuth requires Codewhale's own vendor-registered client identity and remains tracked in #4417.
+- `auth_mode` (string, optional provider-table key): selects a provider-specific authentication contract. Kimi Code membership uses `auth_mode = "api_key"` (or omit the field), a key created in the [Kimi Code console](https://www.kimi.com/code/console), `base_url = "https://api.kimi.com/coding/v1"`, and bare `model = "k3"` for K3. Ghosty gives that route a safe 262,144-token baseline; set `context_window = 1048576` only when the Kimi Code plan includes 1M access (Allegretto and above). `k3[1m]` is a Claude Code-only convention, not an API model ID, and Ghosty rejects it instead of silently changing the wire model or assuming an entitlement. `model = "kimi-for-coding"` remains the valid K2.7 compatibility route available to all Kimi Code members. Legacy `auth_mode = "kimi_oauth"` fails closed with API-key guidance and never probes, reads, refreshes, or rewrites `kimi_cli`/`kimi_code_cli` credential files. First-class OAuth requires Ghosty's own vendor-registered client identity and remains tracked in #4417.
 - `base_url` (string, optional): defaults to `https://api.deepseek.com/beta` for DeepSeek's OpenAI-compatible Chat Completions API, including legacy `provider = "deepseek-cn"` configs. Other defaults are `https://api.deepseek.com/anthropic` for `deepseek-anthropic`, `https://integrate.api.nvidia.com/v1` for `nvidia-nim`, `https://api.openai.com/v1` for `openai`, `https://api.atlascloud.ai/v1` for `atlascloud`, `https://maas-openapi.wanjiedata.com/api/v1` for `wanjie-ark`, `https://ark.cn-beijing.volces.com/api/coding/v3` for `volcengine`, `https://openrouter.ai/api/v1` for `openrouter`, `https://token-plan-sgp.xiaomimimo.com/v1` for `xiaomi-mimo` when the API key starts with `tp-...` and `https://api.xiaomimimo.com/v1` otherwise, `https://api.novita.ai/openai/v1` for `novita`, `https://api.fireworks.ai/inference/v1` for `fireworks`, `https://api.siliconflow.com/v1` for `siliconflow`, `https://api.siliconflow.cn/v1` for `siliconflow-CN`, `https://api.arcee.ai/api/v1` for `arcee`, `https://api.moonshot.ai/v1` for `moonshot`, `https://api.minimax.io/v1` for `minimax`, `https://api.openmodel.ai` for `openmodel`, `https://api.z.ai/api/coding/paas/v4` for `zai`, `https://api.stepfun.ai/v1` for `stepfun`, `https://api.deepinfra.com/v1/openai` for `deepinfra`, `https://api.sakana.ai/v1` for `sakana`, `https://router.huggingface.co/v1` for `huggingface`, `https://api.together.xyz/v1` for `together`, `https://api.baiduqianfan.ai/v1` for `qianfan`, `https://chatgpt.com/backend-api` for `openai-codex`, `https://api.anthropic.com` for `anthropic`, `https://api.mistral.ai/v1` for `mistral`, `http://localhost:30000/v1` for `sglang`, `http://localhost:8000/v1` for `vllm`, `http://localhost:11434/v1` for `ollama`, and `https://ollama.com/v1` for `ollama-cloud`. Set `base_url = "https://token-plan-cn.xiaomimimo.com/v1"` for China-region Xiaomi MiMo Token Plan accounts or `base_url = "https://token-plan-ams.xiaomimimo.com/v1"` for Europe/Amsterdam accounts. Mistral-specific reasoning fields and polymorphic replay are enabled only on the documented first-party HTTPS `/v1` hosts; a custom Mistral base URL keeps generic Chat semantics. Set `https://api.deepseek.com` or `https://api.deepseek.com/v1` explicitly to opt out of DeepSeek beta features.
-- `ollama-cloud` route: select `provider = "ollama-cloud"`, configure `[providers.ollama_cloud]` when overriding the default `https://ollama.com/v1` / `gpt-oss:120b` tuple, and save a key from [Ollama account settings](https://ollama.com/settings/keys) with `codewhale auth set --provider ollama-cloud`. Ambient precedence is `OLLAMA_CLOUD_API_KEY`, then `OLLAMA_API_KEY`; arbitrary Ollama model IDs pass through unchanged.
+- `ollama-cloud` route: select `provider = "ollama-cloud"`, configure `[providers.ollama_cloud]` when overriding the default `https://ollama.com/v1` / `gpt-oss:120b` tuple, and save a key from [Ollama account settings](https://ollama.com/settings/keys) with `ghosty auth set --provider ollama-cloud`. Ambient precedence is `OLLAMA_CLOUD_API_KEY`, then `OLLAMA_API_KEY`; arbitrary Ollama model IDs pass through unchanged.
 - Legacy Ollama Cloud migration: a released `provider = "ollama"` config whose normalized `[providers.ollama].base_url` is exactly `https://ollama.com/v1` is upgraded to the `ollama-cloud` runtime identity in memory. Only that exact tuple may read its old `ollama` provider table and secret slot. The config and secrets are never rewritten, and neighboring paths, HTTP downgrades, lookalike hosts, or an explicit `ollama-cloud` selection never consume the fallback.
 - `telecomjs` base URL and catalog: `[providers.telecomjs]` defaults to `https://aigw.telecomjs.com/v1`; `TELECOMJS_BASE_URL` overrides it. With `TELECOMJS_API_KEY`, `/models` refreshes a key-scoped catalog without mixing rows into another provider.
 - `edenai` gateway: select `provider = "edenai"`; `[providers.edenai]` defaults to `https://api.edenai.run/v3` and `deepseek/deepseek-v4-pro`. `EDENAI_API_KEY`, `EDENAI_BASE_URL`, and `EDENAI_MODEL` are accepted. Use `EDENAI_BASE_URL = "https://api.eu.edenai.run/v3"` for Eden AI's documented EU endpoint; the default `deepseek/deepseek-v4-pro` is only listed on the global catalog, so pair the EU endpoint with an EU-listed model such as `qwen/deepseek-v4-pro` via `EDENAI_MODEL` or `model`. The provider refreshes Eden AI's `/models` catalog, but leaves model-specific reasoning controls untouched because the gateway spans multiple model families.
-- `mistral` model and reasoning contract: `[providers.mistral]` defaults to `mistral-code-latest`; `MISTRAL_MODEL` overrides it and the generic `CODEWHALE_MODEL` override wins when both are set. The current picker also lists `mistral-medium-latest`, `mistral-small-latest`, and `mistral-large-latest`. On exact first-party HTTPS `/v1` routes, Medium and Small accept only `reasoning_effort = "none" | "high"` and replay polymorphic thinking blocks. Deprecated native Magistral IDs may still be configured explicitly, remain always-reasoning, and never receive the adjustable effort field.
-- `context_window` (integer, optional provider-table key): override the total context window for the active `[providers.<name>]` route when an OpenAI-compatible gateway, hosted model alias, or self-hosted runtime has a different limit than Codewhale's static model table. For example, `[providers.openai] context_window = 1000000` lets an OpenAI-compatible DashScope/Qwen route budget against a 1M-token window instead of the conservative fallback. For Kimi Code K3, keep `model = "k3"` and set `[providers.moonshot] context_window = 1048576` only when the membership plan includes 1M access; otherwise omit it to retain the 262,144-token safe baseline. The value must be greater than 0 and affects prompt context notes, compaction thresholds, context-pressure checks, and request output caps. Full resolution order, and how to see which rung produced the current window: [Context length (context window)](#context-length-context-window).
+- `mistral` model and reasoning contract: `[providers.mistral]` defaults to `mistral-code-latest`; `MISTRAL_MODEL` overrides it and the generic `GHOSTY_MODEL` override wins when both are set. The current picker also lists `mistral-medium-latest`, `mistral-small-latest`, and `mistral-large-latest`. On exact first-party HTTPS `/v1` routes, Medium and Small accept only `reasoning_effort = "none" | "high"` and replay polymorphic thinking blocks. Deprecated native Magistral IDs may still be configured explicitly, remain always-reasoning, and never receive the adjustable effort field.
+- `context_window` (integer, optional provider-table key): override the total context window for the active `[providers.<name>]` route when an OpenAI-compatible gateway, hosted model alias, or self-hosted runtime has a different limit than Ghosty's static model table. For example, `[providers.openai] context_window = 1000000` lets an OpenAI-compatible DashScope/Qwen route budget against a 1M-token window instead of the conservative fallback. For Kimi Code K3, keep `model = "k3"` and set `[providers.moonshot] context_window = 1048576` only when the membership plan includes 1M access; otherwise omit it to retain the 262,144-token safe baseline. The value must be greater than 0 and affects prompt context notes, compaction thresholds, context-pressure checks, and request output caps. Full resolution order, and how to see which rung produced the current window: [Context length (context window)](#context-length-context-window).
 - `path_suffix` (string, optional provider-table key): override the chat-completions path for OpenAI-compatible gateways that do not serve `/v1/chat/completions`. For example, `[providers.openai] path_suffix = "/chat/completions"` sends chat requests to the unversioned base URL plus `/chat/completions`; `models` and `beta/*` requests keep their normal routing.
 - `reasoning_stream_style` (string, optional provider-table key): override how streaming reasoning is separated from answer text for the active provider route. Use `separate_field` for `reasoning_content` / `reasoning` deltas, `inline_tags` for gateways that stream `<think>...</think>` inside `delta.content`, or `none` to render incoming content exactly as answer text.
 - `[providers.<name>.auth]` (table, optional): provider-scoped auth source metadata. `source = "command"` stores a command argv plus optional `timeout_ms`; `source = "secret"` stores a `secret_id`. This slice lets provider readiness, `/provider`, and doctor JSON report the auth source class without exposing command argv output or secret values; executing commands and resolving external secret material is handled by the follow-up resolver work.
-- `insecure_skip_tls_verify` (bool, optional provider-table key): legacy compatibility key, disabled by default. When true on the active provider table, provider clients reject the configuration instead of skipping TLS certificate verification. Use `SSL_CERT_FILE` for corporate or private CA bundles; `codewhale doctor` reports stale uses of this setting.
-- `default_text_model` (string, optional): defaults to `deepseek-v4-pro` for DeepSeek and `deepseek-anthropic`, `gpt-5.6` for OpenAI, `grok-4.6` for xAI, `deepseek-ai/deepseek-v4-pro` for NVIDIA NIM, `deepseek-ai/deepseek-v4-flash` for AtlasCloud, `deepseek-reasoner` for Wanjie Ark, `DeepSeek-V4-Pro` for Volcengine Ark, `deepseek/deepseek-v4-pro` for OpenRouter and Novita, `mimo-v2.5-pro` for Xiaomi MiMo, `accounts/fireworks/models/deepseek-v4-pro` for Fireworks, `deepseek-ai/DeepSeek-V4-Pro` for SiliconFlow and DeepInfra, `trinity-large-thinking` for Arcee AI, `kimi-k2.7-code` for Moonshot, `MiniMax-M3` for MiniMax, `GLM-5.3` for Z.ai, `step-3.7-flash` for StepFun, `ernie-4.0-turbo-8k` for Qianfan, `fugu` for Sakana AI, `deepseek-ai/DeepSeek-V4-Pro` for SGLang/vLLM, `deepseek-v4-flash` for local Ollama, and `gpt-oss:120b` for Ollama Cloud. Hugging Face and Together AI both default to `deepseek-ai/DeepSeek-V4-Pro`; `openai-codex` defaults to `gpt-5.6`; `anthropic` defaults to `claude-sonnet-4-6`; `openmodel` defaults to `deepseek-v4-flash`. Current public DeepSeek IDs are `deepseek-v4-pro` and `deepseek-v4-flash`, both with 1M context windows, 384K max output, and thinking mode enabled by default. DeepSeek's live pricing/model page now labels the Pro backend `DeepSeek-V4-Pro-0813`; the callable API ID remains `deepseek-v4-pro`, so Codewhale does not send the backend label or the Claude Code-specific `deepseek-v4-pro[1m]` selector. DeepSeek retires `deepseek-chat` and `deepseek-reasoner` on July 24, 2026; direct first-party routes migrate both to `deepseek-v4-flash`, with omitted reasoning settings preserving their former non-thinking (`off`) and thinking (`high`) intent. Explicit `reasoning_effort` wins, and provider-owned ids on Wanjie Ark, aggregators, self-hosted runtimes, and custom endpoints are not globally rewritten. SiliconFlow retains its own mapping: `deepseek-reasoner` and `deepseek-r1` select its Pro model while `deepseek-chat` and `deepseek-v3` select Flash. Provider-specific mappings translate `deepseek-v4-pro` / `deepseek-v4-flash` to each provider's model ID where supported. OpenRouter also recognizes recent large IDs such as `arcee-ai/trinity-large-thinking`, `minimax/minimax-m3`, `minimax/minimax-m2.7`, `xiaomi/mimo-v2.5-pro`, `qwen/qwen3.6-flash`, `qwen/qwen3.6-35b-a3b`, `qwen/qwen3.6-max-preview`, `qwen/qwen3.6-27b`, `qwen/qwen3.6-plus`, `qwen/qwen3.7-max`, `google/gemma-4-31b-it`, `moonshotai/kimi-k2.7-code`, `moonshotai/kimi-k2.6`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`, and `nvidia/nemotron-3-ultra-550b-a55b`; direct Arcee uses bare IDs such as `trinity-large-thinking` and `trinity-large-preview`; direct Moonshot recognizes `kimi-k3`, `kimi-k2.7-code`, and `kimi-k2.6`. The exact Kimi Code endpoint recognizes bare `k3` for K3 and `kimi-for-coding` for K2.7; those membership IDs are distinct from the direct Moonshot IDs and are never rewritten across routes. Direct MiniMax recognizes `MiniMax-M3` and the documented M2.x chat model IDs; direct Z.ai recognizes `GLM-5.3` (the default), `GLM-5.2`, `GLM-5.1`, and `GLM-5-Turbo`, and OpenRouter recognizes the matching `z-ai/glm-5.1`, `z-ai/glm-5.2`, `z-ai/glm-5.3`, and `z-ai/glm-5-turbo` IDs — `GLM-5.3` has been live on the Z.ai Coding Plan since 2026-08-13; it inherits its catalog metadata from `GLM-5.2` until Z.ai publishes distinct 5.3 numbers and carries no price, and an explicit `GLM-5.2` selection keeps its own id; direct Sakana recognizes `fugu` and `fugu-ultra-20260615`; direct Xiaomi MiMo recognizes chat IDs `mimo-v2.5-pro`, `mimo-v2.5-pro-ultraspeed`, and `mimo-v2.5`, while TTS IDs are selected through `codewhale speech` / `tts`. Generic `openai`, `atlascloud`, `wanjie-ark`, `xiaomi-mimo`, `arcee`, `moonshot`, `minimax`, `openmodel`, `zai`, `stepfun`, `qianfan`, `sakana`, local Ollama, and Ollama Cloud model IDs are passed through unchanged after known aliases are normalized. OpenRouter and SiliconFlow provider configs with a custom `base_url` also preserve explicit model values, which lets OpenAI-compatible gateways accept bare model IDs. Use `/models` or `codewhale models` to discover live IDs from your configured endpoint. `CODEWHALE_MODEL` overrides this for a single process; `DEEPSEEK_MODEL` is the legacy alias.
-- TelecomJS uses `deepseek-v4-pro` only as a conservative pre-refresh fallback. Once its key-scoped `/models` catalog is available, the picker uses those live rows; Codewhale omits unsupported reasoning request fields on this route.
-- `reasoning_effort` (string, optional): `off`, `low`, `medium`, `high`, `max`, `xhigh`, or `ultracode`; defaults to the configured UI tier. DeepSeek Platform receives top-level `thinking` / `reasoning_effort` fields. Ollama Cloud's OpenAI-compatible Chat Completions route preserves its documented `none` / `low` / `medium` / `high` / `max` ladder (`off` is sent as `none`; `xhigh` and `ultracode` normalize to `max`). Direct xAI `grok-4.6` on exact `https://api.x.ai/v1` receives top-level `reasoning_effort = "low" | "medium" | "high" | "xhigh"`; `off` normalizes to `high`, `max`/`ultracode` to `xhigh`, and `auto` leaves the field omitted so xAI's documented default `high` applies. A custom xAI-compatible `base_url` does not inherit that dialect. Direct Moonshot `kimi-k3` on exact `https://api.moonshot.ai/v1` is always-thinking and receives only top-level `reasoning_effort = "low" | "high" | "max"`; `off` normalizes to `low`, and `medium` to `high`. Kimi Code membership `k3` on exact `https://api.kimi.com/coding/v1` instead receives nested `thinking.effort`, and its `off` setting also normalizes to enabled `low`. Normal dispatched `auto` uses Codewhale's auto-reasoning selector and sends a concrete route-normalized tier; only an omitted reasoning setting leaves the provider default in control. Neighboring gateways and model/endpoint combinations retain the generic Moonshot contract. OpenAI Codex normalizes stale `off` to `low` and sends `max` / `ultracode` as Responses `xhigh`. Z.ai receives documented `thinking` controls and treats enabled thinking as the GLM coding high/max lane. NVIDIA NIM receives equivalent settings through `chat_template_kwargs`.
+- `insecure_skip_tls_verify` (bool, optional provider-table key): legacy compatibility key, disabled by default. When true on the active provider table, provider clients reject the configuration instead of skipping TLS certificate verification. Use `SSL_CERT_FILE` for corporate or private CA bundles; `ghosty doctor` reports stale uses of this setting.
+- `default_text_model` (string, optional): defaults to `deepseek-v4-pro` for DeepSeek and `deepseek-anthropic`, `gpt-5.6` for OpenAI, `grok-4.6` for xAI, `deepseek-ai/deepseek-v4-pro` for NVIDIA NIM, `deepseek-ai/deepseek-v4-flash` for AtlasCloud, `deepseek-reasoner` for Wanjie Ark, `DeepSeek-V4-Pro` for Volcengine Ark, `deepseek/deepseek-v4-pro` for OpenRouter and Novita, `mimo-v2.5-pro` for Xiaomi MiMo, `accounts/fireworks/models/deepseek-v4-pro` for Fireworks, `deepseek-ai/DeepSeek-V4-Pro` for SiliconFlow and DeepInfra, `trinity-large-thinking` for Arcee AI, `kimi-k2.7-code` for Moonshot, `MiniMax-M3` for MiniMax, `GLM-5.3` for Z.ai, `step-3.7-flash` for StepFun, `ernie-4.0-turbo-8k` for Qianfan, `fugu` for Sakana AI, `deepseek-ai/DeepSeek-V4-Pro` for SGLang/vLLM, `deepseek-v4-flash` for local Ollama, and `gpt-oss:120b` for Ollama Cloud. Hugging Face and Together AI both default to `deepseek-ai/DeepSeek-V4-Pro`; `openai-codex` defaults to `gpt-5.6`; `anthropic` defaults to `claude-sonnet-4-6`; `openmodel` defaults to `deepseek-v4-flash`. Current public DeepSeek IDs are `deepseek-v4-pro` and `deepseek-v4-flash`, both with 1M context windows, 384K max output, and thinking mode enabled by default. DeepSeek's live pricing/model page now labels the Pro backend `DeepSeek-V4-Pro-0813`; the callable API ID remains `deepseek-v4-pro`, so Ghosty does not send the backend label or the Claude Code-specific `deepseek-v4-pro[1m]` selector. DeepSeek retires `deepseek-chat` and `deepseek-reasoner` on July 24, 2026; direct first-party routes migrate both to `deepseek-v4-flash`, with omitted reasoning settings preserving their former non-thinking (`off`) and thinking (`high`) intent. Explicit `reasoning_effort` wins, and provider-owned ids on Wanjie Ark, aggregators, self-hosted runtimes, and custom endpoints are not globally rewritten. SiliconFlow retains its own mapping: `deepseek-reasoner` and `deepseek-r1` select its Pro model while `deepseek-chat` and `deepseek-v3` select Flash. Provider-specific mappings translate `deepseek-v4-pro` / `deepseek-v4-flash` to each provider's model ID where supported. OpenRouter also recognizes recent large IDs such as `arcee-ai/trinity-large-thinking`, `minimax/minimax-m3`, `minimax/minimax-m2.7`, `xiaomi/mimo-v2.5-pro`, `qwen/qwen3.6-flash`, `qwen/qwen3.6-35b-a3b`, `qwen/qwen3.6-max-preview`, `qwen/qwen3.6-27b`, `qwen/qwen3.6-plus`, `qwen/qwen3.7-max`, `google/gemma-4-31b-it`, `moonshotai/kimi-k2.7-code`, `moonshotai/kimi-k2.6`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`, and `nvidia/nemotron-3-ultra-550b-a55b`; direct Arcee uses bare IDs such as `trinity-large-thinking` and `trinity-large-preview`; direct Moonshot recognizes `kimi-k3`, `kimi-k2.7-code`, and `kimi-k2.6`. The exact Kimi Code endpoint recognizes bare `k3` for K3 and `kimi-for-coding` for K2.7; those membership IDs are distinct from the direct Moonshot IDs and are never rewritten across routes. Direct MiniMax recognizes `MiniMax-M3` and the documented M2.x chat model IDs; direct Z.ai recognizes `GLM-5.3` (the default), `GLM-5.2`, `GLM-5.1`, and `GLM-5-Turbo`, and OpenRouter recognizes the matching `z-ai/glm-5.1`, `z-ai/glm-5.2`, `z-ai/glm-5.3`, and `z-ai/glm-5-turbo` IDs — `GLM-5.3` has been live on the Z.ai Coding Plan since 2026-08-13; it inherits its catalog metadata from `GLM-5.2` until Z.ai publishes distinct 5.3 numbers and carries no price, and an explicit `GLM-5.2` selection keeps its own id; direct Sakana recognizes `fugu` and `fugu-ultra-20260615`; direct Xiaomi MiMo recognizes chat IDs `mimo-v2.5-pro`, `mimo-v2.5-pro-ultraspeed`, and `mimo-v2.5`, while TTS IDs are selected through `ghosty speech` / `tts`. Generic `openai`, `atlascloud`, `wanjie-ark`, `xiaomi-mimo`, `arcee`, `moonshot`, `minimax`, `openmodel`, `zai`, `stepfun`, `qianfan`, `sakana`, local Ollama, and Ollama Cloud model IDs are passed through unchanged after known aliases are normalized. OpenRouter and SiliconFlow provider configs with a custom `base_url` also preserve explicit model values, which lets OpenAI-compatible gateways accept bare model IDs. Use `/models` or `ghosty models` to discover live IDs from your configured endpoint. `GHOSTY_MODEL` overrides this for a single process; `DEEPSEEK_MODEL` is the legacy alias.
+- TelecomJS uses `deepseek-v4-pro` only as a conservative pre-refresh fallback. Once its key-scoped `/models` catalog is available, the picker uses those live rows; Ghosty omits unsupported reasoning request fields on this route.
+- `reasoning_effort` (string, optional): `off`, `low`, `medium`, `high`, `max`, `xhigh`, or `ultracode`; defaults to the configured UI tier. DeepSeek Platform receives top-level `thinking` / `reasoning_effort` fields. Ollama Cloud's OpenAI-compatible Chat Completions route preserves its documented `none` / `low` / `medium` / `high` / `max` ladder (`off` is sent as `none`; `xhigh` and `ultracode` normalize to `max`). Direct xAI `grok-4.6` on exact `https://api.x.ai/v1` receives top-level `reasoning_effort = "low" | "medium" | "high" | "xhigh"`; `off` normalizes to `high`, `max`/`ultracode` to `xhigh`, and `auto` leaves the field omitted so xAI's documented default `high` applies. A custom xAI-compatible `base_url` does not inherit that dialect. Direct Moonshot `kimi-k3` on exact `https://api.moonshot.ai/v1` is always-thinking and receives only top-level `reasoning_effort = "low" | "high" | "max"`; `off` normalizes to `low`, and `medium` to `high`. Kimi Code membership `k3` on exact `https://api.kimi.com/coding/v1` instead receives nested `thinking.effort`, and its `off` setting also normalizes to enabled `low`. Normal dispatched `auto` uses Ghosty's auto-reasoning selector and sends a concrete route-normalized tier; only an omitted reasoning setting leaves the provider default in control. Neighboring gateways and model/endpoint combinations retain the generic Moonshot contract. OpenAI Codex normalizes stale `off` to `low` and sends `max` / `ultracode` as Responses `xhigh`. Z.ai receives documented `thinking` controls and treats enabled thinking as the GLM coding high/max lane. NVIDIA NIM receives equivalent settings through `chat_template_kwargs`.
 - `verbosity` (string, optional): `normal` or `concise`. `normal` keeps the
   default conversational prompt. `concise` appends a prompt discipline block
   for direct, low-chatter output; CLI noninteractive commands (`exec` and
   `eval`) default to `concise` unless config/env/CLI overrides it.
-  Override per process with `CODEWHALE_VERBOSITY` or the legacy
+  Override per process with `GHOSTY_VERBOSITY` or the legacy
   `DEEPSEEK_VERBOSITY` alias.
 - `telemetry` (bool, optional): anonymous usage counting, **`true` by default**,
   with a clear first-run disclosure. An explicit `false` here is the durable
   *opt-out* — it deletes the random install id,
   truncates every buffered event, and leaves a tombstone that every later run
   re-asserts for as long as the key says `false`. It is also a floor: `--telemetry true` and
-  `CODEWHALE_TELEMETRY=1` both lose to it, and turning telemetry back on means
-  writing `true` here. Override per process with `CODEWHALE_TELEMETRY` (legacy
+  `GHOSTY_TELEMETRY=1` both lose to it, and turning telemetry back on means
+  writing `true` here. Override per process with `GHOSTY_TELEMETRY` (legacy
   alias `DEEPSEEK_TELEMETRY`), where an explicit "off" is a hard floor that
   beats both this key and `--telemetry true` — but is a *kill switch*, not an
   opt-out: it stops the run and erases nothing, so a harness disabling
   telemetry for one command never discards the machine owner's install id or
-  dry-run records. A repo-local `.codewhale/config.toml` cannot set it. The
-  resolved consent is visible with its source — `codewhale doctor` prints a
+  dry-run records. A repo-local `.ghosty/config.toml` cannot set it. The
+  resolved consent is visible with its source — `ghosty doctor` prints a
   `telemetry=on (default)` row in the runtime-posture section, and
-  `codewhale config get telemetry` reports `on (default)`, `on (config)`, or
+  `ghosty config get telemetry` reports `on (default)`, `on (config)`, or
   the environment's answer, so a machine that never opted in never reads
   "unset" while its batches ship (#5441). Full
   schema and red lines:
   [`TELEMETRY.md`](TELEMETRY.md).
 - `telemetry_endpoint` (string, optional): where batches are POSTed. Leaving it
   unset selects the shipped default,
-  **`https://telemetry.codewhale.net/v1/telemetry`** — the first-party ingest
+  **`https://telemetry.ghosty.net/v1/telemetry`** — the first-party ingest
   service described in [`TELEMETRY.md`](TELEMETRY.md), whose source is in
   `telemetry-ingest/`. This key decides only *where* a permitted session sends;
   it cannot override an opt-out. Setting it
   to the **empty string** is how you stay enabled and contact nobody: each batch
-  is then written to `$CODEWHALE_HOME/telemetry/dryrun.jsonl` and no HTTP client
+  is then written to `$GHOSTY_HOME/telemetry/dryrun.jsonl` and no HTTP client
   is constructed at all, so you can read exactly what would have been sent. Any
   other value replaces the default outright. `https://` is required; plain
   `http://` is accepted only for loopback hosts, and there is no environment
   variable that overrides that refusal. A rejected endpoint turns telemetry off
   for the run rather than falling back to plaintext or to the default. Override
-  per process with `CODEWHALE_TELEMETRY_ENDPOINT` (legacy alias
+  per process with `GHOSTY_TELEMETRY_ENDPOINT` (legacy alias
   `DEEPSEEK_TELEMETRY_ENDPOINT`), where an empty value means the same "contact
-  nobody". A repo-local `.codewhale/config.toml` cannot set it.
+  nobody". A repo-local `.ghosty/config.toml` cannot set it.
 - `allow_shell` (bool, optional): in interactive TUI Agent sessions, omitting
   this keeps shell tools available with approval prompts; setting it to `false`
   hides shell tools. Headless, durable-task, and other noninteractive profiles
@@ -1877,7 +1877,7 @@ reasoning contract, and all four membership ids omit generic sampling fields.
   execution sandbox is defined in
   [Authorization order](AUTHORIZATION_ORDER.md).
 - `permissions.toml` (sibling file, optional): typed permission rule records
-  loaded next to `config.toml`, for example `~/.codewhale/permissions.toml`.
+  loaded next to `config.toml`, for example `~/.ghosty/permissions.toml`.
   This active user file is the only permission-rule source today; project
   config overlays do not load a project-local `permissions.toml`. A rule's
   optional `workspace` field is its repository scope, not a second source.
@@ -1947,7 +1947,7 @@ reasoning contract, and all four membership ids omit generic sampling fields.
   a disabled/unknown cell instead of silently deleting user config. Trusted
   user config, profiles, and managed config replace the whole list; project
   overlays cannot change hotbar bindings. Setup or wizard flows that persist
-  hotbar bindings write this same schema to the resolved `~/.codewhale/config.toml`
+  hotbar bindings write this same schema to the resolved `~/.ghosty/config.toml`
   path, preserving legacy `~/.deepseek/config.toml` only when that fallback file
   is already the active config.
 
@@ -2088,24 +2088,24 @@ reasoning contract, and all four membership ids omit generic sampling fields.
   parent session, save a Fleet/AgentProfile with explicit `provider` and
   `model` fields (including user-named custom providers such as `lm-studio`)
   and call `agent(profile: "...")`; see [SUBAGENTS.md](SUBAGENTS.md).
-- `skills_dir` (string, optional): defaults to `~/.codewhale/skills` (each skill is
+- `skills_dir` (string, optional): defaults to `~/.ghosty/skills` (each skill is
   a directory containing `SKILL.md`). Workspace-local `.agents/skills` or
   `./skills` are preferred when present; the runtime also discovers global
   agentskills.io-compatible `~/.agents/skills` and the broader Claude-ecosystem
   `~/.claude/skills`. First launch installs versioned bundled skills for common
   workflows including skill creation, delegation, MCP/plugin scaffolding,
   documents, presentations, spreadsheets, PDFs, and Feishu/Lark. Only
-  CodeWhale-owned roots (`<workspace>/.codewhale/skills` and
-  `~/.codewhale/skills`) are writable install/import targets; compatible harness
+  GhostyCode-owned roots (`<workspace>/.ghosty/skills` and
+  `~/.ghosty/skills`) are writable install/import targets; compatible harness
   roots stay read-only. Bare `/skills` opens the Skills Manager (owned-only,
   zero network). See [SKILLS.md](SKILLS.md) for the manager, audit statuses,
   provenance markers, and mutation rules, and
   [CLAUDE_PLUGIN_COMPAT.md](CLAUDE_PLUGIN_COMPAT.md) for the supported boundary
   between portable `SKILL.md` bundles and Claude Code plugin runtimes.
-- `[skills].scan_codewhale_only` (bool, default `false`): when `true`, session
+- `[skills].scan_ghosty_only` (bool, default `false`): when `true`, session
   skill discovery ignores cross-tool roots such as `.claude/skills`,
-  `.opencode/skills`, `.cursor/skills`, and `~/.agents/skills`. Codewhale still
-  scans `<workspace>/.codewhale/skills`, `~/.codewhale/skills`, and any explicit
+  `.opencode/skills`, `.cursor/skills`, and `~/.agents/skills`. Ghosty still
+  scans `<workspace>/.ghosty/skills`, `~/.ghosty/skills`, and any explicit
   `skills_dir` override. The Skills Manager can still toggle a local compatible
   audit scan independently of this runtime knob — see [SKILLS.md](SKILLS.md).
 - `[skills].registry_url` / `[skills].max_install_size_bytes` (optional): used by
@@ -2118,15 +2118,15 @@ reasoning contract, and all four membership ids omit generic sampling fields.
   `pass` / `partial` / `fail` into the goal verdict vocabulary
   `hunted` / `wounded` / `escaped`. `"hunt"` is the only shipped policy today;
   unknown values are rejected so future policies can be added deliberately.
-- `mcp_config_path` (string, optional): defaults to `~/.codewhale/mcp.json`, with
-  legacy `~/.deepseek/mcp.json` fallback when the Codewhale path is absent.
+- `mcp_config_path` (string, optional): defaults to `~/.ghosty/mcp.json`, with
+  legacy `~/.deepseek/mcp.json` fallback when the Ghosty path is absent.
   Custom paths must be absolute; a relative value falls back to the user-global
   path so changing the launch directory cannot silently change the MCP pool.
   It is visible in `/config` and can be changed from the TUI. The new path is
   used immediately by `/mcp`, but rebuilding the model-visible MCP tool pool
   requires restarting the TUI.
-- `notes_path` (string, optional): defaults to `~/.codewhale/notes.txt`, with
-  legacy `~/.deepseek/notes.txt` fallback when the Codewhale path is absent, and
+- `notes_path` (string, optional): defaults to `~/.ghosty/notes.txt`, with
+  legacy `~/.deepseek/notes.txt` fallback when the Ghosty path is absent, and
   is used by the model-visible `note` tool.
 - `[memory].enabled` (bool, optional): defaults to `false`. When `true`,
   the TUI loads the user memory file into a `<user_memory>` prompt block,
@@ -2137,7 +2137,7 @@ reasoning contract, and all four membership ids omit generic sampling fields.
   configured filename is **not** the file that is written. Under the Native
   backend (the only backend) the store is re-rooted to
   `<parent-of-memory_path>/memory/global/MEMORY.md` — so the default
-  `~/.codewhale/memory.md` yields `~/.codewhale/memory/global/MEMORY.md`
+  `~/.ghosty/memory.md` yields `~/.ghosty/memory/global/MEMORY.md`
   (plus workspace-scoped files and a rebuildable SQLite FTS5 index). See
   [`MEMORY.md`](MEMORY.md) for the full feature surface (`# foo` composer
   prefix, `/memory` slash command, `remember` tool, opt-in toggle).
@@ -2145,7 +2145,7 @@ reasoning contract, and all four membership ids omit generic sampling fields.
   - `[snapshots].enabled` (bool, default `true`)
   - `[snapshots].max_age_days` (int, default `7`)
   - snapshots live under
-    `~/.codewhale/snapshots/<project_hash>/<worktree_hash>/.git`, with legacy
+    `~/.ghosty/snapshots/<project_hash>/<worktree_hash>/.git`, with legacy
     `~/.deepseek/snapshots/...` fallback when only the legacy state exists, and
     never use the workspace's own `.git` directory
 - `context.*` (optional):
@@ -2168,7 +2168,7 @@ reasoning contract, and all four membership ids omit generic sampling fields.
   turns whose elapsed time meets `threshold_secs`; failed and cancelled
   turns are silent. `auto` resolves to `osc9` for `iTerm.app`, `Ghostty`,
   and `WezTerm` (detected via `$TERM_PROGRAM`). Unknown terminals fail closed
-  to `off`; Codewhale never invents an audible BEL fallback.
+  to `off`; Ghosty never invents an audible BEL fallback.
 - `[notifications].threshold_secs` (int, optional): defaults to `30`.
   Only completed turns whose elapsed time meets or exceeds this fire a
   notification.
@@ -2209,8 +2209,8 @@ reasoning contract, and all four membership ids omit generic sampling fields.
 ### Workspace notes
 
 `/note` manages a simple notes file in the current workspace at
-`.codewhale/notes.md` (legacy `.deepseek/notes.md` is the fallback path when
-no `.codewhale/notes.md` exists yet).
+`.ghosty/notes.md` (legacy `.deepseek/notes.md` is the fallback path when
+no `.ghosty/notes.md` exists yet).
 Existing `/note <text>` usage still appends a note.
 The management forms are:
 
@@ -2236,8 +2236,8 @@ toggle table:
 
 ```toml
 # Anchors the store only — actual writes go to
-# ~/.codewhale/memory/global/MEMORY.md (see MEMORY.md).
-memory_path = "~/.codewhale/memory.md"
+# ~/.ghosty/memory/global/MEMORY.md (see MEMORY.md).
+memory_path = "~/.ghosty/memory.md"
 
 [memory]
 enabled = true
@@ -2332,7 +2332,7 @@ Method semantics:
 - `bel` — emit a single `\x07` byte. Use this on Windows only if you actively want the chime back.
 - `off` — disable banners. An explicitly selected completion sound remains an independent control.
 
-By default, delivery is background-only: Codewhale waits until the terminal
+By default, delivery is background-only: Ghosty waits until the terminal
 has remained unfocused for two seconds. Set `notification_condition =
 "always"` under `[tui]` to allow configured notifications in the foreground,
 or `"never"` to suppress all operator notifications. macOS native banners are
@@ -2385,7 +2385,7 @@ play of that event) → play. Unknown strings in `events` are ignored.
 
 A desktop notification is a glance surface: on macOS it can appear on the
 lock screen, and on every platform it is visible to anyone near the machine.
-Codewhale therefore builds notifications from a typed payload with a fixed
+Ghosty therefore builds notifications from a typed payload with a fixed
 per-event disclosure policy rather than from whatever text was on hand:
 
 | Event | Shown | Never shown |
@@ -2416,8 +2416,8 @@ the banner to `com.apple.ScriptEditor2`. That attribution supplies the
 Script Editor icon and owns the System Settings → Notifications entry
 (alert style, previews, Do Not Disturb). `display notification` has no
 icon parameter, so this cannot be fixed from the notification code; it
-needs Codewhale to ship a real `.app` bundle. Tracked in
-[#4834](https://github.com/Hmbown/CodeWhale/issues/4834). In the meantime,
+needs Ghosty to ship a real `.app` bundle. Tracked in
+[#4834](https://github.com/blissito/ghostycode/issues/4834). In the meantime,
 iTerm2, WezTerm, Ghostty, and kitty are matched first and use their own
 notification protocols, and `method = "osc9"` / `"bel"` / `"off"` opt out
 of the `osascript` path explicitly.
@@ -2425,9 +2425,9 @@ of the `osascript` path explicitly.
 ## Lifecycle Outbox (`[lifecycle_outbox]`)
 
 The lifecycle outbox is an opt-in, machine-readable stream of session,
-turn, and sub-agent lifecycle events. With a path configured, Codewhale
+turn, and sub-agent lifecycle events. With a path configured, Ghosty
 appends one JSON line per event to that file — for interactive TUI
-sessions *and* headless `codewhale exec` runs — so a supervisor
+sessions *and* headless `ghosty exec` runs — so a supervisor
 (terminal multiplexer wrapper, automation harness, alerting setup) can
 react to what happened without scraping the screen or installing per-hook
 shell commands. Unset or empty `path` = the feature is **off** and
@@ -2435,7 +2435,7 @@ behavior is unchanged.
 
 ```toml
 [lifecycle_outbox]
-path = "~/.codewhale/notifications/outbox.jsonl" # unset/empty = OFF
+path = "~/.ghosty/notifications/outbox.jsonl" # unset/empty = OFF
 webhook_url = ""     # optional; POSTs events as JSON when set
 webhook_token = ""   # optional bearer token for webhook_url
 ```
@@ -2488,7 +2488,7 @@ append.
 
 ## Tool Catalog
 
-Codewhale loads a small core native tool catalog by default and leaves less
+Ghosty loads a small core native tool catalog by default and leaves less
 common native tools discoverable through ToolSearch. To keep specific native
 tools loaded on every request, add them to `[tools].always_load`:
 
@@ -2515,10 +2515,10 @@ exec_policy = true
 
 You can also override features for a single run:
 
-- `codewhale --enable web_search`
-- `codewhale --disable subagents`
+- `ghosty --enable web_search`
+- `ghosty --disable subagents`
 
-Use `codewhale features list` to inspect known flags and their effective state.
+Use `ghosty features list` to inspect known flags and their effective state.
 The native `/config` view also includes a read-only **Experimental** section
 for experimental feature flags. It shows each flag's effective enabled/disabled
 state and whether that state comes from the default or a configured override.
@@ -2532,7 +2532,7 @@ graduate behind real gated flags.
 `web_search` uses keyless Firecrawl by default. Runtime failure or an exhausted
 keyless quota degrades visibly through DuckDuckGo and Bing. China deployments
 can explicitly select Baidu, Metaso, Volcengine, or a trusted SearXNG endpoint;
-Codewhale does not guess geography from locale or model provider.
+Ghosty does not guess geography from locale or model provider.
 
 Configured API providers are attempted first. Runtime failure or an empty
 result visibly degrades through DuckDuckGo and then Bing; the structured search
@@ -2540,25 +2540,25 @@ receipt records every hop. Missing configuration and network-policy denials
 fail closed without sending the query to another provider.
 
 For a private/internal search service that serves DuckDuckGo-compatible HTML,
-keep `provider = "duckduckgo"` and set `base_url`; Codewhale appends the `q`
+keep `provider = "duckduckgo"` and set `base_url`; Ghosty appends the `q`
 query parameter to that endpoint and applies network policy to its host.
-Custom endpoints do not fall back to public Bing. `CODEWHALE_SEARCH_BASE_URL`
+Custom endpoints do not fall back to public Bing. `GHOSTY_SEARCH_BASE_URL`
 can override this per process; `DEEPSEEK_SEARCH_BASE_URL` remains accepted as
 the legacy alias.
 
 **SearXNG** ([docs](https://docs.searxng.org/dev/search_api.html)) uses the
 configured instance's JSON API. Set `provider = "searxng"` and
-`base_url = "https://your-searxng.example"`; Codewhale calls
-`/search?q=...&format=json`. Codewhale does not use a public SearXNG instance
+`base_url = "https://your-searxng.example"`; Ghosty calls
+`/search?q=...&format=json`. Ghosty does not use a public SearXNG instance
 by default because public instances often disable JSON output or rate-limit API
 traffic.
 
 **Metaso** ([metaso.cn](https://metaso.cn)) requires a user-supplied key. Set
-`METASO_API_KEY` or `[search] api_key`; Codewhale does not ship a shared key.
+`METASO_API_KEY` or `[search] api_key`; Ghosty does not ship a shared key.
 
 **Firecrawl** ([docs](https://docs.firecrawl.dev/sdks/cli)) searches Firecrawl
 Cloud without a key using its bounded per-IP daily quota. Set
-`FIRECRAWL_API_KEY` or `[search] api_key` for authenticated limits. Codewhale
+`FIRECRAWL_API_KEY` or `[search] api_key` for authenticated limits. Ghosty
 sends no `Authorization` header in keyless mode.
 
 **Baidu** uses Baidu AI Search at
@@ -2588,7 +2588,7 @@ is text-only; use the local terminal's paste command (`Cmd+V` on macOS or
 `Ctrl+Shift+V` on Linux/Windows), and use `/attach <path>` for remote image
 files. OpenSSH loopback X11 displays are detected automatically. For an
 explicitly forwarded Wayland or non-loopback X11 display, set
-`CODEWHALE_SSH_CLIPBOARD=graphical`; set it to `terminal` to force terminal
+`GHOSTY_SSH_CLIPBOARD=graphical`; set it to `terminal` to force terminal
 transfer instead of an ambient remote display. DeepSeek's public Chat
 Completions API currently accepts text message
 content, so media attachments are sent as explicit local path references instead
@@ -2599,7 +2599,7 @@ the composer, press `↑` to select an attachment row, then press `Backspace` or
 
 ## Managed Configuration and Requirements
 
-codewhale supports a policy layering model:
+ghosty supports a policy layering model:
 
 1. user config + profile + env overrides
 2. managed config (if present)
@@ -2618,18 +2618,18 @@ allowed_sandbox_modes = ["read-only", "workspace-write"]
 
 If configured values violate requirements, startup fails with a descriptive error.
 
-## Notes On `codewhale doctor`
+## Notes On `ghosty doctor`
 
-`codewhale doctor` follows the same config resolution rules as the rest of the
-TUI. That means `--config`, `CODEWHALE_CONFIG_PATH`, and the legacy
+`ghosty doctor` follows the same config resolution rules as the rest of the
+TUI. That means `--config`, `GHOSTY_CONFIG_PATH`, and the legacy
 `DEEPSEEK_CONFIG_PATH` are respected, and MCP/skills
 checks use the resolved `mcp_config_path` / `skills_dir` (including env overrides).
 
-To bootstrap missing MCP/skills paths, run `codewhale setup --all`. You can
-also run `codewhale setup --skills --local` to create a workspace-local
+To bootstrap missing MCP/skills paths, run `ghosty setup --all`. You can
+also run `ghosty setup --skills --local` to create a workspace-local
 `./skills` dir.
 
-Both plain `codewhale doctor` and `codewhale doctor --json` are structural and
+Both plain `ghosty doctor` and `ghosty doctor --json` are structural and
 offline by default. They do not check the release service, hosted provider
 APIs, local provider endpoints, or MCP processes, and they do not load a
 workspace credential `.env`. Use `--check-updates`,
@@ -2673,7 +2673,7 @@ run. `mcp.probe_scope` is `configuration`, `mcp.live_health_checked` is false,
 and each server separates `checks.configuration` / `checks.command` from
 `checks.process_reachable`, `checks.protocol_initialized`, and
 `checks.backend_tool_health`. The latter three remain `not_checked` in doctor
-output. Run `codewhale mcp validate` to explicitly start enabled servers and
+output. Run `ghosty mcp validate` to explicitly start enabled servers and
 verify protocol initialization/discovery; backend health still requires an
 appropriate explicit tool call. Doctor reports only safe structural MCP fields:
 URL userinfo/path/query/fragment and raw command arguments, environment values,
@@ -2693,28 +2693,28 @@ configure reasoning effort.
 
 ## Setup status, clean, and extension dirs
 
-`codewhale setup` accepts a few flags beyond the existing `--mcp`,
+`ghosty setup` accepts a few flags beyond the existing `--mcp`,
 `--skills`, `--local`, `--all`, and `--force`:
 
 - `--status` — print a compact one-screen status (api key, base URL, model,
   MCP/skills/tools/plugins counts, sandbox, `.env` presence). Read-only and
   network-free; safe to run in CI. If `.env` is missing and `.env.example` is
   present in the workspace, the status output points at `cp .env.example .env`.
-- `--tools` — scaffold `~/.codewhale/tools/` with a `README.md` describing the
+- `--tools` — scaffold `~/.ghosty/tools/` with a `README.md` describing the
   self-describing frontmatter convention (`# name:` / `# description:` /
   `# usage:`) and an `example.sh` that follows it. The directory is
   intentionally not auto-loaded; wire individual scripts into the agent via
   MCP, hooks, or skills.
-- `--plugins` — scaffold `~/.codewhale/plugins/` with a `README.md` and an
+- `--plugins` — scaffold `~/.ghosty/plugins/` with a `README.md` and an
   `example/plugin.toml` plus a namespaced example Skill. Bundles are discovered
   read-only, untrusted, and disabled; review them through `/plugin` before
   enabling. v0.9.1 activates only declared Skills and MCP servers. See
   [PLUGIN_BUNDLES.md](PLUGIN_BUNDLES.md).
 - `--all` now scaffolds MCP + skills + tools + plugins together.
-- `--clean` — list `~/.codewhale/sessions/checkpoints/latest.json` and
+- `--clean` — list `~/.ghosty/sessions/checkpoints/latest.json` and
   `offline_queue.json` if they exist. Legacy
   `~/.deepseek/sessions/checkpoints/` files are not scanned automatically; set
-  `CODEWHALE_HOME=~/.deepseek` for a one-off legacy cleanup. Pass `--force` to
+  `GHOSTY_HOME=~/.deepseek` for a one-off legacy cleanup. Pass `--force` to
   actually remove matched files. This never touches real session history or the
   task queue.
 
@@ -2722,10 +2722,10 @@ configure reasoning effort.
 
 ## Why the engine strips XML/`[TOOL_CALL]` text
 
-codewhale sends and receives tool calls only over the API tool channel
+ghosty sends and receives tool calls only over the API tool channel
 (structured `tool_use` / `tool_call` items). The streaming loop in
 `crates/tui/src/core/engine.rs` recognizes a fixed set of fake-wrapper start
-markers — `[TOOL_CALL]`, `<codewhale:tool_call`, `<tool_call`, `<invoke `,
+markers — `[TOOL_CALL]`, `<ghosty:tool_call`, `<tool_call`, `<invoke `,
 `<function_calls>` — and scrubs them from visible assistant text without ever
 turning them into structured tool calls. When a wrapper is stripped, the loop
 emits one compact `status` notice per turn so the user can see why their

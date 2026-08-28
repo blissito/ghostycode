@@ -136,7 +136,7 @@ export function TerminalPlayer({
           <span className="w-2.5 h-2.5 rounded-full bg-ochre inline-block" />
           <span className="w-2.5 h-2.5 rounded-full bg-indigo inline-block" />
           <span className="ml-2.5 font-mono text-[0.66rem] uppercase tracking-widest text-paper-deep">
-            codewhale — thinking
+            ghosty — thinking
           </span>
         </div>
         <span className="font-cjk text-[0.6rem] text-paper-deep/70">{traceLabel}</span>

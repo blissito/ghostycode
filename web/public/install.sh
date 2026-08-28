@@ -1,28 +1,28 @@
 #!/bin/sh
 set -eu
 
-repo="Hmbown/CodeWhale"
-version="${CODEWHALE_VERSION:-latest}"
-release_base="${CODEWHALE_RELEASE_BASE_URL:-${DEEPSEEK_TUI_RELEASE_BASE_URL:-}}"
+repo="blissito/ghostycode"
+version="${GHOSTY_VERSION:-latest}"
+release_base="${GHOSTY_RELEASE_BASE_URL:-${DEEPSEEK_TUI_RELEASE_BASE_URL:-}}"
 
 usage() {
   cat <<'USAGE'
-Codewhale installer for macOS and Linux.
+Ghosty installer for macOS and Linux.
 
 Usage:
-  curl -fsSL https://codewhale.net/install.sh | sh
+  curl -fsSL https://ghosty.net/install.sh | sh
 
 Environment:
-  CODEWHALE_INSTALL_DIR    Install directory. Default: $HOME/.local/bin
-  CODEWHALE_VERSION        Release tag to install, for example v0.9.0. Default: latest
-  CODEWHALE_RELEASE_BASE_URL
+  GHOSTY_INSTALL_DIR    Install directory. Default: $HOME/.local/bin
+  GHOSTY_VERSION        Release tag to install, for example v0.9.0. Default: latest
+  GHOSTY_RELEASE_BASE_URL
                            Custom release asset base URL ending in /download
-  CODEWHALE_SKIP_GLIBC_CHECK=1
+  GHOSTY_SKIP_GLIBC_CHECK=1
                            Skip Linux arm64 glibc compatibility preflight
 
 Examples:
-  curl -fsSL https://codewhale.net/install.sh | CODEWHALE_INSTALL_DIR=/usr/local/bin sh
-  curl -fsSL https://codewhale.net/install.sh | CODEWHALE_VERSION=v0.9.0 sh
+  curl -fsSL https://ghosty.net/install.sh | GHOSTY_INSTALL_DIR=/usr/local/bin sh
+  curl -fsSL https://ghosty.net/install.sh | GHOSTY_VERSION=v0.9.0 sh
 USAGE
 }
 
@@ -38,14 +38,14 @@ say() {
 }
 
 fail() {
-  printf 'codewhale install: %s\n' "$*" >&2
+  printf 'ghosty install: %s\n' "$*" >&2
   exit 1
 }
 
-if [ -n "${CODEWHALE_INSTALL_DIR:-}" ]; then
-  install_dir="$CODEWHALE_INSTALL_DIR"
+if [ -n "${GHOSTY_INSTALL_DIR:-}" ]; then
+  install_dir="$GHOSTY_INSTALL_DIR"
 else
-  [ -n "${HOME:-}" ] || fail "HOME is not set; set CODEWHALE_INSTALL_DIR"
+  [ -n "${HOME:-}" ] || fail "HOME is not set; set GHOSTY_INSTALL_DIR"
   install_dir="$HOME/.local/bin"
 fi
 
@@ -161,7 +161,7 @@ check_glibc() {
     return
   fi
 
-  [ "${CODEWHALE_SKIP_GLIBC_CHECK:-}" = "1" ] && return
+  [ "${GHOSTY_SKIP_GLIBC_CHECK:-}" = "1" ] && return
   [ "${DEEPSEEK_TUI_SKIP_GLIBC_CHECK:-}" = "1" ] && return
   [ "${DEEPSEEK_SKIP_GLIBC_CHECK:-}" = "1" ] && return
 
@@ -169,13 +169,13 @@ check_glibc() {
   host="$(glibc_version || true)"
   if [ -z "$host" ] || ! version_at_least "$host" "$required"; then
     cat >&2 <<EOF
-codewhale install: Codewhale $version $target assets require glibc $required or newer.
+ghosty install: Ghosty $version $target assets require glibc $required or newer.
 This system reports glibc ${host:-unavailable}.
 
 Linux arm64 assets before v0.9.6 were GNU libc builds from Ubuntu 24.04.
 Current v0.9.6+ assets are static musl builds. Build this older release from
 source with Cargo or set
-CODEWHALE_SKIP_GLIBC_CHECK=1 to bypass this check at your own risk.
+GHOSTY_SKIP_GLIBC_CHECK=1 to bypass this check at your own risk.
 EOF
     exit 1
   fi
@@ -211,35 +211,35 @@ fi
 
 target="$(detect_platform)"
 check_glibc
-cli_asset="codewhale-$target"
-shim_asset="codew-$target"
-manifest_asset="codewhale-artifacts-sha256.txt"
+cli_asset="ghosty-$target"
+shim_asset="ghosty-tui-$target"
+manifest_asset="ghosty-artifacts-sha256.txt"
 
-tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t codewhale-install)"
+tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t ghosty-install)"
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
-say "Installing Codewhale for $target"
+say "Installing Ghosty for $target"
 say "Release assets: $release_base"
 say "Install dir: $install_dir"
 
 download "$release_base/$manifest_asset" "$tmpdir/$manifest_asset"
-download "$release_base/$cli_asset" "$tmpdir/codewhale"
-download "$release_base/$shim_asset" "$tmpdir/codew"
+download "$release_base/$cli_asset" "$tmpdir/ghosty"
+download "$release_base/$shim_asset" "$tmpdir/ghosty-tui"
 
-verify_asset "$cli_asset" "$tmpdir/codewhale" "$tmpdir/$manifest_asset"
-verify_asset "$shim_asset" "$tmpdir/codew" "$tmpdir/$manifest_asset"
+verify_asset "$cli_asset" "$tmpdir/ghosty" "$tmpdir/$manifest_asset"
+verify_asset "$shim_asset" "$tmpdir/ghosty-tui" "$tmpdir/$manifest_asset"
 say "Checksums verified"
 
-chmod 755 "$tmpdir/codewhale" "$tmpdir/codew"
+chmod 755 "$tmpdir/ghosty" "$tmpdir/ghosty-tui"
 if command -v xattr >/dev/null 2>&1; then
-  xattr -d com.apple.quarantine "$tmpdir/codewhale" "$tmpdir/codew" 2>/dev/null || true
+  xattr -d com.apple.quarantine "$tmpdir/ghosty" "$tmpdir/ghosty-tui" 2>/dev/null || true
 fi
 
 sudo_cmd=""
 if [ -d "$install_dir" ]; then
   if [ ! -w "$install_dir" ] ||
-    { [ -e "$install_dir/codewhale" ] && [ ! -w "$install_dir/codewhale" ]; } ||
-    { [ -e "$install_dir/codew" ] && [ ! -w "$install_dir/codew" ]; }; then
+    { [ -e "$install_dir/ghosty" ] && [ ! -w "$install_dir/ghosty" ]; } ||
+    { [ -e "$install_dir/ghosty-tui" ] && [ ! -w "$install_dir/ghosty-tui" ]; }; then
     need_cmd sudo
     sudo_cmd="sudo"
   fi
@@ -251,10 +251,10 @@ else
   fi
 fi
 
-legacy_tui="$install_dir/codewhale-tui"
+legacy_tui="$install_dir/ghosty-tui"
 refresh_legacy_tui=0
-# v0.9.4's website installer placed a regular codewhale-tui binary beside
-# codewhale. A clean v0.9.5 install exposes only codewhale + codew, but an
+# v0.9.4's website installer placed a regular ghosty-tui binary beside
+# ghosty. A clean v0.9.5 install exposes only ghosty + ghosty-tui, but an
 # upgrade must not leave that installer-owned path running stale v0.9.4 code.
 # Refresh the existing compatibility command from the already verified
 # consolidated bytes. Do not create it for new installs or replace a symlink.
@@ -262,28 +262,28 @@ if [ -f "$legacy_tui" ] && [ ! -L "$legacy_tui" ]; then
   refresh_legacy_tui=1
 fi
 
-stage_cli="$install_dir/.codewhale.$$"
-stage_shim="$install_dir/.codew.$$"
-stage_legacy_tui="$install_dir/.codewhale-tui.$$"
+stage_cli="$install_dir/.ghosty.$$"
+stage_shim="$install_dir/.ghostyTui.$$"
+stage_legacy_tui="$install_dir/.ghosty-tui.$$"
 trap 'rm -rf "$tmpdir"; rm -f "$stage_cli" "$stage_shim" "$stage_legacy_tui" 2>/dev/null || true' EXIT INT TERM
 
-$sudo_cmd cp "$tmpdir/codewhale" "$stage_cli"
-$sudo_cmd cp "$tmpdir/codew" "$stage_shim"
+$sudo_cmd cp "$tmpdir/ghosty" "$stage_cli"
+$sudo_cmd cp "$tmpdir/ghosty-tui" "$stage_shim"
 $sudo_cmd chmod 755 "$stage_cli" "$stage_shim"
 if [ "$refresh_legacy_tui" -eq 1 ]; then
-  $sudo_cmd cp "$tmpdir/codewhale" "$stage_legacy_tui"
+  $sudo_cmd cp "$tmpdir/ghosty" "$stage_legacy_tui"
   $sudo_cmd chmod 755 "$stage_legacy_tui"
 fi
-$sudo_cmd mv "$stage_cli" "$install_dir/codewhale"
-$sudo_cmd mv "$stage_shim" "$install_dir/codew"
+$sudo_cmd mv "$stage_cli" "$install_dir/ghosty"
+$sudo_cmd mv "$stage_shim" "$install_dir/ghosty-tui"
 if [ "$refresh_legacy_tui" -eq 1 ]; then
   $sudo_cmd mv "$stage_legacy_tui" "$legacy_tui"
   say "Refreshed legacy compatibility command: $legacy_tui"
 fi
 
 say "Installed:"
-"$install_dir/codewhale" --version || true
-"$install_dir/codew" --version || true
+"$install_dir/ghosty" --version || true
+"$install_dir/ghosty-tui" --version || true
 if [ "$refresh_legacy_tui" -eq 1 ]; then
   "$legacy_tui" --version || true
 fi
@@ -292,9 +292,9 @@ case ":$PATH:" in
   *":$install_dir:"*) ;;
   *)
     say ""
-    say "Add $install_dir to PATH to run codewhale from any terminal."
+    say "Add $install_dir to PATH to run ghosty from any terminal."
     ;;
 esac
 
 say ""
-say "Run: codew (or codewhale)"
+say "Run: ghosty-tui (or ghosty)"

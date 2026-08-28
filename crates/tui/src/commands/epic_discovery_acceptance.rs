@@ -48,11 +48,11 @@ fn create_discovery_app(tmpdir: &TempDir) -> App {
 }
 
 fn write_user_command(tmpdir: &TempDir, name: &str, content: &str) {
-    let commands_dir = tmpdir.path().join(".codewhale").join("commands");
+    let commands_dir = tmpdir.path().join(".ghosty").join("commands");
     std::fs::create_dir_all(commands_dir).expect("create commands dir");
     let path = tmpdir
         .path()
-        .join(".codewhale")
+        .join(".ghosty")
         .join("commands")
         .join(format!("{name}.md"));
     std::fs::write(path, content).expect("write user command");

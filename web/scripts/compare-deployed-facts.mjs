@@ -10,8 +10,8 @@ import { buildFacts, REPO_ROOT } from "./facts-lib.mjs";
 
 function parseArgs(argv) {
   const out = {
-    baseUrl: "https://codewhale.net",
-    expectedRevision: process.env.CODEWHALE_SOURCE_REVISION || process.env.GITHUB_SHA || null,
+    baseUrl: "https://ghosty.net",
+    expectedRevision: process.env.GHOSTY_SOURCE_REVISION || process.env.GITHUB_SHA || null,
     requireCurrent: false,
     attempts: null,
     retryDelayMs: 3_000,
@@ -58,7 +58,7 @@ async function fetchReceipt(url) {
       cache: "no-store",
       headers: {
         Accept: "application/json",
-        "User-Agent": "codewhale-deploy-facts-check",
+        "User-Agent": "ghosty-deploy-facts-check",
       },
     });
     if (!response.ok) {

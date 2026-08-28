@@ -10,20 +10,20 @@
 //! - falls back to the prior cache or the bundled snapshot on any failure.
 //!
 //! Override knobs (tests / dogfood):
-//! - `CODEWHALE_MODELS_DEV_URL` — base URL (appends `/catalog.json`) or a full
+//! - `GHOSTY_MODELS_DEV_URL` — base URL (appends `/catalog.json`) or a full
 //!   `*.json` URL.
-//! - `CODEWHALE_MODELS_DEV_PATH` — local file path; skips the network.
-//! - `CODEWHALE_DISABLE_MODELS_DEV_FETCH` — when truthy, never hits the network.
+//! - `GHOSTY_MODELS_DEV_PATH` — local file path; skips the network.
+//! - `GHOSTY_DISABLE_MODELS_DEV_FETCH` — when truthy, never hits the network.
 
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::time::Duration;
 
-use codewhale_config::catalog::{
+use ghosty_config::catalog::{
     CatalogSnapshot, base_url_fingerprint, live_offerings_from_models_dev, now_unix,
 };
-use codewhale_config::models_dev::{MODELS_DEV_CATALOG_URL, ModelsDevCatalog};
-use codewhale_config::persistence::atomic_write;
+use ghosty_config::models_dev::{MODELS_DEV_CATALOG_URL, ModelsDevCatalog};
+use ghosty_config::persistence::atomic_write;
 use serde::{Deserialize, Serialize};
 
 /// Default TTL for a live Models.dev snapshot (24h, #4187 / #4114).
@@ -33,17 +33,17 @@ pub const DEFAULT_MODELS_DEV_TTL_SECS: u64 = 24 * 60 * 60;
 pub const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Explicit user-agent; no credentials, no session cookies.
-pub const USER_AGENT: &str = concat!("CodeWhale/", env!("CARGO_PKG_VERSION"), " (+models-dev)");
+pub const USER_AGENT: &str = concat!("GhostyCode/", env!("CARGO_PKG_VERSION"), " (+models-dev)");
 
-/// Filename under the CodeWhale `catalog` state dir.
+/// Filename under the GhostyCode `catalog` state dir.
 pub const CACHE_FILE: &str = "models-dev-catalog.json";
 
 /// Env: override Models.dev base URL or full catalog URL.
-pub const ENV_MODELS_DEV_URL: &str = "CODEWHALE_MODELS_DEV_URL";
+pub const ENV_MODELS_DEV_URL: &str = "GHOSTY_MODELS_DEV_URL";
 /// Env: load catalog JSON from a local path (skips network).
-pub const ENV_MODELS_DEV_PATH: &str = "CODEWHALE_MODELS_DEV_PATH";
+pub const ENV_MODELS_DEV_PATH: &str = "GHOSTY_MODELS_DEV_PATH";
 /// Env: disable network fetch entirely (`1`/`true`/`yes`/`on`).
-pub const ENV_DISABLE_FETCH: &str = "CODEWHALE_DISABLE_MODELS_DEV_FETCH";
+pub const ENV_DISABLE_FETCH: &str = "GHOSTY_DISABLE_MODELS_DEV_FETCH";
 
 const CACHE_SCHEMA_VERSION: u32 = 1;
 
@@ -134,13 +134,13 @@ impl std::fmt::Display for ModelsDevRefreshError {
     }
 }
 
-/// Resolve the on-disk cache path under the CodeWhale `catalog` state dir.
+/// Resolve the on-disk cache path under the GhostyCode `catalog` state dir.
 ///
 /// Under `cfg(test)` this is confined the same way settings and config paths
-/// are: `resolve_state_dir` lives in `codewhale-config`, which is compiled as a
+/// are: `resolve_state_dir` lives in `ghosty-config`, which is compiled as a
 /// plain dependency here and so has no view of this crate's isolated test root.
 /// Without this shield a test that never asked for the developer's catalog read
-/// their real `~/.codewhale/catalog` and rendered against whatever models they
+/// their real `~/.ghosty/catalog` and rendered against whatever models they
 /// last fetched (#5359).
 #[must_use]
 pub fn cache_path() -> Option<PathBuf> {
@@ -154,7 +154,7 @@ pub fn cache_path() -> Option<PathBuf> {
             );
         }
     }
-    codewhale_config::resolve_state_dir("catalog")
+    ghosty_config::resolve_state_dir("catalog")
         .ok()
         .map(|dir| dir.join(CACHE_FILE))
 }
@@ -233,7 +233,7 @@ pub fn maybe_load_persisted_cache() {
     }
 }
 
-/// Force a refresh: prefer `CODEWHALE_MODELS_DEV_PATH`, else network fetch.
+/// Force a refresh: prefer `GHOSTY_MODELS_DEV_PATH`, else network fetch.
 ///
 /// On success, updates the disk cache and ProviderLake. On failure, keeps any
 /// prior live/bundled rows and records a quiet Failed status.
@@ -479,7 +479,7 @@ fn save_cache_file(
 #[cfg(test)]
 pub(crate) fn offerings_from_json_for_test(
     body: &str,
-) -> Result<Vec<codewhale_config::catalog::CatalogOffering>, String> {
+) -> Result<Vec<ghosty_config::catalog::CatalogOffering>, String> {
     let catalog = ModelsDevCatalog::parse_json(body).map_err(|e| e.to_string())?;
     Ok(live_offerings_from_models_dev(
         &catalog,
@@ -494,7 +494,7 @@ mod tests {
     use crate::config::ApiProvider;
     use crate::provider_lake::{all_catalog_models_for_provider, clear_live_snapshot};
     use crate::test_support::{EnvVarGuard, lock_test_env};
-    use codewhale_config::catalog::CatalogSource;
+    use ghosty_config::catalog::CatalogSource;
 
     const FIXTURE: &str = r#"{
       "models": {},
@@ -535,7 +535,7 @@ mod tests {
 
     /// An unguarded test must not resolve the developer's catalog cache.
     ///
-    /// `resolve_state_dir` lives in `codewhale-config`, which is a plain
+    /// `resolve_state_dir` lives in `ghosty-config`, which is a plain
     /// dependency here and cannot see this crate's isolated test root, so this
     /// path had no equivalent of the settings confinement (#5359). A picker
     /// test then rendered against whatever models the developer last fetched.
@@ -557,13 +557,13 @@ mod tests {
     fn guarded_cache_path_follows_the_sealed_home() {
         let _lock = lock_test_env();
         let home = tempfile::tempdir().expect("tempdir");
-        let _guard = EnvVarGuard::set("CODEWHALE_HOME", home.path());
+        let _guard = EnvVarGuard::set("GHOSTY_HOME", home.path());
 
         let path = cache_path().expect("cache path");
 
         assert!(
             path.starts_with(home.path()),
-            "sealed CODEWHALE_HOME was ignored: {}",
+            "sealed GHOSTY_HOME was ignored: {}",
             path.display()
         );
     }
@@ -604,7 +604,7 @@ mod tests {
         let path = dir.path().join("catalog.json");
         std::fs::write(&path, FIXTURE).expect("write fixture");
 
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", dir.path().join("home"));
+        let _home = EnvVarGuard::set("GHOSTY_HOME", dir.path().join("home"));
         let _disable = EnvVarGuard::set(ENV_DISABLE_FETCH, "1");
         let _path = EnvVarGuard::set(ENV_MODELS_DEV_PATH, &path);
 
@@ -654,7 +654,7 @@ mod tests {
         let path = dir.path().join("bad.json");
         std::fs::write(&path, "{not-json").expect("write");
 
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", dir.path().join("home"));
+        let _home = EnvVarGuard::set("GHOSTY_HOME", dir.path().join("home"));
         let _path = EnvVarGuard::set(ENV_MODELS_DEV_PATH, &path);
 
         let before = all_catalog_models_for_provider(ApiProvider::Together);
@@ -681,7 +681,7 @@ mod tests {
         clear_live_snapshot();
         let dir = tempfile::tempdir().expect("tempdir");
         let home = dir.path().join("home");
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", &home);
+        let _home = EnvVarGuard::set("GHOSTY_HOME", &home);
 
         let cache_dir = home.join("catalog");
         std::fs::create_dir_all(&cache_dir).expect("mkdir");
@@ -712,7 +712,7 @@ mod tests {
         let path = dir.path().join("catalog.json");
         std::fs::write(&path, FIXTURE).expect("write");
 
-        let _home = EnvVarGuard::set("CODEWHALE_HOME", dir.path().join("home"));
+        let _home = EnvVarGuard::set("GHOSTY_HOME", dir.path().join("home"));
         let _path = EnvVarGuard::set(ENV_MODELS_DEV_PATH, &path);
 
         let rt = tokio::runtime::Builder::new_current_thread()

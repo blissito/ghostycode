@@ -1,5 +1,5 @@
 //! Real-process acceptance for `persist:true` background services on the
-//! headless `codewhale exec` host.
+//! headless `ghosty exec` host.
 //!
 //! Three black-box contracts against the actual binary and real child
 //! processes, with a `wiremock` OpenAI-compatible provider:
@@ -202,7 +202,7 @@ fn preserve_host_env(command: &mut Command) {
 }
 
 fn exec_command(server: &MockServer, workspace: &Path, home: &Path) -> Command {
-    let mut command = Command::new(codewhale_tui_binary());
+    let mut command = Command::new(ghosty_tui_binary());
     preserve_host_env(&mut command);
     command
         .current_dir(workspace)
@@ -224,8 +224,8 @@ fn exec_command(server: &MockServer, workspace: &Path, home: &Path) -> Command {
         .env("XDG_DATA_HOME", home.join(".local").join("share"))
         .env("XDG_CACHE_HOME", home.join(".cache"))
         .env(
-            "CODEWHALE_CONFIG_PATH",
-            home.join(".codewhale").join("config.toml"),
+            "GHOSTY_CONFIG_PATH",
+            home.join(".ghosty").join("config.toml"),
         )
         .env(
             "DEEPSEEK_CONFIG_PATH",
@@ -233,13 +233,13 @@ fn exec_command(server: &MockServer, workspace: &Path, home: &Path) -> Command {
         )
         .env("DEEPSEEK_API_KEY", "ci-test-key-not-real")
         .env("DEEPSEEK_BASE_URL", server.uri())
-        .env("CODEWHALE_BASE_URL", server.uri())
+        .env("GHOSTY_BASE_URL", server.uri())
         .env("DEEPSEEK_MODEL", TEST_MODEL)
-        .env("CODEWHALE_MODEL", TEST_MODEL)
+        .env("GHOSTY_MODEL", TEST_MODEL)
         .env("RUST_LOG", "warn")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    std::fs::create_dir_all(home.join(".codewhale")).expect("create codewhale config dir");
+    std::fs::create_dir_all(home.join(".ghosty")).expect("create ghosty config dir");
     std::fs::create_dir_all(home.join(".deepseek")).expect("create deepseek config dir");
     command
 }
@@ -263,11 +263,11 @@ fn join_pipe(handle: std::thread::JoinHandle<std::io::Result<Vec<u8>>>, label: &
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
     let mut path = std::env::current_exe().expect("current test executable path");
@@ -275,7 +275,7 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }
 
@@ -339,7 +339,7 @@ async fn successful_exec_releases_persisted_service() {
 
     let mut child = exec_command(&server, workspace.path(), home.path())
         .spawn()
-        .expect("spawn codewhale-tui exec");
+        .expect("spawn ghosty-tui exec");
     let stdout_reader = read_pipe_in_background(child.stdout.take().expect("stdout pipe"));
     let stderr_reader = read_pipe_in_background(child.stderr.take().expect("stderr pipe"));
     let status = child
@@ -392,7 +392,7 @@ async fn failed_exec_kills_pending_service_and_exits_nonzero() {
 
     let mut child = exec_command(&server, workspace.path(), home.path())
         .spawn()
-        .expect("spawn codewhale-tui exec");
+        .expect("spawn ghosty-tui exec");
     let stdout_reader = read_pipe_in_background(child.stdout.take().expect("stdout pipe"));
     let stderr_reader = read_pipe_in_background(child.stderr.take().expect("stderr pipe"));
     let status = match child.wait_timeout(RUN_TIMEOUT).expect("wait for exec") {
@@ -437,7 +437,7 @@ async fn terminating_signal_kills_pending_service_and_exits_nonzero() {
 
     let mut child = exec_command(&server, workspace.path(), home.path())
         .spawn()
-        .expect("spawn codewhale-tui exec");
+        .expect("spawn ghosty-tui exec");
     let stdout_reader = read_pipe_in_background(child.stdout.take().expect("stdout pipe"));
     let stderr_reader = read_pipe_in_background(child.stderr.take().expect("stderr pipe"));
 

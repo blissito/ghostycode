@@ -20,8 +20,8 @@ struct DirectoryListingWorld {
     fixture_records: Vec<serde_json::Value>,
 }
 
-#[given("an offline CodeWhale evaluation workspace")]
-fn offline_codewhale_evaluation_workspace(world: &mut DirectoryListingWorld) {
+#[given("an offline GhostyCode evaluation workspace")]
+fn offline_ghosty_evaluation_workspace(world: &mut DirectoryListingWorld) {
     world.record_dir = Some(TempDir::new().expect("record tempdir"));
 }
 
@@ -33,12 +33,12 @@ fn user_asks(world: &mut DirectoryListingWorld, prompt: String) {
         .record_dir
         .as_ref()
         .expect("offline evaluation workspace should be initialized");
-    let output = Command::new(codewhale_tui_binary())
+    let output = Command::new(ghosty_tui_binary())
         .args(["eval", "--json", "--shell-command", "echo eval-harness"])
         .arg("--record")
         .arg(record_dir.path())
         .output()
-        .expect("run codewhale-tui eval");
+        .expect("run ghosty-tui eval");
 
     assert!(
         output.status.success(),
@@ -179,11 +179,11 @@ fn read_jsonl_records(path: &Path) -> Vec<serde_json::Value> {
         .collect()
 }
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
 
@@ -192,6 +192,6 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }

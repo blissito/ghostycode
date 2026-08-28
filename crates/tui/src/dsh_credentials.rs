@@ -1,12 +1,12 @@
 //! Read-only DeepSeek Harness credential import.
 //!
 //! Official `dsh` stores API keys as a YAML mapping in
-//! `$DSH_HOME/.credentials.yaml`. Codewhale may read `DEEPSEEK_API_KEY` from
-//! that exact file only after `codewhale auth external-consent`. The file is
+//! `$DSH_HOME/.credentials.yaml`. Ghosty may read `DEEPSEEK_API_KEY` from
+//! that exact file only after `ghosty auth external-consent`. The file is
 //! never written, refreshed, or loaded into the process environment.
 
 use anyhow::{Result, bail};
-use codewhale_config::ExternalCredentialReadGrant;
+use ghosty_config::ExternalCredentialReadGrant;
 
 const DEEPSEEK_API_KEY_REF: &str = "DEEPSEEK_API_KEY";
 
@@ -14,7 +14,7 @@ const DEEPSEEK_API_KEY_REF: &str = "DEEPSEEK_API_KEY";
 pub(crate) fn deepseek_api_key_from_grant(
     grant: &ExternalCredentialReadGrant,
 ) -> Result<Option<String>> {
-    if grant.source() != codewhale_config::ExternalCredentialSource::DshCli {
+    if grant.source() != ghosty_config::ExternalCredentialSource::DshCli {
         bail!(
             "DeepSeek Harness import requires a dsh_cli grant, not {}",
             grant.source().as_str()

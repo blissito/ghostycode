@@ -121,13 +121,13 @@ impl Default for SetupToolsMcpFacts {
 }
 
 impl SetupToolsMcpFacts {
-    pub(super) fn from_app_config(app: &App, config: &Config, codewhale_home: &Path) -> Self {
+    pub(super) fn from_app_config(app: &App, config: &Config, ghosty_home: &Path) -> Self {
         let project_mcp_path = crate::mcp::workspace_mcp_config_path(&app.workspace);
         let mcp = mcp_inventory(app, &project_mcp_path);
         let skills = skills_inventory(app);
-        let tools_dir = codewhale_home.join("tools");
+        let tools_dir = ghosty_home.join("tools");
         let tools = tools_dir_inventory(&tools_dir);
-        let plugins = plugins_inventory(app, config, codewhale_home);
+        let plugins = plugins_inventory(app, config, ghosty_home);
         let hotbar = hotbar_source_inventory(app);
 
         let overall = mcp
@@ -143,7 +143,7 @@ impl SetupToolsMcpFacts {
 
         let mcp_path_display = display_path(&app.mcp_config_path);
         let skills_path_display = display_path(&app.skills_dir);
-        let plugins_path_display = display_path(&plugins_dir_for(app, config, codewhale_home));
+        let plugins_path_display = display_path(&plugins_dir_for(app, config, ghosty_home));
 
         let servers_result = format!("{} — {}", mcp.status_label(), mcp.detail);
         let skills_result = format!("{} — {}", skills.status.as_str(), skills.detail);
@@ -189,7 +189,7 @@ fn dsh_integration_result(config: &Config, workspace: &Path) -> String {
         Err(error) => return format!("unavailable — {error}"),
     };
     let detection = dsh::detect::detect(&dsh::DetectEnv::from_process(), &dsh::ProcessRunner);
-    let identity = dsh::codewhale_route_identity(config, workspace);
+    let identity = dsh::ghosty_route_identity(config, workspace);
     match dsh::compute_status(
         &paths,
         detection,
@@ -231,7 +231,7 @@ fn mcp_inventory(app: &App, project_mcp_path: &Path) -> McpInventoryRow {
         Err(_) => McpInventoryRow {
             status: InventoryStatus::NeedsConfig,
             detail: format!(
-                "config unreadable at {} (and project {}); open /mcp or run `codewhale doctor` — secrets not shown",
+                "config unreadable at {} (and project {}); open /mcp or run `ghosty doctor` — secrets not shown",
                 display_path(&app.mcp_config_path),
                 display_path(project_mcp_path)
             ),
@@ -269,7 +269,7 @@ fn mcp_snapshot_inventory(
         return McpInventoryRow {
             status: InventoryStatus::Off,
             detail: format!(
-                "nothing configured yet ({paths}); optional — use /mcp or `codewhale mcp init` later"
+                "nothing configured yet ({paths}); optional — use /mcp or `ghosty mcp init` later"
             ),
             scope: McpInventoryScope::Protocol,
         };
@@ -357,7 +357,7 @@ fn mcp_config_inventory(global: &Path, project: &Path, cfg: &McpConfig) -> McpIn
         return McpInventoryRow {
             status: InventoryStatus::Off,
             detail: format!(
-                "nothing configured yet ({paths}); optional — use /mcp or `codewhale mcp init` later"
+                "nothing configured yet ({paths}); optional — use /mcp or `ghosty mcp init` later"
             ),
             scope: McpInventoryScope::Configuration,
         };
@@ -413,7 +413,7 @@ fn mcp_config_inventory(global: &Path, project: &Path, cfg: &McpConfig) -> McpIn
     if !names_off.is_empty() {
         detail.push_str(&format!("; off: {}", names_off.join(", ")));
     }
-    detail.push_str("; /mcp or `codewhale doctor` for full checks");
+    detail.push_str("; /mcp or `ghosty doctor` for full checks");
     McpInventoryRow {
         status,
         detail,
@@ -456,7 +456,7 @@ fn skills_inventory(app: &App) -> InventoryRow {
         return InventoryRow {
             status: InventoryStatus::Off,
             detail: format!(
-                "nothing configured yet (missing at {path}); optional — /skills or `codewhale setup --skills`"
+                "nothing configured yet (missing at {path}); optional — /skills or `ghosty setup --skills`"
             ),
         };
     }
@@ -492,7 +492,7 @@ fn tools_dir_inventory(tools_dir: &Path) -> InventoryRow {
         return InventoryRow {
             status: InventoryStatus::Off,
             detail: format!(
-                "nothing configured yet (missing at {path}); optional — `codewhale setup --tools`"
+                "nothing configured yet (missing at {path}); optional — `ghosty setup --tools`"
             ),
         };
     }
@@ -518,8 +518,8 @@ fn tools_dir_inventory(tools_dir: &Path) -> InventoryRow {
     }
 }
 
-fn plugins_inventory(app: &App, config: &Config, codewhale_home: &Path) -> InventoryRow {
-    let plugins_dir = plugins_dir_for(app, config, codewhale_home);
+fn plugins_inventory(app: &App, config: &Config, ghosty_home: &Path) -> InventoryRow {
+    let plugins_dir = plugins_dir_for(app, config, ghosty_home);
     let path = display_path(&plugins_dir);
 
     // Manifest-based plugins (plugin.toml) are owned by this App's immutable,
@@ -597,8 +597,8 @@ fn plugins_inventory(app: &App, config: &Config, codewhale_home: &Path) -> Inven
     }
 }
 
-fn plugins_dir_for(_app: &App, _config: &Config, codewhale_home: &Path) -> PathBuf {
-    codewhale_home.join("plugins")
+fn plugins_dir_for(_app: &App, _config: &Config, ghosty_home: &Path) -> PathBuf {
+    ghosty_home.join("plugins")
 }
 
 fn hotbar_source_inventory(app: &App) -> InventoryRow {
@@ -690,7 +690,7 @@ mod tests {
     }
 
     fn write_path_only_command(dir: &Path) -> String {
-        let command = "codewhale-setup-mcp-path-only-test";
+        let command = "ghosty-setup-mcp-path-only-test";
         #[cfg(windows)]
         let file_name = format!("{command}.exe");
         #[cfg(not(windows))]
@@ -871,7 +871,7 @@ mod tests {
             crate::McpCommandAvailability::NotChecked
         );
 
-        server.command = Some("codewhale-setup-mcp-command-that-does-not-exist".to_string());
+        server.command = Some("ghosty-setup-mcp-command-that-does-not-exist".to_string());
         assert_eq!(
             classify_config_server(&server),
             InventoryStatus::NeedsConfig
@@ -1065,15 +1065,15 @@ mod tests {
             result: "overall=off".into(),
             overall_status: InventoryStatus::Off,
             needs_action: false,
-            mcp_path_display: "~/.codewhale/mcp.json".into(),
-            skills_path_display: "~/.codewhale/skills".into(),
-            plugins_path_display: "~/.codewhale/plugins".into(),
+            mcp_path_display: "~/.ghosty/mcp.json".into(),
+            skills_path_display: "~/.ghosty/skills".into(),
+            plugins_path_display: "~/.ghosty/plugins".into(),
         };
         let text = on_ramp_text(Locale::En, &facts);
-        assert!(text.contains("codewhale mcp init") || text.contains("/mcp"));
+        assert!(text.contains("ghosty mcp init") || text.contains("/mcp"));
         assert!(text.contains("/skills") || text.contains("setup --skills"));
         assert!(text.contains("does not") || text.contains("never") || text.contains("not run"));
-        assert!(text.contains("~/.codewhale/mcp.json"));
+        assert!(text.contains("~/.ghosty/mcp.json"));
         assert!(!text.contains("sk-"));
     }
 

@@ -105,24 +105,24 @@ function weixinEnv(name) {
 
 const config = {
   runtimeUrl: (
-    envFirst(process.env, "CODEWHALE_RUNTIME_URL", "DEEPSEEK_RUNTIME_URL") ||
+    envFirst(process.env, "GHOSTY_RUNTIME_URL", "DEEPSEEK_RUNTIME_URL") ||
     "http://127.0.0.1:7878"
   ).replace(/\/+$/, ""),
   runtimeToken: requiredEnvFirst(
-    "CODEWHALE_RUNTIME_TOKEN",
+    "GHOSTY_RUNTIME_TOKEN",
     "DEEPSEEK_RUNTIME_TOKEN"
   ),
   workspace:
-    envFirst(process.env, "CODEWHALE_WORKSPACE", "DEEPSEEK_WORKSPACE") ||
+    envFirst(process.env, "GHOSTY_WORKSPACE", "DEEPSEEK_WORKSPACE") ||
     process.cwd(),
   model:
-    envFirst(process.env, "CODEWHALE_MODEL", "DEEPSEEK_MODEL") || "auto",
+    envFirst(process.env, "GHOSTY_MODEL", "DEEPSEEK_MODEL") || "auto",
   mode:
-    envFirst(process.env, "CODEWHALE_MODE", "DEEPSEEK_MODE") || "agent",
+    envFirst(process.env, "GHOSTY_MODE", "DEEPSEEK_MODE") || "agent",
   allowShell: parseBool(
     envFirst(
       process.env,
-      "CODEWHALE_ALLOW_SHELL",
+      "GHOSTY_ALLOW_SHELL",
       "DEEPSEEK_ALLOW_SHELL"
     ),
     true
@@ -130,7 +130,7 @@ const config = {
   trustMode: parseBool(
     envFirst(
       process.env,
-      "CODEWHALE_TRUST_MODE",
+      "GHOSTY_TRUST_MODE",
       "DEEPSEEK_TRUST_MODE"
     ),
     false
@@ -138,7 +138,7 @@ const config = {
   autoApprove: parseBool(
     envFirst(
       process.env,
-      "CODEWHALE_AUTO_APPROVE",
+      "GHOSTY_AUTO_APPROVE",
       "DEEPSEEK_AUTO_APPROVE"
     ),
     false
@@ -147,7 +147,7 @@ const config = {
     weixinEnv("WEIXIN_CHAT_ALLOWLIST") ||
       envFirst(
         process.env,
-        "CODEWHALE_CHAT_ALLOWLIST",
+        "GHOSTY_CHAT_ALLOWLIST",
         "DEEPSEEK_CHAT_ALLOWLIST"
       )
   ),
@@ -155,17 +155,17 @@ const config = {
     weixinEnv("WEIXIN_ALLOW_UNLISTED") ||
       envFirst(
         process.env,
-        "CODEWHALE_ALLOW_UNLISTED",
+        "GHOSTY_ALLOW_UNLISTED",
         "DEEPSEEK_ALLOW_UNLISTED"
       ),
     false
   ),
   stateDir:
     weixinEnv("WEIXIN_STATE_DIR") ||
-    "/var/lib/codewhale-weixin-bot-bridge",
+    "/var/lib/ghosty-weixin-bot-bridge",
   threadMapPath:
     weixinEnv("WEIXIN_THREAD_MAP_PATH") ||
-    "/var/lib/codewhale-weixin-bot-bridge/thread-map.json",
+    "/var/lib/ghosty-weixin-bot-bridge/thread-map.json",
   maxReplyChars: Number(weixinEnv("WEIXIN_MAX_REPLY_CHARS") || 3500),
   longPollTimeoutMs: Number(
     weixinEnv("WEIXIN_LONGPOLL_TIMEOUT_MS") || 35000
@@ -173,7 +173,7 @@ const config = {
   turnTimeoutMs: Number(
     envFirst(
       process.env,
-      "CODEWHALE_TURN_TIMEOUT_MS",
+      "GHOSTY_TURN_TIMEOUT_MS",
       "DEEPSEEK_TURN_TIMEOUT_MS"
     ) || 900000
   ),
@@ -866,7 +866,7 @@ function sleep(ms) {
 // ============================================================================
 
 async function main() {
-  console.log("Starting CodeWhale Weixin Bot Bridge");
+  console.log("Starting GhostyCode Weixin Bot Bridge");
   console.log(`Runtime: ${config.runtimeUrl}`);
   console.log(`Workspace: ${config.workspace}`);
   console.log(`State dir: ${config.stateDir}`);

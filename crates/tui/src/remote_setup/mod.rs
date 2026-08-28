@@ -1,4 +1,4 @@
-//! `codewhale remote-setup` — guided generation of a remote-agent deploy bundle.
+//! `ghosty remote-setup` — guided generation of a remote-agent deploy bundle.
 //!
 //! Generate-only MVP: the wizard collects a cloud target, a chat bridge, and a
 //! model provider, then renders a deploy bundle (env files, systemd units,
@@ -7,7 +7,7 @@
 //!
 //! Design mirrors the table-driven provider registry in
 //! `crates/config/src/lib.rs`: the wizard iterates [`registry::CLOUD_TARGETS`],
-//! [`registry::BRIDGES`], and the existing `codewhale_config::provider` registry
+//! [`registry::BRIDGES`], and the existing `ghosty_config::provider` registry
 //! rather than hard-coding the matrix.
 
 pub mod bundle;
@@ -22,7 +22,7 @@ use clap::Args;
 use bundle::{BundleInputs, DEFAULT_PORT, DEFAULT_WORKERS, ProviderInfo, write_bundle};
 use registry::{BRIDGES, BridgeSpec, CLOUD_TARGETS, CloudTarget};
 
-/// Flags for `codewhale remote-setup` (clap), per the RFC command surface.
+/// Flags for `ghosty remote-setup` (clap), per the RFC command surface.
 #[derive(Args, Debug, Clone, Default)]
 pub struct RemoteSetupArgs {
     /// Cloud target slug (lighthouse, azure, digitalocean). Skips the prompt.
@@ -34,7 +34,7 @@ pub struct RemoteSetupArgs {
     /// Provider slug; validated against the provider registry. Skips the prompt.
     #[arg(long)]
     pub provider: Option<String>,
-    /// Bundle output directory (default `./codewhale-deploy/<cloud>-<bridge>`).
+    /// Bundle output directory (default `./ghosty-deploy/<cloud>-<bridge>`).
     #[arg(long, value_name = "DIR")]
     pub out: Option<PathBuf>,
     /// Emit the bundle, do not provision (default).
@@ -97,7 +97,7 @@ pub fn run_remote_setup(args: RemoteSetupArgs) -> Result<()> {
     };
 
     let out_dir = args.out.clone().unwrap_or_else(|| {
-        PathBuf::from("codewhale-deploy").join(format!("{}-{}", cloud.slug, bridge.slug))
+        PathBuf::from("ghosty-deploy").join(format!("{}-{}", cloud.slug, bridge.slug))
     });
 
     // Always render the bundle, even when --apply is requested.
@@ -131,9 +131,9 @@ fn print_header() {
     use crate::palette;
     use colored::Colorize;
     let (r, g, b) = palette::WHALE_INFO_RGB;
-    println!("{}", "Codewhale Remote Setup".truecolor(r, g, b).bold());
+    println!("{}", "Ghosty Remote Setup".truecolor(r, g, b).bold());
     println!("{}", "======================".truecolor(r, g, b));
-    println!("Generate a deploy bundle for a remote Codewhale agent (cloud + chat bridge).");
+    println!("Generate a deploy bundle for a remote Ghosty agent (cloud + chat bridge).");
 }
 
 // ---------------------------------------------------------------------------
@@ -187,18 +187,18 @@ fn resolve_provider(args: &RemoteSetupArgs) -> Result<ProviderInfo> {
         return ProviderInfo::from_slug(slug).ok_or_else(|| {
             anyhow::anyhow!(
                 "unknown provider '{slug}'. Known: {}",
-                codewhale_config::ProviderKind::names_hint()
+                ghosty_config::ProviderKind::names_hint()
             )
         });
     }
     if args.non_interactive {
         bail!(
             "--provider is required in --non-interactive mode. Known: {}",
-            codewhale_config::ProviderKind::names_hint()
+            ghosty_config::ProviderKind::names_hint()
         );
     }
     // List providers by their canonical names from the existing registry.
-    let providers: Vec<ProviderInfo> = codewhale_config::ProviderKind::all()
+    let providers: Vec<ProviderInfo> = ghosty_config::ProviderKind::all()
         .iter()
         .filter_map(|kind| ProviderInfo::from_slug(kind.as_str()))
         .collect();

@@ -26,7 +26,7 @@ export const chrome: ChromeDict = {
 
 
   navPrimaryAria: "主导航",
-  navHomeAria: "Codewhale 首页",
+  navHomeAria: "Ghosty 首页",
 
   installCta: "安装 →",
 
@@ -65,7 +65,7 @@ export const chrome: ChromeDict = {
   themeAria: "文档主题：{mode}（点击切换）",
   themeTitle: "文档主题 · 自动 / 浅色 / 深色",
 
-  footerTagline: "Codewhale 潜入深海，你不必亲自下潜——开源运行时的文档、源码与社区。",
+  footerTagline: "Ghosty 潜入深海，你不必亲自下潜——开源运行时的文档、源码与社区。",
   footerProduct: "产品",
   footerProject: "项目",
   footerDocs: "文档",

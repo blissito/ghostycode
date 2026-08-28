@@ -799,7 +799,7 @@ async fn prepare_acp_tool_with_hooks(
 
 fn next_acp_permission_request_id() -> Value {
     Value::String(format!(
-        "codewhale-permission-{}",
+        "ghosty-permission-{}",
         NEXT_ACP_PERMISSION_REQUEST_ID.fetch_add(1, Ordering::Relaxed)
     ))
 }
@@ -1095,7 +1095,7 @@ where
         match prepared.admission {
             AcpToolAdmission::Auto => {}
             AcpToolAdmission::Block(reason) => {
-                let content = format!("Blocked by Codewhale policy: {reason}");
+                let content = format!("Blocked by Ghosty policy: {reason}");
                 write_tool_call_update(writer, session_id, &call, "failed", Some(&content)).await?;
                 result_messages.push(tool_result_message(&call.id, content, true));
                 continue;
@@ -1460,7 +1460,7 @@ impl AcpServer {
             .and_then(Value::as_str)
             .map(PathBuf::from)
             .unwrap_or_else(|| self.default_cwd.clone());
-        let session_id = format!("codewhale-{}", uuid::Uuid::new_v4());
+        let session_id = format!("ghosty-{}", uuid::Uuid::new_v4());
         let tool_registry = Arc::new(build_acp_tool_registry(
             &self.config,
             &cwd,
@@ -1732,7 +1732,7 @@ fn resolve_acp_route_facts(
     provider: ApiProvider,
     model: &str,
 ) -> (
-    Option<codewhale_config::route::RouteLimits>,
+    Option<ghosty_config::route::RouteLimits>,
     crate::model_profile::SupportState,
 ) {
     let Ok(route) = crate::route_runtime::resolve_runtime_route(config, provider, Some(model))
@@ -1754,7 +1754,7 @@ fn frozen_acp_system_prompt(
     workspace: &std::path::Path,
     provider: ApiProvider,
     model: &str,
-    route_limits: Option<codewhale_config::route::RouteLimits>,
+    route_limits: Option<ghosty_config::route::RouteLimits>,
 ) -> SystemPrompt {
     let mut slot = match slot.lock() {
         Ok(slot) => slot,
@@ -1769,7 +1769,7 @@ fn frozen_acp_system_prompt(
 }
 
 /// Compose ACP's stable prompt through the same headless host seam as
-/// `codewhale exec`. Tool availability remains owned by the request catalog;
+/// `ghosty exec`. Tool availability remains owned by the request catalog;
 /// this function supplies the shared constitution, project instructions,
 /// configured instruction files, memory, locale, and route context.
 fn build_acp_system_prompt(
@@ -1777,7 +1777,7 @@ fn build_acp_system_prompt(
     workspace: &std::path::Path,
     provider: ApiProvider,
     model: &str,
-    route_limits: Option<codewhale_config::route::RouteLimits>,
+    route_limits: Option<ghosty_config::route::RouteLimits>,
 ) -> SystemPrompt {
     let settings = crate::settings::Settings::load().unwrap_or_default();
     let locale_tag = crate::localization::resolve_locale(&settings.locale)
@@ -1813,7 +1813,7 @@ fn build_acp_system_prompt(
                 route_limits,
             )),
             verbosity: config.verbosity.as_deref(),
-            skills_scan_codewhale_only: config.skills_config().scan_codewhale_only(),
+            skills_scan_ghosty_only: config.skills_config().scan_ghosty_only(),
             plugin_registry: None,
             mode: crate::tui::app::AppMode::Agent,
         },
@@ -2033,7 +2033,7 @@ async fn write_tool_call_update_with_blocks<W>(
     call: &PendingToolCall,
     status: &str,
     content: Option<&str>,
-    rich_blocks: &[codewhale_tools::ToolResultContentBlock],
+    rich_blocks: &[ghosty_tools::ToolResultContentBlock],
 ) -> Result<()>
 where
     W: AsyncWrite + Unpin,
@@ -2052,7 +2052,7 @@ where
             }));
         }
         blocks.extend(rich_blocks.iter().map(|block| match block {
-            codewhale_tools::ToolResultContentBlock::Image { mime_type, data } => json!({
+            ghosty_tools::ToolResultContentBlock::Image { mime_type, data } => json!({
                 "type": "content",
                 "content": { "type": "image", "data": data, "mimeType": mime_type }
             }),
@@ -2128,8 +2128,8 @@ fn initialize_result(client_protocol_version: Option<u64>, config: &Config) -> V
             "sessionCapabilities": {}
         },
         "agentInfo": {
-            "name": "codewhale",
-            "title": "codewhale",
+            "name": "ghosty",
+            "title": "ghosty",
             "version": env!("CARGO_PKG_VERSION")
         },
         "authMethods": acp_auth_methods(config)
@@ -2140,9 +2140,9 @@ fn acp_auth_methods(config: &Config) -> Value {
     let provider = config.api_provider().as_str();
     json!([
         {
-            "id": "codewhale-terminal-auth",
-            "name": "Set Codewhale API key",
-            "description": format!("Run Codewhale's terminal credential setup for the {provider} provider."),
+            "id": "ghosty-terminal-auth",
+            "name": "Set Ghosty API key",
+            "description": format!("Run Ghosty's terminal credential setup for the {provider} provider."),
             "type": "terminal",
             "args": ["auth", "set", "--provider", provider],
             "env": {}
@@ -2312,7 +2312,7 @@ mod tests {
             &call,
             "completed",
             Some("screenshot captured"),
-            &[codewhale_tools::ToolResultContentBlock::Image {
+            &[ghosty_tools::ToolResultContentBlock::Image {
                 mime_type: "image/png".to_string(),
                 data: "QUJD".to_string(),
             }],
@@ -2335,7 +2335,7 @@ mod tests {
         let result = initialize_result(Some(1), &Config::default());
 
         assert_eq!(result["protocolVersion"], 1);
-        assert_eq!(result["agentInfo"]["name"], "codewhale");
+        assert_eq!(result["agentInfo"]["name"], "ghosty");
         assert_eq!(result["agentCapabilities"]["loadSession"], false);
         assert_eq!(
             result["agentCapabilities"]["promptCapabilities"]["embeddedContext"],
@@ -3315,10 +3315,10 @@ mod tests {
         }
     }
 
-    fn config_with_policy_rule(rule: codewhale_execpolicy::ToolAskRule) -> Config {
+    fn config_with_policy_rule(rule: ghosty_execpolicy::ToolAskRule) -> Config {
         Config {
-            exec_policy_engine: codewhale_execpolicy::ExecPolicyEngine::with_rulesets(vec![
-                codewhale_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(vec![rule]),
+            exec_policy_engine: ghosty_execpolicy::ExecPolicyEngine::with_rulesets(vec![
+                ghosty_execpolicy::Ruleset::user(vec![], vec![]).with_ask_rules(vec![rule]),
             ]),
             ..Config::default()
         }
@@ -3371,9 +3371,9 @@ mod tests {
     #[tokio::test]
     async fn acp_hook_rewrite_is_reprepared_and_policy_is_re_evaluated() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let deny_rewritten_write = codewhale_execpolicy::ToolAskRule {
-            action: codewhale_execpolicy::PermissionAction::Deny,
-            ..codewhale_execpolicy::ToolAskRule::file_path("write_file", "rewritten.txt")
+        let deny_rewritten_write = ghosty_execpolicy::ToolAskRule {
+            action: ghosty_execpolicy::PermissionAction::Deny,
+            ..ghosty_execpolicy::ToolAskRule::file_path("write_file", "rewritten.txt")
         };
         let config = config_with_tool_call_hook(
             config_with_policy_rule(deny_rewritten_write),
@@ -3430,13 +3430,13 @@ mod tests {
         let input = json!({"action": "write", "path": "allowed.txt", "content": "new"});
         let call = pending_call("File", input.clone());
 
-        let allow = codewhale_execpolicy::ToolAskRule::file_path("write_file", "allowed.txt")
+        let allow = ghosty_execpolicy::ToolAskRule::file_path("write_file", "allowed.txt")
             .into_exact_workspace_allow(workspace.clone());
         let (_, admission) =
             prepare_acp_tool_admission(&config_with_policy_rule(allow), &registry, &call).unwrap();
         assert_eq!(admission, AcpToolAdmission::Auto);
 
-        let ask = codewhale_execpolicy::ToolAskRule::file_path("write_file", "allowed.txt");
+        let ask = ghosty_execpolicy::ToolAskRule::file_path("write_file", "allowed.txt");
         let (_, admission) =
             prepare_acp_tool_admission(&config_with_policy_rule(ask), &registry, &call).unwrap();
         assert!(matches!(
@@ -3444,16 +3444,16 @@ mod tests {
             AcpToolAdmission::RequestPermission(reason) if reason.contains("requires approval")
         ));
 
-        let deny = codewhale_execpolicy::ToolAskRule {
-            action: codewhale_execpolicy::PermissionAction::Deny,
-            ..codewhale_execpolicy::ToolAskRule::file_path("write_file", "allowed.txt")
+        let deny = ghosty_execpolicy::ToolAskRule {
+            action: ghosty_execpolicy::PermissionAction::Deny,
+            ..ghosty_execpolicy::ToolAskRule::file_path("write_file", "allowed.txt")
         };
         let (_, admission) =
             prepare_acp_tool_admission(&config_with_policy_rule(deny), &registry, &call).unwrap();
         assert!(matches!(admission, AcpToolAdmission::Block(_)));
 
         let command = "rm -rf ~/";
-        let shell_allow = codewhale_execpolicy::ToolAskRule::exec_shell(command)
+        let shell_allow = ghosty_execpolicy::ToolAskRule::exec_shell(command)
             .into_exact_workspace_allow(workspace);
         let shell_call = pending_call("Bash", json!({"command": command}));
         let (_, admission) = prepare_acp_tool_admission(
@@ -3499,7 +3499,7 @@ mod tests {
         let (dir, registry) = workspace_registry();
         let workspace = dir.path().to_string_lossy().into_owned();
         let command = "cargo test";
-        let shell_allow = codewhale_execpolicy::ToolAskRule::exec_shell(command)
+        let shell_allow = ghosty_execpolicy::ToolAskRule::exec_shell(command)
             .into_exact_workspace_allow(workspace.clone());
         let mut auto_review_block = config_with_policy_rule(shell_allow);
         auto_review_block.auto_review = Some(crate::config::AutoReviewConfig {
@@ -3522,7 +3522,7 @@ mod tests {
             AcpToolAdmission::Block(reason) if reason.contains("ACP shell is disabled by policy")
         ));
 
-        let law_dir = dir.path().join(".codewhale");
+        let law_dir = dir.path().join(".ghosty");
         std::fs::create_dir_all(&law_dir).unwrap();
         std::fs::write(
             law_dir.join("constitution.json"),
@@ -3536,7 +3536,7 @@ mod tests {
         .unwrap();
 
         for (path, expected_block) in [("wire.rs", true), ("CHANGELOG.md", false)] {
-            let allow = codewhale_execpolicy::ToolAskRule::file_path("write_file", path)
+            let allow = ghosty_execpolicy::ToolAskRule::file_path("write_file", path)
                 .into_exact_workspace_allow(workspace.clone());
             let config = config_with_policy_rule(allow);
             let call = pending_call(

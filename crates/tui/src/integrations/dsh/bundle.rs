@@ -1,14 +1,14 @@
-//! The documented DSH plugin path: a Codewhale bundle package installed into
-//! a dedicated `codewhale` DSH profile with `dsh plugin --profile codewhale
+//! The documented DSH plugin path: a Ghosty bundle package installed into
+//! a dedicated `ghosty` DSH profile with `dsh plugin --profile ghosty
 //! add <absolute path>` (pnpm required).
 //!
 //! The bundle is an npm-shaped package under
-//! `$CODEWHALE_HOME/integrations/dsh/bundle/` whose `cordis.patch.yml`
+//! `$GHOSTY_HOME/integrations/dsh/bundle/` whose `cordis.patch.yml`
 //! carries the same identity rows as the `--patch` overlay. Because
 //! `dsh plugin add <path>` records a `link:` dependency, `update` only has to
 //! rewrite the patch file. The dedicated profile also gets DSH's own shipped
 //! app bundle (`@deepseek-ai/dsh-web-app` or `dsh-headless`) linked from the
-//! installed launcher, so `dsh --profile codewhale` boots without `--patch`.
+//! installed launcher, so `dsh --profile ghosty` boots without `--patch`.
 //! The user's `web`/`headless` profiles are never touched. The profile
 //! directory itself is DSH-owned and is left in place on removal.
 
@@ -24,15 +24,15 @@ use super::skin::{self, SKIN_SOURCE};
 use super::{brand, scene};
 
 pub(crate) const BUNDLE_DIR: &str = "bundle";
-pub(crate) const BUNDLE_PACKAGE_NAME: &str = "codewhale-dsh-bundle";
+pub(crate) const BUNDLE_PACKAGE_NAME: &str = "ghosty-dsh-bundle";
 pub(crate) const BUNDLE_PATCH_FILE: &str = "cordis.patch.yml";
-pub(crate) const BUNDLE_PROFILE: &str = "codewhale";
+pub(crate) const BUNDLE_PROFILE: &str = "ghosty";
 pub(crate) const BUNDLE_CLIENT_FILE: &str = "lib/client.js";
 pub(crate) const BUNDLE_INDEX_FILE: &str = "lib/index.js";
 /// Last row of `cordis.patch.yml` when the skin is enabled. Appended after the
 /// identity overlay so the `--patch` overlay file stays byte-identical.
 pub(crate) const SKIN_INSERT_YAML: &str =
-    "- insert: [{ id: codewhale-skin, name: codewhale-dsh-bundle }]\n";
+    "- insert: [{ id: ghosty-skin, name: ghosty-dsh-bundle }]\n";
 
 /// Which shipped DSH app bundle the dedicated profile boots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,9 +65,9 @@ pub(crate) struct DshBundleRecord {
     pub(crate) installed_at: String,
     pub(crate) updated_at: String,
     pub(crate) profile: String,
-    /// `$DSH_HOME/profiles/codewhale` (DSH-owned).
+    /// `$DSH_HOME/profiles/ghosty` (DSH-owned).
     pub(crate) profile_dir: PathBuf,
-    /// `$CODEWHALE_HOME/integrations/dsh/bundle` (Codewhale-owned).
+    /// `$GHOSTY_HOME/integrations/dsh/bundle` (Ghosty-owned).
     pub(crate) bundle_dir: PathBuf,
     pub(crate) package_name: String,
     pub(crate) package_version: String,
@@ -203,9 +203,9 @@ pub(crate) fn app_bundle_source(binary: &Path, app: DshAppBundle) -> Result<Path
     Ok(dir)
 }
 
-pub(crate) fn bundle_version(codewhale_version: &str, patch_sha256: &str) -> String {
+pub(crate) fn bundle_version(ghosty_version: &str, patch_sha256: &str) -> String {
     format!(
-        "{codewhale_version}+dsh.{}",
+        "{ghosty_version}+dsh.{}",
         &patch_sha256[..12.min(patch_sha256.len())]
     )
 }
@@ -224,17 +224,17 @@ pub(crate) fn render_bundle_patch(overlay_text: &str, skin: bool) -> String {
     out
 }
 
-/// Files the bundle package consists of (all Codewhale-owned). `ocean` only
+/// Files the bundle package consists of (all Ghosty-owned). `ocean` only
 /// matters with `skin`: it splices the ambient scene into `lib/client.js`
 /// (dsh serves one client file per plugin, so there is no `lib/scene.js`).
 pub(crate) fn render_bundle_files(
-    codewhale_version: &str,
+    ghosty_version: &str,
     overlay_text: &str,
     skin: bool,
     ocean: bool,
 ) -> Vec<(&'static str, String)> {
     let patch_sha = sha256_hex(overlay_text.as_bytes());
-    let version = bundle_version(codewhale_version, &patch_sha);
+    let version = bundle_version(ghosty_version, &patch_sha);
     let mut dsh = serde_json::json!({
         "bundle": { "patch": format!("./{BUNDLE_PATCH_FILE}") }
     });
@@ -242,11 +242,11 @@ pub(crate) fn render_bundle_files(
         "name": BUNDLE_PACKAGE_NAME,
         "version": version,
         "private": true,
-        "description": "DeepSeek Harness connected through Codewhale: identity overlay bundle (generated; do not edit)",
+        "description": "DeepSeek Harness connected through Ghosty: identity overlay bundle (generated; do not edit)",
         "license": "MIT",
         "dsh": dsh.clone(),
-        "codewhale": {
-            "generated_by": "codewhale integrations dsh install-bundle",
+        "ghosty": {
+            "generated_by": "ghosty integrations dsh install-bundle",
             "patch_sha256": patch_sha,
             "skin": skin,
             "ocean": skin && ocean,
@@ -271,18 +271,17 @@ pub(crate) fn render_bundle_files(
             "./client": { "default": format!("./{BUNDLE_CLIENT_FILE}") },
             "./package.json": "./package.json"
         });
-        package_json["codewhale"]["skin_sha256"] = serde_json::json!(skin::skin_tokens_sha256());
-        package_json["codewhale"]["skin_source"] = serde_json::json!(SKIN_SOURCE);
-        package_json["codewhale"]["brand_sha256"] = serde_json::json!(brand::brand_sha256());
+        package_json["ghosty"]["skin_sha256"] = serde_json::json!(skin::skin_tokens_sha256());
+        package_json["ghosty"]["skin_source"] = serde_json::json!(SKIN_SOURCE);
+        package_json["ghosty"]["brand_sha256"] = serde_json::json!(brand::brand_sha256());
         if ocean {
-            package_json["codewhale"]["ocean_scene_sha256"] =
-                serde_json::json!(scene::scene_sha256());
+            package_json["ghosty"]["ocean_scene_sha256"] = serde_json::json!(scene::scene_sha256());
         }
     }
     let readme = format!(
-        "# {BUNDLE_PACKAGE_NAME}\n\nDeepSeek Harness connected through Codewhale.\n\nGenerated bundle: `{BUNDLE_PATCH_FILE}` carries the exact Codewhale provider/model/endpoint identity (no credentials). Installed into the dedicated DSH profile `{BUNDLE_PROFILE}` with `dsh plugin --profile {BUNDLE_PROFILE} add <this directory>`. Regenerated by `codewhale integrations dsh update`; removed by `codewhale integrations dsh remove-bundle`. Do not edit by hand.\n"
+        "# {BUNDLE_PACKAGE_NAME}\n\nDeepSeek Harness connected through Ghosty.\n\nGenerated bundle: `{BUNDLE_PATCH_FILE}` carries the exact Ghosty provider/model/endpoint identity (no credentials). Installed into the dedicated DSH profile `{BUNDLE_PROFILE}` with `dsh plugin --profile {BUNDLE_PROFILE} add <this directory>`. Regenerated by `ghosty integrations dsh update`; removed by `ghosty integrations dsh remove-bundle`. Do not edit by hand.\n"
     );
-    let notice = "This bundle is generated by Codewhale and configures the official DeepSeek Harness (dsh).\n\nDeepSeek Harness — MIT License, Copyright (c) 2026 DeepSeek. The DeepSeek Harness copyright and permission notice apply to the harness packages this bundle references; this bundle redistributes none of them.\n\nThis generated bundle is provided under the MIT License.\n".to_string();
+    let notice = "This bundle is generated by Ghosty and configures the official DeepSeek Harness (dsh).\n\nDeepSeek Harness — MIT License, Copyright (c) 2026 DeepSeek. The DeepSeek Harness copyright and permission notice apply to the harness packages this bundle references; this bundle redistributes none of them.\n\nThis generated bundle is provided under the MIT License.\n".to_string();
     let mut files = vec![
         (
             "package.json",
@@ -306,7 +305,7 @@ pub(crate) fn render_bundle_files(
 /// (not the on-disk patch hash, which may include the skin insert row).
 pub(crate) fn write_bundle(
     bundle_dir: &Path,
-    codewhale_version: &str,
+    ghosty_version: &str,
     overlay_text: &str,
     skin: bool,
     ocean: bool,
@@ -317,7 +316,7 @@ pub(crate) fn write_bundle(
         std::fs::create_dir_all(bundle_dir.join("lib"))
             .with_context(|| format!("create {}", bundle_dir.join("lib").display()))?;
     }
-    for (name, text) in render_bundle_files(codewhale_version, overlay_text, skin, ocean) {
+    for (name, text) in render_bundle_files(ghosty_version, overlay_text, skin, ocean) {
         write_atomic(&bundle_dir.join(name), text.as_bytes())?;
     }
     if !skin {
@@ -357,7 +356,7 @@ pub(crate) fn remove_bundle_files(bundle_dir: &Path) -> Result<Vec<PathBuf>> {
         }
     }
     let _ = std::fs::remove_dir(bundle_dir.join("lib"));
-    // Only remove the directory when Codewhale left nothing else in it.
+    // Only remove the directory when Ghosty left nothing else in it.
     let _ = std::fs::remove_dir(bundle_dir);
     Ok(removed)
 }
@@ -374,9 +373,9 @@ pub(crate) fn client_half_stale(bundle_dir: &Path, skin: bool, ocean: bool) -> O
         }
         match std::fs::read_to_string(&client) {
             Ok(text) if text == skin::bundle_client_js(ocean) => None,
-            Ok(_) => Some(
-                "bundle lib/client.js was modified outside Codewhale; run `update`".to_string(),
-            ),
+            Ok(_) => {
+                Some("bundle lib/client.js was modified outside Ghosty; run `update`".to_string())
+            }
             Err(_) => Some("bundle lib/client.js is unreadable; run `update`".to_string()),
         }
     } else if present {
@@ -434,7 +433,7 @@ fn run_dsh_plugin(
 }
 
 /// Install the app bundle (linked from the installed launcher) and then the
-/// Codewhale bundle, in that order so Codewhale's rows patch last.
+/// Ghosty bundle, in that order so Ghosty's rows patch last.
 pub(crate) fn install_into_profile(
     runner: &dyn DshRunner,
     detection: &DshDetection,

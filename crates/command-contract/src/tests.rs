@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use codewhale_core::request::{Message, SystemPrompt};
+use ghosty_core::request::{Message, SystemPrompt};
 
 use crate::*;
 

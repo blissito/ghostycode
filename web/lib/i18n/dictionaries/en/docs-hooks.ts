@@ -6,13 +6,13 @@ import type { DocsHooksDict } from "../types";
  * belongs in its own commit, never mixed into a structural move.
  */
 export const docsHooks: DocsHooksDict = {
-  metaTitle: "Hooks · Codewhale Docs",
+  metaTitle: "Hooks · Ghosty Docs",
   metaDescription:
     "The shipped lifecycle hooks: mutable message_submit, tool_call_before decisions, turn_end, and sub-agent observer events.",
   bodyClassName: "text-ink-soft leading-relaxed",
   overviewTitle: "Hooks",
   overviewLead:
-    "Hooks attach your own commands to Codewhale's lifecycle: inject context before a message is submitted, enforce policy before a tool call, and audit turns or sub-agent activity. This page describes what currently ships; docs/rfcs/1364-hooks-lifecycle.md is the design RFC for this surface, and docs/CONFIGURATION.md carries the full configuration schema.",
+    "Hooks attach your own commands to Ghosty's lifecycle: inject context before a message is submitted, enforce policy before a tool call, and audit turns or sub-agent activity. This page describes what currently ships; docs/rfcs/1364-hooks-lifecycle.md is the design RFC for this surface, and docs/CONFIGURATION.md carries the full configuration schema.",
   configIntro:
     "Hooks are configured under {hooksTable} entries in config.toml; run {hooksCommand} in the TUI to see every configured hook grouped by event — name, command preview, timeout, and condition — plus the global {enabledKey} state.",
   events: [
@@ -35,7 +35,7 @@ export const docsHooks: DocsHooksDict = {
   ],
   projectTitle: "Project-local hooks",
   projectLead:
-    'Repositories can ship policy in <workspace>/.codewhale/hooks.toml. Because project hooks are executable shell configuration, Codewhale loads them only after the workspace is trusted through the trust prompt or a trust_level = "trusted" entry in user-owned config — session /trust on and legacy .deepseek/trusted markers do not enable project hooks by themselves. Once trusted, project hooks are appended after the global hooks from config.toml, so they run last and win updatedInput ties. A malformed trusted project file logs a warning and startup falls back to global hooks only.',
+    'Repositories can ship policy in <workspace>/.ghosty/hooks.toml. Because project hooks are executable shell configuration, Ghosty loads them only after the workspace is trusted through the trust prompt or a trust_level = "trusted" entry in user-owned config — session /trust on and legacy .deepseek/trusted markers do not enable project hooks by themselves. Once trusted, project hooks are appended after the global hooks from config.toml, so they run last and win updatedInput ties. A malformed trusted project file logs a warning and startup falls back to global hooks only.',
   sourceNote:
     "Source documents: docs/rfcs/1364-hooks-lifecycle.md (design RFC), docs/CONFIGURATION.md (configuration schema) · Update docs-map.ts when changing.",
 };

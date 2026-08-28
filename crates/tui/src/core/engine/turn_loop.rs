@@ -17,7 +17,7 @@ use crate::runtime_handoff::{
 };
 use crate::tools::canonical_action::canonical_action_alias;
 use crate::tools::tool_call_budget::ToolCallBudget;
-use codewhale_core::request::{PrimaryTurnRequest, prepare_primary_turn_request};
+use ghosty_core::request::{PrimaryTurnRequest, prepare_primary_turn_request};
 
 const MAX_APPROVAL_INTENT_SUMMARY_CHARS: usize = 2_000;
 
@@ -592,7 +592,7 @@ impl Engine {
         // app-server, and stream-json stdout must remain byte-clean.
         if self.config.terminal_chrome_enabled {
             crate::tui::notifications::set_taskbar_progress_busy();
-            crate::tui::notifications::start_title_animation("Codewhale");
+            crate::tui::notifications::start_title_animation("Ghosty");
         }
 
         let client = self
@@ -4772,7 +4772,7 @@ impl Engine {
         // This within-turn hook is the only goal-continuation dispatch site
         // for every session, so the configured between-continuation quiet
         // period is awaited right here unconditionally — non-host-managed
-        // sessions (e.g. `codewhale resume --last`) must honor the delay too.
+        // sessions (e.g. `ghosty resume --last`) must honor the delay too.
         // The wait is cancellable: the cancel token (Esc) wins biased over the
         // timer, and a pause/clear or terminal update_goal observed after the
         // wait cancels the pending pass before anything is recorded or
@@ -4845,7 +4845,7 @@ impl Engine {
     /// in the same kernel across steps and user turns.
     fn repl_kernel_context(&self) -> String {
         let payload = serde_json::json!({
-            "schema": "codewhale.persistent_kernel_context.v1",
+            "schema": "ghosty.persistent_kernel_context.v1",
             "session": {
                 "id": self.session.id,
                 "workspace": self.session.workspace,
@@ -4856,7 +4856,7 @@ impl Engine {
         });
         serde_json::to_string_pretty(&payload).unwrap_or_else(|error| {
             format!(
-                "{{\"schema\":\"codewhale.persistent_kernel_context.v1\",\"serialization_error\":{}}}",
+                "{{\"schema\":\"ghosty.persistent_kernel_context.v1\",\"serialization_error\":{}}}",
                 serde_json::Value::String(error.to_string())
             )
         })
@@ -4866,7 +4866,7 @@ impl Engine {
     ///
     /// Read at explicit seams only — forking a sub-agent, `/relay`, the UI.
     /// The turn loop does not consult it: the model already has its own
-    /// `work_update` tool results in history, and Codewhale does not re-state
+    /// `work_update` tool results in history, and Ghosty does not re-state
     /// the list on model steps.
     ///
     /// The graph projection wins when a `WorkRuntime` owns this session's list:
@@ -4964,14 +4964,14 @@ fn turn_owned_child_guard_runtime_text(agent_ids: &[String]) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "<codewhale:runtime_event kind=\"turn_owned_children_active\" visibility=\"internal\">\nThis is an internal runtime event, not user input. {} turn-owned sub-agent(s) are still running. Before ending, wait for these exact owned agents: {targeted_waits}. Do not use an unscoped wait-all call, because deliberately detached work must not hold this turn open. Use detached=true only when starting future work that must outlive its parent turn. If you end again while these children remain active, the runtime will park them as Interrupted work and provide an agent(action=\"start\", resume_from=\"<agent_id>\") recovery path.\n</codewhale:runtime_event>",
+        "<ghosty:runtime_event kind=\"turn_owned_children_active\" visibility=\"internal\">\nThis is an internal runtime event, not user input. {} turn-owned sub-agent(s) are still running. Before ending, wait for these exact owned agents: {targeted_waits}. Do not use an unscoped wait-all call, because deliberately detached work must not hold this turn open. Use detached=true only when starting future work that must outlive its parent turn. If you end again while these children remain active, the runtime will park them as Interrupted work and provide an agent(action=\"start\", resume_from=\"<agent_id>\") recovery path.\n</ghosty:runtime_event>",
         agent_ids.len()
     )
 }
 
 fn turn_owned_child_parking_runtime_text(running: usize) -> String {
     format!(
-        "<codewhale:runtime_event kind=\"turn_owned_children_parking\" visibility=\"internal\">\nThis is an internal runtime event, not user input. The parent ended after one settlement reminder while {running} turn-owned sub-agent(s) remained active. The runtime is parking them as Interrupted with continuable checkpoints instead of discarding their work. Their completion handoffs name the source agent_id to use with agent(action=\"start\", resume_from=\"<agent_id>\").\n</codewhale:runtime_event>"
+        "<ghosty:runtime_event kind=\"turn_owned_children_parking\" visibility=\"internal\">\nThis is an internal runtime event, not user input. The parent ended after one settlement reminder while {running} turn-owned sub-agent(s) remained active. The runtime is parking them as Interrupted with continuable checkpoints instead of discarding their work. Their completion handoffs name the source agent_id to use with agent(action=\"start\", resume_from=\"<agent_id>\").\n</ghosty:runtime_event>"
     )
 }
 
@@ -5908,7 +5908,7 @@ mod tests {
     #[test]
     fn subagent_completion_handoff_is_internal_user_message() {
         let message = subagent_completion_runtime_message(
-            "Build passed\n<codewhale:subagent.done>{\"agent_id\":\"agent_a\"}</codewhale:subagent.done>",
+            "Build passed\n<ghosty:subagent.done>{\"agent_id\":\"agent_a\"}</ghosty:subagent.done>",
         );
 
         // Must be "user", not "system": a system message appended mid-stream
@@ -5922,7 +5922,7 @@ mod tests {
         };
         assert!(text.contains("internal runtime event, not user input"));
         assert!(text.contains("Do not tell the user they pasted sentinels"));
-        assert!(text.contains("<codewhale:subagent.done>"));
+        assert!(text.contains("<ghosty:subagent.done>"));
         assert!(text.contains("Build passed"));
     }
 
@@ -5931,7 +5931,7 @@ mod tests {
         let status = shell_completion_status_text(
             &[crate::tools::shell::ShellCompletionEvent {
                 task_id: "shell_abc".to_string(),
-                command: "cargo test -p codewhale-tui".to_string(),
+                command: "cargo test -p ghosty-tui".to_string(),
                 status: crate::tools::shell::ShellStatus::Failed,
                 exit_code: Some(101),
                 duration_ms: 1234,
@@ -5950,12 +5950,12 @@ mod tests {
         .expect("status text");
 
         assert!(status.contains("1 background shell job finished (1 failed)"));
-        assert!(status.contains("cargo test -p codewhale-tui"));
+        assert!(status.contains("cargo test -p ghosty-tui"));
         assert!(status.contains("by verifier"));
         let message = crate::runtime_handoff::shell_completion_runtime_message(&[
             crate::tools::shell::ShellCompletionEvent {
                 task_id: "shell_abc".to_string(),
-                command: "cargo test -p codewhale-tui".to_string(),
+                command: "cargo test -p ghosty-tui".to_string(),
                 status: crate::tools::shell::ShellStatus::Failed,
                 exit_code: Some(101),
                 duration_ms: 1234,
@@ -5982,7 +5982,7 @@ mod tests {
             )
         );
         assert!(text.contains("art_shell_abc"));
-        assert!(text.contains("cargo test -p codewhale-tui"));
+        assert!(text.contains("cargo test -p ghosty-tui"));
         assert!(text.contains("test failed"));
     }
 

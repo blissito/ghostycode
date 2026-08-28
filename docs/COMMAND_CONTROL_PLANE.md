@@ -2,16 +2,16 @@
 
 Issues #1888 and #4022.
 
-Codewhale exposes the same lifecycle operations on three surfaces: a slash
+Ghosty exposes the same lifecycle operations on three surfaces: a slash
 command typed into the composer, a bound hotbar slot, and a CLI entrypoint.
 Before this contract those three could — and did — drift: `/fleet status`
-showed the current session's sub-agents while `codewhale fleet status` read the
+showed the current session's sub-agents while `ghosty fleet status` read the
 durable ledger, and the CLI's Lane verbs had no slash equivalent at all.
 
 The contract is one typed descriptor table plus one executor per domain, in
 [`crates/lane/src/control.rs`](../crates/lane/src/control.rs) and
 [`crates/tui/src/fleet/control.rs`](../crates/tui/src/fleet/control.rs).
-`codewhale-lane` is the lowest crate the thin CLI facade and the TUI both
+`ghosty-lane` is the lowest crate the thin CLI facade and the TUI both
 already depend on, so there is exactly one place the contract can live without
 forking.
 
@@ -56,7 +56,7 @@ a typed `UnavailableReason` with a sanitized hint:
 
 - `backend_not_implemented` — nobody has built it. Every surface refuses.
 - `surface_not_supported` — the backend exists but not here. The hint names the
-  surface that works (`codewhale fleet restart <worker-id>`).
+  surface that works (`ghosty fleet restart <worker-id>`).
 - `no_lane_registry` / `no_fleet_ledger` — the durable store does not exist yet.
 
 Availability is probed **read-only**. `LaneRegistry::open_default` and
@@ -75,7 +75,7 @@ handed an argument.
 A write may be **fenced** by appending `@<lifecycle-seq>`:
 
 ```
-codewhale lane interrupt lane-a1b2c3d4@3
+ghosty lane interrupt lane-a1b2c3d4@3
 /lane interrupt lane-a1b2c3d4@3
 ```
 

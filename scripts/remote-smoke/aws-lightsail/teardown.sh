@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# EXPERIMENTAL — tears down the CodeWhale Lightsail smoke lab and verifies
+# EXPERIMENTAL — tears down the GhostyCode Lightsail smoke lab and verifies
 # nothing billable is left behind (instance, key pair, static IPs, disks,
 # snapshots). Safe to re-run; prints what it finds before deleting.
 set -euo pipefail
 
-INSTANCE_NAME="${INSTANCE_NAME:-codewhale-smoke}"
+INSTANCE_NAME="${INSTANCE_NAME:-ghosty-smoke}"
 KEY_PAIR_NAME="${KEY_PAIR_NAME:-${INSTANCE_NAME}-key}"
 REGION="${AWS_REGION:-$(aws configure get region || true)}"
 [[ -n "${REGION}" ]] || { echo "Set AWS_REGION" >&2; exit 1; }

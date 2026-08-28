@@ -60,7 +60,7 @@ jobs:
               return;
             }
 
-            const marker = '<!-- codewhale-issue-intake -->';
+            const marker = '<!-- ghosty-issue-intake -->';
             const { data: comments } = await github.rest.issues.listComments({
               owner,
               repo,
@@ -77,7 +77,7 @@ jobs:
                 marker,
                 `Thanks @${issue.user.login} for the report.`,
                 '',
-                'This issue is staying open for maintainer triage. CodeWhale gets better because people bring us real edge cases from real machines, providers, regions, and workflows.',
+                'This issue is staying open for maintainer triage. GhostyCode gets better because people bring us real edge cases from real machines, providers, regions, and workflows.',
                 '',
                 'If you can add a reproduction, logs, version output, screenshots, or the provider/model involved, that makes it much easier for us to verify and harvest the fix. Maintainers may comment `/lgtmi` to mark recurring issue reporters as approved so this intake note is skipped next time.',
               ].join('\n'),

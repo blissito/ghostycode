@@ -53,7 +53,7 @@ impl DeclarativePluginFixture {
         let config = DiscoveryConfig {
             workspace: workspace.clone(),
             user_plugins_dir,
-            workspace_plugins_dir: workspace.join(".codewhale/plugins"),
+            workspace_plugins_dir: workspace.join(".ghosty/plugins"),
             builtin_plugin_dirs: Vec::new(),
             state_path: temp.path().join("state/plugin-state.json"),
         };

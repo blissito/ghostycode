@@ -393,7 +393,7 @@ fn read_only_machine_authority_clamps_live_shell_policy() {
 
 #[test]
 fn process_tool_authority_inherits_into_all_context_constructors() {
-    const CHILD_ENV: &str = "CODEWHALE_TEST_PROCESS_TOOL_AUTHORITY_CHILD";
+    const CHILD_ENV: &str = "GHOSTY_TEST_PROCESS_TOOL_AUTHORITY_CHILD";
     if std::env::var_os(CHILD_ENV).is_some() {
         let tmp = tempdir().expect("tempdir");
         install_process_tool_authority(ToolAuthorityEnvelope {

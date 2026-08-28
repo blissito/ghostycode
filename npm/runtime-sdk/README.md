@@ -1,16 +1,16 @@
-# @codewhale/runtime-sdk
+# @ghosty/runtime-sdk
 
-Small JavaScript helpers and TypeScript declarations for Codewhale's local
+Small JavaScript helpers and TypeScript declarations for Ghosty's local
 Runtime API. The package is intentionally transport-only: it never bypasses the
 Rust runtime, sandbox, approvals, provider configuration, or Runtime execution
 ledger.
 
 ```js
-import { createRuntimeClient } from "@codewhale/runtime-sdk";
+import { createRuntimeClient } from "@ghosty/runtime-sdk";
 
 const client = createRuntimeClient({
   baseUrl: "http://127.0.0.1:7878",
-  token: process.env.CODEWHALE_RUNTIME_TOKEN,
+  token: process.env.GHOSTY_RUNTIME_TOKEN,
 });
 
 const created = await client.createFleetRun({

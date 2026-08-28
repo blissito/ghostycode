@@ -563,7 +563,7 @@ mod tests {
         // scope — and compares against the API's projection of the same store.
         let _lock = crate::test_support::lock_test_env();
         let tmp = TempDir::new().expect("tempdir");
-        let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", tmp.path());
+        let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", tmp.path());
         let manager = SessionManager::default_location().expect("manager");
         let workspace = tmp.path().join("workspace");
         let other = tmp.path().join("other");

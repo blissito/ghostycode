@@ -9,19 +9,17 @@ fn offline_doctor_loads_never_materialize_secret_environment_overrides() {
     let temp = tempfile::TempDir::new().expect("tempdir");
     let config_path = temp.path().join("config.toml");
     fs::write(&config_path, "").expect("empty config");
-    let _home = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_HOME",
-        temp.path().join("home").as_os_str(),
-    );
-    let _profile = crate::test_support::EnvVarGuard::remove("CODEWHALE_PROFILE");
+    let _home =
+        crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path().join("home").as_os_str());
+    let _profile = crate::test_support::EnvVarGuard::remove("GHOSTY_PROFILE");
     let _legacy_profile = crate::test_support::EnvVarGuard::remove("DEEPSEEK_PROFILE");
-    let _managed = crate::test_support::EnvVarGuard::remove("CODEWHALE_MANAGED_CONFIG_PATH");
+    let _managed = crate::test_support::EnvVarGuard::remove("GHOSTY_MANAGED_CONFIG_PATH");
     let _legacy_managed = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MANAGED_CONFIG_PATH");
-    let _requirements = crate::test_support::EnvVarGuard::remove("CODEWHALE_REQUIREMENTS_PATH");
+    let _requirements = crate::test_support::EnvVarGuard::remove("GHOSTY_REQUIREMENTS_PATH");
     let _legacy_requirements =
         crate::test_support::EnvVarGuard::remove("DEEPSEEK_REQUIREMENTS_PATH");
     let _headers = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_HTTP_HEADERS",
+        "GHOSTY_HTTP_HEADERS",
         "Authorization=doctor-offline-header-sentinel",
     );
     let _legacy_headers = crate::test_support::EnvVarGuard::set(
@@ -29,7 +27,7 @@ fn offline_doctor_loads_never_materialize_secret_environment_overrides() {
         "Authorization=doctor-offline-legacy-header-sentinel",
     );
     let _sandbox = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_SANDBOX_API_KEY",
+        "GHOSTY_SANDBOX_API_KEY",
         "doctor-offline-sandbox-sentinel",
     );
     let _legacy_sandbox = crate::test_support::EnvVarGuard::set(
@@ -37,7 +35,7 @@ fn offline_doctor_loads_never_materialize_secret_environment_overrides() {
         "doctor-offline-legacy-sandbox-sentinel",
     );
     let _search = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_SEARCH_API_KEY",
+        "GHOSTY_SEARCH_API_KEY",
         "doctor-offline-search-sentinel",
     );
     let _legacy_search = crate::test_support::EnvVarGuard::set(
@@ -45,10 +43,10 @@ fn offline_doctor_loads_never_materialize_secret_environment_overrides() {
         "doctor-offline-legacy-search-sentinel",
     );
     let _base_url = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_BASE_URL",
+        "GHOSTY_BASE_URL",
         "https://safe-doctor.example:9443/v1",
     );
-    let _allow_shell = crate::test_support::EnvVarGuard::set("CODEWHALE_ALLOW_SHELL", "false");
+    let _allow_shell = crate::test_support::EnvVarGuard::set("GHOSTY_ALLOW_SHELL", "false");
     let config_arg = config_path.to_string_lossy().into_owned();
 
     for suffix in [
@@ -59,7 +57,7 @@ fn offline_doctor_loads_never_materialize_secret_environment_overrides() {
         vec!["--probe-mcp"],
     ] {
         let mut argv = vec![
-            "codewhale-tui".to_string(),
+            "ghosty-tui".to_string(),
             "--config".to_string(),
             config_arg.clone(),
             "doctor".to_string(),
@@ -101,7 +99,7 @@ fn offline_doctor_loads_never_materialize_secret_environment_overrides() {
     }
 
     for probe in ["--probe-api", "--probe-local"] {
-        let cli = Cli::try_parse_from(["codewhale-tui", "--config", &config_arg, "doctor", probe])
+        let cli = Cli::try_parse_from(["ghosty-tui", "--config", &config_arg, "doctor", probe])
             .expect("live doctor CLI");
         let Some(Commands::Doctor(args)) = cli.command.as_ref() else {
             panic!("expected doctor command");
@@ -155,11 +153,11 @@ fn make_server(command: Option<&str>, args: &[&str], url: Option<&str>) -> McpSe
 #[test]
 fn doctor_does_not_expand_mcp_environment_placeholders() {
     let _lock = crate::test_support::lock_test_env();
-    let _missing = crate::test_support::EnvVarGuard::remove("CODEWHALE_DOCTOR_MCP_MISSING_PATH");
-    let mut server = make_server(Some("codewhale-mcp-command"), &[], None);
+    let _missing = crate::test_support::EnvVarGuard::remove("GHOSTY_DOCTOR_MCP_MISSING_PATH");
+    let mut server = make_server(Some("ghosty-mcp-command"), &[], None);
     server.env.insert(
         "PATH".to_string(),
-        "do-not-leak-${CODEWHALE_DOCTOR_MCP_MISSING_PATH}-also-secret".to_string(),
+        "do-not-leak-${GHOSTY_DOCTOR_MCP_MISSING_PATH}-also-secret".to_string(),
     );
 
     let status = doctor_check_mcp_server(&server);
@@ -169,7 +167,7 @@ fn doctor_does_not_expand_mcp_environment_placeholders() {
     let serialized = report.to_string();
     assert!(!serialized.contains("do-not-leak"));
     assert!(!serialized.contains("also-secret"));
-    assert!(!serialized.contains("CODEWHALE_DOCTOR_MCP_MISSING_PATH"));
+    assert!(!serialized.contains("GHOSTY_DOCTOR_MCP_MISSING_PATH"));
 }
 #[test]
 fn doctor_does_not_resolve_or_echo_command_environment() {
@@ -337,11 +335,11 @@ fn doctor_startup_skips_workspace_dotenv_loading() {
     use std::cell::Cell;
 
     for args in [
-        vec!["codewhale", "doctor"],
-        vec!["codewhale", "doctor", "--json"],
-        vec!["codewhale", "doctor", "--context-json"],
-        vec!["codewhale", "doctor", "--probe-mcp"],
-        vec!["codewhale", "doctor", "--check-updates"],
+        vec!["ghosty", "doctor"],
+        vec!["ghosty", "doctor", "--json"],
+        vec!["ghosty", "doctor", "--context-json"],
+        vec!["ghosty", "doctor", "--probe-mcp"],
+        vec!["ghosty", "doctor", "--check-updates"],
     ] {
         let phase = Cell::new(0);
         let (_cli, command) = prepare_cli_startup(
@@ -362,8 +360,8 @@ fn explicit_doctor_api_probes_may_load_workspace_dotenv_credentials() {
     use std::cell::Cell;
 
     for args in [
-        ["codewhale", "doctor", "--probe-api"],
-        ["codewhale", "doctor", "--probe-local"],
+        ["ghosty", "doctor", "--probe-api"],
+        ["ghosty", "doctor", "--probe-local"],
     ] {
         let phase = Cell::new(0);
         let (_cli, command) = prepare_cli_startup(
@@ -463,13 +461,13 @@ fn resolve_api_key_source_does_not_inspect_provider_env_values() {
 fn resolve_api_key_source_does_not_open_standalone_secret_store() {
     let _lock = crate::test_support::lock_test_env();
     let temp = TempDir::new().expect("temp home");
-    let codewhale_home = temp.path().join("codewhale-home");
-    std::fs::create_dir_all(&codewhale_home).expect("create codewhale home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", codewhale_home.as_os_str());
-    let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+    let ghosty_home = temp.path().join("ghosty-home");
+    std::fs::create_dir_all(&ghosty_home).expect("create ghosty home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", ghosty_home.as_os_str());
+    let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
     let _deepseek_key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
     let _deepseek_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-    let secret_path = codewhale_home.join("secrets").join("secrets.json");
+    let secret_path = ghosty_home.join("secrets").join("secrets.json");
     std::fs::create_dir_all(secret_path.parent().unwrap()).expect("secret fixture dir");
     let sentinel = "not-json:doctor-must-not-read-this-secret";
     std::fs::write(&secret_path, sentinel).expect("secret fixture");
@@ -488,10 +486,10 @@ fn resolve_api_key_source_does_not_probe_system_keyring() {
     let _lock = crate::test_support::lock_test_env();
     let temp = TempDir::new().expect("temp home");
     let _home = crate::test_support::EnvVarGuard::set(
-        "CODEWHALE_HOME",
-        temp.path().join("codewhale-home").as_os_str(),
+        "GHOSTY_HOME",
+        temp.path().join("ghosty-home").as_os_str(),
     );
-    let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "system");
+    let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "system");
     let _deepseek_key = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY");
     let _deepseek_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
 
@@ -550,9 +548,9 @@ fn credential_diagnostic_distinguishes_literal_from_empty_config_keys() {
 fn credential_diagnostic_treats_sentinel_as_unprobed_store_not_config() {
     let _lock = crate::test_support::lock_test_env();
     let temp = TempDir::new().expect("temp home");
-    let codewhale_home = temp.path().join("codewhale-home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
-    let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+    let ghosty_home = temp.path().join("ghosty-home");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
+    let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
     let config = Config {
         api_key: Some(crate::config::API_KEYRING_SENTINEL.to_string()),
         ..Config::default()
@@ -566,7 +564,7 @@ fn credential_diagnostic_treats_sentinel_as_unprobed_store_not_config() {
         )
     );
     assert!(!doctor_has_credentials_or_local_runtime(&config));
-    assert!(!codewhale_home.join("secrets/secrets.json").exists());
+    assert!(!ghosty_home.join("secrets/secrets.json").exists());
 
     for sentinel in [crate::config::API_KEYRING_SENTINEL, "  __KEYRING__  "] {
         let mut providers = crate::config::ProvidersConfig::default();
@@ -593,7 +591,7 @@ fn unavailable_sentinel_routes_stay_distinct_from_unknown_and_unprobed() {
     let workspace = temp.path().join("workspace");
     std::fs::create_dir_all(&workspace).expect("workspace");
     let _home =
-        crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path().join("codewhale-home"));
+        crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path().join("ghosty-home"));
 
     for sentinel in [crate::config::API_KEYRING_SENTINEL, "  __KEYRING__  "] {
         let mut custom = std::collections::HashMap::new();
@@ -687,11 +685,11 @@ fn unavailable_sentinel_routes_stay_distinct_from_unknown_and_unprobed() {
 fn sentinel_placeholders_never_become_attemptable_routes_or_metered_evidence() {
     let _lock = crate::test_support::lock_test_env();
     let temp = TempDir::new().expect("isolated credential home");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-    let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", temp.path());
+    let _backend = crate::test_support::EnvVarGuard::set("GHOSTY_SECRET_BACKEND", "file");
     let _xai = crate::test_support::EnvVarGuard::remove("XAI_API_KEY");
     let _cli_source = crate::test_support::EnvVarGuard::remove("DEEPSEEK_API_KEY_SOURCE");
-    let _cli_key = crate::test_support::EnvVarGuard::remove("CODEWHALE_CLI_API_KEY");
+    let _cli_key = crate::test_support::EnvVarGuard::remove("GHOSTY_CLI_API_KEY");
     let _mimo_mode = crate::test_support::EnvVarGuard::remove("XIAOMI_MIMO_MODE");
     let _mimo_base = crate::test_support::EnvVarGuard::remove("XIAOMI_MIMO_BASE_URL");
     let _mimo_plan = crate::test_support::EnvVarGuard::remove("XIAOMI_MIMO_TOKEN_PLAN_API_KEY");
@@ -824,8 +822,8 @@ fn sentinel_diagnostic_yields_to_route_bound_env_or_auth_declaration() {
                 base_url: Some("https://external.example.test/v1".to_string()),
                 model: Some("test-model".to_string()),
                 api_key: Some(sentinel.to_string()),
-                auth: Some(codewhale_config::ProviderAuthSourceToml {
-                    source: codewhale_config::AuthSourceKind::Command,
+                auth: Some(ghosty_config::ProviderAuthSourceToml {
+                    source: ghosty_config::AuthSourceKind::Command,
                     command: vec!["MUST-NOT-RUN".to_string()],
                     timeout_ms: None,
                     secret_id: None,
@@ -855,10 +853,10 @@ fn sentinel_diagnostic_yields_to_route_bound_env_or_auth_declaration() {
 fn credential_declarations_do_not_certify_setup_or_fleet_readiness() {
     let _lock = crate::test_support::lock_test_env();
     let temp = TempDir::new().expect("temp home");
-    let codewhale_home = temp.path().join("codewhale-home");
+    let ghosty_home = temp.path().join("ghosty-home");
     let workspace = temp.path().join("workspace");
     std::fs::create_dir_all(&workspace).expect("workspace");
-    let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &codewhale_home);
+    let _home = crate::test_support::EnvVarGuard::set("GHOSTY_HOME", &ghosty_home);
     let _declared_value =
         crate::test_support::EnvVarGuard::set("TEST_DECLARED_API_KEY", "MUST-NOT-BE-READ");
 
@@ -885,8 +883,8 @@ fn credential_declarations_do_not_certify_setup_or_fleet_readiness() {
     assert!(!env_setup.to_string().contains("MUST-NOT-BE-READ"));
 
     let mut providers = crate::config::ProvidersConfig::default();
-    providers.openai.auth = Some(codewhale_config::ProviderAuthSourceToml {
-        source: codewhale_config::AuthSourceKind::Command,
+    providers.openai.auth = Some(ghosty_config::ProviderAuthSourceToml {
+        source: ghosty_config::AuthSourceKind::Command,
         command: vec!["MUST-NOT-RUN".to_string()],
         timeout_ms: None,
         secret_id: None,

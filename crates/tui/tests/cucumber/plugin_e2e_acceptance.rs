@@ -153,7 +153,7 @@ struct PluginE2EWorld {
 // Given steps
 // ---------------------------------------------------------------------------
 
-#[given("an offline CodeWhale workspace with a configured plugin directory")]
+#[given("an offline GhostyCode workspace with a configured plugin directory")]
 fn offline_workspace_with_plugin_dir(world: &mut PluginE2EWorld) {
     let workspace = TempDir::new().expect("workspace tempdir");
     let plugin_dir = TempDir::new().expect("plugin tempdir");
@@ -365,21 +365,21 @@ fn scanner_should_report_missing_path(world: &mut PluginE2EWorld) {
 /// Prove the binary still loads after the plugin module extraction.
 #[tokio::test(flavor = "current_thread")]
 async fn plugin_module_does_not_break_binary_load() {
-    let output = Command::new(codewhale_tui_binary())
+    let output = Command::new(ghosty_tui_binary())
         .arg("--version")
         .output()
-        .expect("codewhale-tui --version should start");
+        .expect("ghosty-tui --version should start");
 
     assert!(
         output.status.success(),
-        "codewhale-tui --version failed\nstderr:\n{}",
+        "ghosty-tui --version failed\nstderr:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
     let version = String::from_utf8_lossy(&output.stdout);
     assert!(
-        version.contains("codewhale"),
-        "version output should mention codewhale, got: {version}"
+        version.contains("ghosty"),
+        "version output should mention ghosty, got: {version}"
     );
 }
 
@@ -394,7 +394,7 @@ const BINARY_ACCEPTANCE_TIMEOUT: std::time::Duration = std::time::Duration::from
 fn write_reviewed_bundle_fixture(workspace: &std::path::Path) -> PathBuf {
     use std::os::unix::fs::PermissionsExt as _;
 
-    let bundle = workspace.join(".codewhale/plugins/demo");
+    let bundle = workspace.join(".ghosty/plugins/demo");
     std::fs::create_dir_all(bundle.join("skills/review")).expect("plugin fixture directories");
     std::fs::write(
         bundle.join("plugin.toml"),
@@ -826,9 +826,9 @@ async fn plugin_toml_binary_lifecycle_skill_and_stdio_mcp_acceptance() {
         .unwrap_or_else(|lock| lock.into_inner());
     let workspace = make_sealed_workspace().expect("sealed workspace");
     let bundle = write_reviewed_bundle_fixture(workspace.workspace());
-    let mcp_log = workspace.home().join(".codewhale/plugin-acceptance.log");
+    let mcp_log = workspace.home().join(".ghosty/plugin-acceptance.log");
     let (base_url, shutdown_tx, model_thread) = spawn_hermetic_model_server();
-    let mut tui = Harness::builder(Harness::cargo_bin("codewhale-tui"))
+    let mut tui = Harness::builder(Harness::cargo_bin("ghosty-tui"))
         .cwd(workspace.workspace())
         .clear_env()
         .seal_home(workspace.home())
@@ -836,7 +836,7 @@ async fn plugin_toml_binary_lifecycle_skill_and_stdio_mcp_acceptance() {
         .env("DEEPSEEK_BASE_URL", &base_url)
         .env("DEEPSEEK_MODEL", "deepseek-v4-pro")
         .env("PLUGIN_ACCEPTANCE_LOG", mcp_log.to_string_lossy())
-        .env("CODEWHALE_DISABLE_MODELS_DEV_FETCH", "1")
+        .env("GHOSTY_DISABLE_MODELS_DEV_FETCH", "1")
         .env("NO_ANIMATIONS", "1")
         .env("RUST_LOG", "warn")
         .args([
@@ -859,10 +859,7 @@ async fn plugin_toml_binary_lifecycle_skill_and_stdio_mcp_acceptance() {
         "show reviewed Skill inventory",
     );
     assert!(
-        !workspace
-            .home()
-            .join(".codewhale/plugins/state.json")
-            .exists(),
+        !workspace.home().join(".ghosty/plugins/state.json").exists(),
         "show must remain read-only"
     );
 
@@ -927,7 +924,7 @@ async fn plugin_toml_binary_lifecycle_skill_and_stdio_mcp_acceptance() {
     );
     wait_for_log(&mut tui, &mcp_log, "signal:");
 
-    let state = std::fs::read_to_string(workspace.home().join(".codewhale/plugins/state.json"))
+    let state = std::fs::read_to_string(workspace.home().join(".ghosty/plugins/state.json"))
         .expect("durable plugin state");
     assert!(state.contains("\"enabled\": true"));
     assert!(state.contains("\"trust\": null"));
@@ -1077,11 +1074,11 @@ async fn run_scenario(name: &'static str, expected_steps: usize) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn codewhale_tui_binary() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_codewhale-tui") {
+fn ghosty_tui_binary() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_codewhale-tui") {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_ghosty-tui") {
         return PathBuf::from(path);
     }
 
@@ -1090,6 +1087,6 @@ fn codewhale_tui_binary() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push(format!("codewhale-tui{}", std::env::consts::EXE_SUFFIX));
+    path.push(format!("ghosty-tui{}", std::env::consts::EXE_SUFFIX));
     path
 }

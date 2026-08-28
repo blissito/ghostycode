@@ -1,6 +1,6 @@
 # Website voice
 
-How codewhale.net copy is written. Companion to `docs/VOICE.md` (the
+How ghosty.net copy is written. Companion to `docs/VOICE.md` (the
 terminal charter); this sheet covers the marketing and docs-portal surface
 in `web/`. Reference points: opencode.ai and pi.dev — short declarative
 sentences, one concrete fact each, install command above the fold, providers

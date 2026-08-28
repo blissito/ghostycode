@@ -10,10 +10,10 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return buildPageMetadata({
     path: "/models",
     locale,
-    title: isZh ? "模型与提供商 · Codewhale" : "Models & providers · Codewhale",
+    title: isZh ? "模型与提供商 · Ghosty" : "Models & providers · Ghosty",
     description: isZh
-      ? "Codewhale 支持的托管与本地提供商：如何配置，以及完整列表。"
-      : "Every hosted and local provider Codewhale supports, and how to configure one.",
+      ? "Ghosty 支持的托管与本地提供商：如何配置，以及完整列表。"
+      : "Every hosted and local provider Ghosty supports, and how to configure one.",
   });
 }
 
@@ -22,13 +22,13 @@ export default async function ModelsPage({ params }: { params: Promise<{ locale:
   const isZh = locale === "zh";
   const p = (path: string) => (isZh ? `/zh${path}` : `/en${path}`);
   const facts = await getFacts();
-  const providerDocs = "https://github.com/Hmbown/CodeWhale/blob/main/docs/PROVIDERS.md";
+  const providerDocs = "https://github.com/blissito/ghostycode/blob/main/docs/PROVIDERS.md";
 
   const setupPatterns = isZh
     ? [
         {
           title: "DeepSeek",
-          detail: `新配置默认使用 ${facts.defaultModel ?? "deepseek-v4-pro"}。用 --provider、/provider 或 CODEWHALE_PROVIDER 换成别的提供商。`,
+          detail: `新配置默认使用 ${facts.defaultModel ?? "deepseek-v4-pro"}。用 --provider、/provider 或 GHOSTY_PROVIDER 换成别的提供商。`,
           reference: "DEEPSEEK_API_KEY",
         },
         {
@@ -45,7 +45,7 @@ export default async function ModelsPage({ params }: { params: Promise<{ locale:
     : [
         {
           title: "DeepSeek",
-          detail: `New installs default to ${facts.defaultModel ?? "deepseek-v4-pro"}. Switch with --provider, /provider, or CODEWHALE_PROVIDER.`,
+          detail: `New installs default to ${facts.defaultModel ?? "deepseek-v4-pro"}. Switch with --provider, /provider, or GHOSTY_PROVIDER.`,
           reference: "DEEPSEEK_API_KEY",
         },
         {
@@ -69,15 +69,15 @@ export default async function ModelsPage({ params }: { params: Promise<{ locale:
           <h1>{isZh ? "选择模型和提供商。" : "Choose a model and provider."}</h1>
           <p>
             {isZh
-              ? `Codewhale 内置 ${facts.providers.length} 个提供商。你来选提供商、模型和端点；每一个都跑同一套本地运行时、工具和权限。托管提供商用你的凭据；本地 vLLM、SGLang 和 Ollama 通常不需要密钥。`
-              : `Codewhale ships with ${facts.providers.length} providers. You set the provider, model, and endpoint. Every one runs through the same local runtime, tools, and permissions. Hosted providers use your credentials; local vLLM, SGLang, and Ollama usually need no key.`}
+              ? `Ghosty 内置 ${facts.providers.length} 个提供商。你来选提供商、模型和端点；每一个都跑同一套本地运行时、工具和权限。托管提供商用你的凭据；本地 vLLM、SGLang 和 Ollama 通常不需要密钥。`
+              : `Ghosty ships with ${facts.providers.length} providers. You set the provider, model, and endpoint. Every one runs through the same local runtime, tools, and permissions. Hosted providers use your credentials; local vLLM, SGLang, and Ollama usually need no key.`}
           </p>
           <div className="portal-actions">
             <Link href={providerDocs} className="portal-button portal-button-primary">
               {isZh ? "阅读提供商文档" : "Read the provider docs"}
             </Link>
             <Link href={p("/install")} className="portal-button portal-button-secondary">
-              {isZh ? "安装 Codewhale" : "Install Codewhale"}
+              {isZh ? "安装 Ghosty" : "Install Ghosty"}
             </Link>
           </div>
         </div>
@@ -90,8 +90,8 @@ export default async function ModelsPage({ params }: { params: Promise<{ locale:
             <h2>{isZh ? "常用提供商" : "Common providers"}</h2>
             <p>
               {isZh
-                ? "托管提供商的密钥用 codewhale auth set 保存，或放进配置文件或环境变量。提供商和模型分开选；模型名不会改变提供商。"
-                : "Save a hosted provider's key with codewhale auth set, or set it in config or an environment variable. Provider and model are chosen separately; a model name never changes the provider."}
+                ? "托管提供商的密钥用 ghosty auth set 保存，或放进配置文件或环境变量。提供商和模型分开选；模型名不会改变提供商。"
+                : "Save a hosted provider's key with ghosty auth set, or set it in config or an environment variable. Provider and model are chosen separately; a model name never changes the provider."}
             </p>
           </div>
           <div className="portal-topic-list">
@@ -117,8 +117,8 @@ export default async function ModelsPage({ params }: { params: Promise<{ locale:
             </div>
             <p>
               {isZh
-                ? "这是 Codewhale 本地设置的只读预览，不会更改你的本地配置。"
-                : "A read-only view of Codewhale's local settings. It does not change your local configuration."}
+                ? "这是 Ghosty 本地设置的只读预览，不会更改你的本地配置。"
+                : "A read-only view of Ghosty's local settings. It does not change your local configuration."}
             </p>
           </div>
 
@@ -224,13 +224,13 @@ export default async function ModelsPage({ params }: { params: Promise<{ locale:
             {isZh ? (
               <>
                 缺你要的提供商？{" "}
-                <Link href="https://github.com/Hmbown/CodeWhale/issues/new/choose" className="body-link">提交 issue</Link>
+                <Link href="https://github.com/blissito/ghostycode/issues/new/choose" className="body-link">提交 issue</Link>
                 ，写明端点、认证方式和模型能力。带注册表、文档和测试的 pull request 也欢迎。
               </>
             ) : (
               <>
                 Missing a provider?{" "}
-                <Link href="https://github.com/Hmbown/CodeWhale/issues/new/choose" className="body-link">File an issue</Link>
+                <Link href="https://github.com/blissito/ghostycode/issues/new/choose" className="body-link">File an issue</Link>
                 {" "}with its endpoint, authentication method, and model capabilities. Pull requests that update the registry, docs, and tests are welcome.
               </>
             )}

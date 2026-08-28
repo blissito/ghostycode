@@ -1,11 +1,11 @@
 [package]
-name = "codewhale-core"
+name = "ghosty-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Core runtime boundaries for Codewhale"
+description = "Core runtime boundaries for Ghosty"
 
 [lints]
 workspace = true
@@ -16,14 +16,14 @@ chrono.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio-util.workspace = true
-codewhale-agent = { path = "../agent", version = "0.9.11" }
-codewhale-config = { path = "../config", version = "0.9.11" }
-codewhale-execpolicy = { path = "../execpolicy", version = "0.9.11" }
-codewhale-hooks = { path = "../hooks", version = "0.9.11" }
-codewhale-mcp = { path = "../mcp", version = "0.9.11" }
-codewhale-protocol = { path = "../protocol", version = "0.9.11" }
-codewhale-state = { path = "../state", version = "0.9.11" }
-codewhale-tools = { path = "../tools", version = "0.9.11" }
+ghosty-agent = { path = "../agent", version = "0.0.15" }
+ghosty-config = { path = "../config", version = "0.0.15" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.15" }
+ghosty-hooks = { path = "../hooks", version = "0.0.15" }
+ghosty-mcp = { path = "../mcp", version = "0.0.15" }
+ghosty-protocol = { path = "../protocol", version = "0.0.15" }
+ghosty-state = { path = "../state", version = "0.0.15" }
+ghosty-tools = { path = "../tools", version = "0.0.15" }
 regex = "1.11"
 serde_json = { workspace = true, features = ["preserve_order"] }
 tokio = { workspace = true, features = ["time"] }

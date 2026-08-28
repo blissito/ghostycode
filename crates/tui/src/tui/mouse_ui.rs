@@ -1461,14 +1461,14 @@ pub(crate) fn handle_context_menu_action(app: &mut App, action: ContextMenuActio
             app.needs_redraw = true;
         }
         ContextMenuAction::OpenCommandPalette => {
-            codewhale_telemetry::session_counters()
-                .bump(codewhale_telemetry::Counter::CommandPaletteOpen);
+            ghosty_telemetry::session_counters()
+                .bump(ghosty_telemetry::Counter::CommandPaletteOpen);
             app.view_stack.push(CommandPaletteView::new_for_locale(
                 app.ui_locale,
                 build_command_palette_entries(
                     app.ui_locale,
                     &app.skills_dir,
-                    app.skills_scan_codewhale_only,
+                    app.skills_scan_ghosty_only,
                     &app.workspace,
                     &app.mcp_config_path,
                     app.mcp_snapshot.as_ref(),
