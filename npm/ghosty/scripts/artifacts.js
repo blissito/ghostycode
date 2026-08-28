@@ -10,10 +10,19 @@ const WINDOWS_INSTALLER_ASSET = "GhostyCodeSetup.exe";
 // they will advertise or install a newer release. They contain byte-identical
 // copies of the consolidated `ghosty` runtime; current installers do not
 // expose them as a third command.
-// GhostyCode publica UN solo nombre: `ghosty`. Upstream consolidó el runtime en
-// un binario único (su release lo verifica con `cmp`), así que no hay segundo
-// comando ni familia de compatibilidad que puentear.
-const LEGACY_TUI_BRIDGE_ASSET_NAMES = [];
+// GhostyCode publica UN solo comando: `ghosty`. El pipeline de release sigue
+// emitiendo `ghosty-tui-*` como copias byte-idénticas (compatibilidad con
+// instalaciones previas y con el updater viejo); forman parte del inventario
+// del GitHub Release pero el instalador de npm no las descarga (ASSET_MATRIX).
+const LEGACY_TUI_BRIDGE_ASSET_NAMES = [
+  "ghosty-tui-linux-x64",
+  "ghosty-tui-linux-arm64",
+  "ghosty-tui-android-arm64",
+  "ghosty-tui-macos-x64",
+  "ghosty-tui-macos-arm64",
+  "ghosty-tui-windows-x64.exe",
+  "ghosty-tui-windows-arm64.exe",
+];
 
 const CNB_BINARY_ASSET_NAMES = ["ghosty-linux-x64"];
 const CNB_RELEASE_ASSET_NAMES = [

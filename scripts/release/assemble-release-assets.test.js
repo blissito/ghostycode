@@ -91,10 +91,12 @@ function makeIntermediateArtifacts(root) {
   );
 }
 
-test("authoritative release inventory contains seven targets and 34 bridge assets", () => {
+test("authoritative release inventory contains seven targets and 27 bridge assets", () => {
+  // Upstream publica tres familias (cli, shim `codew`, legacy `codewhale-tui`).
+  // GhostyCode publica dos: `ghosty-*` y las copias `ghosty-tui-*`.
   const assets = allReleaseAssetNames();
-  assert.equal(assets.length, 34);
-  assert.equal(checksummedReleaseAssetNames().length, 33);
+  assert.equal(assets.length, 27);
+  assert.equal(checksummedReleaseAssetNames().length, 26);
   for (const required of [
     "ghosty-android-arm64",
     "ghosty-tui-android-arm64",
@@ -206,8 +208,8 @@ test("bundle helper emits reproducible timestamped tar and zip archives from pat
     ).trim().split("\n").sort();
     assert.deepEqual(linuxEntries, [
       "ghosty-linux-x64/",
-      "ghosty-linux-x64/ghosty-tui",
       "ghosty-linux-x64/ghosty",
+      "ghosty-linux-x64/ghosty-tui",
       "ghosty-linux-x64/install.sh",
     ]);
     const extracted = path.join(tempRoot, "tar extracted");
