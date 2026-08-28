@@ -34,7 +34,9 @@ fi
 
 os=$(uname -s); arch=$(uname -m)
 case "$os" in
-  Linux) os=linux ;;
+  # Termux no es Linux arm64: el binario de Android es un target aparte
+  # (bionic, sin glibc). Instalar el de Linux ahí falla al arrancar.
+  Linux) if [ -n "${TERMUX_VERSION:-}" ]; then os=android; else os=linux; fi ;;
   Darwin) os=macos ;;
   *) err "OS no soportado: $os — usa npm o cargo (ver README)" ;;
 esac
