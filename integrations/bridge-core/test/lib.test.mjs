@@ -64,7 +64,7 @@ test("commands map common actions while menu/start stay opt in", () => {
     args: "ap_1 remember"
   });
   assert.deepEqual(parseCommand("/allow@GhostyCodeBot ap_1 remember"), {
-    name: "allow@ghostybot",
+    name: "allow@ghostycodebot",
     args: "ap_1 remember"
   });
   assert.deepEqual(commandAction(parseCommand("/status")), { kind: "status" });

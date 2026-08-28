@@ -156,5 +156,5 @@ GHOSTY_0_9_0_CUTOVER.md
 # Ralph agent scratch (local only)
 .ralph/
 
-# Estado local de Ghosty en este workspace (constitución/instrucciones viven en ~/.ghosty)
-.ghosty/
+# Estado local de Ghosty en este workspace (la constitución e instrucciones SÍ se versionan)
+.ghosty/state/

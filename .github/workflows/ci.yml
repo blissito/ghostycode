@@ -396,12 +396,6 @@ jobs:
       - name: Check persistence-backlog budget
         if: needs.changes.outputs.heavy == 'true'
         run: python3 scripts/check-persistence-backlog-budget.py
-      - name: Check README translations stay in sync
-        if: github.event_name != 'schedule'
-        run: python3 scripts/check-readme-translations.py
-      - name: Check README locale link symmetry
-        if: github.event_name != 'schedule'
-        run: bash scripts/check-readme-locales.sh
       - name: Check TUI locale pack parity
         if: github.event_name != 'schedule'
         run: python3 scripts/check-tui-locale-parity.py

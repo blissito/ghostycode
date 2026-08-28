@@ -33,8 +33,7 @@ package() {
 
     install -Dm755 "${srcdir}/ghosty-linux-${release_arch}/ghosty" \
         "${pkgdir}/usr/bin/ghosty"
-    install -Dm755 "${srcdir}/ghosty-linux-${release_arch}/ghosty-tui" \
-        "${pkgdir}/usr/bin/ghosty-tui"
+    # Un solo binario. `ghosty-tui` queda como symlink de compatibilidad.
     ln -s ghosty "${pkgdir}/usr/bin/ghosty-tui"
     install -Dm644 "${srcdir}/LICENSE-${pkgver}" \
         "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
