@@ -204,9 +204,16 @@ if [[ -n "${previous_tag}" ]]; then
     # upstream; sus recibos viven en el changelog de allá, no en el de aquí.
     # El recibo se exige solo a los commits propios: desde la base de upstream
     # (`GHOSTY_UPSTREAM_BASE`, o el merge-base con `upstream/main`) hasta HEAD.
+    # La base es un dato del repo (`.github/upstream-base`), no un remoto: en
+    # CI `upstream/main` no existe y el check caería al tag anterior, que hoy
+    # queda al otro lado de miles de commits de upstream.
     receipt_base="${GHOSTY_UPSTREAM_BASE:-}"
-    if [[ -z "${receipt_base}" ]] && git rev-parse -q --verify upstream/main >/dev/null 2>&1; then
-      receipt_base="$(git merge-base upstream/main HEAD 2>/dev/null || true)"
+    if [[ -z "${receipt_base}" && -f .github/upstream-base ]]; then
+      receipt_base="$(tr -d '[:space:]' < .github/upstream-base)"
+    fi
+    if [[ -n "${receipt_base}" ]] && ! git rev-parse -q --verify "${receipt_base}^{commit}" >/dev/null 2>&1; then
+      echo "::warning::upstream base ${receipt_base} is not reachable in this checkout; falling back to ${previous_tag}." >&2
+      receipt_base=""
     fi
     if [[ -z "${receipt_base}" ]]; then
       receipt_base="${previous_tag}"
