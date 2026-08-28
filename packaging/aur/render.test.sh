@@ -24,7 +24,11 @@ for release_arch in x64 arm64; do
   mkdir -p "${stage_dir}/${archive_root}"
   printf '#!/usr/bin/env sh\necho ghosty-%s\n' "${release_arch}" \
     > "${stage_dir}/${archive_root}/ghosty"
-  chmod 0755 "${stage_dir}/${archive_root}/ghosty"
+  printf '#!/usr/bin/env sh\necho ghosty-tui-%s\n' "${release_arch}" \
+    > "${stage_dir}/${archive_root}/ghosty-tui"
+  chmod 0755 \
+    "${stage_dir}/${archive_root}/ghosty" \
+    "${stage_dir}/${archive_root}/ghosty-tui"
   COPYFILE_DISABLE=1 tar -czf "${assets_dir}/${archive_root}.tar.gz" \
     -C "${stage_dir}" "${archive_root}"
 done
@@ -94,9 +98,10 @@ for arch_case in 'x86_64:x64' 'aarch64:arm64'; do
   cmp \
     "${stage_dir}/ghosty-linux-${release_arch}/ghosty" \
     "${package_root}/usr/bin/ghosty"
-  # `ghosty-tui` es un symlink de compatibilidad al único binario.
-  test -L "${package_root}/usr/bin/ghosty-tui"
-  test "$(readlink "${package_root}/usr/bin/ghosty-tui")" = ghosty
+  cmp \
+    "${stage_dir}/ghosty-linux-${release_arch}/ghosty-tui" \
+    "${package_root}/usr/bin/ghosty-tui"
+  test -f "${package_root}/usr/bin/ghosty-tui"
   cmp "${repo_root}/LICENSE" \
     "${package_root}/usr/share/licenses/ghosty-bin/LICENSE"
 done
