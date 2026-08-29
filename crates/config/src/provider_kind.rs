@@ -11,7 +11,6 @@ use crate::provider;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProviderKind {
-    #[default]
     #[serde(
         alias = "deepseek-cn",
         alias = "deepseek_china",
@@ -95,6 +94,9 @@ pub enum ProviderKind {
     /// EasyBits.cloud — revendedor de DeepSeek. Proveedor propio (no alias de
     /// `Deepseek`) para que el modo sobreviva a persistirse en disco: escribir
     /// `as_str()` de un alias devolvía `"deepseek"` y perdía el modo al arrancar.
+    /// EasyBits es el proveedor por defecto del producto: es la puerta de
+    /// entrada que Ghosty ofrece cuando no hay ninguna configuración todavía.
+    #[default]
     #[serde(alias = "easy-bits", alias = "easy_bits", alias = "eb")]
     Easybits,
     #[serde(

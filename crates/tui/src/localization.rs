@@ -3816,7 +3816,11 @@ where
         }
     }
 
-    Locale::En
+    // Ghosty se escribe y se prueba en español; cuando el entorno no dice nada
+    // (LC_ALL/LC_MESSAGES/LANG ausentes o no reconocidos) el idioma por defecto
+    // de la TUI es el español, no el inglés. Un `locale` explícito en settings
+    // sigue mandando sobre esto.
+    Locale::Es419
 }
 
 #[allow(dead_code)]

@@ -524,17 +524,14 @@ fn resolver_openrouter_keeps_provider_for_every_namespace_prefix() {
 #[test]
 fn resolver_no_explicit_provider_does_not_infer_deepseek_from_prefix() {
     let r = RouteResolver::new();
-    // explicit_provider=None => default scope (Deepseek). A prefixed selector
-    // is foreign for the strict-direct default, so it ERRORS rather than being
-    // silently accepted as a deepseek model: the prefix never *selects* it.
-    let out = r.resolve(&req(None, Some("deepseek/deepseek-v4-pro")));
-    match out {
-        Err(RouteError::ForeignModelForDirectProvider { provider, model }) => {
-            assert_eq!(provider.as_str(), "deepseek");
-            assert_eq!(model, "deepseek/deepseek-v4-pro");
-        }
-        other => panic!("expected ForeignModelForDirectProvider, got {other:?}"),
-    }
+    // explicit_provider=None => el scope por defecto del producto (EasyBits).
+    // Un selector con prefijo `deepseek/` no *elige* proveedor: se resuelve
+    // dentro del scope por defecto, nunca inferiendo DeepSeek desde el prefijo.
+    let out = r
+        .resolve(&req(None, Some("deepseek/deepseek-v4-pro")))
+        .expect("default scope resolves the prefixed selector");
+    assert_eq!(out.provider_kind(), ProviderKind::Easybits);
+    assert_eq!(out.wire_model_id().as_str(), "deepseek/deepseek-v4-pro");
 }
 
 #[test]

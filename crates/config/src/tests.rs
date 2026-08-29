@@ -4,6 +4,16 @@ use std::ffi::OsString;
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
+/// Un config vacío pero con DeepSeek elegido a mano. El proveedor por defecto
+/// del producto es EasyBits, así que un test sobre la ruta DeepSeek tiene que
+/// nombrarla en vez de apoyarse en `ConfigToml::default()`.
+fn deepseek_config() -> ConfigToml {
+    ConfigToml {
+        provider: ProviderKind::Deepseek,
+        ..ConfigToml::default()
+    }
+}
+
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -1775,7 +1785,7 @@ fn root_deepseek_fields_are_runtime_fallbacks() {
         api_key: Some("root-key".to_string()),
         base_url: Some("https://api.deepseek.com".to_string()),
         default_text_model: Some("deepseek-v4-pro".to_string()),
-        ..ConfigToml::default()
+        ..deepseek_config()
     };
 
     let resolved = config.resolve_runtime_options(&CliRuntimeOverrides::default());
@@ -1790,7 +1800,7 @@ fn root_deepseek_fields_are_runtime_fallbacks() {
 fn deepseek_runtime_defaults_to_beta_endpoint() {
     let _lock = env_lock();
     let _env = EnvGuard::without_deepseek_runtime_overrides();
-    let config = ConfigToml::default();
+    let config = deepseek_config();
 
     let resolved = config.resolve_runtime_options(&CliRuntimeOverrides::default());
 
@@ -1807,7 +1817,7 @@ fn provider_specific_deepseek_fields_override_tui_compat_fields() {
         api_key: Some("root-key".to_string()),
         base_url: Some("https://api.deepseek.com".to_string()),
         default_text_model: Some("deepseek-v4-pro".to_string()),
-        ..ConfigToml::default()
+        ..deepseek_config()
     };
     config.providers.deepseek.api_key = Some("provider-key".to_string());
     config.providers.deepseek.base_url = Some("https://gateway.example/v1".to_string());
@@ -1828,7 +1838,7 @@ fn provider_http_headers_override_root_headers() {
         api_key: Some("root-key".to_string()),
         base_url: Some("https://api.deepseek.com".to_string()),
         default_text_model: Some("deepseek-v4-pro".to_string()),
-        ..ConfigToml::default()
+        ..deepseek_config()
     };
     config.providers.deepseek.api_key = Some("provider-key".to_string());
     config.providers.deepseek.base_url = Some("https://gateway.example/v1".to_string());
@@ -6471,7 +6481,7 @@ fn loopback_custom_deepseek_base_url_does_not_probe_secret_store_by_default() {
     let secrets = Secrets::new(store.clone());
     let config = ConfigToml {
         base_url: Some("http://127.0.0.1:8000/v1".to_string()),
-        ..ConfigToml::default()
+        ..deepseek_config()
     };
 
     let resolved =
@@ -7427,7 +7437,7 @@ fn config_file_resolves_above_env_and_keyring() {
     store.set("deepseek", "ring-key").unwrap();
     let secrets = Secrets::new(store);
 
-    let mut config = ConfigToml::default();
+    let mut config = deepseek_config();
     config.providers.deepseek.api_key = Some("file-key".to_string());
 
     let resolved =
@@ -7452,7 +7462,7 @@ fn env_resolves_when_config_file_and_keyring_empty() {
     let secrets = Secrets::new(std::sync::Arc::new(
         ghosty_secrets::InMemoryKeyringStore::new(),
     ));
-    let config = ConfigToml::default();
+    let config = deepseek_config();
 
     let resolved =
         config.resolve_runtime_options_with_secrets(&CliRuntimeOverrides::default(), &secrets);
@@ -7471,7 +7481,7 @@ fn config_file_resolves_when_keyring_and_env_empty() {
     let secrets = Secrets::new(std::sync::Arc::new(
         ghosty_secrets::InMemoryKeyringStore::new(),
     ));
-    let mut config = ConfigToml::default();
+    let mut config = deepseek_config();
     config.providers.deepseek.api_key = Some("file-key".to_string());
 
     let resolved =
@@ -7495,7 +7505,7 @@ fn keyring_resolves_when_config_file_empty_even_if_env_is_set() {
     store.set("deepseek", "ring-key").unwrap();
     let secrets = Secrets::new(store);
 
-    let resolved = ConfigToml::default()
+    let resolved = deepseek_config()
         .resolve_runtime_options_with_secrets(&CliRuntimeOverrides::default(), &secrets);
     assert_eq!(resolved.api_key.as_deref(), Some("ring-key"));
     assert_eq!(resolved.api_key_source, Some(RuntimeApiKeySource::Keyring));

@@ -1054,7 +1054,12 @@ api_key = {provider_api_key:?}
             "https://api.deepseek.com/beta",
         ] {
             for alias in ["deepseek-chat", "deepseek-reasoner"] {
-                let mut config = ConfigToml::default();
+                // El proveedor por defecto del producto es EasyBits, así que
+                // una prueba sobre la ruta oficial de DeepSeek la nombra.
+                let mut config = ConfigToml {
+                    provider: ProviderKind::Deepseek,
+                    ..ConfigToml::default()
+                };
                 config.providers.deepseek.base_url = Some(base_url.to_string());
                 let endpoint = resolve_endpoint(&config, &registry, Some(alias))
                     .expect("official DeepSeek route");

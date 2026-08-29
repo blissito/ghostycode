@@ -838,6 +838,10 @@ async fn plugin_toml_binary_lifecycle_skill_and_stdio_mcp_acceptance() {
         .env("PLUGIN_ACCEPTANCE_LOG", mcp_log.to_string_lossy())
         .env("GHOSTY_DISABLE_MODELS_DEV_FETCH", "1")
         .env("NO_ANIMATIONS", "1")
+        // El entorno va limpio (`clear_env`), y sin LANG la TUI arranca en su
+        // idioma por defecto, que es el español. Este escenario afirma copia
+        // en inglés, así que nombra el idioma en vez de heredarlo.
+        .env("LANG", "en_US.UTF-8")
         .env("RUST_LOG", "warn")
         .args([
             "--workspace",

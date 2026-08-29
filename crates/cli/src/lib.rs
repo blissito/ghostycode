@@ -8636,6 +8636,9 @@ verbosity = "project-imported"
             std::process::id()
         ));
         let mut store = ConfigStore::load(Some(path.clone())).expect("store should load");
+        // El proveedor por defecto del producto es EasyBits; esta prueba es
+        // sobre la credencial de DeepSeek, así que la nombra.
+        store.config.provider = ghosty_config::ProviderKind::Deepseek;
         let inner = Arc::new(InMemoryKeyringStore::new());
         inner.set("deepseek", "ring-key").unwrap();
         let secrets = Secrets::new(inner);
@@ -8776,6 +8779,8 @@ verbosity = "project-imported"
             std::process::id()
         ));
         let mut store = ConfigStore::load(Some(path.clone())).expect("store should load");
+        // Ruta DeepSeek explícita: el default del producto es EasyBits.
+        store.config.provider = ProviderKind::Deepseek;
         store.config.api_key = Some("sk-deep".to_string());
         store.config.providers.deepseek.api_key = Some("sk-deep".to_string());
         store.config.providers.openrouter.api_key = Some("or-key".to_string());
