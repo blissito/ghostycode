@@ -129,7 +129,11 @@ bundle() {
         scripts/release/install.bat \
         "${stage_dir}/install.bat"
     else
-      cp scripts/release/install.sh "${stage_dir}/"
+      # UNA sola fuente de verdad: el mismo instalador que sirve el sitio
+      # (`scripts/install.sh`). La copia que vivía en scripts/release/ se quedó
+      # en la era de los dos binarios —bajaba `ghosty-tui` aparte— y apuntaba a
+      # un dominio que no es nuestro, así que cada bundle repartía eso.
+      cp scripts/install.sh "${stage_dir}/"
       chmod +x "${stage_dir}/install.sh"
     fi
   fi

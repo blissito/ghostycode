@@ -18,7 +18,7 @@ matching package, tag, checksums, and release assets exist.
 On macOS and Linux, the website installer is the shortest install/update path:
 
 ```bash
-curl -fsSL https://ghosty.net/install.sh | sh
+curl -fsSL https://formmy.app/ghosty/install.sh | sh
 ```
 
 It downloads the matching `ghosty` release binary,

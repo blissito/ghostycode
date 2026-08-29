@@ -11,7 +11,7 @@
 在 macOS 和 Linux 上，网站安装器是最短的安装/更新路径：
 
 ```bash
-curl -fsSL https://ghosty.net/install.sh | sh
+curl -fsSL https://formmy.app/ghosty/install.sh | sh
 ```
 
 它会下载匹配的 `ghosty` 和 `ghosty-tui` 发布二进制，对照 `ghosty-artifacts-sha256.txt` 校验，默认安装到 `~/.local/bin`，并暴露 `ghosty-tui` 便捷命令。

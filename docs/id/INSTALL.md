@@ -11,7 +11,7 @@ Jika Anda hanya menginginkan versi singkat, lihat [README utama](../README.md#in
 Pada macOS dan Linux, installer situs web adalah jalur instalasi dan pembaruan tersingkat:
 
 ```bash
-curl -fsSL https://ghosty.net/install.sh | sh
+curl -fsSL https://formmy.app/ghosty/install.sh | sh
 ```
 
 Skrip ini akan mengunduh biner rilis `ghosty` dan `ghosty-tui` yang cocok, memverifikasinya terhadap `ghosty-artifacts-sha256.txt`, dan menginstalnya ke `~/.local/bin` secara bawaan. Nama aset `ghosty-tui-*` hanya dipertahankan untuk kompatibilitas updater lama dan bukan perintah ketiga.
