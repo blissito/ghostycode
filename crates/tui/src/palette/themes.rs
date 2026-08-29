@@ -324,6 +324,82 @@ pub const CATPPUCCIN_MOCHA_UI_THEME: UiTheme = UiTheme {
     tool_failed: Color::Rgb(0xf3, 0x8b, 0xa8),  // red
 };
 
+/// Ghosty — el tema de la marca, negro profundo con acento violeta.
+///
+/// Venía en 0.0.14 y el rebase sobre CodeWhale se lo llevó junto con el resto
+/// de `palette.rs`. Se recupera tal cual: 39 de sus 40 campos siguen existiendo.
+/// `mode_goal` desapareció y su papel lo ocupa `mode_operate`; los tres
+/// `permission_*` son nuevos y salen de los acentos que el tema ya tenía.
+pub const GHOSTY_UI_THEME: UiTheme = UiTheme {
+    name: "ghosty",
+    mode: PaletteMode::Dark,
+    // Ghosty — deep black with purple/violet accent
+    surface_bg: Color::Rgb(0x0d, 0x0d, 0x12), // near-black with blue tint
+    panel_bg: Color::Rgb(0x14, 0x13, 0x1c),   // elevated dark purple-black
+    elevated_bg: Color::Rgb(0x12, 0x11, 0x1a),
+    composer_bg: Color::Rgb(0x14, 0x13, 0x1c),
+    selection_bg: Color::Rgb(0x2a, 0x22, 0x3d),
+    header_bg: Color::Rgb(0x0d, 0x0d, 0x12),
+    footer_bg: Color::Rgb(0x0d, 0x0d, 0x12),
+    // Cool-tinted text hierarchy
+    // Aclarados respecto a 0.0.14: los originales (#4a475c y #5a5770) daban 2.06
+    // y 2.66 de contraste sobre el fondo, bajo el piso de 3.0 que exige el audit.
+    // Mismo tinte lavanda, ahora 3.43 y 4.45.
+    text_dim: Color::Rgb(0x6b, 0x67, 0x85),
+    text_hint: Color::Rgb(0x7d, 0x79, 0x9a),
+    text_muted: Color::Rgb(0x8a, 0x85, 0xa8),
+    text_body: Color::Rgb(0xf0, 0xee, 0xff), // near-white with lavender tint
+    text_soft: Color::Rgb(0xc0, 0xbb, 0xe0),
+    border: Color::Rgb(0x2a, 0x25, 0x40),
+    // Purple primary, cyan secondary
+    accent_primary: Color::Rgb(0x9b, 0x5d, 0xe5), // violet/purple
+    accent_secondary: Color::Rgb(0x3d, 0xdc, 0xd4), // cyan-teal
+    accent_action: Color::Rgb(0xf7, 0x5f, 0xa0),  // pink-magenta
+    // Error — vivid red
+    error_fg: Color::Rgb(0xff, 0x4d, 0x6d),
+    error_hover: Color::Rgb(0xff, 0x5c, 0x78),
+    error_surface: Color::Rgb(0x2a, 0x0f, 0x1a),
+    error_border: Color::Rgb(0xff, 0x4d, 0x6d),
+    error_text: Color::Rgb(0xff, 0xb3, 0xc6),
+    // Status
+    warning: Color::Rgb(0xf9, 0xc7, 0x4f), // yellow
+    success: Color::Rgb(0x43, 0xd9, 0x87), // bright green
+    // Azul, no el cian de `status_working`: compartirlo hacía indistinguible el
+    // marcador de "trabajando" de un mensaje informativo. El cian se queda para
+    // la vía viva (status_working / tool_running), que es su identidad.
+    info: Color::Rgb(0x6a, 0xa9, 0xf0), // azul
+    // Mode badges
+    // El lavanda de la marca (#A29BE8) y no el violeta del acento: reusar
+    // accent_primary borraba la identidad del badge de modo.
+    mode_agent: Color::Rgb(0xa2, 0x9b, 0xe8), // lavanda de marca
+    // Rojo-naranja, no el rojo de `error_fg`: ningún badge de modo puede
+    // compartir color con una vía semántica, o dejas de distinguir "modo yolo"
+    // de "algo falló".
+    mode_yolo: Color::Rgb(0xff, 0x70, 0x43), // rojo-naranja
+    // Naranja, no el amarillo de `warning`: compartirlo borraba la identidad
+    // del badge (mismo criterio que tokyo-night y dracula).
+    mode_plan: Color::Rgb(0xff, 0x9f, 0x64), // naranja
+    // Menta, no el verde de `success`: en 0.0.14 esto era `mode_goal` y compartía
+    // color con el estado de éxito; hoy los badges de modo deben distinguirse.
+    mode_operate: Color::Rgb(0x6e, 0xe7, 0xb7), // menta
+    permission_ask: Color::Rgb(0xf9, 0xc7, 0x4f),
+    permission_auto_review: Color::Rgb(0xf7, 0x5f, 0xa0),
+    permission_full_access: Color::Rgb(0xff, 0x4d, 0x6d),
+    // Footer statusline
+    status_ready: Color::Rgb(0x8a, 0x85, 0xa8),
+    status_working: Color::Rgb(0x3d, 0xdc, 0xd4),
+    status_warning: Color::Rgb(0xf9, 0xc7, 0x4f),
+    // Diff
+    diff_added_fg: Color::Rgb(0x43, 0xd9, 0x87),
+    diff_deleted_fg: Color::Rgb(0xff, 0x4d, 0x6d),
+    diff_added_bg: Color::Rgb(0x0d, 0x22, 0x1a),
+    diff_deleted_bg: Color::Rgb(0x22, 0x0d, 0x14),
+    // Tool cells
+    tool_running: Color::Rgb(0x3d, 0xdc, 0xd4),
+    tool_success: Color::Rgb(0x8a, 0x85, 0xa8),
+    tool_failed: Color::Rgb(0xff, 0x4d, 0x6d),
+};
+
 pub const TOKYO_NIGHT_UI_THEME: UiTheme = UiTheme {
     name: "tokyo-night",
     mode: PaletteMode::Dark,
@@ -740,6 +816,7 @@ pub enum ThemeId {
     WhaleLight,
     Grayscale,
     CatppuccinMocha,
+    Ghosty,
     TokyoNight,
     Dracula,
     GruvboxDark,
@@ -762,6 +839,7 @@ impl ThemeId {
             "light" => Some(Self::WhaleLight),
             "grayscale" => Some(Self::Grayscale),
             "catppuccin-mocha" => Some(Self::CatppuccinMocha),
+            "ghosty" => Some(Self::Ghosty),
             "tokyo-night" => Some(Self::TokyoNight),
             "dracula" => Some(Self::Dracula),
             "gruvbox-dark" => Some(Self::GruvboxDark),
@@ -784,6 +862,7 @@ impl ThemeId {
             Self::WhaleLight => "light",
             Self::Grayscale => "grayscale",
             Self::CatppuccinMocha => "catppuccin-mocha",
+            Self::Ghosty => "ghosty",
             Self::TokyoNight => "tokyo-night",
             Self::Dracula => "dracula",
             Self::GruvboxDark => "gruvbox-dark",
@@ -804,6 +883,7 @@ impl ThemeId {
             Self::WhaleLight => "Blue Stage Light",
             Self::Grayscale => "Grayscale",
             Self::CatppuccinMocha => "Catppuccin Mocha",
+            Self::Ghosty => "Ghosty",
             Self::TokyoNight => "Tokyo Night",
             Self::Dracula => "Dracula",
             Self::GruvboxDark => "Gruvbox Dark",
@@ -824,6 +904,7 @@ impl ThemeId {
             Self::WhaleLight => "Paper, cobalt action, and one Signal Gold human beacon",
             Self::Grayscale => "Color-minimal high contrast",
             Self::CatppuccinMocha => "Soft pastels on warm dark",
+            Self::Ghosty => "Negro profundo con acento violeta — la marca",
             Self::TokyoNight => "Deep blue/violet night palette",
             Self::Dracula => "Classic high-contrast purple",
             Self::GruvboxDark => "Vintage warm earth tones",
@@ -849,6 +930,7 @@ impl ThemeId {
             Self::WhaleLight => LIGHT_UI_THEME,
             Self::Grayscale => GRAYSCALE_UI_THEME,
             Self::CatppuccinMocha => CATPPUCCIN_MOCHA_UI_THEME,
+            Self::Ghosty => GHOSTY_UI_THEME,
             Self::TokyoNight => TOKYO_NIGHT_UI_THEME,
             Self::Dracula => DRACULA_UI_THEME,
             Self::GruvboxDark => GRUVBOX_DARK_UI_THEME,
@@ -868,6 +950,7 @@ pub const SELECTABLE_THEMES: &[ThemeId] = &[
     ThemeId::WhaleLight,
     ThemeId::Grayscale,
     ThemeId::CatppuccinMocha,
+    ThemeId::Ghosty,
     ThemeId::TokyoNight,
     ThemeId::Dracula,
     ThemeId::GruvboxDark,
@@ -881,7 +964,11 @@ impl UiTheme {
     #[must_use]
     pub fn for_mode(mode: PaletteMode) -> Self {
         match mode {
-            PaletteMode::Dark => UI_THEME,
+            // Ghosty es el tema por defecto en terminal oscuro, que es el caso de
+            // casi todo el mundo. `System` sigue siendo la elección por defecto y
+            // sigue respetando el fondo del terminal — quien lo tenga claro recibe
+            // el tema claro, como antes. `whale` sigue disponible por nombre.
+            PaletteMode::Dark => GHOSTY_UI_THEME,
             PaletteMode::Light => LIGHT_UI_THEME,
             PaletteMode::Grayscale => GRAYSCALE_UI_THEME,
             PaletteMode::SolarizedLight => SOLARIZED_LIGHT_UI_THEME,
@@ -986,6 +1073,7 @@ mod tests {
                 "light",
                 "grayscale",
                 "catppuccin-mocha",
+                "ghosty",
                 "tokyo-night",
                 "dracula",
                 "gruvbox-dark",

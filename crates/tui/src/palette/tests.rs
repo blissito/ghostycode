@@ -259,8 +259,11 @@ fn ui_theme_applies_custom_background_to_base_surfaces() {
     assert_eq!(theme.surface_bg, custom);
     assert_eq!(theme.header_bg, custom);
     assert_eq!(theme.footer_bg, custom);
+    // La propiedad es que el composer conserva el suyo, no que sea el de un tema
+    // concreto: se compara contra el mismo tema sin fondo custom.
     assert_eq!(
-        theme.composer_bg, UI_THEME.composer_bg,
+        theme.composer_bg,
+        UiTheme::for_mode(PaletteMode::Dark).composer_bg,
         "custom background must not erase panel contrast"
     );
 }
@@ -957,7 +960,11 @@ fn measured_light_background_selects_the_light_theme_end_to_end() {
     let measured = resolve_terminal_background(Some((0xFA, 0xFA, 0xFA)), None, None);
     assert_eq!(UiTheme::for_mode(measured.mode()), LIGHT_UI_THEME);
     let dark = resolve_terminal_background(Some((0x1E, 0x1E, 0x1E)), None, None);
-    assert_eq!(UiTheme::for_mode(dark.mode()), UI_THEME);
+    // El default oscuro es GHOSTY (la marca), no whale. Se compara contra el tema
+    // por defecto y no contra una constante concreta, para que cambiarlo otra vez
+    // no rompa un test que en realidad verifica la DETECCIÓN, no qué tema sale.
+    assert_eq!(UiTheme::for_mode(dark.mode()).mode, PaletteMode::Dark);
+    assert_eq!(UiTheme::for_mode(dark.mode()), super::themes::GHOSTY_UI_THEME);
 }
 
 // === #4813: cross-theme contrast audit ===
