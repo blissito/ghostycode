@@ -5101,8 +5101,10 @@ fn provider_metadata_defaults_match_runtime_helpers() {
         // and the Anthropic-compatible routes speak native Messages; every
         // other built-in provider is OpenAI-compatible Chat Completions.
         let expected_wire = match kind {
-            // EasyBits revende DeepSeek: wire ModelAware, sin formato fijo.
-            ProviderKind::Deepseek | ProviderKind::OpencodeZen | ProviderKind::Easybits => None,
+            // EasyBits queda FUERA a propósito: revende DeepSeek pero su proxy
+            // sólo expone /chat/completions, así que su wire es fijo. Cae en el
+            // `_` de abajo. Ver provider.rs y el CHANGELOG de 0.0.16.
+            ProviderKind::Deepseek | ProviderKind::OpencodeZen => None,
             ProviderKind::OpenaiCodex => Some(provider::WireFormat::Responses),
             ProviderKind::Anthropic
             | ProviderKind::DeepseekAnthropic

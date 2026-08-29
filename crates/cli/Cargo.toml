@@ -18,19 +18,19 @@ path = "src/main.rs"
 anyhow.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
-ghosty-tui = { path = "../tui", version = "0.0.15" }
-ghosty-agent = { path = "../agent", version = "0.0.15" }
-ghosty-app-server = { path = "../app-server", version = "0.0.15" }
-ghosty-config = { path = "../config", version = "0.0.15" }
-ghosty-lane = { path = "../lane", version = "0.0.15" }
-ghosty-workflow = { path = "../workflow", version = "0.0.15" }
-ghosty-execpolicy = { path = "../execpolicy", version = "0.0.15" }
-ghosty-mcp = { path = "../mcp", version = "0.0.15" }
-ghosty-paths = { path = "../paths", version = "0.0.15" }
-ghosty-release = { path = "../release", version = "0.0.15" }
-ghosty-secrets = { path = "../secrets", version = "0.0.15" }
-ghosty-state = { path = "../state", version = "0.0.15" }
-ghosty-telemetry = { path = "../telemetry", version = "0.0.15" }
+ghosty-tui = { path = "../tui", version = "0.0.16" }
+ghosty-agent = { path = "../agent", version = "0.0.16" }
+ghosty-app-server = { path = "../app-server", version = "0.0.16" }
+ghosty-config = { path = "../config", version = "0.0.16" }
+ghosty-lane = { path = "../lane", version = "0.0.16" }
+ghosty-workflow = { path = "../workflow", version = "0.0.16" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.16" }
+ghosty-mcp = { path = "../mcp", version = "0.0.16" }
+ghosty-paths = { path = "../paths", version = "0.0.16" }
+ghosty-release = { path = "../release", version = "0.0.16" }
+ghosty-secrets = { path = "../secrets", version = "0.0.16" }
+ghosty-state = { path = "../state", version = "0.0.16" }
+ghosty-telemetry = { path = "../telemetry", version = "0.0.16" }
 chrono.workspace = true
 console = "0.16.3"
 dirs.workspace = true
@@ -49,7 +49,7 @@ webbrowser = "1.0"
 zeroize = "1.8.2"
 
 [build-dependencies]
-ghosty-build-support = { path = "../build-support", version = "0.0.15" }
+ghosty-build-support = { path = "../build-support", version = "0.0.16" }
 
 # Parent-death cleanup for delegated server children (#3259): on Linux the
 # dispatcher sets PR_SET_PDEATHSIG so the child is signalled if the dispatcher

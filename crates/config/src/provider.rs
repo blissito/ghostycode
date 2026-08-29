@@ -764,8 +764,16 @@ impl Provider for Easybits {
     }
 
     fn wire_policy(&self) -> WirePolicy {
-        // Mismo criterio que DeepSeek: revende su API.
-        WirePolicy::ModelAware
+        // FIJO en chat/completions: el proxy de EasyBits sólo implementa
+        // `/api/v2/llm/v1/chat/completions`. No hay `/responses` — devuelve un 404
+        // con página HTML, y el turno muere con "Responses API request failed".
+        //
+        // No vale `ModelAware` aunque revenda DeepSeek: el catálogo no le atribuye
+        // modelos a easybits (por eso el resolver de rutas lo trata como
+        // revendedor pass-through), así que la resolución por modelo no encuentra
+        // endpoint y acaba en Responses. Medido contra producción el 2026-08-29:
+        // /responses → 404, /chat/completions → 200.
+        WirePolicy::Fixed(WireFormat::ChatCompletions)
     }
 }
 

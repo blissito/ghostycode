@@ -27,10 +27,10 @@ export interface RepoFacts {
 }
 
 export const FACTS: RepoFacts = {
-  "generatedAt": "2026-08-28T19:33:10.354Z",
+  "generatedAt": "2026-08-29T02:52:28.174Z",
   "sourceRevision": null,
   "sourceCommittedAt": null,
-  "version": "0.0.15",
+  "version": "0.0.16",
   "crates": [
     "agent",
     "app-server",
@@ -193,6 +193,11 @@ export const FACTS: RepoFacts = {
       "id": "zai",
       "label": "Z.ai",
       "env": "ZAI_API_KEY / Z_AI_API_KEY"
+    },
+    {
+      "id": "easybits",
+      "label": "EasyBits",
+      "env": "EASYBITS_API_KEY"
     },
     {
       "id": "stepfun",

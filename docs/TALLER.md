@@ -75,7 +75,7 @@ Vas a usar EasyBits de **dos formas a la vez**, y es a propósito.
 
 | Capacidad | Cómo | Por qué |
 |---|---|---|
-| Cajas (crear, ejecutar, exponer puerto, destruir) | **MCP** | Crear una caja no tiene endpoint REST: solo existe por MCP o SDK. |
+| Cajas (crear, ejecutar, SSH, destruir) | **MCP** | Es lo que el agente usa por su cuenta. También hay REST (`POST /api/v2/sandboxes`) si prefieres `curl`. |
 | Archivos / S3, bases de datos | **API con `curl`** | Sí tienen REST completo, y así no consumen presupuesto de tools. |
 
 El motivo de fondo: DeepSeek —que es lo que EasyBits revende— tiene un **tope duro
@@ -187,6 +187,99 @@ ghosty --yolo
 | `DeepSeek API key not found` | La key no quedó guardada. Repite `ghosty auth set` y luego `ghosty doctor`. |
 | El instalador se cuelga o da 403 | La red del lugar. Pide la ruta de respaldo (abajo). |
 | macOS bloquea el binario | `xattr -d com.apple.quarantine ~/.local/bin/ghosty` |
+
+## 5. Mover el agente a una caja
+
+Hasta aquí Ghosty corre en tu laptop. Ahora va a correr en una microVM y tú vas a
+entrar por SSH — el mismo salto que hace un equipo cuando el agente deja de vivir
+en la máquina de una persona.
+
+### Una sola vez: el túnel
+
+```sh
+npm i -g @easybits.cloud/cli
+easybits login TU_KEY_DEL_CORREO
+```
+
+Y en `~/.ssh/config`:
+
+```
+Host *.ghosty
+  ProxyCommand easybits ssh-proxy %h
+  User root
+```
+
+Esto entra por el **443**, no por un puerto alto. Importa: en la red de una
+oficina o detrás de una VPN corporativa un puerto alto no pasa, y el fallo se ve
+como "no me conecta" sin más pistas. Si puedes abrir una página web, puedes
+entrar a tu caja.
+
+### Pídeselo a Ghosty
+
+Con el MCP de cajas conectado (paso 3), esto es una instrucción en lenguaje
+natural. Lo que hará por dentro:
+
+```
+1. sandbox_create({ template: "dev-box", timeoutSeconds: 3600 })
+2. sandbox_ssh_enable({ sandboxId, publicKeys: ["<tu llave pública>"] })
+3. sandbox_exec({ sandboxId, command:
+     "export HOME=/root; curl -fsSL https://formmy.app/ghosty/install.sh | sh" })
+```
+
+`export HOME=/root` **no es opcional**: el `exec` de EasyBits no define `HOME` y el
+instalador muere con `HOME: parameter not set` devolviendo un código de error casi
+mudo. Le pasa igual a rustup, nvm o uv. Por lo mismo, después hay que invocar la
+ruta absoluta `/root/.local/bin/ghosty`: ese `exec` tampoco es shell de login.
+
+### Goose en la misma caja
+
+No hace falta una caja distinta: `dev-box` aguanta los dos agentes, y así aprendes
+un solo flujo.
+
+```sh
+export HOME=/root CONFIGURE=false
+curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash
+```
+
+Verificado sobre la misma caja: `ghosty 0.0.15` y `goose 1.48.0` conviviendo en
+`/root/.local/bin/`. El instalador de Goose avisa que `$GOOSE_BIN_DIR` no está en
+el `PATH` — es el mismo detalle de siempre: añade
+`export PATH="/root/.local/bin:$PATH"` o invoca la ruta absoluta.
+
+### Entra
+
+```sh
+ssh sb_abc123.ghosty
+```
+
+Y el momento que da nombre a la sesión — **el editor sigue en tu Mac, el agente ya
+vive en la caja**:
+
+```sh
+ssh sb_abc123.ghosty "cd /data/work && ghosty serve --acp"
+```
+
+Eso habla ACP por stdio a través del túnel. Un editor con soporte ACP (Zed,
+JetBrains) puede usarlo como `ProxyCommand` y trabajar contra el agente remoto sin
+saber que está remoto.
+
+### Qué cajas admiten SSH
+
+Sólo las que declaran el puerto 22: hoy **`dev-box`** (la limpia, Node 22 + git +
+build-essential, nace sin credenciales) y `ghosty-studio` (el control-surface, no
+la uses para esto). `ubuntu`, `python`, `node` y `bun` **no pueden**: usan la
+imagen oficial de Docker y no hay dónde hornearles el sshd.
+
+Un `403` al pedir SSH significa "este template no lo tiene". Es definitivo, no lo
+reintentes.
+
+### Cerrar
+
+`sandbox_ssh_disable` corta el acceso desde fuera, pero **no revoca la llave**: el
+sshd sigue vivo dentro. Para revocar de verdad hay que quitarla de
+`/app/secrets.env`. Y la caja se destruye sola al vencer su `timeoutSeconds`.
+
+---
 
 ### Ruta de respaldo: caja remota
 

@@ -16,9 +16,18 @@ sub-agents through long tool-using sessions with evidence-driven verification.
 Built for developers who want a keyboard-first coding agent with MCP support,
 session persistence, and zero vendor lock-in. Open source (MIT).
 
-> ### ⚡ Novedad (0.0.15) — Ghosty se pone al día con upstream
+> ### ⚡ Novedad (0.0.16) — el proveedor EasyBits vuelve a hablar con el modelo
 >
-> Esta versión vuelve a sincronizar Ghosty con [CodeWhale](https://github.com/Hmbown/CodeWhale),
+> **Arreglo urgente.** En 0.0.15 `--provider easybits` no podía hablar con el modelo:
+> pedía la Responses API, que el proxy de EasyBits no implementa, y el turno moría
+> con `Responses API request failed` y un 404. Ahora habla `chat/completions`, que
+> es lo que ese proxy expone. Si usas una key de EasyBits, actualiza.
+>
+> ---
+>
+> ### 0.0.15 — Ghosty se pone al día con upstream
+>
+> Esa versión volvió a sincronizar Ghosty con [CodeWhale](https://github.com/Hmbown/CodeWhale),
 > el proyecto del que nace. Es un salto grande por dentro —el árbol se triplica—
 > pero lo que verás tú es esto:
 >

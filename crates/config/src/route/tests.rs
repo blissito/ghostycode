@@ -277,11 +277,11 @@ fn descriptor_for_every_kind_has_nonempty_transport_facts() {
 fn descriptor_protocol_matches_provider_wire() {
     for kind in ProviderKind::ALL {
         let d = ProviderDescriptor::for_kind(kind);
-        // EasyBits revende DeepSeek: mismo wire ModelAware.
-        if matches!(
-            kind,
-            ProviderKind::Deepseek | ProviderKind::OpencodeZen | ProviderKind::Easybits
-        ) {
+        // EasyBits NO va aquí aunque revenda DeepSeek: su proxy sólo expone
+        // /chat/completions. Con ModelAware pedía /responses, que devuelve 404, y
+        // ningún turno funcionaba (0.0.15). Medido: /responses → 404,
+        // /chat/completions → 200. Si vuelves a meterlo, rompes al proveedor.
+        if matches!(kind, ProviderKind::Deepseek | ProviderKind::OpencodeZen) {
             assert_eq!(d.wire_policy(), crate::provider::WirePolicy::ModelAware);
             assert_eq!(
                 d.protocol_for_endpoint("chat"),

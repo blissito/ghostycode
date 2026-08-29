@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-08-29
+
+### Fixed
+
+- **El proveedor `easybits` no podía hablar con el modelo.** Cualquier turno moría con
+  `Responses API request failed` y un 404 que devolvía una página HTML. El proxy de EasyBits
+  sólo implementa `/api/v2/llm/v1/chat/completions`; no existe `/responses`.
+
+  La causa era `WirePolicy::ModelAware` en el proveedor: esa política resuelve el formato de cable
+  consultando el catálogo de modelos, y el catálogo **no atribuye modelos a `easybits`** — que es
+  justamente por lo que el resolver de rutas lo trata como revendedor pass-through. Sin endpoint
+  que resolver, terminaba en Responses. Ahora es `WirePolicy::Fixed(WireFormat::ChatCompletions)`.
+
+  Es una regresión de 0.0.15: hasta 0.0.14 `easybits` era un alias de `ApiProvider::Deepseek` y
+  heredaba su formato; al volverlo `ProviderKind` propio se quedó con una política que no le
+  corresponde. Medido contra producción: `/responses` → 404, `/chat/completions` → 200.
+
 ## [0.0.15] - 2026-08-28
 
 Ghosty se rebasa sobre CodeWhale 0.9.11 (commit `c8f38f0`), el proyecto del que
@@ -7640,6 +7657,7 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
 [Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.15...HEAD
+[0.0.16]: https://github.com/blissito/ghostycode/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/blissito/ghostycode/compare/v0.0.14...v0.0.15
 [0.9.11]: https://github.com/Hmbown/GhostyCode/compare/v0.9.10...v0.9.11
 [0.9.10]: https://github.com/Hmbown/GhostyCode/compare/v0.9.9...v0.9.10
