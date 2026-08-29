@@ -206,7 +206,8 @@ async function main() {
       cwd: installDir,
       env,
     });
-    await runCommand("npx", ["--no-install", "ghosty-tui", "--version"], {
+    // 0.0.15 publica un solo bin: `ghosty`. `ghosty-tui` dejo de ser comando npm.
+    await runCommand("npx", ["--no-install", "ghosty", "--version"], {
       cwd: installDir,
       env,
     });
