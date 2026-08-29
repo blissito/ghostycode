@@ -964,7 +964,10 @@ fn measured_light_background_selects_the_light_theme_end_to_end() {
     // por defecto y no contra una constante concreta, para que cambiarlo otra vez
     // no rompa un test que en realidad verifica la DETECCIÓN, no qué tema sale.
     assert_eq!(UiTheme::for_mode(dark.mode()).mode, PaletteMode::Dark);
-    assert_eq!(UiTheme::for_mode(dark.mode()), super::themes::GHOSTY_UI_THEME);
+    assert_eq!(
+        UiTheme::for_mode(dark.mode()),
+        super::themes::GHOSTY_UI_THEME
+    );
 }
 
 // === #4813: cross-theme contrast audit ===

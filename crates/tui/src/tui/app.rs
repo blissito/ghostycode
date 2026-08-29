@@ -2607,6 +2607,28 @@ impl App {
             .unwrap_or_else(|_| "auto".to_string())
     }
 
+    /// Project a launch-screen choice or a restored session's saved mode onto
+    /// the live session.
+    ///
+    /// Unlike [`Self::set_mode`], re-asserting the mode the session is already
+    /// in is a no-op rather than a permission downgrade. `--yolo` starts in
+    /// Agent with Full Access, and both the launch screen's Work row and a
+    /// restored session (YOLO persists as `mode = "agent"`) then asked for
+    /// Agent again, which reset the live posture to the configured `ask`
+    /// baseline — the 2026-08-28 report "aparece como ask aunque inicia como
+    /// --yolo". An explicit user selection still goes through
+    /// [`Self::select_mode`]/[`Self::set_mode`] and still drops the elevation.
+    pub fn adopt_session_mode(&mut self, mode: AppMode) -> bool {
+        let projected = match mode {
+            AppMode::Yolo => AppMode::Agent,
+            other => other,
+        };
+        if self.yolo && projected == self.mode {
+            return false;
+        }
+        self.set_mode(mode)
+    }
+
     pub fn set_mode(&mut self, mode: AppMode) -> bool {
         let requested_mode = mode;
         let mode = match mode {

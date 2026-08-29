@@ -627,6 +627,16 @@ pub(crate) fn begin_launch_session(
     if let Some(workspace) = workspace {
         app.workspace = workspace;
     }
+    // A launch-screen "new session" is a new session in the same sense `/new`
+    // is: without this reset the live Work runtime kept the previous session's
+    // graph, so a resumed to-do list reappeared in the strip of every session
+    // started afterwards and was then saved into each of them (2026-08-28
+    // report: "Pendientes" permanently pinned in every session).
+    if !crate::commands::reset_conversation_state(app) {
+        return commands::CommandResult::error(
+            "Could not start a new session because Work state is busy; retry in a moment.",
+        );
+    }
     let session_id = uuid::Uuid::new_v4().to_string();
     app.current_session_id = Some(session_id.clone());
     app.current_session_metadata = None;

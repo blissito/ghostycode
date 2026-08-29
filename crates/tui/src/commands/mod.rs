@@ -10,6 +10,10 @@ mod contract;
 pub mod discovery;
 mod groups;
 pub mod traits;
+
+/// The `/new` + `/clear` conversation/Work reset, shared with the launch
+/// screen's "new session" action so both mint a genuinely empty session.
+pub(crate) use groups::core::reset_conversation_state;
 pub mod user_commands;
 pub mod user_registry;
 

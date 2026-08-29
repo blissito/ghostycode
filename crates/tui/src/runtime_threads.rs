@@ -2559,6 +2559,13 @@ fn merge_usage_totals(into: &mut UsageTotals, from: &UsageTotals) {
     into.turns = into.turns.saturating_add(from.turns);
 }
 
+// Nueve acumuladores sueltos porque el llamador los tiene sueltos: agruparlos en un
+// struct sólo movería la lista de argumentos a la definición del struct y obligaría a
+// construirlo y desarmarlo en cada turno. La función es un fold, no una API.
+//
+// ⚠️ Esto NO es deuda nueva: el aviso existe desde el rebase sobre CodeWhale 0.9.11 y
+// tumbaba `clippy -D warnings`, así que ni 0.0.15 ni 0.0.16 pasaron esa puerta.
+#[allow(clippy::too_many_arguments)]
 fn accumulate_runtime_cost_coverage(
     audit: Option<&crate::pricing::TurnCostAudit>,
     priced_turns: &mut u64,

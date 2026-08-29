@@ -100,12 +100,19 @@ import json, os, pathlib, re, sys
 
 old, new = os.environ["OLD_VERSION"], os.environ["NEW_VERSION"]
 old_re = re.escape(old)
+# Las traducciones del README vienen del upstream y este repo no las tiene todas.
+# El encabezado de este script ya prometía "when present": se cumple filtrando por
+# existencia en vez de reventar con un FileNotFoundError a mitad del bump.
 readmes = [
-    "README.md",
-    "README.zh-CN.md",
-    "README.ja-JP.md",
-    "README.vi.md",
-    "README.ko-KR.md",
+    path
+    for path in (
+        "README.md",
+        "README.zh-CN.md",
+        "README.ja-JP.md",
+        "README.vi.md",
+        "README.ko-KR.md",
+    )
+    if pathlib.Path(path).exists()
 ]
 
 def bump(path, pattern, repl, minimum):
@@ -186,13 +193,18 @@ for readme in readmes:
 #    Current docs deliberately describe installed output generically, so zero
 #    matches is valid. If numeric forms exist, validate that they agree with
 #    the old workspace version before replacing them.
+# Mismo filtro que `readmes`: las traducciones son del upstream y aquí no están todas.
 version_doc_files = [
-    "README.md",
-    "README.zh-CN.md",
-    "README.ja-JP.md",
-    "README.vi.md",
-    "README.ko-KR.md",
-    "docs/INSTALL.md",
+    path
+    for path in (
+        "README.md",
+        "README.zh-CN.md",
+        "README.ja-JP.md",
+        "README.vi.md",
+        "README.ko-KR.md",
+        "docs/INSTALL.md",
+    )
+    if pathlib.Path(path).exists()
 ]
 for doc in version_doc_files:
     p = pathlib.Path(doc)

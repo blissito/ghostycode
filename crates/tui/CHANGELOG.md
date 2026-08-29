@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-08-29
+
+### Added
+
+- **Vuelve el tema `ghosty`, y es el default en terminal oscuro.** Negro profundo con
+  acento violeta. Venía en 0.0.14 y el rebase sobre CodeWhale se lo llevó junto con el
+  resto de `palette.rs`; 39 de sus 40 campos siguen existiendo, `mode_goal` desapareció y
+  su papel lo ocupa `mode_operate`, y los tres `permission_*` son nuevos y salen de los
+  acentos que el tema ya tenía.
+
+  Tres colores NO se copiaron tal cual del original, y conviene saber por qué:
+
+  - Los dos grises de texto daban **2.06 y 2.66** de contraste sobre el fondo, por debajo
+    del piso de 3.0 que exige el audit cruzado. Mismo tinte lavanda, ahora 3.43 y 4.45.
+  - `mode_yolo` es rojo-naranja y no el rojo de `error_fg`: un badge de modo no puede
+    compartir color con una vía semántica, o dejas de distinguir «modo yolo» de «algo
+    falló».
+  - `mode_plan` es naranja y no el amarillo de `warning` — mismo criterio que tokyo-night
+    y dracula.
+
+  `system` sigue siendo la elección por defecto y sigue respetando el fondo del terminal:
+  quien lo tenga claro recibe el tema claro, como antes. `whale` sigue disponible por
+  nombre.
+
+### Changed
+
+- **El instalador tiene UNA sola fuente.** Había tres copias y sólo `scripts/install.sh`
+  estaba viva. La de `scripts/release/` se copiaba dentro de **cada bundle de release**,
+  así que quien instalaba desde un bundle recibía el instalador de la era de los dos
+  binarios —bajaba `ghosty-tui` aparte— y además apuntaba a `ghosty.net`, que no es un
+  dominio de este proyecto. Los tres `INSTALL.md` (es, id, zh) apuntan ya al instalador
+  real.
+
+### Fixed
+
+- **`--yolo` volvía a `ask` en cuanto arrancabas la sesión.** El binario sí nacía con
+  Full Access, pero la fila «Work» de la pantalla de inicio —y una sesión restaurada,
+  porque YOLO se guarda con el nombre `agent`— volvía a pedir el modo Agent, y ese
+  segundo `set_mode` reponía la postura configurada (`ask`) y apagaba `yolo`. Resultado:
+  el chip decía `ask`, se pedía aprobación en cada llamada y Shift+Tab parecía no hacer
+  nada porque partía de la postura equivocada. Reafirmar el modo que la sesión ya tiene
+  es ahora un no-op (`adopt_session_mode`); elegir «Act» a mano sigue bajando la
+  elevación, que para eso es una elección.
+
+- **Los «Pendientes» se quedaban pegados en todas las sesiones.** La sesión nueva que
+  nace desde la pantalla de inicio estrenaba id pero no limpiaba nada: el Work runtime
+  conservaba el grafo de la sesión anterior, la lista reaparecía en la tira superior y se
+  volvía a guardar en cada sesión siguiente. Ahora hace el mismo reset que `/new`.
+
 ## [0.0.16] - 2026-08-29
 
 ### Fixed
@@ -4574,165 +4623,6 @@ reproductions shaped v0.9.0:
 - [@WavesMan](https://github.com/WavesMan),
   [@wuisabel-gif](https://github.com/wuisabel-gif), and
   [@yekern](https://github.com/yekern).
-
-## [0.8.68] - 2026-07-10
-
-### Changed
-
-- Make the advertised Android/Termux release target buildable by generating
-  QuickJS bindings against the Android NDK instead of expecting an upstream
-  pre-generated `aarch64-linux-android` binding file, and give Android CLI/TUI
-  HTTP clients a preconfigured rustls root store (Mozilla WebPKI roots) so
-  standalone Termux processes stop panicking inside
-  `rustls-platform-verifier`'s JVM expectations (#4236, #4242).
-- Rebalance the bundled Constitution after the v0.8.67 prompt ablation: keep
-  the procedural policy tail in mode-specific layers, while restoring concise
-  behavioral guidance for momentum, causal investigation, constraint-first
-  decisions, mechanism-backed guarantees, and clean continuity.
-- Wire live catalog cache into provider/model pickers without dropping stale or
-  prior rows after TTL expiry / refresh failure (#4139). Remove the dead
-  `OFFERING_SEEDS` hand table so the bundled Models.dev catalog is the sole
-  seed source; pickers show a compact `stale` / `cache failed` chrome chip when
-  the Models.dev layer is past TTL or last refresh failed.
-- Make `work_update` the sole model-facing To-do / Work progress tool (#4132).
-  `checklist_*` and `todo_*` remain registered as hidden compat aliases for
-  transcript replay; `update_plan` stays Strategy metadata/context/route, not
-  a second checklist. Mode/approval prompts nudge the single surface.
-- Demote the bundled Models.dev snapshot to an offline/stale fallback after
-  live catalog refresh (#4188). ProviderLake precedence is live Models.dev >
-  bundled seed > legacy hardcoded completion names; pickers, inventory, and
-  subagent validation stay catalog-backed, and GhostyCode-only providers keep
-  defaults when Models.dev has no rows.
-
-### Added
-- Wire xAI device-code OAuth into `ghosty auth xai-device`, the TUI
-  `/auth xai-device` command, and guided provider setup, with comment-preserving
-  auth-mode persistence and loopback exchange coverage (#4257).
-- Add GPT-5.6 Sol, Terra, and Luna to the OpenAI API route, including their
-  1.05M context metadata, 128K output limits, pricing, and `max` reasoning
-  effort. Add Meta Model API as a first-class OpenAI-compatible provider for
-  Muse Spark 1.1 with 1M context, tool/reasoning metadata, provider aliases,
-  and both `META_MODEL_API_KEY` and Meta's `MODEL_API_KEY` credential names.
-- Catalog automation: `scripts/catalog_models_dev.py` refreshes secret-free
-  Models.dev / OpenRouter listings and validates the offline seed snapshot
-  (`snapshot --check`) without ever persisting API keys (#4117).
-- `/model` picker cycles six catalog views with `A` (Configured → Catalog →
-  Recent → Coding → Cheap → Long context) and richer row metadata from the
-  live/bundled catalog (context, max output, tools, reasoning, price/M,
-  freshness). Discoverability views do not auto-apply a surprising route
-  (#4115).
-
-- Workflow runs are now durable: every run appends to a
-  `.ghosty/workflow-runs.jsonl` journal and hydrates on startup, so
-  `workflow status` survives restarts; runs left `running` by a dead process
-  are recovered as failed (#4011). The transcript renders workflow tool
-  output as a run card (status, goal, children, progress, verification)
-  instead of a generic one-liner (#4038), and `workflow` accepts a `verify`
-  flag that runs post-completion verification gates and fails the run when
-  gates fail (#4013).
-- Hotbar sources for MCP tools and skills: MCP tool slots prefill the
-  composer (execution stays behind the normal tool-approval flow) and skill
-  slots activate through the existing `$skill` alias (#2068, #2069).
-- Mode & permission surface: Tab cycles Plan → Act → Operate; Shift+Tab
-  cycles the Agent permission posture (Ask / Auto-Review / Full Access) with
-  a footer permission chip; Ctrl+T cycles reasoning effort and Ctrl+Shift+T
-  opens the live transcript overlay. Operate is the orchestration mode
-  (delegate, wait, inspect, dispatch) and raises sub-agent fan-out while
-  focusing the Agents sidebar.
-- Provider lake facade: the provider/model pickers, hotbar, and model
-  inventory now enumerate configured providers' models from the bundled
-  catalog (with an `A` toggle to browse the full catalog), replacing the
-  hardcoded per-provider model table (#3830 follow-up).
-- Added Cursor-integrated-terminal dogfood evidence for the published v0.8.67
-  release, covering installed binary provenance, release/publication checks,
-  headless runtime smoke, setup QA, and remaining manual visual TUI checks.
-- README and README.zh-CN now point users to the community-maintained
-  GhostyCode for VS Code GUI frontend while clarifying that this repository's
-  `extensions/vscode/` scaffold remains the read-only Phase 0 viewer (#4035).
-
-### Fixed
-
-- Sub-agent waiting no longer peek→sleep polls: `agent(action="wait")` joins
-  children, unchanged peeks are throttled (~30s) with an anti-polling nudge,
-  and mode prompts teach the join primitive (#4097). Harvested from PR #4098
-  by [@Mr-Moon121](https://github.com/Mr-Moon121) (Jeffrey Luna).
-- `/provider` picker remembers catalog/configured view and highlighted row
-  across reopen, matching `/model` picker memory.
-- Mode picker roster is exactly Act / Plan / Operate (no Multitask, no
-  numeric `4`/`5` gaps). Legacy `yolo`/`4` remain invisible one-way
-  permission shorthand for Act + Bypass.
-
-- Fleet setup is a role/profile roster editor, not a provider-scoped model
-  picker: the Model step lists routes from every configured provider (not
-  only the active one), a picked route's provider is persisted explicitly in
-  the saved profile TOML (`provider = "..."`, never inferred from the model
-  id), and the loader/route resolver read that field back out verbatim. The
-  draft-preview ratify keypress no longer competes with a separate pager's
-  `g`/`G` scroll bindings — the exact TOML preview now renders inline on the
-  same Review step that ratifies it (#4093).
-- The headless `ghosty fleet run` CLI now launches workers on their profile-pinned route, not just records it on the receipt: `ghosty exec` gains a non-secret `--provider` flag, and a worker whose profile pins provider B is dispatched with `--provider B --model <B's model>` even when the parent session is on provider A (credentials still resolve from the worker's own environment; provider is never inferred from the model id). Workers with no profile-bound provider are unchanged — no `--provider`, run-level model. The interactive TUI spawns roster members in-process and does not yet honor the pinned provider (it uses the session provider); that remainder is tracked in #4193 (#4093).
-- The Fleet setup `m` model-assisted redraft no longer drops a picked
-  cross-provider route: the provider/model the operator chose are re-pinned
-  onto the drafted profile (a model draft is always `provider: None`), so
-  ratifying it keeps the explicit route instead of persisting an ambiguous,
-  provider-scoped profile (#4093).
-- Ratifying a Fleet profile now fails with a clear message when it pins a
-  provider that has no configured credentials, using the same
-  configured-provider check the model picker uses (#4093).
-- Workflow correctness: completion polling fails closed instead of
-  fabricating success when a sub-agent reports no terminal status; cancel
-  interrupts the JS VM (cancel handle + abort) and blocks further spawns;
-  and `budget.spent()` reports real manager-scope usage instead of always 0.
-- Sub-agent spawns validate the model↔provider pair before dispatch:
-  inherited/faster routes remap foreign models to the provider's catalog
-  default, and explicit pins fail fast with a diagnostic instead of an
-  upstream model-not-found error.
-- TUI stability: engine event drains break every 8–16 events / 8 ms to keep
-  input live (#1830, #2317, #1198); the terminal input pump restarts after
-  stall recovery on macOS/Linux too; the startup raw-mode probe no longer
-  leaks raw mode on timeout; recovery snapshots persist every 45 s during
-  long turns and the offline queue persists on every push (#1830);
-  queue/steer paths surface toasts while streaming (#2317, #1338); and
-  modal submit errors re-open the modal instead of being swallowed (#1198).
-- app-server hardening: `/v1/chat/completions` requires the bearer token;
-  errors return real 4xx/5xx statuses; request bodies and SSE frames are
-  size-limited; stdio `config get` redacts secrets and stdio shutdown reaps
-  the runtime child; graceful shutdown on SIGTERM/Ctrl+C; constant-time
-  token comparison; dropping the runtime bridge no longer blocks the
-  runtime.
-- Policy/config/secrets: user-layer ExecPolicy rules outrank agent-layer
-  rules; chained commands no longer propose trusted-prefix amendments;
-  config and secrets writes are atomic (with fsync) on all platforms; empty
-  provider chains no longer panic.
-- Core/state: paused jobs persist as paused across restarts; unarchive
-  updates the in-memory cache; tool dispatch has a timeout; MCP
-  notifications no longer receive responses; corrupted checkpoints surface
-  errors instead of loading empty state; the session index compacts instead
-  of growing unbounded; and recording thread-goal usage no longer
-  self-deadlocks the state store.
-- Runtime compaction summaries are now persisted into `/v1` thread records so
-  engine reloads and restarts preserve compacted context. Contributed by
-  MXAntian (@MXAntian) (#4091).
-- The TUI leaves xterm alternate-scroll mode off when mouse capture is disabled,
-  preserving native terminal text selection in light-theme/no-mouse-capture
-  sessions. Contributed by Nightt (@nightt5879) (#4088, #4026).
-- The public `/api/github/feed` endpoint is now forced dynamic on Cloudflare so
-  it returns live GitHub activity instead of a build-time empty feed.
-
-### Changed
-
-- Tool-hang watchdog trimmed from 15 minutes to 10 (#1862); approval modal
-  footer hints use a higher-contrast tier (#3380); status/mode copy is
-  disclosed once across header, footer, cards, and sidebar instead of
-  repeated per layer.
-- Removed the unused `tui::whale_routes` taxonomy module and its tests.
-  Contributed by Darrell Thomas (@DarrellThomas) (#4041, #3852).
-
-### Deprecated
-
-- YOLO mode: `--yolo`, `default_mode = "yolo"`, and the hotbar YOLO action
-  now map to Act + Full Access permissions via a compatibility shim and
-  show a one-shot deprecation notice; removal is planned for 0.9.0.
 
 ---
 

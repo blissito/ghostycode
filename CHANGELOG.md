@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-08-29
+
+### Added
+
+- **Vuelve el tema `ghosty`, y es el default en terminal oscuro.** Negro profundo con
+  acento violeta. Venía en 0.0.14 y el rebase sobre CodeWhale se lo llevó junto con el
+  resto de `palette.rs`; 39 de sus 40 campos siguen existiendo, `mode_goal` desapareció y
+  su papel lo ocupa `mode_operate`, y los tres `permission_*` son nuevos y salen de los
+  acentos que el tema ya tenía.
+
+  Tres colores NO se copiaron tal cual del original, y conviene saber por qué:
+
+  - Los dos grises de texto daban **2.06 y 2.66** de contraste sobre el fondo, por debajo
+    del piso de 3.0 que exige el audit cruzado. Mismo tinte lavanda, ahora 3.43 y 4.45.
+  - `mode_yolo` es rojo-naranja y no el rojo de `error_fg`: un badge de modo no puede
+    compartir color con una vía semántica, o dejas de distinguir «modo yolo» de «algo
+    falló».
+  - `mode_plan` es naranja y no el amarillo de `warning` — mismo criterio que tokyo-night
+    y dracula.
+
+  `system` sigue siendo la elección por defecto y sigue respetando el fondo del terminal:
+  quien lo tenga claro recibe el tema claro, como antes. `whale` sigue disponible por
+  nombre.
+
+### Changed
+
+- **El instalador tiene UNA sola fuente.** Había tres copias y sólo `scripts/install.sh`
+  estaba viva. La de `scripts/release/` se copiaba dentro de **cada bundle de release**,
+  así que quien instalaba desde un bundle recibía el instalador de la era de los dos
+  binarios —bajaba `ghosty-tui` aparte— y además apuntaba a `ghosty.net`, que no es un
+  dominio de este proyecto. Los tres `INSTALL.md` (es, id, zh) apuntan ya al instalador
+  real.
+
+### Fixed
+
+- **`--yolo` volvía a `ask` en cuanto arrancabas la sesión.** El binario sí nacía con
+  Full Access, pero la fila «Work» de la pantalla de inicio —y una sesión restaurada,
+  porque YOLO se guarda con el nombre `agent`— volvía a pedir el modo Agent, y ese
+  segundo `set_mode` reponía la postura configurada (`ask`) y apagaba `yolo`. Resultado:
+  el chip decía `ask`, se pedía aprobación en cada llamada y Shift+Tab parecía no hacer
+  nada porque partía de la postura equivocada. Reafirmar el modo que la sesión ya tiene
+  es ahora un no-op (`adopt_session_mode`); elegir «Act» a mano sigue bajando la
+  elevación, que para eso es una elección.
+
+- **Los «Pendientes» se quedaban pegados en todas las sesiones.** La sesión nueva que
+  nace desde la pantalla de inicio estrenaba id pero no limpiaba nada: el Work runtime
+  conservaba el grafo de la sesión anterior, la lista reaparecía en la tira superior y se
+  volvía a guardar en cada sesión siguiente. Ahora hace el mismo reset que `/new`.
+
 ## [0.0.16] - 2026-08-29
 
 ### Fixed
@@ -7657,6 +7706,7 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
 [Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.15...HEAD
+[0.0.17]: https://github.com/blissito/ghostycode/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/blissito/ghostycode/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/blissito/ghostycode/compare/v0.0.14...v0.0.15
 [0.9.11]: https://github.com/Hmbown/GhostyCode/compare/v0.9.10...v0.9.11

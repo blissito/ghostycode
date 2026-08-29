@@ -43,7 +43,7 @@ pub mod voice;
 mod workflow;
 mod workspace;
 
-pub(in crate::commands) use self::core::reset_conversation_state;
+pub(crate) use self::core::reset_conversation_state;
 
 use crate::commands::CommandResult;
 use crate::commands::traits::{Command, CommandGroup, FunctionCommand, RegisterCommand};

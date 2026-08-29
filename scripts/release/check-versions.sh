@@ -278,6 +278,10 @@ fi
 
 # 10) README install-tag examples point at the current release.
 for readme in README.md README.zh-CN.md README.ja-JP.md README.vi.md README.ko-KR.md; do
+  # Mismo guard que el bucle 10b de abajo, al que sí se le puso: las traducciones
+  # del README son del upstream y este repo no las tiene, así que sin esto la
+  # puerta imprime cuatro `grep: ... No such file` en cada corrida.
+  [[ -f "${readme}" ]] || continue
   stale_tags="$(grep -nE -- "--tag v[0-9]+\.[0-9]+\.[0-9]+" "${readme}" | grep -v -- "--tag v${workspace_version}" || true)"
   if [[ -n "${stale_tags}" ]]; then
     echo "::error::${readme} has install examples pinned to an old tag (want v${workspace_version}):" >&2

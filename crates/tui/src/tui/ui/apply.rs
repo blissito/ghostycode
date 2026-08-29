@@ -3088,7 +3088,7 @@ pub(crate) fn apply_loaded_session_with_goal(
     app.update_model_compaction_budget();
     apply_workspace_runtime_state(app, config, session.metadata.workspace.clone());
     if let Some(mode) = session.metadata.mode.as_deref().and_then(AppMode::parse) {
-        app.set_mode(mode);
+        app.adopt_session_mode(mode);
     }
     app.session.total_tokens = u32::try_from(session.metadata.total_tokens).unwrap_or(u32::MAX);
     app.session.total_conversation_tokens = app.session.total_tokens;

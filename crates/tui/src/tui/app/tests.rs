@@ -7256,3 +7256,22 @@ fn launch_onboarding_starts_first_run_at_welcome() {
     let (ready, _) = launch_onboarding_decision(false, false, false, false, false, false);
     assert_eq!(ready, OnboardingState::Welcome);
 }
+
+/// `--yolo` launches in Agent with Full Access. The launch screen's Work row
+/// and a restored session both re-assert `agent` (YOLO persists under that
+/// name), which used to reset the live posture back to the configured `ask`
+/// baseline — every `--yolo` session then prompted for every tool call.
+#[test]
+fn adopt_session_mode_keeps_launch_yolo_full_access() {
+    let mut app = App::new(test_options(true), &Config::default());
+    app.yolo_compat_notified = true;
+    assert_eq!(app.approval_mode, ApprovalMode::Bypass);
+
+    assert!(!app.adopt_session_mode(AppMode::Agent));
+    assert_eq!(app.approval_mode, ApprovalMode::Bypass);
+    assert!(app.yolo);
+
+    // An explicit selection is still a real downgrade.
+    assert!(app.set_mode(AppMode::Agent));
+    assert_eq!(app.approval_mode, ApprovalMode::Suggest);
+}

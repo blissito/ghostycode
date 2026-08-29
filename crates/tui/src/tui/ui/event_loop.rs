@@ -3879,7 +3879,7 @@ pub(crate) async fn run_event_loop(
                     // Work and Chat choose only this new session's posture.
                     // `set_mode` deliberately does not write startup defaults.
                     if let Some(mode) = action.session_mode() {
-                        let _ = app.set_mode(mode);
+                        let _ = app.adopt_session_mode(mode);
                     }
                     match action {
                         crate::tui::underwater::LaunchAction::None => {}
@@ -4326,7 +4326,7 @@ pub(crate) async fn run_event_loop(
                 let action =
                     crate::tui::underwater::handle_launch_key(&mut app.launch, key, launch_locale);
                 if let Some(mode) = action.session_mode() {
-                    let _ = app.set_mode(mode);
+                    let _ = app.adopt_session_mode(mode);
                 }
                 match action {
                     crate::tui::underwater::LaunchAction::None => {}
