@@ -27,64 +27,9 @@ session persistence, and zero vendor lock-in. Open source (MIT).
 >
 > Como esa vía ejecuta herramientas, exige token de runtime y política de origen:
 > sin `Origin` sólo entra quien manda cabecera `Authorization`, que una página del
-> navegador no puede fijar. Eso cierra además un agujero que ya afectaba a quien
-> usaba el servidor HTTP.
+> navegador no puede fijar.
 >
-> ---
->
-> ### 0.0.18 — EasyBits por defecto, y la TUI en español
->
-> Sin configuración previa, Ghosty entraba por DeepSeek y en inglés. Las dos
-> puertas de entrada del producto son EasyBits y el español, así que ese es el
-> default. Un `provider` o un `locale` explícitos siguen mandando.
->
-> ---
->
-> ### 0.0.17 — `--yolo` volvía a `ask`
->
-> El binario nacía con Full Access, pero la pantalla de inicio reponía la postura
-> configurada y apagaba `yolo`: el chip decía `ask` y se pedía aprobación en cada
-> llamada. Con él, los «Pendientes» dejaron de heredarse entre sesiones.
->
-> ---
->
-> ### 0.0.16 — el proveedor EasyBits vuelve a hablar con el modelo
->
-> **Arreglo urgente.** En 0.0.15 `--provider easybits` no podía hablar con el modelo:
-> pedía la Responses API, que el proxy de EasyBits no implementa, y el turno moría
-> con `Responses API request failed` y un 404. Ahora habla `chat/completions`, que
-> es lo que ese proxy expone. Si usas una key de EasyBits, actualiza.
->
-> ---
->
-> ### 0.0.15 — Ghosty se pone al día con upstream
->
-> Esa versión volvió a sincronizar Ghosty con [CodeWhale](https://github.com/Hmbown/CodeWhale),
-> el proyecto del que nace. Es un salto grande por dentro —el árbol se triplica—
-> pero lo que verás tú es esto:
->
-> - **Un solo binario.** `ghosty` lo hace todo; ya no existe `ghosty-tui` ni el
->   error `Companion ghosty-tui binary not found`. Quien lo tenga instalado
->   recibe el comando viejo refrescado, sin código obsoleto.
-> - **Agente completo desde Zed y JetBrains** (`ghosty serve --acp`): lee y
->   edita archivos, ejecuta comandos, cancela a media respuesta, cambia de
->   modelo. Antes por ACP solo había chat.
-> - **Cambia de proveedor sin reiniciar**, con el `/provider` nuevo: lista,
->   prueba la conexión y edita la key desde la TUI.
-> - **La constitución se cumple.** Las invariantes de `.ghosty/constitution.json`
->   dejan de ser prosa en el prompt y pasan a verificarse mecánicamente.
-> - **Límites reales por modelo.** `max_tokens` y ventana de contexto ya salen
->   del catálogo de cada ruta, no de un número fijo.
-> - **EasyBits es proveedor de primera clase** (`--provider easybits`), no un
->   alias: el modo ya no se pierde al guardar. Y `ghosty auth set` sobre una
->   instalación nueva deja ese proveedor activo, sin paso extra.
-> - **El fantasma volvió**, con más gestos.
->
-> Sigue disponible **Kimi K3** con tu key de **Moonshot** (1M de contexto):
->
-> ```bash
-> ghosty auth set --provider moonshot --api-key "TU_KEY_MOONSHOT"
-> ```
+> Lo anterior, en el [CHANGELOG](CHANGELOG.md).
 
 ## Instalación
 
@@ -210,12 +155,8 @@ Gestiona otros servidores con `ghosty mcp add stdio|http <nombre> ...`,
 ## Más
 
 - **Servidor**: `ghosty serve --http` (API HTTP/SSE) o `--mobile` (control desde el móvil en LAN).
-- **Zed/ACP**: `ghosty serve --acp` por stdio, cuando el editor lanza a Ghosty él mismo.
-- **ACP por red**: `ghosty serve --acp --acp-http` publica el agente en `ws://host:port/acp`
-  (WebSocket y Streamable HTTP) para clientes que no pueden lanzarlo como proceso hijo —un
-  navegador, una caja remota—, y atiende a varios a la vez. Esa vía ejecuta herramientas:
-  pide token y política de origen, así que lee `docs/RUNTIME_API.md` antes de sacarla de
-  loopback.
+- **Editores**: `ghosty serve --acp` (stdio), y `--acp-http` cuando el cliente llega por red
+  — detalles y seguridad en [`docs/RUNTIME_API.md`](docs/RUNTIME_API.md).
 - Otros proveedores compatibles con OpenAI vía `base_url` en la config.
 
 ## Related
