@@ -7716,8 +7716,8 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
-[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.15...HEAD
-[0.0.18]: https://github.com/blissito/ghostycode/releases/tag/v0.0.18
+[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.18...HEAD
+[0.0.18]: https://github.com/blissito/ghostycode/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/blissito/ghostycode/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/blissito/ghostycode/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/blissito/ghostycode/compare/v0.0.14...v0.0.15
