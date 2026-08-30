@@ -824,7 +824,12 @@ impl OauthLoginFlow {
 
         let (tx, rx) = oneshot::channel();
         let guard = CallbackServerGuard {
-            accept_task: spawn_callback_server(listener, tx, callback_path),
+            accept_task: spawn_callback_server(
+                listener,
+                tx,
+                callback_path,
+                success_redirect_for(server_url),
+            ),
         };
 
         let headers = build_default_headers(&http_headers, &env_headers)?;
@@ -941,10 +946,26 @@ async fn start_authorization(
     ))
 }
 
+/// Algunos proveedores tienen su propia pantalla de cierre, hecha con su marca.
+/// Cuando la conocemos, el navegador termina ahí en vez de en la página que
+/// sirve este binario.
+fn success_redirect_for(server_url: &str) -> Option<String> {
+    let host = Url::parse(server_url)
+        .ok()?
+        .host_str()?
+        .to_ascii_lowercase();
+    let host = host.strip_prefix("www.").unwrap_or(&host).to_string();
+    match host.as_str() {
+        "easybits.cloud" => Some("https://www.easybits.cloud/oauth/listo".to_string()),
+        _ => None,
+    }
+}
+
 fn spawn_callback_server(
     listener: TcpListener,
     tx: oneshot::Sender<CallbackResult>,
     expected_callback_path: String,
+    success_redirect: Option<String>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         // The sender is wrapped in Option so we can take it on success/error
@@ -957,33 +978,35 @@ fn spawn_callback_server(
             let path = match read_http_path(&mut stream).await {
                 Some(p) => p,
                 None => {
-                    let _ = write_http_response(&mut stream, 400, "Invalid OAuth callback").await;
+                    let _ = write_callback_page(&mut stream, 400, &invalid_callback_page()).await;
                     continue;
                 }
             };
             match parse_oauth_callback(&path, &expected_callback_path) {
                 CallbackOutcome::Success(callback) => {
-                    let _ = write_http_response(
-                        &mut stream,
-                        200,
-                        "Authentication complete. You may close this window.",
-                    )
-                    .await;
+                    match success_redirect.as_deref() {
+                        Some(url) => {
+                            let _ = write_redirect(&mut stream, url).await;
+                        }
+                        None => {
+                            let _ = write_callback_page(&mut stream, 200, &success_page()).await;
+                        }
+                    }
                     if let Some(tx) = tx_opt.take() {
                         let _ = tx.send(CallbackResult::Success(callback));
                     }
                     break;
                 }
                 CallbackOutcome::Error(error) => {
-                    let msg = error.to_string();
-                    let _ = write_http_response(&mut stream, 400, &msg).await;
+                    let page = error_page(&error.to_string());
+                    let _ = write_callback_page(&mut stream, 400, &page).await;
                     if let Some(tx) = tx_opt.take() {
                         let _ = tx.send(CallbackResult::Error(error));
                     }
                     break;
                 }
                 CallbackOutcome::Invalid => {
-                    let _ = write_http_response(&mut stream, 400, "Invalid OAuth callback").await;
+                    let _ = write_callback_page(&mut stream, 400, &invalid_callback_page()).await;
                 }
             }
         }
@@ -1018,18 +1041,87 @@ async fn read_http_path(stream: &mut tokio::net::TcpStream) -> Option<String> {
     Some(path)
 }
 
+/// La página que cierra el flujo OAuth. Es lo ultimo que ve quien conecta un
+/// servidor MCP, así que se sirve con la marca en vez de texto plano.
+const CALLBACK_TEMPLATE: &str = include_str!("callback.html");
+
+/// Escapa el texto que se interpola en la plantilla: los mensajes de error del
+/// proveedor son ajenos y pueden traer marcado.
+fn escape_html(raw: &str) -> String {
+    raw.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+fn render_callback_page(accent: &str, title: &str, message: &str, hint: &str) -> String {
+    CALLBACK_TEMPLATE
+        .replace("{{ACCENT}}", accent)
+        .replace("{{TITLE}}", &escape_html(title))
+        .replace("{{MESSAGE}}", &escape_html(message))
+        .replace("{{HINT}}", &escape_html(hint))
+}
+
+fn success_page() -> String {
+    render_callback_page(
+        "#9bd66f",
+        "Listo, ya quedaste conectado",
+        "Tu autorización quedó guardada.",
+        "Vuelve a tu terminal",
+    )
+}
+
+fn error_page(detail: &str) -> String {
+    render_callback_page(
+        "#ff7a59",
+        "No pudimos completar la autorización",
+        detail,
+        "Vuelve a tu terminal e intenta de nuevo",
+    )
+}
+
+fn invalid_callback_page() -> String {
+    render_callback_page(
+        "#ff7a59",
+        "Esta no es una respuesta válida",
+        "El navegador llegó aquí sin los datos que esperábamos.",
+        "Vuelve a tu terminal e intenta de nuevo",
+    )
+}
+
+/// 302 hacia la pantalla de cierre del proveedor.
+async fn write_redirect(stream: &mut tokio::net::TcpStream, location: &str) -> std::io::Result<()> {
+    let response = format!(
+        "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    stream.write_all(response.as_bytes()).await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+async fn write_callback_page(
+    stream: &mut tokio::net::TcpStream,
+    status: u16,
+    body: &str,
+) -> std::io::Result<()> {
+    write_http_response(stream, status, body, "text/html; charset=utf-8").await
+}
+
 async fn write_http_response(
     stream: &mut tokio::net::TcpStream,
     status: u16,
     body: &str,
+    content_type: &str,
 ) -> std::io::Result<()> {
     let status_text = match status {
         200 => "OK",
         400 => "Bad Request",
         _ => "OK",
     };
+    // Content-Length va en bytes, no en caracteres: el copy lleva acentos.
+    // `String::len` ya cuenta bytes, así que es la longitud correcta.
     let response = format!(
-        "HTTP/1.1 {status} {status_text}\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{body}",
+        "HTTP/1.1 {status} {status_text}\r\nContent-Length: {}\r\nContent-Type: {content_type}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     stream.write_all(response.as_bytes()).await?;
@@ -1306,7 +1398,7 @@ mod tests {
         let addr = listener.local_addr()?;
         let (tx, _rx) = oneshot::channel();
         let guard = CallbackServerGuard {
-            accept_task: spawn_callback_server(listener, tx, "/callback/test".to_string()),
+            accept_task: spawn_callback_server(listener, tx, "/callback/test".to_string(), None),
         };
 
         drop(guard);
