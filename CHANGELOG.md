@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.18] - 2026-08-30
+
+### Changed
+
+- **EasyBits es el proveedor por defecto y la TUI habla español.** Sin configuración
+  previa, Ghosty entraba por DeepSeek y en inglés. Las dos puertas de entrada del
+  producto son EasyBits y el español, así que ese es el default: sin `provider` en el
+  config se resuelve EasyBits, y cuando el entorno no dice nada —`LC_ALL`,
+  `LC_MESSAGES` y `LANG` ausentes o no reconocidos— la TUI arranca en es-419. Un
+  `provider` o un `locale` explícitos siguen mandando sobre esto.
+
 ## [0.0.17] - 2026-08-29
 
 ### Added
@@ -7706,6 +7717,7 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
 [Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.15...HEAD
+[0.0.18]: https://github.com/blissito/ghostycode/releases/tag/v0.0.18
 [0.0.17]: https://github.com/blissito/ghostycode/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/blissito/ghostycode/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/blissito/ghostycode/compare/v0.0.14...v0.0.15

@@ -12,5 +12,5 @@ workspace = true
 
 [dependencies]
 anyhow.workspace = true
-ghosty-protocol = { path = "../protocol", version = "0.0.17" }
+ghosty-protocol = { path = "../protocol", version = "0.0.18" }
 serde.workspace = true
