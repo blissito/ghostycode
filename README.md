@@ -16,7 +16,39 @@ sub-agents through long tool-using sessions with evidence-driven verification.
 Built for developers who want a keyboard-first coding agent with MCP support,
 session persistence, and zero vendor lock-in. Open source (MIT).
 
-> ### ⚡ Novedad (0.0.16) — el proveedor EasyBits vuelve a hablar con el modelo
+> ### ⚡ Novedad (0.0.19) — ACP ya viaja por red
+>
+> Hasta ahora el agente sólo hablaba ACP por stdio, o sea que el cliente tenía que
+> lanzar a Ghosty como proceso hijo: un navegador no puede, y una caja remota
+> tampoco. `ghosty serve --acp --acp-http` lo publica en `ws://host:port/acp`
+> —WebSocket y Streamable HTTP, la RFD oficial— y atiende a varios clientes a la
+> vez, cada uno con sus propias sesiones. El transporte es el del SDK oficial de
+> ACP, no uno escrito a mano.
+>
+> Como esa vía ejecuta herramientas, exige token de runtime y política de origen:
+> sin `Origin` sólo entra quien manda cabecera `Authorization`, que una página del
+> navegador no puede fijar. Eso cierra además un agujero que ya afectaba a quien
+> usaba el servidor HTTP.
+>
+> ---
+>
+> ### 0.0.18 — EasyBits por defecto, y la TUI en español
+>
+> Sin configuración previa, Ghosty entraba por DeepSeek y en inglés. Las dos
+> puertas de entrada del producto son EasyBits y el español, así que ese es el
+> default. Un `provider` o un `locale` explícitos siguen mandando.
+>
+> ---
+>
+> ### 0.0.17 — `--yolo` volvía a `ask`
+>
+> El binario nacía con Full Access, pero la pantalla de inicio reponía la postura
+> configurada y apagaba `yolo`: el chip decía `ask` y se pedía aprobación en cada
+> llamada. Con él, los «Pendientes» dejaron de heredarse entre sesiones.
+>
+> ---
+>
+> ### 0.0.16 — el proveedor EasyBits vuelve a hablar con el modelo
 >
 > **Arreglo urgente.** En 0.0.15 `--provider easybits` no podía hablar con el modelo:
 > pedía la Responses API, que el proxy de EasyBits no implementa, y el turno moría
