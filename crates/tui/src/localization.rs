@@ -3977,7 +3977,7 @@ mod tests {
     }
 
     #[test]
-    fn locale_resolution_uses_config_then_environment_then_english() {
+    fn locale_resolution_uses_config_then_environment_then_spanish() {
         assert_eq!(
             resolve_locale_with_env("ja", |_| Some("pt_BR.UTF-8".to_string())),
             Locale::Ja
@@ -3994,7 +3994,8 @@ mod tests {
             }),
             Locale::ZhHant
         );
-        assert_eq!(resolve_locale_with_env("auto", |_| None), Locale::En);
+        // Sin nada en el entorno, el idioma por defecto del producto.
+        assert_eq!(resolve_locale_with_env("auto", |_| None), Locale::Es419);
     }
 
     pub fn missing_message_ids(locale: Locale) -> Vec<MessageId> {

@@ -434,7 +434,15 @@ pub(crate) fn resolve_route_candidate_with_context_metadata(
     }
     let resolver = RouteResolver::new();
     let base_request = RouteRequest {
-        explicit_provider: provider.kind(),
+        // El alias legado `deepseek-cn` no tiene `ProviderKind` propio, y sin
+        // proveedor explícito la ruta cae al scope por defecto del producto
+        // (EasyBits), que sí acepta ids con prefijo. CN comparte el contrato
+        // estricto de DeepSeek, así que lo nombra en vez de heredarlo del
+        // default.
+        explicit_provider: provider
+            .kind()
+            .or((provider == crate::config::ApiProvider::DeepseekCN)
+                .then_some(ghosty_config::ProviderKind::Deepseek)),
         model_selector: model_selector.map(|model| LogicalModelRef::from(model.to_string())),
         saved_provider_model: saved_provider_model
             .map(|model| WireModelId::from(model.to_string())),
