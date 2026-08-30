@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-08-30
+
+### Added
+
+- **ACP sobre WebSocket y Streamable HTTP.** `ghosty serve --acp --acp-http` publica el
+  agente en `ws://host:port/acp` para clientes que llegan por red en vez de lanzarlo como
+  proceso hijo — un navegador, una sandbox remota, un editor del otro lado del cable. El
+  transporte es `agent-client-protocol-http`, la implementación de referencia del SDK
+  oficial, la misma que goose adoptó tras borrar la suya escrita a mano; aquí sólo vive la
+  política. Cada conexión trae sus propias sesiones, así que varios clientes conviven. La
+  vía expone ejecución de herramientas: pide token de runtime y política de origen, y no se
+  ata fuera de loopback sin leer `docs/RUNTIME_API.md`.
+
+### Changed
+
+- **La pantalla que cierra `ghosty mcp login` ya no es texto plano.** Al autorizar contra
+  EasyBits, el callback redirige a la página de la marca en lugar de dejar un
+  `Authentication complete. You may close this window.` sobre fondo blanco, que era la
+  última impresión del setup y parecía un error de servidor. Los demás servidores MCP —y
+  las ramas de error— usan una plantilla propia con la paleta de la TUI.
+
+### Fixed
+
+- **Una pestaña cualquiera podía abrir un canal ACP contra tu máquina.** Un upgrade de
+  WebSocket es un `GET`, CORS no lo cubre, y el camino de cookie admitía un `GET` sin
+  `Origin`: bastaba que el navegador adjuntara la cookie de sesión para quedarse con
+  lectura de archivos y shell. `/acp` falla ahora cerrado —sin `Origin` sólo pasa quien
+  trae cabecera `Authorization`, que una página no puede fijar—, y la regla sigue vigente
+  con `--insecure`.
+
+- **Una sesión ACP ya no mueve el directorio de trabajo del proceso.** Lo hacía en cada
+  ronda de prompt y lo restauraba al terminar; con dos turnos a la vez, el segundo devolvía
+  el directorio del primero y el proceso quedaba apuntando a un workspace ajeno de forma
+  permanente. Las rutas se resuelven contra la sesión, que es lo que ya hacían las
+  herramientas.
+
 ## [0.0.18] - 2026-08-30
 
 ### Changed
@@ -7716,7 +7752,8 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
-[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.18...HEAD
+[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.19...HEAD
+[0.0.19]: https://github.com/blissito/ghostycode/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/blissito/ghostycode/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/blissito/ghostycode/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/blissito/ghostycode/compare/v0.0.15...v0.0.16

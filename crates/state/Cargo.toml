@@ -13,8 +13,8 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
-ghosty-paths = { path = "../paths", version = "0.0.18" }
-ghosty-protocol = { path = "../protocol", version = "0.0.18" }
+ghosty-paths = { path = "../paths", version = "0.0.19" }
+ghosty-protocol = { path = "../protocol", version = "0.0.19" }
 fd-lock = "4.0.4"
 rusqlite.workspace = true
 serde.workspace = true
