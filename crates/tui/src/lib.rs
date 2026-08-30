@@ -20,6 +20,7 @@ use crate::dependencies::ExternalTool;
 use rust_i18n::i18n;
 i18n!("locales", fallback = ["en"]);
 
+mod acp_http;
 mod acp_server;
 mod agy_credentials;
 mod approval_log;
@@ -1247,6 +1248,16 @@ struct ServeArgs {
     /// Start ACP server over stdio for editor clients such as Zed
     #[arg(long)]
     acp: bool,
+    /// Serve ACP over WebSocket + Streamable HTTP at /acp instead of stdio,
+    /// for clients that cannot spawn Ghosty as a child process (a browser, or
+    /// a sandbox reached over the network).
+    #[arg(long = "acp-http", requires = "acp")]
+    acp_http: bool,
+    /// Browser origin allowed to open /acp (repeatable). The server's own
+    /// origin is always allowed. Non-browser clients authenticate with
+    /// `Authorization: Bearer` instead and need no entry here.
+    #[arg(long = "acp-allow-origin", value_name = "URL", requires = "acp_http")]
+    acp_allow_origin: Vec<String>,
     /// Bind host for HTTP server (default localhost; --mobile defaults to 0.0.0.0)
     #[arg(long)]
     host: Option<String>,
@@ -1296,18 +1307,28 @@ fn resolve_serve_bind_host(mobile: bool, host: Option<String>) -> ServeBindHost 
     }
 }
 
+/// `--acp-http` is a transport for `--acp`, not a fourth mode: it says how the
+/// ACP protocol reaches clients, while the mode says which protocol is spoken.
+/// So `--acp --acp-http` is one selection, and it still excludes `--mcp`.
 fn validate_serve_mode_selection(
     mcp: bool,
     http: bool,
     mobile: bool,
     web: bool,
     acp: bool,
+    acp_http: bool,
 ) -> Result<bool> {
     if http && mobile {
         bail!("--http and --mobile are mutually exclusive; choose one");
     }
     if web && (http || mobile) {
         bail!("--web is mutually exclusive with --http and --mobile");
+    }
+    if acp_http && !acp {
+        bail!("--acp-http selects a transport for --acp; add --acp");
+    }
+    if acp_http && mcp {
+        bail!("--acp-http and --mcp are mutually exclusive; choose one");
     }
     let http_selected = http || mobile || web;
     let selected_modes = [mcp, http_selected, acp]
@@ -2353,6 +2374,7 @@ async fn run_async_main_dispatch(
                     args.mobile,
                     args.web,
                     args.acp,
+                    args.acp_http,
                 )?;
                 if args.mcp {
                     tokio::task::block_in_place(|| mcp_server::run_mcp_server(workspace))
@@ -2394,13 +2416,47 @@ async fn run_async_main_dispatch(
                             show_qr: args.qr,
                             config_path: cli.config.clone(),
                             config_profile,
+                            acp: None,
                         },
                     )
                     .await
                 } else if args.acp {
-                    let config = load_config_from_cli(&cli)?;
+                    let (config, config_profile) =
+                        load_config_from_cli_with_effective_profile(&cli)?;
                     let model = config.default_model();
-                    acp_server::run_acp_server(config, model, workspace).await
+                    if !args.acp_http {
+                        return acp_server::run_acp_server(config, model, workspace).await;
+                    }
+                    // ACP over the network. The runtime API owns the listener,
+                    // the token check and the origin policy; `/v1/*` stays
+                    // unmounted unless the operator also asked for --http.
+                    let bind_host = resolve_serve_bind_host(false, args.host);
+                    let cors_origins = resolve_cors_origins(&config, &args.cors_origin);
+                    let acp = runtime_api::AcpTransportOptions {
+                        allow_origins: args.acp_allow_origin.clone(),
+                        model: model.clone(),
+                        default_cwd: workspace.clone(),
+                    };
+                    runtime_api::run_http_server(
+                        config,
+                        workspace,
+                        std::sync::Arc::clone(&plugin_discovery),
+                        runtime_api::RuntimeApiOptions {
+                            host: bind_host.host,
+                            port: args.port,
+                            workers: args.workers.clamp(1, 8),
+                            cors_origins,
+                            auth_token: args.auth_token,
+                            insecure_no_auth: args.insecure_no_auth,
+                            mobile: false,
+                            web: false,
+                            show_qr: false,
+                            config_path: cli.config.clone(),
+                            config_profile,
+                            acp: Some(acp),
+                        },
+                    )
+                    .await
                 } else {
                     unreachable!("server mode count checked above")
                 }
@@ -11663,17 +11719,34 @@ mod serve_bind_host_tests {
 
     #[test]
     fn http_and_mobile_are_mutually_exclusive() {
-        let err = validate_serve_mode_selection(false, true, true, false, false).unwrap_err();
+        let err =
+            validate_serve_mode_selection(false, true, true, false, false, false).unwrap_err();
         assert!(
             err.to_string()
                 .contains("--http and --mobile are mutually exclusive")
         );
     }
 
+    /// `--acp-http` picks the transport for `--acp`; it is not a fourth mode
+    /// and must not trip the "exactly one mode" rule.
+    #[test]
+    fn acp_http_is_a_transport_for_acp_not_a_mode() {
+        assert!(!validate_serve_mode_selection(false, false, false, false, true, true).unwrap());
+        assert!(!validate_serve_mode_selection(false, false, false, false, true, false).unwrap());
+
+        let err =
+            validate_serve_mode_selection(false, false, false, false, false, true).unwrap_err();
+        assert!(err.to_string().contains("add --acp"));
+
+        let err = validate_serve_mode_selection(true, false, false, false, true, true).unwrap_err();
+        assert!(err.to_string().contains("mutually exclusive"));
+    }
+
     #[test]
     fn web_is_a_distinct_loopback_runtime_mode() {
-        assert!(validate_serve_mode_selection(false, false, false, true, false).unwrap());
-        let err = validate_serve_mode_selection(false, true, false, true, false).unwrap_err();
+        assert!(validate_serve_mode_selection(false, false, false, true, false, false).unwrap());
+        let err =
+            validate_serve_mode_selection(false, true, false, true, false, false).unwrap_err();
         assert!(err.to_string().contains("--web is mutually exclusive"));
         assert_eq!(
             resolve_serve_bind_host(false, None),

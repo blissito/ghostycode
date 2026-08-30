@@ -21,10 +21,24 @@
 //! a `tool_result` content block, and re-opens the provider stream so the
 //! model can keep going until it produces a final answer with no further tool
 //! calls.
+//!
+//! ## Working directory contract
+//!
+//! No path in an ACP turn may depend on the process working directory. Every
+//! path resolves against [`AcpSession::cwd`]: tools go through
+//! `ToolContext::resolve_path`, process executors receive an explicit `cwd`,
+//! hooks receive the workspace, and the system prompt composer takes
+//! `workspace: &Path`. An earlier `ScopedCurrentDir` guard used to
+//! `set_current_dir` per prompt round, which is process-global state: two
+//! concurrent turns with different workspaces interleaved their guards and the
+//! second `Drop` restored the *first* turn's directory, leaving the process
+//! pointed at a foreign workspace for good. Serving more than one connection
+//! from one process is what made that fatal, so the guard is gone. Do not
+//! reintroduce it — pass the directory instead.
 
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -78,11 +92,37 @@ static NEXT_ACP_PERMISSION_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 /// result does not flood the client UI.
 const TOOL_CALL_CONTENT_PREVIEW_CHARS: usize = 4_000;
 
+/// Serve ACP over the process stdio pipes, the transport an editor gets when
+/// it launches Ghosty as a child process.
 pub async fn run_acp_server(config: Config, model: String, default_cwd: PathBuf) -> Result<()> {
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
-    let mut reader = BufReader::new(stdin).lines();
-    let mut writer = tokio::io::BufWriter::new(stdout);
+    run_acp_server_over(
+        config,
+        model,
+        default_cwd,
+        BufReader::new(tokio::io::stdin()),
+        tokio::io::BufWriter::new(tokio::io::stdout()),
+    )
+    .await
+}
+
+/// Serve one ACP connection over any byte pair.
+///
+/// stdio is one caller; a socket is another. The protocol above this line does
+/// not know the difference, so a network transport reuses this loop verbatim
+/// rather than growing a second copy of the dispatch.
+pub async fn run_acp_server_over<R, W>(
+    config: Config,
+    model: String,
+    default_cwd: PathBuf,
+    reader: R,
+    writer: W,
+) -> Result<()>
+where
+    R: AsyncBufRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
+    let mut reader = reader.lines();
+    let mut writer = writer;
     let mut server = AcpServer::new(config, model, default_cwd);
 
     while let Some(line) = reader.next_line().await? {
@@ -1640,17 +1680,17 @@ impl AcpServer {
     /// Resolve the route, build the streaming request, and open the provider
     /// response stream. Borrows `&self` only to read config/model; the returned
     /// [`StreamEventBox`] is `'static`, so the caller can race it against the
-    /// reader without holding any borrow on the server. The cwd guard only needs
-    /// to cover route resolution and client construction, not stream
-    /// consumption, so it is dropped here.
+    /// reader without holding any borrow on the server.
+    ///
+    /// Every path below resolves against the `cwd` argument, never against the
+    /// process working directory — see the module contract.
     async fn open_prompt_stream(
         &self,
         messages: &[Message],
-        cwd: &PathBuf,
+        cwd: &Path,
         tool_registry: &ToolRegistry,
         frozen_system_prompt: &std::sync::Mutex<Option<SystemPrompt>>,
     ) -> Result<StreamEventBox> {
-        let _cwd_guard = ScopedCurrentDir::new(cwd)?;
         let last_user_text = messages
             .iter()
             .rev()
@@ -2068,28 +2108,6 @@ where
         }
     });
     write_json_line(writer, notification).await
-}
-
-struct ScopedCurrentDir {
-    prior: PathBuf,
-}
-
-impl ScopedCurrentDir {
-    fn new(cwd: &PathBuf) -> Result<Self> {
-        let prior = std::env::current_dir()?;
-        if cwd.as_os_str().is_empty() {
-            return Ok(Self { prior });
-        }
-        std::env::set_current_dir(cwd)
-            .map_err(|err| anyhow!("failed to enter ACP session cwd {}: {err}", cwd.display()))?;
-        Ok(Self { prior })
-    }
-}
-
-impl Drop for ScopedCurrentDir {
-    fn drop(&mut self) {
-        let _ = std::env::set_current_dir(&self.prior);
-    }
 }
 
 impl AcpError {
@@ -4101,6 +4119,38 @@ mod tests {
                 .iter()
                 .any(|value| value["id"] == "7" && value["result"].is_null()),
             "Zed-compatible cancellation response id was not stringified: {messages:?}"
+        );
+    }
+
+    /// The process working directory is shared by every connection this
+    /// process serves, so an ACP turn may not move it. A `ScopedCurrentDir`
+    /// guard used to `set_current_dir` per prompt round; with two concurrent
+    /// turns its `Drop` restored the wrong directory and left the process
+    /// pointed at a foreign workspace permanently. This pins the contract:
+    /// building registries and system prompts for two different workspaces
+    /// leaves the process directory untouched.
+    #[test]
+    fn acp_session_setup_never_moves_the_process_working_directory() {
+        let before = std::env::current_dir().expect("cwd before");
+
+        let (dir1, _registry1) = workspace_registry();
+        let (dir2, _registry2) = workspace_registry();
+        assert_ne!(dir1.path(), dir2.path());
+
+        for workspace in [dir1.path(), dir2.path()] {
+            let _ = build_acp_system_prompt(
+                &Config::default(),
+                workspace,
+                ApiProvider::Deepseek,
+                "deepseek-v4-pro",
+                None,
+            );
+        }
+
+        assert_eq!(
+            std::env::current_dir().expect("cwd after"),
+            before,
+            "an ACP session must resolve paths against its own cwd, never by moving the process"
         );
     }
 

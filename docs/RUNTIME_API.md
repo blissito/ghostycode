@@ -234,7 +234,7 @@ output is passed through a redactor, so secrets are never printed. The parser is
 covered by `scripts/release/app-server-smoke.test.sh` against a fake `ghosty`
 binary.
 
-## ACP stdio adapter: `ghosty serve --acp`
+## ACP adapter: `ghosty serve --acp`
 
 `ghosty serve --acp` speaks JSON-RPC 2.0 over newline-delimited stdio for
 ACP-compatible editor clients. The initial adapter implements the ACP baseline:
@@ -252,6 +252,41 @@ The adapter is intentionally conservative: it does not yet expose shell tools,
 file-write tools, checkpoint replay, or session loading through ACP. Use
 `ghosty serve --http` for the full local runtime API and `ghosty serve --mcp`
 when another client needs Ghosty's tools as MCP tools.
+
+### Network transport: `ghosty serve --acp --acp-http`
+
+stdio requires the client to launch Ghosty as a child process, which a browser
+cannot do and a remote sandbox cannot offer. `--acp-http` serves the same
+protocol over the network at `/acp`, implementing the ACP RFD
+[Streamable HTTP & WebSocket Transport][acp-rfd]:
+
+| Method | Upgrade | Behavior |
+| --- | --- | --- |
+| `GET` | `websocket` | Upgrade; each text frame carries one JSON-RPC message |
+| `GET` | — | SSE stream for server→client messages |
+| `POST` | — | Send JSON-RPC; `initialize` answers `200`, others `202` |
+| `DELETE` | — | Close the connection |
+
+Connection identity travels in the `Acp-Connection-Id` and `Acp-Session-Id`
+headers. The transport itself is the reference implementation from the official
+ACP SDK (`agent-client-protocol-http`), so framing and connection handling match
+what other ACP agents do.
+
+**The transport changes nothing about ACP semantics.** The limitations above
+still apply. What it does change is concurrency: one process serves several
+connections at once, each with its own sessions.
+
+```sh
+ghosty serve --acp --acp-http --port 7878
+# then, from any ACP client:
+websocat -H 'Authorization: Bearer <token>' ws://127.0.0.1:7878/acp
+```
+
+`--acp-allow-origin` adds a browser origin (repeatable); the server's own origin
+is always allowed. `--acp --acp-http` does not mount `/v1/*` — add `--http` if
+you want both.
+
+[acp-rfd]: https://agentclientprotocol.com/rfds/streamable-http-websocket-transport
 
 ## Capability endpoint: `ghosty doctor --json`
 
@@ -1053,6 +1088,19 @@ clients and does not grant or persist permissions.
   control. There is no cloud component.
 - **Capability responses** never leak secrets, file contents, or session
   message bodies. They report *metadata*: presence, counts, status flags.
+- **`/acp` is not a metadata route.** Unlike everything above, a connection to
+  the ACP transport can read files and run shell commands. Do not expose it off
+  loopback without an authenticating proxy in front.
+- **WebSocket origin policy.** WebSockets skip CORS entirely — a browser sends
+  no preflight for `new WebSocket(...)`, and an upgrade arrives as a `GET` that
+  the cookie path would otherwise admit with no `Origin` at all. Any page could
+  then open `ws://127.0.0.1:7878/acp`, have the browser attach the session
+  cookie by itself, and hold a full ACP channel. So `/acp` is guarded
+  separately and fails closed: a request with **no `Origin` and only a cookie is
+  refused**. Browser clients must connect from an origin allowed by
+  `--acp-allow-origin`; every other client sends `Authorization: Bearer`, which
+  a page cannot set and which therefore doubles as proof the caller is not one.
+  This rule still applies under `--insecure`.
 
 ### CORS allow-list
 
@@ -1068,6 +1116,10 @@ when developing a UI on Vite's default `:5173`), use any of:
   [runtime_api]
   cors_origins = ["http://localhost:5173"]
   ```
+
+`--cors-origin` does **not** govern `/acp`: CORS is about preflighting a
+cross-origin fetch, while the ACP guard is about who may complete a WebSocket
+upgrade. Use `--acp-allow-origin` for that, and see the origin policy above.
 
 User-supplied origins **stack on top of** the built-in defaults; they do not
 replace them. Wildcard origins are not supported — the explicit allow-list

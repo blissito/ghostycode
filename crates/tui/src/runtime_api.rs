@@ -13,7 +13,7 @@ use async_stream::stream;
 use axum::extract::{Path, Query, Request, State};
 use axum::http::header;
 use axum::http::{HeaderName, HeaderValue, Method, StatusCode};
-use axum::middleware;
+use axum::middleware::{self, Next};
 use axum::response::Html;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -85,6 +85,11 @@ use ghosty_protocol::fleet::{
     FleetWorkerSpec, FleetWorkerStatus, FleetWorkflowDescriptor, FleetWorkflowKind,
 };
 
+/// Path the ACP transport is served on. The RFD names `/acp`, and clients
+/// assume it.
+const ACP_TRANSPORT_PATH: &str = "/acp";
+
+mod acp_policy;
 mod auth;
 mod sessions;
 mod web;
@@ -179,6 +184,12 @@ pub struct RuntimeApiState {
     /// lazily-initialized slot; slow per-pool work (connect_all) runs under
     /// the inner handle so it cannot block slot reads.
     mcp_pool: Arc<Mutex<Option<Arc<Mutex<McpPool>>>>>,
+    /// Origins allowed to open `/acp`, precomputed from the bind address plus
+    /// `--acp-allow-origin`. Empty when the transport is off.
+    acp_allowed_origins: Arc<Vec<String>>,
+    /// Present only when `--acp-http` asked for the network transport; `None`
+    /// leaves `/acp` unregistered.
+    acp_factory: Option<crate::acp_http::SharedAcpHttpFactory>,
     #[cfg(test)]
     compat_stream_test_hook: Option<tokio::sync::mpsc::UnboundedSender<CompatStreamTestPoint>>,
 }
@@ -233,6 +244,21 @@ pub struct RuntimeApiOptions {
     pub config_path: Option<PathBuf>,
     /// Effective profile used to load the server's initial Config.
     pub config_profile: Option<String>,
+    /// Serve ACP over WebSocket + Streamable HTTP at `/acp`. `None` leaves the
+    /// route unregistered, so `--http` alone is unchanged.
+    pub acp: Option<AcpTransportOptions>,
+}
+
+/// Operator-controlled policy for the `/acp` transport.
+#[derive(Debug, Clone)]
+pub struct AcpTransportOptions {
+    /// Browser origins allowed to open a connection, on top of the server's
+    /// own origin. `--acp-allow-origin`.
+    pub allow_origins: Vec<String>,
+    /// Model the connection's sessions start on.
+    pub model: String,
+    /// Directory a session gets when the client names none.
+    pub default_cwd: PathBuf,
 }
 
 impl Default for RuntimeApiOptions {
@@ -249,6 +275,7 @@ impl Default for RuntimeApiOptions {
             show_qr: false,
             config_path: None,
             config_profile: None,
+            acp: None,
         }
     }
 }
@@ -893,6 +920,24 @@ pub async fn run_http_server(
     let skill_state = SkillStateStore::load_default()
         .context("load persistent Skill activation state for Runtime API")?;
     let sub_agent_manager = runtime_api_sub_agent_manager(&workspace, options.workers);
+    // The server's own origin is always allowed; anything else is an explicit
+    // operator decision. See `acp_policy` for why this list is the boundary.
+    let (acp_factory, acp_allowed_origins) = match options.acp.as_ref() {
+        Some(acp) => {
+            let mut origins = vec![acp_policy::self_origin(&options.host, options.port)];
+            origins.extend(acp.allow_origins.iter().cloned());
+            origins.dedup();
+            (
+                Some(Arc::new(crate::acp_http::AcpHttpFactory::new(
+                    config.clone(),
+                    acp.model.clone(),
+                    acp.default_cwd.clone(),
+                ))),
+                origins,
+            )
+        }
+        None => (None, Vec::new()),
+    };
     let state = RuntimeApiState {
         config: Arc::new(parking_lot::RwLock::new(config.clone())),
         workspace,
@@ -914,6 +959,8 @@ pub async fn run_http_server(
         web,
         fleet_ghosty_binary: configured_ghosty_binary(),
         mcp_pool: Arc::new(Mutex::new(None)),
+        acp_allowed_origins: Arc::new(acp_allowed_origins),
+        acp_factory,
         #[cfg(test)]
         compat_stream_test_hook: None,
     };
@@ -1004,6 +1051,10 @@ fn fallback_sessions_dir() -> PathBuf {
 }
 
 pub fn build_router(state: RuntimeApiState) -> Router {
+    let acp_routes = state
+        .acp_factory
+        .as_ref()
+        .map(|factory| factory.as_ref().clone().into_router(ACP_TRANSPORT_PATH));
     let api_routes = Router::new()
         .route(
             "/v1/sessions",
@@ -1182,7 +1233,7 @@ pub fn build_router(state: RuntimeApiState) -> Router {
             require_runtime_token,
         ));
 
-    Router::new()
+    let mut router = Router::new()
         .route("/", get(web::web_page))
         .route("/assets/ghosty-web.css", get(web::web_styles))
         .route("/assets/ghosty-web.js", get(web::web_script))
@@ -1193,8 +1244,57 @@ pub fn build_router(state: RuntimeApiState) -> Router {
         .route("/mobile/", get(mobile_page))
         .route("/v1/runtime/info", get(runtime_info))
         .merge(api_routes)
-        .layer(cors_layer(&state.cors_origins))
-        .with_state(state)
+        .with_state(state.clone());
+
+    // The ACP transport carries its own state, so it merges after the runtime
+    // state is applied. `route_layer` keeps the guard on `/acp` only: a 404
+    // elsewhere must not run it. CORS goes on last so both halves share it.
+    if let Some(acp) = acp_routes {
+        router = router.merge(acp.route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_acp_access,
+        )));
+    }
+
+    router.layer(cors_layer(&state.cors_origins))
+}
+
+/// Gate for `/acp`: the runtime credential check every route gets, plus the
+/// WebSocket-specific origin rule in [`acp_policy`].
+async fn require_acp_access(
+    State(state): State<RuntimeApiState>,
+    req: Request,
+    next: Next,
+) -> Response {
+    // With auth disabled there is no credential to reason about, so the origin
+    // rule is the only boundary left; keep it applied. `--insecure` must not
+    // turn one browser tab into local code execution.
+    let has_header_credential = state
+        .runtime_token
+        .as_deref()
+        .is_none_or(|expected| auth::request_has_header_runtime_token(&req, expected));
+    let authorized = auth::runtime_request_is_authorized(&req, &state);
+    let origin = acp_policy::origin_of(req.headers()).map(str::to_string);
+
+    match acp_policy::decide(
+        origin.as_deref(),
+        has_header_credential,
+        authorized,
+        &state.acp_allowed_origins,
+    ) {
+        Ok(()) => next.run(req).await,
+        Err(acp_policy::AcpDenial::Unauthorized) => (
+            StatusCode::UNAUTHORIZED,
+            "ACP requires the runtime token (Authorization: Bearer <token>).",
+        )
+            .into_response(),
+        Err(acp_policy::AcpDenial::ForbiddenOrigin) => (
+            StatusCode::FORBIDDEN,
+            "ACP refused this origin. Browser clients must connect from an allowed origin \
+             (--acp-allow-origin); other clients must send Authorization: Bearer <token>.",
+        )
+            .into_response(),
+    }
 }
 
 async fn mobile_page(State(state): State<RuntimeApiState>, req: Request) -> Response {

@@ -49,6 +49,8 @@ async-stream = "0.3.6"
 async-trait.workspace = true
 base64 = "0.22.1"
 axum.workspace = true
+agent-client-protocol.workspace = true
+agent-client-protocol-http.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 colored = "3.0.0"
@@ -115,6 +117,9 @@ mimalloc.workspace = true
 ghosty-build-support = { path = "../build-support", version = "0.0.18" }
 
 [dev-dependencies]
+# Drives a real WebSocket handshake against the ACP transport. `oneshot`-style
+# router tests cannot: they never perform the upgrade.
+tokio-tungstenite = "0.29"
 cucumber = "0.23.0"
 jsonschema.workspace = true
 wiremock = "0.6"

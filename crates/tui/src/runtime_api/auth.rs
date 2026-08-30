@@ -94,7 +94,7 @@ pub(super) fn runtime_request_is_authorized(req: &Request, state: &RuntimeApiSta
         || (cookie_authorized && web_cookie_request_is_same_origin(req, state))
 }
 
-fn request_has_header_runtime_token(req: &Request, expected: &str) -> bool {
+pub(super) fn request_has_header_runtime_token(req: &Request, expected: &str) -> bool {
     req.headers()
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())

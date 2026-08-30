@@ -874,6 +874,9 @@ struct TestServerOverrides {
     web: Option<web::RuntimeWebState>,
     compat_stream_test_hook: Option<mpsc::UnboundedSender<CompatStreamTestPoint>>,
     plugin_discovery: Option<Arc<crate::plugins::PluginDiscoveryContext>>,
+    /// Mounts `/acp` with these extra allowed origins. `None` leaves the ACP
+    /// transport unregistered, which is what every other test expects.
+    acp_allow_origins: Option<Vec<String>>,
 }
 
 async fn spawn_test_server_with_root_token_mobile_workspace_and_subagents(
@@ -972,6 +975,8 @@ async fn spawn_test_server_with_root_token_mobile_workspace_and_overrides(
         Err(err) => return Err(err.into()),
     };
     let addr = listener.local_addr()?;
+    let acp_config = config.clone();
+    let acp_workspace = workspace.clone();
     let state = RuntimeApiState {
         config: Arc::new(parking_lot::RwLock::new(config)),
         workspace,
@@ -985,6 +990,21 @@ async fn spawn_test_server_with_root_token_mobile_workspace_and_overrides(
         config_path: overrides.config_path.clone(),
         config_profile: overrides.config_profile,
         mcp_pool: Arc::new(Mutex::new(None)),
+        acp_allowed_origins: Arc::new(match overrides.acp_allow_origins.as_ref() {
+            Some(extra) => {
+                let mut origins = vec![super::acp_policy::self_origin("127.0.0.1", addr.port())];
+                origins.extend(extra.iter().cloned());
+                origins
+            }
+            None => Vec::new(),
+        }),
+        acp_factory: overrides.acp_allow_origins.as_ref().map(|_| {
+            Arc::new(crate::acp_http::AcpHttpFactory::new(
+                acp_config,
+                DEFAULT_TEXT_MODEL.to_string(),
+                acp_workspace,
+            ))
+        }),
         automations,
         sub_agent_manager,
         runtime_token,
@@ -10513,4 +10533,215 @@ async fn skill_lifecycle_runtime_info_advertises_skill_lifecycle_capability() ->
 
     handle.abort();
     Ok(())
+}
+
+/// End-to-end coverage for the ACP network transport.
+///
+/// These drive a real WebSocket handshake, which is the only way to exercise
+/// the guard that matters: `oneshot` router tests never perform the upgrade, so
+/// they cannot tell an accepted connection from a refused one.
+mod acp_transport {
+    use super::*;
+    use futures_util::SinkExt;
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    use tokio_tungstenite::tungstenite::http::StatusCode as WsStatus;
+
+    const TOKEN: &str = "acp-transport-test-token";
+
+    async fn spawn_acp_server(
+        allow_origins: Vec<String>,
+    ) -> Result<
+        Option<(
+            SocketAddr,
+            SharedRuntimeThreadManager,
+            tokio::task::JoinHandle<()>,
+        )>,
+    > {
+        let root = std::env::temp_dir().join(format!("ghosty-acp-ws-{}", Uuid::new_v4()));
+        let sessions_dir = root.join("sessions");
+        let workspace = root.join("workspace");
+        spawn_test_server_with_root_token_mobile_workspace_and_overrides(
+            root,
+            sessions_dir,
+            Some(TOKEN.to_string()),
+            false,
+            workspace,
+            TestServerOverrides {
+                acp_allow_origins: Some(allow_origins),
+                ..TestServerOverrides::default()
+            },
+        )
+        .await
+    }
+
+    /// Attempt an upgrade with whatever headers the caller wants to prove.
+    async fn connect(
+        addr: SocketAddr,
+        headers: &[(&str, String)],
+    ) -> std::result::Result<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        Option<WsStatus>,
+    > {
+        let mut request = format!("ws://{addr}/acp")
+            .into_client_request()
+            .expect("ws request");
+        for (name, value) in headers {
+            request.headers_mut().insert(
+                tokio_tungstenite::tungstenite::http::HeaderName::from_bytes(name.as_bytes())
+                    .expect("header name"),
+                value.parse().expect("header value"),
+            );
+        }
+        match tokio_tungstenite::connect_async(request).await {
+            Ok((stream, _)) => Ok(stream),
+            Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
+                Err(Some(response.status()))
+            }
+            Err(_) => Err(None),
+        }
+    }
+
+    fn bearer() -> (&'static str, String) {
+        ("authorization", format!("Bearer {TOKEN}"))
+    }
+
+    /// A page in any browser can open a WebSocket to loopback, and the browser
+    /// attaches the cookie on its own. It cannot set a header, so the cookie is
+    /// the only credential it has — and with no allowed `Origin` behind it,
+    /// that must not be enough. This is the cross-site WebSocket hijacking
+    /// case; losing it means one open tab can read files and run shell.
+    #[tokio::test]
+    async fn cookie_only_upgrade_without_an_origin_is_refused() -> Result<()> {
+        let Some((addr, _threads, handle)) = spawn_acp_server(Vec::new()).await? else {
+            return Ok(());
+        };
+
+        let denied = connect(addr, &[("cookie", format!("ghosty_runtime_token={TOKEN}"))]).await;
+        assert_eq!(denied.err().flatten(), Some(WsStatus::FORBIDDEN));
+
+        handle.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn upgrade_without_any_credential_is_unauthorized() -> Result<()> {
+        let Some((addr, _threads, handle)) = spawn_acp_server(Vec::new()).await? else {
+            return Ok(());
+        };
+
+        let denied = connect(addr, &[]).await;
+        assert_eq!(denied.err().flatten(), Some(WsStatus::UNAUTHORIZED));
+
+        handle.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn foreign_origin_is_refused_even_with_the_token() -> Result<()> {
+        let Some((addr, _threads, handle)) = spawn_acp_server(Vec::new()).await? else {
+            return Ok(());
+        };
+
+        let denied = connect(
+            addr,
+            &[bearer(), ("origin", "https://evil.example".to_string())],
+        )
+        .await;
+        assert_eq!(denied.err().flatten(), Some(WsStatus::FORBIDDEN));
+
+        handle.abort();
+        Ok(())
+    }
+
+    /// The whole point of the transport: a non-browser client connects over the
+    /// network and gets a working ACP session, no child process involved.
+    #[tokio::test]
+    async fn bearer_upgrade_completes_the_acp_handshake() -> Result<()> {
+        let Some((addr, _threads, handle)) = spawn_acp_server(Vec::new()).await? else {
+            return Ok(());
+        };
+
+        let mut socket = connect(addr, &[bearer()]).await.expect("upgrade accepted");
+        socket
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {"protocolVersion": 1, "clientCapabilities": {}}
+                })
+                .to_string()
+                .into(),
+            ))
+            .await?;
+
+        let reply = tokio::time::timeout(Duration::from_secs(10), socket.next())
+            .await
+            .expect("initialize did not answer in time")
+            .expect("stream open")?;
+        let parsed: Value = serde_json::from_str(reply.to_text()?)?;
+        assert_eq!(parsed["id"], json!(1));
+        assert!(
+            parsed["result"]["protocolVersion"].is_number(),
+            "expected an ACP initialize result, got {parsed}"
+        );
+
+        handle.abort();
+        Ok(())
+    }
+
+    /// One process, two clients, two independent session trees. This is what
+    /// stdio could never do, and it is why the process working directory had to
+    /// stop moving per turn.
+    #[tokio::test]
+    async fn two_connections_get_independent_sessions() -> Result<()> {
+        let Some((addr, _threads, handle)) = spawn_acp_server(Vec::new()).await? else {
+            return Ok(());
+        };
+
+        let mut first = connect(addr, &[bearer()]).await.expect("first upgrade");
+        let mut second = connect(addr, &[bearer()]).await.expect("second upgrade");
+
+        let mut session_ids = Vec::new();
+        for socket in [&mut first, &mut second] {
+            for (id, method) in [(1, "initialize"), (2, "session/new")] {
+                socket
+                    .send(tokio_tungstenite::tungstenite::Message::Text(
+                        json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "method": method,
+                            "params": {"protocolVersion": 1, "clientCapabilities": {}}
+                        })
+                        .to_string()
+                        .into(),
+                    ))
+                    .await?;
+                let reply = tokio::time::timeout(Duration::from_secs(10), socket.next())
+                    .await
+                    .expect("no reply in time")
+                    .expect("stream open")?;
+                let parsed: Value = serde_json::from_str(reply.to_text()?)?;
+                if method == "session/new" {
+                    session_ids.push(
+                        parsed["result"]["sessionId"]
+                            .as_str()
+                            .expect("sessionId")
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
+        assert_eq!(session_ids.len(), 2);
+        assert_ne!(
+            session_ids[0], session_ids[1],
+            "each connection owns its own sessions"
+        );
+
+        handle.abort();
+        Ok(())
+    }
 }

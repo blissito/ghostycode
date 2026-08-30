@@ -409,16 +409,21 @@ becomes `mcp_ghosty_shell`.
 
 ### MCP Server vs HTTP/SSE API vs ACP
 
-| | `ghosty serve --mcp` | `ghosty serve --http` | `ghosty serve --acp` |
-|---|---|---|---|
-| **Protocol** | MCP stdio | HTTP/SSE JSON-RPC | ACP stdio |
-| **Use case** | Tool server for MCP clients | Runtime API for apps | Editor agent for Zed/custom ACP clients |
-| **Config** | `~/.ghosty/mcp.json` entry | Direct URL connection | Editor `agent_servers` custom command |
-| **Lifecycle** | Spawned per client session | Long-running daemon | Spawned per editor agent session |
+| | `ghosty serve --mcp` | `ghosty serve --http` | `ghosty serve --acp` | `ghosty serve --acp --acp-http` |
+|---|---|---|---|---|
+| **Protocol** | MCP stdio | HTTP/SSE JSON-RPC | ACP stdio | ACP over WebSocket + Streamable HTTP |
+| **Use case** | Tool server for MCP clients | Runtime API for apps | Editor agent for Zed/custom ACP clients | Remote or browser clients that cannot spawn a child process |
+| **Config** | `~/.ghosty/mcp.json` entry | Direct URL connection | Editor `agent_servers` custom command | `ws://host:port/acp` |
+| **Auth** | None (the client owns the process) | Runtime token | None (the client owns the process) | Runtime token **and** origin policy |
+| **Clients at once** | One per spawn | Many | One | Many, each with its own sessions |
+| **Lifecycle** | Spawned per client session | Long-running daemon | Spawned per editor agent session | Long-running daemon |
 
 Use `mcp add-self` when you want Ghosty tools available to other MCP clients.
 Use `serve --http` when building applications that consume the API directly.
-Use `serve --acp` when an editor wants to talk to Ghosty as an ACP agent.
+Use `serve --acp` when an editor wants to talk to Ghosty as an ACP agent, and
+add `--acp-http` when the client reaches Ghosty over the network instead of
+launching it. That transport exposes tool execution, so read the origin policy
+in `docs/RUNTIME_API.md` before binding it anywhere but loopback.
 
 ### Verification
 
