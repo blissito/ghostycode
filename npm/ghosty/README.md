@@ -5,6 +5,16 @@
 
 Instala y corre Ghosty Code desde los binarios precompilados (Rust) publicados en GitHub Releases.
 
+> **Novedad (0.0.19)** — **ACP ya viaja por red.** Hasta ahora el agente sólo hablaba ACP
+> por stdio, o sea que el cliente tenía que lanzar a Ghosty como proceso hijo: un navegador
+> no puede, y una caja remota tampoco. `ghosty serve --acp --acp-http` lo publica en
+> `ws://host:port/acp` —WebSocket y Streamable HTTP, la RFD oficial— y atiende a varios
+> clientes a la vez, cada uno con sus propias sesiones. El transporte es el del SDK oficial
+> de ACP, no uno escrito a mano. Como esa vía ejecuta herramientas, exige token de runtime
+> y política de origen: sin `Origin` sólo entra quien manda cabecera `Authorization`, que
+> una página del navegador no puede fijar. De paso cierra ese mismo agujero para quien ya
+> usaba el servidor HTTP.
+>
 > **Novedad (0.0.15)** — **la sesión ya no se te olvida.** Desde 0.0.13, los bytes de
 > las capturas que pegabas se quedaban en el historial y se reenviaban cada turno, pero
 > el medidor de contexto los contaba como cero tokens: el proveedor terminaba rechazando

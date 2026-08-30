@@ -178,7 +178,12 @@ Gestiona otros servidores con `ghosty mcp add stdio|http <nombre> ...`,
 ## Más
 
 - **Servidor**: `ghosty serve --http` (API HTTP/SSE) o `--mobile` (control desde el móvil en LAN).
-- **Zed/ACP**: `ghosty serve --acp`.
+- **Zed/ACP**: `ghosty serve --acp` por stdio, cuando el editor lanza a Ghosty él mismo.
+- **ACP por red**: `ghosty serve --acp --acp-http` publica el agente en `ws://host:port/acp`
+  (WebSocket y Streamable HTTP) para clientes que no pueden lanzarlo como proceso hijo —un
+  navegador, una caja remota—, y atiende a varios a la vez. Esa vía ejecuta herramientas:
+  pide token y política de origen, así que lee `docs/RUNTIME_API.md` antes de sacarla de
+  loopback.
 - Otros proveedores compatibles con OpenAI vía `base_url` en la config.
 
 ## Related
