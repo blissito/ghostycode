@@ -77,15 +77,41 @@ impl AcpHttpFactory {
     /// panics when a merge finds the path twice, so leaving this on turns a
     /// configuration detail into a failure to boot.
     ///
-    /// CORS is left `Disabled` here on purpose. The crate's allow-list treats a
-    /// missing `Origin` as permitted, which is exactly the hole this server
-    /// must close for WebSocket upgrades; the caller wraps this router in its
-    /// own origin and auth policy instead of delegating.
-    pub fn into_router(self, path: &str) -> Router {
+    /// `allowed_origins` is the caller's ACP allow-list, handed to the crate as
+    /// well as enforced in [`crate::runtime_api`]'s own middleware. Both layers
+    /// are needed and neither is redundant:
+    ///
+    /// * `CorsOptions::Disabled` rejects **every** request carrying an `Origin`
+    ///   (its own tests assert `!disabled().allows_origin(Some(_))`), so
+    ///   leaving it off meant no browser could ever connect, with or without a
+    ///   valid token — the exact client this transport exists for.
+    /// * The crate's allow-list, on the other hand, treats a *missing* `Origin`
+    ///   as permitted, which is the cross-site WebSocket hole our middleware
+    ///   closes by demanding a header credential there.
+    ///
+    /// So the crate screens listed origins and we screen the rest. With no
+    /// operator origins configured the old `Disabled` behaviour stands.
+    ///
+    /// `health_endpoint` is forced off: the crate would register its own
+    /// `GET /health`, and the runtime API already owns that route — `axum`
+    /// panics when a merge finds the path twice, so leaving this on turns a
+    /// configuration detail into a failure to boot.
+    pub fn into_router(self, path: &str, allowed_origins: &[String]) -> Router {
+        let cors = if allowed_origins.is_empty() {
+            CorsOptions::Disabled
+        } else {
+            CorsOptions::allow_origins(allowed_origins).unwrap_or_else(|error| {
+                tracing::warn!(
+                    "ignoring unparsable ACP origin allow-list ({error}); \
+                     browser clients will be refused by the transport"
+                );
+                CorsOptions::Disabled
+            })
+        };
         AcpHttpServer::new(move || self.clone().connect())
             .with_options(ServerOptions {
                 path: path.to_string(),
-                cors: CorsOptions::Disabled,
+                cors,
                 health_endpoint: false,
             })
             .into_router()

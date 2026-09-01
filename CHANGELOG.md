@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.20] - 2026-09-01
 
+### Added
+
+- **Un cliente ACP ya puede aportar sus propios servidores MCP.** `session/new`
+  acepta `mcpServers` en las tres formas de la spec —stdio, `http` y `sse`— y los fusiona
+  con los que el usuario tenga en su `mcp.json` en vez de reemplazarlos, como hace Goose.
+  Antes el parámetro se ignoraba en silencio mientras el handshake declaraba
+  `mcpCapabilities: {http:false, sse:false}`, lo que sugería que stdio sí servía; no
+  servía ninguno. **Y de paso ACP tampoco exponía los servidores MCP de la propia config
+  del usuario**: la ruta ACP no pasa por el `Engine`, así que no heredaba nada. Un agente
+  ACP ajeno se quedaba sin voz y sin artefactos por las dos razones a la vez. Los procesos
+  hijos se apagan al evictar la sesión y en `shutdown`, que antes eran un `remove` pelado.
+- **`?token=` en el upgrade WebSocket de `/acp`.** `new WebSocket(url)` no puede poner
+  headers y la cookie no viaja cross-site, así que una app web servida desde otro origen
+  no tenía forma de autenticarse aunque tuviera el token. Cuenta **sólo** en el upgrade
+  —POST y SSE siguen exigiendo header o cookie, donde `fetch()` sí puede ponerlos— y vale
+  lo mismo que la cookie, nunca lo que un header: exige `Origin` en la allow-list. Ese
+  matiz es el que separa esto del RCE de un clic que se comió Goose, donde el token en la
+  URL iba sin ninguna validación de origen. El token no es lo que detiene a una página
+  hostil; la allow-list sí.
+- **TLS opcional con `--tls-cert` y `--tls-key`.** El certificado lo pone el operador: no
+  generamos uno self-signed porque el navegador lo rechaza en `wss://` sin interstitial
+  que aceptar, y el navegador es justamente el público de este cambio. Y es estrictamente
+  opt-in: Goose hizo TLS obligatorio y rompió todo despliegue headless —sondas de
+  Kubernetes, sidecars, proxies inversos— porque hablaban HTTP plano contra el guest. Si
+  ya tienes un proxy que termina TLS, no uses estas banderas.
+
 ### Changed
 
 - **`ghosty serve` sin banderas ya sirve el caso del agente en una caja.** Antes había que

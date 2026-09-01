@@ -261,6 +261,17 @@ agent's own shell in its own sandbox, so a client with nothing to lend — a
 browser, or anything talking to an agent alone in a microVM — still gets a
 working shell. The client-side `terminal/*` methods stay unexposed.
 
+**MCP servers.** A session gets the MCP servers from the user's `mcp.json` plus
+any the client supplies in `session/new`'s `mcpServers` — the two are merged,
+not one replacing the other. All three transports in the ACP schema work: stdio
+(untagged), `"type": "http"`, and `"type": "sse"`. Their tools appear in the
+session catalog as `mcp_<server>_<tool>`, and their child processes are stopped
+when the session is evicted or the connection shuts down.
+
+If the resulting catalog would exceed the provider's tool cap, `session/new`
+fails with that count instead of leaving every later turn to die on an opaque
+`Invalid 'tools': array too long` from the provider.
+
 Still not exposed through ACP: checkpoint replay and session loading. Use
 `ghosty serve --http` for the full local runtime API and `ghosty serve --mcp`
 when another client needs Ghosty's tools as MCP tools.
@@ -327,6 +338,41 @@ to.
 
 `--acp-allow-origin` adds a browser origin (repeatable); the server's own origin
 is always allowed.
+
+**Browser clients: `?token=`.** `new WebSocket(url)` cannot set headers and the
+runtime cookie does not travel cross-site, so a web app served from another
+origin had no way to authenticate. Pass the token in the query string of the
+upgrade instead:
+
+```js
+new WebSocket("wss://box.example:7878/acp?token=" + encodeURIComponent(token));
+```
+
+It counts **only** on the WebSocket upgrade. `POST` and SSE on `/acp` still
+require a header or cookie, because `fetch()` can set headers and there is no
+reason to leak the secret into a URL that lands in proxy logs and history.
+
+A query token ranks with the cookie, never with a header: a page can put
+anything in a URL, so it proves possession of the secret and nothing about the
+caller not being a page. **It therefore still requires an allowed `Origin`.**
+That is the whole difference between this and the one-click RCE goose shipped,
+where a page could open a WebSocket to the local agent and run shell commands:
+the token is not what stops a hostile page, the allow-list is. Register your app
+with `--acp-allow-origin https://your.app`.
+
+### TLS
+
+`--tls-cert <PEM> --tls-key <PEM>` serves HTTPS. Both flags are required
+together, and the certificate is yours: Ghosty generates no self-signed
+certificate, because a browser rejects one on `wss://` with no interstitial to
+accept — and the browser is the client this exists for. Use a real certificate,
+or terminate TLS in front.
+
+**Do not use these flags behind a reverse proxy, sidecar, or ingress that
+already terminates TLS.** The hop from that proxy to Ghosty is plain HTTP, and
+answering it with a TLS handshake is how health probes crash-loop and sidecars
+fail to connect. goose made TLS mandatory and broke exactly those deployments;
+here it stays opt-in for that reason.
 
 [acp-rfd]: https://agentclientprotocol.com/rfds/streamable-http-websocket-transport
 

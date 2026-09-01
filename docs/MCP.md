@@ -426,6 +426,15 @@ instead, plain `ghosty serve` is that mode already — no flags. That transport
 exposes tool execution, so read the origin policy in `docs/RUNTIME_API.md`
 before binding it anywhere but loopback.
 
+### MCP servers from an ACP client
+
+`ghosty serve` (ACP over the network) accepts servers from the client itself:
+`session/new` takes an `mcpServers` array in the ACP schema's three shapes —
+stdio (no `type`), `{"type": "http", "url", "headers"}` and
+`{"type": "sse", ...}`. They are **merged with** the user's configured servers
+rather than replacing them, and they live only for that session; nothing is
+written to `mcp.json`. Their child processes stop when the session ends.
+
 ### Verification
 
 After adding, test the connection:

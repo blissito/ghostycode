@@ -37,6 +37,8 @@
 //! reintroduce it — pass the directory instead.
 
 use std::collections::{HashMap, VecDeque};
+
+use crate::mcp::{McpPool, McpServerConfig};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -1415,6 +1417,10 @@ struct AcpServer {
 struct AcpSession {
     cwd: PathBuf,
     messages: Vec<Message>,
+    /// The session's MCP pool: the user's configured servers plus anything the
+    /// client handed us in `session/new`. Kept so the session can shut its
+    /// child processes down; see [`AcpServer::retire_session`].
+    mcp_pool: Option<Arc<tokio::sync::Mutex<McpPool>>>,
     /// Built once per session over the session `cwd`, then reused for every
     /// prompt turn: `to_api_tools()` memoises the serialised catalog, and
     /// `file_read_tracker` / the shell manager need to persist across turns.
@@ -1468,26 +1474,48 @@ impl AcpServer {
                     &self.config,
                 )))
             }
-            "session/new" => Ok(AcpDispatch::Response(self.new_session(params)?)),
+            "session/new" => Ok(AcpDispatch::Response(self.new_session(params).await?)),
             "session/listProviders" => Ok(AcpDispatch::Response(self.list_providers())),
             "session/currentModel" => Ok(AcpDispatch::Response(self.current_model())),
             "session/selectModel" => Ok(AcpDispatch::Response(self.select_model(params)?)),
             // A cancel that arrives with no prompt in flight is an idempotent
             // no-op (the in-flight case is handled by the prompt driver).
             "session/cancel" => Ok(AcpDispatch::Response(json!(null))),
-            "shutdown" => Ok(AcpDispatch::Shutdown),
+            "shutdown" => {
+                self.retire_all_sessions().await;
+                Ok(AcpDispatch::Shutdown)
+            }
             _ => Err(AcpError::method_not_found(method)),
         }
     }
 
-    fn new_session(&mut self, params: Value) -> std::result::Result<Value, AcpError> {
+    async fn new_session(&mut self, params: Value) -> std::result::Result<Value, AcpError> {
         let cwd = params
             .get("cwd")
             .and_then(Value::as_str)
             .map(PathBuf::from)
             .unwrap_or_else(|| self.default_cwd.clone());
+
+        let mcp_pool = self.build_session_mcp_pool(&params, &cwd).await?;
         let session_id = format!("ghosty-{}", uuid::Uuid::new_v4());
-        let tool_registry = Arc::new(build_acp_tool_registry(&self.config, &cwd));
+        let tool_registry =
+            Arc::new(build_acp_tool_registry(&self.config, &cwd, mcp_pool.as_ref()).await);
+
+        // The tool array goes to the provider whole. Over the cap the request
+        // is rejected outright, and until now that surfaced as an opaque
+        // provider error on every turn — so refuse the session instead, while
+        // the client can still act on it.
+        let tool_count = tool_registry.to_api_tools().len();
+        if tool_count > crate::core::engine::tool_catalog::DEEPSEEK_MAX_TOOLS {
+            if let Some(pool) = mcp_pool {
+                pool.lock().await.shutdown_all().await;
+            }
+            return Err(AcpError::invalid_params(format!(
+                "this session would expose {tool_count} tools, over the provider cap of {}. \
+                 Reduce the MCP servers passed in mcpServers or configured in mcp.json.",
+                crate::core::engine::tool_catalog::DEEPSEEK_MAX_TOOLS
+            )));
+        }
 
         // Evict oldest session when at capacity.
         if self.sessions.len() >= MAX_ACP_SESSIONS {
@@ -1495,7 +1523,7 @@ impl AcpServer {
             // does not. Pop from the front to evict the session created
             // earliest.
             if let Some(oldest) = self.insertion_order.pop_front() {
-                self.sessions.remove(&oldest);
+                self.retire_session(&oldest).await;
             }
         }
 
@@ -1506,9 +1534,64 @@ impl AcpServer {
                 cwd,
                 messages: Vec::new(),
                 tool_registry,
+                mcp_pool,
             },
         );
         Ok(json!({ "sessionId": session_id }))
+    }
+
+    /// Assemble the session's MCP pool: the user's own `mcp.json` servers plus
+    /// whatever the client passed in `mcpServers`. Goose merges the two the
+    /// same way rather than letting one replace the other, and it is the right
+    /// call: the operator's servers are why the agent works at all, and the
+    /// client's are what this particular conversation needs.
+    async fn build_session_mcp_pool(
+        &self,
+        params: &Value,
+        cwd: &std::path::Path,
+    ) -> std::result::Result<Option<Arc<tokio::sync::Mutex<McpPool>>>, AcpError> {
+        let requested = params
+            .get("mcpServers")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        let path = self.config.mcp_config_path();
+        let plugins = Arc::new(crate::plugins::PluginRegistry::empty(cwd));
+        let pool = McpPool::from_config_path_with_workspace_and_plugins(&path, cwd, plugins)
+            .map_err(|error| {
+                AcpError::invalid_params(format!(
+                    "could not load the MCP config at {}: {error}",
+                    path.display()
+                ))
+            })?;
+
+        for entry in &requested {
+            let (name, config) = parse_acp_mcp_server(entry).map_err(AcpError::invalid_params)?;
+            pool.add_runtime_server_config(name, config)
+                .map_err(AcpError::invalid_params)?;
+        }
+
+        Ok(Some(Arc::new(tokio::sync::Mutex::new(pool))))
+    }
+
+    /// Drop a session and stop anything it owns. Eviction used to be a bare
+    /// `remove`, which is fine for a struct of plain data and a leak once the
+    /// session owns child processes.
+    async fn retire_session(&mut self, session_id: &str) {
+        if let Some(session) = self.sessions.remove(session_id)
+            && let Some(pool) = session.mcp_pool
+        {
+            pool.lock().await.shutdown_all().await;
+        }
+    }
+
+    /// Stop every session's MCP children. Called on `shutdown`.
+    async fn retire_all_sessions(&mut self) {
+        let ids = self.insertion_order.drain(..).collect::<Vec<_>>();
+        for id in ids {
+            self.retire_session(&id).await;
+        }
     }
 
     fn session_tool_registry(&self, session_id: &str) -> Option<Arc<ToolRegistry>> {
@@ -1843,6 +1926,90 @@ fn build_acp_system_prompt(
     )
 }
 
+/// One entry of `session/new`'s `mcpServers`, mapped onto the config shape the
+/// rest of Ghosty already speaks (`crate::mcp::McpServerConfig`).
+///
+/// The ACP schema tags `http` and `sse` with `"type"` and leaves **stdio
+/// untagged** as the fallback every agent must support, so the discriminator
+/// is "does `type` say http/sse, else treat it as stdio". `headers` and `env`
+/// arrive as arrays of `{name, value}` pairs rather than maps.
+fn parse_acp_mcp_server(value: &Value) -> std::result::Result<(String, McpServerConfig), String> {
+    let name = value
+        .get("name")
+        .and_then(Value::as_str)
+        .filter(|name| !name.trim().is_empty())
+        .ok_or_else(|| "each entry of mcpServers needs a non-empty `name`".to_string())?
+        .to_string();
+
+    let pairs = |field: &str| -> HashMap<String, String> {
+        value
+            .get(field)
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| {
+                        Some((
+                            item.get("name").and_then(Value::as_str)?.to_string(),
+                            item.get("value").and_then(Value::as_str)?.to_string(),
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    // `McpServerConfig` has no `Default`, and hand-listing its twenty fields
+    // here would rot the moment one is added. Go through its own serde
+    // contract: every field it does not require carries `#[serde(default)]`.
+    let mut fields = serde_json::Map::new();
+    fields.insert("command".to_string(), Value::Null);
+    fields.insert("url".to_string(), Value::Null);
+
+    match value.get("type").and_then(Value::as_str) {
+        Some(transport @ ("http" | "sse")) => {
+            let url = value.get("url").and_then(Value::as_str).ok_or_else(|| {
+                format!("mcpServers entry `{name}` of type {transport} needs `url`")
+            })?;
+            fields.insert("url".to_string(), Value::String(url.to_string()));
+            fields.insert("headers".to_string(), json!(pairs("headers")));
+            // `validate_mcp_transport` accepts only "sse" as an override;
+            // Streamable HTTP is the default when none is given.
+            if transport == "sse" {
+                fields.insert("transport".to_string(), Value::String("sse".to_string()));
+            }
+        }
+        Some(other) => {
+            return Err(format!(
+                "mcpServers entry `{name}` has unsupported type `{other}`; use http, sse, or omit it for stdio"
+            ));
+        }
+        None => {
+            let command = value
+                .get("command")
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!("mcpServers entry `{name}` needs `command` for stdio"))?;
+            fields.insert("command".to_string(), Value::String(command.to_string()));
+            let args = value
+                .get("args")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(str::to_string))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            fields.insert("args".to_string(), json!(args));
+            fields.insert("env".to_string(), json!(pairs("env")));
+        }
+    }
+
+    let config: McpServerConfig = serde_json::from_value(Value::Object(fields))
+        .map_err(|error| format!("mcpServers entry `{name}` is not a usable server: {error}"))?;
+    Ok((name, config))
+}
+
 /// Build the tool registry for one ACP session, rooted at the session's
 /// `cwd`. Reuses the shared registry builders used by headless `exec` and the
 /// MCP adapter — no ACP-specific tool implementations.
@@ -1866,7 +2033,11 @@ fn build_acp_system_prompt(
 /// shell's own last-line safety check remains active after ACP's shared
 /// prepared-call, typed-policy, auto-review, repository-law, and explicit
 /// `session/request_permission` gates have admitted the call.
-fn build_acp_tool_registry(config: &Config, workspace: &std::path::Path) -> ToolRegistry {
+async fn build_acp_tool_registry(
+    config: &Config,
+    workspace: &std::path::Path,
+    mcp_pool: Option<&Arc<tokio::sync::Mutex<McpPool>>>,
+) -> ToolRegistry {
     let features = config.features();
     let external_sandbox_requested = config.sandbox_backend.as_deref().is_some_and(|kind| {
         let kind = kind.trim();
@@ -1926,6 +2097,22 @@ fn build_acp_tool_registry(config: &Config, workspace: &std::path::Path) -> Tool
     }
     if allow_shell {
         builder = builder.with_foreground_shell_tools();
+    }
+
+    // MCP tools, both the user's configured servers and any the ACP client
+    // supplied. The snapshot is taken here, holding the lock across an await,
+    // because the builder must not guess: a registry that quietly omits every
+    // MCP tool looks exactly like a server that has none.
+    if let Some(pool) = mcp_pool {
+        let mut locked = pool.lock().await;
+        locked.connect_all().await;
+        let snapshot = locked
+            .all_tools()
+            .into_iter()
+            .map(|(name, tool)| (name, tool.clone()))
+            .collect::<Vec<_>>();
+        drop(locked);
+        builder = builder.with_mcp_tools(Arc::clone(pool), snapshot);
     }
 
     let mut registry = builder.build(context);
@@ -2127,8 +2314,8 @@ fn initialize_result(client_protocol_version: Option<u64>, config: &Config) -> V
                 "embeddedContext": true
             },
             "mcpCapabilities": {
-                "http": false,
-                "sse": false
+                "http": true,
+                "sse": true
             },
             "sessionCapabilities": {}
         },
@@ -2539,8 +2726,8 @@ mod tests {
         assert_eq!(value["error"]["code"], -32700);
     }
 
-    #[test]
-    fn new_session_starts_with_empty_messages() {
+    #[tokio::test]
+    async fn new_session_starts_with_empty_messages() {
         let mut server = AcpServer::new(
             Config::default(),
             "test-model".to_string(),
@@ -2548,14 +2735,15 @@ mod tests {
         );
         let result = server
             .new_session(json!({ "cwd": "/tmp" }))
+            .await
             .expect("new session");
         let session_id = result["sessionId"].as_str().expect("session id");
         let session = server.sessions.get(session_id).expect("session exists");
         assert!(session.messages.is_empty());
     }
 
-    #[test]
-    fn prompt_appends_user_and_assistant_messages_to_history() {
+    #[tokio::test]
+    async fn prompt_appends_user_and_assistant_messages_to_history() {
         let mut server = AcpServer::new(
             Config::default(),
             "test-model".to_string(),
@@ -2563,6 +2751,7 @@ mod tests {
         );
         let result = server
             .new_session(json!({ "cwd": "/tmp" }))
+            .await
             .expect("new session");
         let session_id = result["sessionId"].as_str().unwrap().to_string();
 
@@ -3076,8 +3265,8 @@ mod tests {
         assert!(tool_calls[0].parse_error.is_some());
     }
 
-    #[test]
-    fn different_sessions_have_independent_history() {
+    #[tokio::test]
+    async fn different_sessions_have_independent_history() {
         let mut server = AcpServer::new(
             Config::default(),
             "test-model".to_string(),
@@ -3085,9 +3274,11 @@ mod tests {
         );
         let result1 = server
             .new_session(json!({ "cwd": "/tmp" }))
+            .await
             .expect("session 1");
         let result2 = server
             .new_session(json!({ "cwd": "/tmp" }))
+            .await
             .expect("session 2");
         let sid1 = result1["sessionId"].as_str().unwrap().to_string();
         let sid2 = result2["sessionId"].as_str().unwrap().to_string();
@@ -3113,8 +3304,8 @@ mod tests {
         assert_eq!(session1.messages.len(), 1);
     }
 
-    #[test]
-    fn concurrent_sessions_each_get_their_own_tool_registry() {
+    #[tokio::test]
+    async fn concurrent_sessions_each_get_their_own_tool_registry() {
         let mut server = AcpServer::new(
             Config {
                 allow_shell: Some(true),
@@ -3123,8 +3314,8 @@ mod tests {
             "test-model".to_string(),
             PathBuf::from("/tmp"),
         );
-        let s1 = server.new_session(json!({ "cwd": "/tmp" })).unwrap();
-        let s2 = server.new_session(json!({ "cwd": "/tmp" })).unwrap();
+        let s1 = server.new_session(json!({ "cwd": "/tmp" })).await.unwrap();
+        let s2 = server.new_session(json!({ "cwd": "/tmp" })).await.unwrap();
         let id1 = s1["sessionId"].as_str().unwrap();
         let id2 = s2["sessionId"].as_str().unwrap();
 
@@ -3149,17 +3340,68 @@ mod tests {
         assert!(reg1.context().runtime.hook_executor.is_some());
     }
 
+    /// The three shapes of the ACP `McpServer` enum. `stdio` is the untagged
+    /// fallback, so "no `type`" must not be read as an error.
+    #[test]
+    fn acp_mcp_server_shapes_map_onto_the_config() {
+        let (name, stdio) = parse_acp_mcp_server(&json!({
+            "name": "voice",
+            "command": "/usr/bin/voice-mcp",
+            "args": ["--stdio"],
+            "env": [{"name": "TOKEN", "value": "s3cret"}]
+        }))
+        .expect("stdio");
+        assert_eq!(name, "voice");
+        assert_eq!(stdio.command.as_deref(), Some("/usr/bin/voice-mcp"));
+        assert_eq!(stdio.args, vec!["--stdio".to_string()]);
+        assert_eq!(stdio.env.get("TOKEN").map(String::as_str), Some("s3cret"));
+        assert!(stdio.url.is_none());
+
+        let (_, http) = parse_acp_mcp_server(&json!({
+            "type": "http",
+            "name": "art",
+            "url": "https://mcp.example/mcp",
+            "headers": [{"name": "Authorization", "value": "Bearer t"}]
+        }))
+        .expect("http");
+        assert_eq!(http.url.as_deref(), Some("https://mcp.example/mcp"));
+        assert_eq!(
+            http.headers.get("Authorization").map(String::as_str),
+            Some("Bearer t")
+        );
+        // Streamable HTTP is the default; only sse is an explicit override.
+        assert_eq!(http.transport, None);
+
+        let (_, sse) = parse_acp_mcp_server(&json!({
+            "type": "sse", "name": "old", "url": "https://mcp.example/sse"
+        }))
+        .expect("sse");
+        assert_eq!(sse.transport.as_deref(), Some("sse"));
+    }
+
+    /// A malformed entry has to say which one and why: `session/new` is the
+    /// only place the client can still act on it.
+    #[test]
+    fn acp_mcp_server_rejects_unusable_entries() {
+        assert!(parse_acp_mcp_server(&json!({ "command": "/bin/x" })).is_err());
+        assert!(parse_acp_mcp_server(&json!({ "name": "a" })).is_err());
+        assert!(parse_acp_mcp_server(&json!({ "type": "http", "name": "a" })).is_err());
+        let err = parse_acp_mcp_server(&json!({ "type": "carrier-pigeon", "name": "a" }))
+            .expect_err("unknown transport");
+        assert!(err.contains("carrier-pigeon"), "{err}");
+    }
+
     /// The regression: a client that lends no terminal must still get an
     /// agent that can use its own shell. `clientCapabilities.terminal` is an
     /// offer from the client, not permission for the agent.
-    #[test]
-    fn shell_tool_survives_a_client_that_declares_no_terminal_support() {
+    #[tokio::test]
+    async fn shell_tool_survives_a_client_that_declares_no_terminal_support() {
         let workspace = std::env::temp_dir();
         let config = Config {
             allow_shell: Some(true),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&config, &workspace);
+        let registry = build_acp_tool_registry(&config, &workspace, None).await;
         assert!(registry.contains("Bash"));
         assert!(
             registry
@@ -3171,17 +3413,17 @@ mod tests {
         assert!(registry.contains("File"));
     }
 
-    #[test]
-    fn shell_tool_omitted_without_headless_config_opt_in() {
+    #[tokio::test]
+    async fn shell_tool_omitted_without_headless_config_opt_in() {
         let workspace = std::env::temp_dir();
-        let registry = build_acp_tool_registry(&Config::default(), &workspace);
+        let registry = build_acp_tool_registry(&Config::default(), &workspace, None).await;
         assert!(!registry.contains("Bash"));
         assert_eq!(registry.context().shell_policy, ShellPolicy::None);
         assert!(!registry.context().auto_approve);
     }
 
-    #[test]
-    fn acp_shell_uses_configured_external_sandbox_or_fails_closed() {
+    #[tokio::test]
+    async fn acp_shell_uses_configured_external_sandbox_or_fails_closed() {
         let workspace = std::env::temp_dir();
         let configured = Config {
             allow_shell: Some(true),
@@ -3189,7 +3431,7 @@ mod tests {
             sandbox_url: Some("http://127.0.0.1:8080".to_string()),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&configured, &workspace);
+        let registry = build_acp_tool_registry(&configured, &workspace, None).await;
         assert!(registry.contains("bash"));
         assert!(registry.context().sandbox_backend.is_some());
 
@@ -3198,14 +3440,14 @@ mod tests {
             sandbox_backend: Some("unsupported-backend".to_string()),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&unsupported, &workspace);
+        let registry = build_acp_tool_registry(&unsupported, &workspace, None).await;
         assert!(!registry.contains("bash"));
         assert!(!registry.contains("Bash"));
         assert!(registry.context().sandbox_backend.is_none());
     }
 
-    #[test]
-    fn acp_tool_override_removes_every_builtin_compatibility_alias() {
+    #[tokio::test]
+    async fn acp_tool_override_removes_every_builtin_compatibility_alias() {
         let mut overrides = std::collections::HashMap::new();
         overrides.insert("Bash".to_string(), crate::config::ToolOverride::Disabled);
         let config = Config {
@@ -3216,7 +3458,7 @@ mod tests {
             }),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&config, &std::env::temp_dir());
+        let registry = build_acp_tool_registry(&config, &std::env::temp_dir(), None).await;
         assert!(!registry.contains("bash"));
         assert!(!registry.contains("Bash"));
         assert!(
@@ -3309,13 +3551,13 @@ mod tests {
         );
     }
 
-    fn workspace_registry() -> (tempfile::TempDir, ToolRegistry) {
+    async fn workspace_registry() -> (tempfile::TempDir, ToolRegistry) {
         let dir = tempfile::tempdir().expect("tempdir");
         let config = Config {
             allow_shell: Some(true),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&config, dir.path());
+        let registry = build_acp_tool_registry(&config, dir.path(), None).await;
         (dir, registry)
     }
 
@@ -3368,7 +3610,7 @@ mod tests {
             json!({"decision": "deny", "reason": "release gate"}),
             true,
         );
-        let registry = build_acp_tool_registry(&config, dir.path());
+        let registry = build_acp_tool_registry(&config, dir.path(), None).await;
         let error = prepare_acp_tool_with_hooks(
             &config,
             "test-model",
@@ -3399,7 +3641,7 @@ mod tests {
             }),
             true,
         );
-        let registry = build_acp_tool_registry(&config, dir.path());
+        let registry = build_acp_tool_registry(&config, dir.path(), None).await;
         let raw = pending_call("File", json!({"action": "read", "path": "safe.txt"}));
         let (_, raw_admission) = prepare_acp_tool_admission(&config, &registry, &raw).unwrap();
         assert_eq!(raw_admission, AcpToolAdmission::Auto);
@@ -3415,9 +3657,9 @@ mod tests {
         assert!(!dir.path().join("rewritten.txt").exists());
     }
 
-    #[test]
-    fn acp_admission_is_input_specific_and_has_no_workspace_write_carve_out() {
-        let (dir, registry) = workspace_registry();
+    #[tokio::test]
+    async fn acp_admission_is_input_specific_and_has_no_workspace_write_carve_out() {
+        let (dir, registry) = workspace_registry().await;
         let config = Config::default();
         let read = pending_call("File", json!({"action": "read", "path": "src/lib.rs"}));
         let write = pending_call(
@@ -3436,9 +3678,9 @@ mod tests {
         assert_eq!(registry.context().workspace, dir.path());
     }
 
-    #[test]
-    fn acp_admission_folds_typed_rules_then_headless_safety_floor() {
-        let (dir, registry) = workspace_registry();
+    #[tokio::test]
+    async fn acp_admission_folds_typed_rules_then_headless_safety_floor() {
+        let (dir, registry) = workspace_registry().await;
         let workspace = dir.path().to_string_lossy().into_owned();
         let input = json!({"action": "write", "path": "allowed.txt", "content": "new"});
         let call = pending_call("File", input.clone());
@@ -3482,9 +3724,9 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn acp_admission_blocks_detached_and_stateful_bash_inputs() {
-        let (_dir, registry) = workspace_registry();
+    #[tokio::test]
+    async fn acp_admission_blocks_detached_and_stateful_bash_inputs() {
+        let (_dir, registry) = workspace_registry().await;
         for input in [
             json!({"command": "sleep 30", "background": true}),
             json!({"command": "sleep 30", "tty": true}),
@@ -3507,9 +3749,9 @@ mod tests {
         assert!(!acp_shell_command_requests_detach("echo '&' && echo done"));
     }
 
-    #[test]
-    fn acp_admission_auto_review_and_repo_law_override_typed_allow() {
-        let (dir, registry) = workspace_registry();
+    #[tokio::test]
+    async fn acp_admission_auto_review_and_repo_law_override_typed_allow() {
+        let (dir, registry) = workspace_registry().await;
         let workspace = dir.path().to_string_lossy().into_owned();
         let command = "cargo test";
         let shell_allow = ghosty_execpolicy::ToolAskRule::exec_shell(command)
@@ -3574,7 +3816,7 @@ mod tests {
 
     #[tokio::test]
     async fn acp_read_runs_without_permission_but_reports_pending_before_in_progress() {
-        let (dir, registry) = workspace_registry();
+        let (dir, registry) = workspace_registry().await;
         std::fs::write(dir.path().join("read.txt"), "safe").unwrap();
         let mut reader = lines_from("");
         let mut out = Vec::new();
@@ -3615,7 +3857,7 @@ mod tests {
 
     #[tokio::test]
     async fn acp_permission_allow_executes_write_once_after_response() {
-        let (dir, registry) = workspace_registry();
+        let (dir, registry) = workspace_registry().await;
         let target = dir.path().join("allowed.txt");
         let (outcome, messages, late) = execute_one_with_permission_client(
             &Config::default(),
@@ -3657,7 +3899,7 @@ mod tests {
             PermissionClientScript::Reject,
             PermissionClientScript::WrongIdThenReject,
         ] {
-            let (dir, registry) = workspace_registry();
+            let (dir, registry) = workspace_registry().await;
             let target = dir.path().join("denied.txt");
             let (outcome, messages, _) = execute_one_with_permission_client(
                 &Config::default(),
@@ -3692,7 +3934,7 @@ mod tests {
 
     #[tokio::test]
     async fn acp_permission_cancel_ignores_late_allow_and_never_runs_tool() {
-        let (dir, registry) = workspace_registry();
+        let (dir, registry) = workspace_registry().await;
         let target = dir.path().join("cancelled.txt");
         let (outcome, messages, late) = execute_one_with_permission_client(
             &Config::default(),
@@ -3726,7 +3968,7 @@ mod tests {
 
     #[tokio::test]
     async fn tool_registry_read_file_returns_real_contents() {
-        let (dir, registry) = workspace_registry();
+        let (dir, registry) = workspace_registry().await;
         std::fs::write(dir.path().join("hello.txt"), "hi there").unwrap();
 
         let result = registry
@@ -3740,7 +3982,7 @@ mod tests {
 
     #[tokio::test]
     async fn tool_registry_write_file_creates_a_real_file() {
-        let (dir, registry) = workspace_registry();
+        let (dir, registry) = workspace_registry().await;
 
         let result = registry
             .execute_full(
@@ -3757,7 +3999,7 @@ mod tests {
 
     #[tokio::test]
     async fn tool_registry_list_dir_reports_real_directory_contents() {
-        let (dir, registry) = workspace_registry();
+        let (dir, registry) = workspace_registry().await;
         std::fs::write(dir.path().join("a.txt"), "a").unwrap();
         std::fs::write(dir.path().join("b.txt"), "b").unwrap();
 
@@ -3773,7 +4015,7 @@ mod tests {
 
     #[tokio::test]
     async fn tool_registry_bash_runs_a_real_command() {
-        let (_dir, registry) = workspace_registry();
+        let (_dir, registry) = workspace_registry().await;
 
         let result = registry
             .execute_full("Bash", json!({"command": "echo acp-terminal-check"}))
@@ -3785,7 +4027,7 @@ mod tests {
 
     #[tokio::test]
     async fn tool_registry_read_file_reports_failure_for_missing_path() {
-        let (_dir, registry) = workspace_registry();
+        let (_dir, registry) = workspace_registry().await;
 
         let err = registry
             .execute_full(
@@ -3823,7 +4065,7 @@ mod tests {
 
     #[tokio::test]
     async fn agentic_turn_executes_a_tool_call_then_streams_the_final_answer() {
-        let (dir, registry) = workspace_registry();
+        let (dir, registry) = workspace_registry().await;
         std::fs::write(dir.path().join("VERSION"), "9.9.9").unwrap();
 
         let round1 = ready_stream({
@@ -3901,7 +4143,7 @@ mod tests {
 
     #[tokio::test]
     async fn agentic_turn_preserves_tool_receipts_when_later_provider_round_fails() {
-        let (dir, registry) = workspace_registry();
+        let (dir, registry) = workspace_registry().await;
         std::fs::write(dir.path().join("receipt.txt"), "observed").unwrap();
         let round1 = ready_stream({
             let mut events = tool_use_events(
@@ -3952,7 +4194,7 @@ mod tests {
 
     #[tokio::test]
     async fn agentic_turn_chains_nested_tool_calls_across_rounds() {
-        let (dir, registry) = workspace_registry();
+        let (dir, registry) = workspace_registry().await;
         std::fs::write(dir.path().join("a.txt"), "contents-of-a").unwrap();
         std::fs::write(dir.path().join("b.txt"), "contents-of-b").unwrap();
 
@@ -4025,7 +4267,7 @@ mod tests {
 
     #[tokio::test]
     async fn agentic_turn_reports_a_tool_failure_back_to_the_model_and_keeps_going() {
-        let (_dir, registry) = workspace_registry();
+        let (_dir, registry) = workspace_registry().await;
 
         let round1 = ready_stream({
             let mut events = tool_use_events(
@@ -4091,7 +4333,7 @@ mod tests {
 
     #[tokio::test]
     async fn tool_batch_cancels_a_running_bash_and_applies_response_id_policy() {
-        let (_dir, registry) = workspace_registry();
+        let (_dir, registry) = workspace_registry().await;
         let started = std::time::Instant::now();
 
         let (outcome, messages, _) = execute_one_with_permission_client(
@@ -4124,12 +4366,12 @@ mod tests {
     /// pointed at a foreign workspace permanently. This pins the contract:
     /// building registries and system prompts for two different workspaces
     /// leaves the process directory untouched.
-    #[test]
-    fn acp_session_setup_never_moves_the_process_working_directory() {
+    #[tokio::test]
+    async fn acp_session_setup_never_moves_the_process_working_directory() {
         let before = std::env::current_dir().expect("cwd before");
 
-        let (dir1, _registry1) = workspace_registry();
-        let (dir2, _registry2) = workspace_registry();
+        let (dir1, _registry1) = workspace_registry().await;
+        let (dir2, _registry2) = workspace_registry().await;
         assert_ne!(dir1.path(), dir2.path());
 
         for workspace in [dir1.path(), dir2.path()] {
@@ -4151,8 +4393,8 @@ mod tests {
 
     #[tokio::test]
     async fn concurrent_acp_sessions_execute_tools_independently() {
-        let (dir1, registry1) = workspace_registry();
-        let (dir2, registry2) = workspace_registry();
+        let (dir1, registry1) = workspace_registry().await;
+        let (dir2, registry2) = workspace_registry().await;
         std::fs::write(dir1.path().join("f.txt"), "session-one").unwrap();
         std::fs::write(dir2.path().join("f.txt"), "session-two").unwrap();
 

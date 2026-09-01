@@ -112,6 +112,7 @@ semver.workspace = true
 rust-i18n = "4.1.0"
 shell-words = "1.1.1"
 mimalloc.workspace = true
+axum-server = { version = "0.8.0", features = ["tls-rustls"] }
 
 [build-dependencies]
 ghosty-build-support = { path = "../build-support", version = "0.0.20" }

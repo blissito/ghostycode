@@ -213,7 +213,7 @@ pub(super) fn build_model_tool_catalog_with_surface(
 /// tool anunciada, así que el tope aplica al catálogo completo y no solo a la
 /// cabeza activa. Por eso `apply_tool_surface_budget` no basta: marca tools como
 /// diferidas pero no las saca del array.
-const DEEPSEEK_MAX_TOOLS: usize = 128;
+pub(crate) const DEEPSEEK_MAX_TOOLS: usize = 128;
 
 /// Avisa antes de enviar la petición. **No truncamos**: descartar tools en
 /// silencio podría quitar la equivocada, y la cabeza debe quedar estable byte a

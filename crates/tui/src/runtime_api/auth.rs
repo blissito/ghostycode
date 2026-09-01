@@ -112,6 +112,41 @@ pub(super) fn request_has_header_runtime_token(req: &Request, expected: &str) ->
             .is_some_and(|token| token == expected)
 }
 
+/// A `?token=` on the ACP WebSocket upgrade. It exists because
+/// `new WebSocket(url)` cannot set headers, so a browser app served from an
+/// allowed origin had no way to authenticate at all.
+///
+/// Callers must treat the result as cookie-grade, never header-grade: a page
+/// can put anything in a URL, so this proves possession of the secret and
+/// nothing about the caller not being a page. [`super::acp_policy::decide`]
+/// enforces that, and the origin allow-list is what actually stops a hostile
+/// page. Unlike the older comparisons in this file, this one is constant time.
+pub(super) fn request_has_query_runtime_token(req: &Request, expected: &str) -> bool {
+    token_from_query(req.uri().query())
+        .is_some_and(|token| super::web::constant_time_eq(token.as_bytes(), expected.as_bytes()))
+}
+
+/// Is this request the WebSocket upgrade? Only there is a URL token accepted:
+/// `fetch()` can set headers, so the POST and SSE shapes of `/acp` have no
+/// excuse to leak the secret into a URL that lands in proxy logs and history.
+pub(super) fn is_websocket_upgrade(req: &Request) -> bool {
+    req.headers()
+        .get(header::UPGRADE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.eq_ignore_ascii_case("websocket"))
+}
+
+fn token_from_query(query: Option<&str>) -> Option<String> {
+    query.and_then(|query| {
+        query.split('&').find_map(|pair| {
+            let (key, value) = pair.split_once('=')?;
+            (key == "token")
+                .then(|| percent_decode_query_component(value))
+                .flatten()
+        })
+    })
+}
+
 fn request_has_runtime_cookie(req: &Request, expected: &str) -> bool {
     token_from_cookie_header(
         req.headers()

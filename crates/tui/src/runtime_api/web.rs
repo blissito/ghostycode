@@ -186,7 +186,7 @@ fn valid_bootstrap_nonce(value: &str) -> bool {
     })
 }
 
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+pub(super) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     if left.len() != right.len() {
         return false;
     }

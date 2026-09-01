@@ -14363,7 +14363,25 @@ impl SubAgentToolRegistry {
         );
 
         if let Some(pool) = runtime.mcp_pool.as_ref() {
-            registry = registry.with_mcp_tools(std::sync::Arc::clone(pool));
+            // This constructor is sync, so the snapshot stays best-effort here.
+            // It used to fail silently inside `with_mcp_tools`; now a contended
+            // pool at least says so instead of yielding a child agent that
+            // looks like it simply has no MCP servers.
+            let snapshot = match pool.try_lock() {
+                Ok(locked) => locked
+                    .all_tools()
+                    .into_iter()
+                    .map(|(name, tool)| (name, tool.clone()))
+                    .collect(),
+                Err(_) => {
+                    tracing::warn!(
+                        "MCP pool was busy while building the subagent registry; \
+                         this child starts without MCP tools"
+                    );
+                    Vec::new()
+                }
+            };
+            registry = registry.with_mcp_tools(std::sync::Arc::clone(pool), snapshot);
         }
 
         let mut registry = registry.build(context);

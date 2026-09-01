@@ -23,6 +23,19 @@
 //! evidence the caller is not a page, which is what lets non-browser clients
 //! (an editor, `websocat`, our own tests) connect with no `Origin` while a
 //! cookie-only request with no `Origin` is refused.
+//!
+//! That same rule is why a browser app served from another origin could not
+//! authenticate at all, and why `?token=` exists. It is deliberately the
+//! *weakest* credential here: a page can put anything in a URL, so a query
+//! token proves possession of the secret but proves nothing about the caller
+//! not being a page. It therefore ranks with the cookie and never unlocks the
+//! no-`Origin` branch.
+//!
+//! Goose shipped the same query token without an origin check and it became a
+//! one-click RCE: any page could open a WebSocket to the local agent and run
+//! shell commands. The token is not what stops that attack — the allow-list
+//! is. A malicious page always sends its own `Origin`, so it is refused here
+//! even when it has somehow learned the token.
 
 use axum::http::{HeaderMap, header};
 
@@ -42,15 +55,18 @@ pub(super) enum AcpDenial {
 /// * `has_header_credential` — a valid `Authorization: Bearer` or
 ///   `X-*-Runtime-Token`; proof the caller is not a browser page.
 /// * `has_cookie_credential` — a valid runtime or web-session cookie.
+/// * `has_query_credential` — a valid `?token=` on a WebSocket upgrade. Ranks
+///   with the cookie, never with the header: see the module docs.
 /// * `allowed_origins` — the server's own origin plus anything the operator
 ///   added with `--acp-allow-origin`.
 pub(super) fn decide(
     origin: Option<&str>,
     has_header_credential: bool,
     has_cookie_credential: bool,
+    has_query_credential: bool,
     allowed_origins: &[String],
 ) -> Result<(), AcpDenial> {
-    if !has_header_credential && !has_cookie_credential {
+    if !has_header_credential && !has_cookie_credential && !has_query_credential {
         return Err(AcpDenial::Unauthorized);
     }
 
@@ -64,7 +80,7 @@ pub(super) fn decide(
         }
         Some(_) => Ok(()),
         // No `Origin`. Only a header credential can vouch for this, because a
-        // page cannot produce one.
+        // page cannot produce one — and it can produce a query string.
         None if has_header_credential => Ok(()),
         None => Err(AcpDenial::ForbiddenOrigin),
     }
@@ -99,11 +115,17 @@ mod tests {
     #[test]
     fn no_credential_is_unauthorized() {
         assert_eq!(
-            decide(None, false, false, &allowed()),
+            decide(None, false, false, false, &allowed()),
             Err(AcpDenial::Unauthorized)
         );
         assert_eq!(
-            decide(Some("http://127.0.0.1:7878"), false, false, &allowed()),
+            decide(
+                Some("http://127.0.0.1:7878"),
+                false,
+                false,
+                false,
+                &allowed()
+            ),
             Err(AcpDenial::Unauthorized)
         );
     }
@@ -114,7 +136,7 @@ mod tests {
     #[test]
     fn cookie_without_an_origin_is_refused() {
         assert_eq!(
-            decide(None, false, true, &allowed()),
+            decide(None, false, true, false, &allowed()),
             Err(AcpDenial::ForbiddenOrigin)
         );
     }
@@ -123,19 +145,37 @@ mod tests {
     /// caller is an editor or a script rather than a page.
     #[test]
     fn header_credential_without_an_origin_is_allowed() {
-        assert!(decide(None, true, false, &allowed()).is_ok());
+        assert!(decide(None, true, false, false, &allowed()).is_ok());
     }
 
     #[test]
     fn allowed_origin_passes_with_either_credential() {
-        assert!(decide(Some("http://127.0.0.1:7878"), false, true, &allowed()).is_ok());
-        assert!(decide(Some("http://127.0.0.1:7878"), true, false, &allowed()).is_ok());
+        assert!(
+            decide(
+                Some("http://127.0.0.1:7878"),
+                false,
+                true,
+                false,
+                &allowed()
+            )
+            .is_ok()
+        );
+        assert!(
+            decide(
+                Some("http://127.0.0.1:7878"),
+                true,
+                false,
+                false,
+                &allowed()
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn foreign_origin_is_refused_even_with_a_bearer_token() {
         assert_eq!(
-            decide(Some("https://evil.example"), true, true, &allowed()),
+            decide(Some("https://evil.example"), true, true, false, &allowed()),
             Err(AcpDenial::ForbiddenOrigin)
         );
     }
@@ -146,13 +186,50 @@ mod tests {
     #[test]
     fn opaque_origin_needs_an_explicit_opt_in() {
         assert_eq!(
-            decide(Some("null"), true, false, &allowed()),
+            decide(Some("null"), true, false, false, &allowed()),
             Err(AcpDenial::ForbiddenOrigin)
         );
 
         let mut with_null = allowed();
         with_null.push("null".to_string());
-        assert!(decide(Some("null"), true, false, &with_null).is_ok());
+        assert!(decide(Some("null"), true, false, false, &with_null).is_ok());
+    }
+
+    /// The reason `?token=` exists: `new WebSocket(url)` cannot set headers, so
+    /// a browser app served from an allowed origin had no way in at all.
+    #[test]
+    fn query_credential_passes_from_an_allowed_origin() {
+        assert!(
+            decide(
+                Some("http://127.0.0.1:7878"),
+                false,
+                false,
+                true,
+                &allowed()
+            )
+            .is_ok()
+        );
+    }
+
+    /// The lesson from goose's one-click RCE: the query token is *not* what
+    /// stops a malicious page — the allow-list is. A page that has somehow
+    /// learned the token still loses, because it cannot forge its `Origin`.
+    #[test]
+    fn query_credential_loses_to_a_foreign_origin() {
+        assert_eq!(
+            decide(Some("https://evil.example"), false, false, true, &allowed()),
+            Err(AcpDenial::ForbiddenOrigin)
+        );
+    }
+
+    /// A query string is something a page *can* produce, so unlike a header it
+    /// never vouches for the caller in the no-`Origin` branch.
+    #[test]
+    fn query_credential_does_not_stand_in_for_a_header() {
+        assert_eq!(
+            decide(None, false, false, true, &allowed()),
+            Err(AcpDenial::ForbiddenOrigin)
+        );
     }
 
     #[test]

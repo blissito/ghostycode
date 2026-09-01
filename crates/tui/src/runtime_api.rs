@@ -213,6 +213,30 @@ enum CompatStreamTestPoint {
 }
 
 #[derive(Debug, Clone)]
+/// A PEM certificate chain and its private key, as given on the command line.
+///
+/// TLS here is deliberately opt-in and operator-supplied. Ghosty generates no
+/// self-signed certificate: a browser rejects one on `wss://` with no
+/// interstitial to accept, so it would help nobody this feature is for. And
+/// making TLS mandatory is what broke goose's headless deployments — k8s
+/// probes and sidecars speak plain HTTP to the guest.
+#[derive(PartialEq, Eq)]
+pub struct TlsFiles {
+    pub cert: PathBuf,
+    pub key: PathBuf,
+}
+
+impl TlsFiles {
+    /// `clap` already guarantees the two flags arrive together.
+    #[must_use]
+    pub fn from_args(cert: Option<PathBuf>, key: Option<PathBuf>) -> Option<Self> {
+        match (cert, key) {
+            (Some(cert), Some(key)) => Some(Self { cert, key }),
+            _ => None,
+        }
+    }
+}
+
 pub struct RuntimeApiOptions {
     pub host: String,
     pub port: u16,
@@ -230,6 +254,9 @@ pub struct RuntimeApiOptions {
     pub auth_token: Option<String>,
     /// Allow `/v1/*` routes without auth when no token is configured.
     pub insecure_no_auth: bool,
+    /// Serve HTTPS with this certificate and key. `None` means plain HTTP,
+    /// which is the right answer behind a proxy that already terminates TLS.
+    pub tls: Option<TlsFiles>,
     /// Enables the built-in mobile control page at `/mobile`.
     pub mobile: bool,
     /// Enables the embedded local browser client and opens it after binding.
@@ -270,6 +297,7 @@ impl Default for RuntimeApiOptions {
             cors_origins: Vec::new(),
             auth_token: None,
             insecure_no_auth: false,
+            tls: None,
             mobile: false,
             web: false,
             show_qr: false,
@@ -984,6 +1012,31 @@ pub async fn run_http_server(
             "Set GHOSTY_RUNTIME_TOKEN or pass --auth-token, or pass --insecure to accept an unauthenticated listener."
         );
     }
+    // Read cert and key before binding: a listener that opens and then dies on
+    // an unreadable file is worse than one that never opened.
+    let tls_config = match options.tls.as_ref() {
+        Some(files) => {
+            crate::tls::ensure_rustls_crypto_provider();
+            Some(
+                axum_server::tls_rustls::RustlsConfig::from_pem_file(&files.cert, &files.key)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "Failed to load TLS certificate {} and key {}",
+                            files.cert.display(),
+                            files.key.display()
+                        )
+                    })?,
+            )
+        }
+        None => None,
+    };
+    let scheme = if tls_config.is_some() {
+        "https"
+    } else {
+        "http"
+    };
+
     let listener = TcpListener::bind(addr)
         .await
         .with_context(|| format!("Failed to bind {addr}"))?;
@@ -991,7 +1044,7 @@ pub async fn run_http_server(
     let bound_addr = listener
         .local_addr()
         .context("Failed to read Runtime API listener address")?;
-    println!("Runtime API listening on http://{bound_addr}");
+    println!("Runtime API listening on {scheme}://{bound_addr}");
     for line in runtime_auth_status_lines(&resolved_auth) {
         println!("{line}");
     }
@@ -1037,12 +1090,18 @@ pub async fn run_http_server(
             auth = auth_enabled,
         );
     }
-    let serve_result = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await
-    .map_err(|e| anyhow!("Runtime API server error: {e}"));
+    let service = app.into_make_service_with_connect_info::<SocketAddr>();
+    let serve_result = match tls_config {
+        // `axum_server` wants to own the socket, so hand it the one already
+        // bound — that keeps `bound_addr` (and port 0 in tests) truthful.
+        Some(tls_config) => axum_server::from_tcp_rustls(listener.into_std()?, tls_config)?
+            .serve(service)
+            .await
+            .map_err(|e| anyhow!("Runtime API server error: {e}")),
+        None => axum::serve(listener, service)
+            .await
+            .map_err(|e| anyhow!("Runtime API server error: {e}")),
+    };
     scheduler_cancel.cancel();
     scheduler_handle.abort();
     serve_result
@@ -1066,10 +1125,12 @@ fn fallback_sessions_dir() -> PathBuf {
 }
 
 pub fn build_router(state: RuntimeApiState) -> Router {
-    let acp_routes = state
-        .acp_factory
-        .as_ref()
-        .map(|factory| factory.as_ref().clone().into_router(ACP_TRANSPORT_PATH));
+    let acp_routes = state.acp_factory.as_ref().map(|factory| {
+        factory
+            .as_ref()
+            .clone()
+            .into_router(ACP_TRANSPORT_PATH, &state.acp_allowed_origins)
+    });
     let api_routes = Router::new()
         .route(
             "/v1/sessions",
@@ -1289,12 +1350,20 @@ async fn require_acp_access(
         .as_deref()
         .is_none_or(|expected| auth::request_has_header_runtime_token(&req, expected));
     let authorized = auth::runtime_request_is_authorized(&req, &state);
+    // Only the WebSocket upgrade may carry the token in the URL, and only as a
+    // cookie-grade credential: the origin allow-list is what stops a page.
+    let has_query_credential = auth::is_websocket_upgrade(&req)
+        && state
+            .runtime_token
+            .as_deref()
+            .is_some_and(|expected| auth::request_has_query_runtime_token(&req, expected));
     let origin = acp_policy::origin_of(req.headers()).map(str::to_string);
 
     match acp_policy::decide(
         origin.as_deref(),
         has_header_credential,
         authorized,
+        has_query_credential,
         &state.acp_allowed_origins,
     ) {
         Ok(()) => next.run(req).await,
@@ -1306,7 +1375,8 @@ async fn require_acp_access(
         Err(acp_policy::AcpDenial::ForbiddenOrigin) => (
             StatusCode::FORBIDDEN,
             "ACP refused this origin. Browser clients must connect from an allowed origin \
-             (--acp-allow-origin); other clients must send Authorization: Bearer <token>.",
+             (--acp-allow-origin) and may pass ?token=<token> on the WebSocket upgrade; \
+             other clients must send Authorization: Bearer <token>.",
         )
             .into_response(),
     }

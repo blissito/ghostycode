@@ -1288,6 +1288,16 @@ struct ServeArgs {
     /// Disable runtime API auth when no token is configured. Only use on a trusted loopback.
     #[arg(long = "insecure")]
     insecure_no_auth: bool,
+    /// PEM certificate chain to serve HTTPS with. Requires --tls-key.
+    ///
+    /// Leave both unset behind a reverse proxy or sidecar that already
+    /// terminates TLS: speaking TLS to a hop that expects plain HTTP is how
+    /// health probes and sidecars break.
+    #[arg(long = "tls-cert", value_name = "PEM", requires = "tls_key")]
+    tls_cert: Option<PathBuf>,
+    /// PEM private key matching --tls-cert.
+    #[arg(long = "tls-key", value_name = "PEM", requires = "tls_cert")]
+    tls_key: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2558,6 +2568,10 @@ async fn run_async_main_dispatch(
                             cors_origins,
                             auth_token: args.auth_token,
                             insecure_no_auth: args.insecure_no_auth,
+                            tls: runtime_api::TlsFiles::from_args(
+                                args.tls_cert.clone(),
+                                args.tls_key.clone(),
+                            ),
                             mobile: args.mobile,
                             web: args.web,
                             show_qr: args.qr,
@@ -2602,6 +2616,10 @@ async fn run_async_main_dispatch(
                             cors_origins,
                             auth_token: args.auth_token,
                             insecure_no_auth: args.insecure_no_auth,
+                            tls: runtime_api::TlsFiles::from_args(
+                                args.tls_cert.clone(),
+                                args.tls_key.clone(),
+                            ),
                             mobile: false,
                             web: false,
                             show_qr: false,

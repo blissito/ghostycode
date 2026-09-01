@@ -1181,21 +1181,26 @@ impl ToolRegistryBuilder {
     /// MCP tools are marked `defer_loading` by default (except discovery
     /// helpers) to keep the model-visible catalog compact.
     #[must_use]
+    /// Register one adapter per MCP tool. `snapshot` is the catalog the caller
+    /// already read from the pool — `pool.all_tools()`, cloned — and the pool
+    /// is kept so each adapter resolves the live connection at execution time.
+    ///
+    /// The snapshot is a parameter rather than something read here because
+    /// this used to `try_lock()` the pool and, whenever that lock was held,
+    /// register **nothing at all** and report success. A registry silently
+    /// missing every MCP tool is indistinguishable from a server that has
+    /// none. Locking is async work and belongs to the caller.
     pub fn with_mcp_tools(
         mut self,
         mcp_pool: std::sync::Arc<tokio::sync::Mutex<crate::mcp::McpPool>>,
+        snapshot: Vec<(String, crate::mcp::McpTool)>,
     ) -> Self {
-        // Snapshot the current tool list from the pool (non-blocking).
-        // The adapter lazily resolves at execution time via the pool.
-        if let Ok(pool) = mcp_pool.try_lock() {
-            for (name, tool) in pool.all_tools() {
-                let adapter = Arc::new(McpToolAdapter {
-                    name: name.clone(),
-                    tool: tool.clone(),
-                    pool: mcp_pool.clone(),
-                });
-                self.tools.push(adapter);
-            }
+        for (name, tool) in snapshot {
+            self.tools.push(Arc::new(McpToolAdapter {
+                name,
+                tool,
+                pool: mcp_pool.clone(),
+            }));
         }
         self
     }
