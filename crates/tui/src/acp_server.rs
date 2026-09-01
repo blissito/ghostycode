@@ -1409,13 +1409,6 @@ struct AcpServer {
     /// session (by insertion order, not arbitrary HashMap iteration) when
     /// the session cap is reached.
     insertion_order: VecDeque<String>,
-    /// Whether the connected client accepts `terminal` tool calls, from
-    /// `initialize` params `clientCapabilities.terminal`. Defaults to `false`
-    /// (restrictive): clients that omit the field get no shell access. Older
-    /// ACP clients predating the `terminal` capability get a working agent
-    /// without shell, which is safe; the client can re-declare support when it
-    /// reconnects.
-    client_supports_terminal: bool,
     response_id_policy: JsonRpcResponseIdPolicy,
 }
 
@@ -1456,7 +1449,6 @@ impl AcpServer {
             default_cwd,
             sessions: HashMap::new(),
             insertion_order: VecDeque::new(),
-            client_supports_terminal: false,
             response_id_policy: JsonRpcResponseIdPolicy::Preserve,
         }
     }
@@ -1470,12 +1462,6 @@ impl AcpServer {
     ) -> std::result::Result<AcpDispatch, AcpError> {
         match method {
             "initialize" => {
-                if let Some(terminal) = params
-                    .pointer("/clientCapabilities/terminal")
-                    .and_then(Value::as_bool)
-                {
-                    self.client_supports_terminal = terminal;
-                }
                 self.response_id_policy = JsonRpcResponseIdPolicy::from_initialize_params(&params);
                 Ok(AcpDispatch::Response(initialize_result(
                     params.get("protocolVersion").and_then(Value::as_u64),
@@ -1501,11 +1487,7 @@ impl AcpServer {
             .map(PathBuf::from)
             .unwrap_or_else(|| self.default_cwd.clone());
         let session_id = format!("ghosty-{}", uuid::Uuid::new_v4());
-        let tool_registry = Arc::new(build_acp_tool_registry(
-            &self.config,
-            &cwd,
-            self.client_supports_terminal,
-        ));
+        let tool_registry = Arc::new(build_acp_tool_registry(&self.config, &cwd));
 
         // Evict oldest session when at capacity.
         if self.sessions.len() >= MAX_ACP_SESSIONS {
@@ -1865,20 +1847,26 @@ fn build_acp_system_prompt(
 /// `cwd`. Reuses the shared registry builders used by headless `exec` and the
 /// MCP adapter — no ACP-specific tool implementations.
 ///
-/// `Bash` is registered only when all three independent gates allow it: the
-/// client declares `clientCapabilities.terminal`, headless shell access is
-/// explicitly enabled in config, and the stable shell feature is enabled.
-/// Omitting any gate fails closed. The context also inherits the current
-/// mode-derived/configured sandbox boundary.
+/// `Bash` is registered only when all three independent gates allow it:
+/// headless shell access is explicitly enabled in config, the stable shell
+/// feature is enabled, and any requested sandbox boundary was actually built.
+/// Omitting any gate fails closed. These are the same gates headless `exec`
+/// and the MCP adapter use, so ACP does not invent its own shell policy.
+///
+/// Deliberately *not* a gate: `clientCapabilities.terminal`. In ACP that
+/// capability means "I, the client, lend you a terminal" — it describes what
+/// the client offers, not whether a shell exists. `Bash` here is the agent's
+/// own shell, run in this process against its own sandbox, so a client that
+/// lends nothing is irrelevant to it. Reading the capability as permission
+/// left the remote case — an agent alone in a microVM, whose client has no
+/// terminal to lend and wants the agent to use its own — with a whole machine
+/// and no way to run `ls`. The client-side `terminal/*` methods stay
+/// unexposed either way.
 /// `ToolContext::new` leaves `auto_approve` at its default (`false`), so the
 /// shell's own last-line safety check remains active after ACP's shared
 /// prepared-call, typed-policy, auto-review, repository-law, and explicit
 /// `session/request_permission` gates have admitted the call.
-fn build_acp_tool_registry(
-    config: &Config,
-    workspace: &std::path::Path,
-    client_supports_terminal: bool,
-) -> ToolRegistry {
+fn build_acp_tool_registry(config: &Config, workspace: &std::path::Path) -> ToolRegistry {
     let features = config.features();
     let external_sandbox_requested = config.sandbox_backend.as_deref().is_some_and(|kind| {
         let kind = kind.trim();
@@ -1895,8 +1883,7 @@ fn build_acp_tool_registry(
     // it cannot be constructed, omit Bash instead of silently running the
     // command on the local host.
     let sandbox_backend_ready = !external_sandbox_requested || sandbox_backend.is_some();
-    let allow_shell = client_supports_terminal
-        && config.allow_shell()
+    let allow_shell = config.allow_shell()
         && features.enabled(crate::features::Feature::ShellTool)
         && sandbox_backend_ready;
     let shell_policy = if allow_shell {
@@ -3136,8 +3123,6 @@ mod tests {
             "test-model".to_string(),
             PathBuf::from("/tmp"),
         );
-        // Both config opt-in and the client terminal capability are present.
-        server.client_supports_terminal = true;
         let s1 = server.new_session(json!({ "cwd": "/tmp" })).unwrap();
         let s2 = server.new_session(json!({ "cwd": "/tmp" })).unwrap();
         let id1 = s1["sessionId"].as_str().unwrap();
@@ -3164,22 +3149,32 @@ mod tests {
         assert!(reg1.context().runtime.hook_executor.is_some());
     }
 
+    /// The regression: a client that lends no terminal must still get an
+    /// agent that can use its own shell. `clientCapabilities.terminal` is an
+    /// offer from the client, not permission for the agent.
     #[test]
-    fn shell_tool_omitted_when_client_declares_no_terminal_support() {
+    fn shell_tool_survives_a_client_that_declares_no_terminal_support() {
         let workspace = std::env::temp_dir();
         let config = Config {
             allow_shell: Some(true),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&config, &workspace, false);
-        assert!(!registry.contains("Bash"));
+        let registry = build_acp_tool_registry(&config, &workspace);
+        assert!(registry.contains("Bash"));
+        assert!(
+            registry
+                .names()
+                .into_iter()
+                .all(|name| !name.starts_with("terminal/")),
+            "the client-side terminal methods stay unexposed"
+        );
         assert!(registry.contains("File"));
     }
 
     #[test]
     fn shell_tool_omitted_without_headless_config_opt_in() {
         let workspace = std::env::temp_dir();
-        let registry = build_acp_tool_registry(&Config::default(), &workspace, true);
+        let registry = build_acp_tool_registry(&Config::default(), &workspace);
         assert!(!registry.contains("Bash"));
         assert_eq!(registry.context().shell_policy, ShellPolicy::None);
         assert!(!registry.context().auto_approve);
@@ -3194,7 +3189,7 @@ mod tests {
             sandbox_url: Some("http://127.0.0.1:8080".to_string()),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&configured, &workspace, true);
+        let registry = build_acp_tool_registry(&configured, &workspace);
         assert!(registry.contains("bash"));
         assert!(registry.context().sandbox_backend.is_some());
 
@@ -3203,7 +3198,7 @@ mod tests {
             sandbox_backend: Some("unsupported-backend".to_string()),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&unsupported, &workspace, true);
+        let registry = build_acp_tool_registry(&unsupported, &workspace);
         assert!(!registry.contains("bash"));
         assert!(!registry.contains("Bash"));
         assert!(registry.context().sandbox_backend.is_none());
@@ -3221,7 +3216,7 @@ mod tests {
             }),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&config, &std::env::temp_dir(), true);
+        let registry = build_acp_tool_registry(&config, &std::env::temp_dir());
         assert!(!registry.contains("bash"));
         assert!(!registry.contains("Bash"));
         assert!(
@@ -3320,7 +3315,7 @@ mod tests {
             allow_shell: Some(true),
             ..Config::default()
         };
-        let registry = build_acp_tool_registry(&config, dir.path(), true);
+        let registry = build_acp_tool_registry(&config, dir.path());
         (dir, registry)
     }
 
@@ -3373,7 +3368,7 @@ mod tests {
             json!({"decision": "deny", "reason": "release gate"}),
             true,
         );
-        let registry = build_acp_tool_registry(&config, dir.path(), false);
+        let registry = build_acp_tool_registry(&config, dir.path());
         let error = prepare_acp_tool_with_hooks(
             &config,
             "test-model",
@@ -3404,7 +3399,7 @@ mod tests {
             }),
             true,
         );
-        let registry = build_acp_tool_registry(&config, dir.path(), false);
+        let registry = build_acp_tool_registry(&config, dir.path());
         let raw = pending_call("File", json!({"action": "read", "path": "safe.txt"}));
         let (_, raw_admission) = prepare_acp_tool_admission(&config, &registry, &raw).unwrap();
         assert_eq!(raw_admission, AcpToolAdmission::Auto);
