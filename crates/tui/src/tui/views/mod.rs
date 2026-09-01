@@ -5876,6 +5876,13 @@ consent_version = 1
         .expect("config fixture");
         let ambient_path = temp.path().join("new-ambient-codex-auth.json");
         let _path = crate::test_support::EnvVarGuard::set("OPENAI_CODEX_AUTH_FILE", &ambient_path);
+        // This row is rendered through localized messages, and
+        // `resolve_locale_with_env` falls back to es-419 when LC_ALL,
+        // LC_MESSAGES and LANG are all absent. The Linux and macOS runners set
+        // LANG, the Windows one does not, so the English literals below held on
+        // two runners and failed on the third. Pin the environment instead of
+        // inheriting the machine's.
+        let _lc_all = crate::test_support::EnvVarGuard::set("LC_ALL", "en_US.UTF-8");
         let mut app = create_test_app();
         app.config_path = Some(config_path);
         crate::external_credentials::reset_side_effect_trap();
@@ -7208,6 +7215,13 @@ context_window = 262144
         );
     }
 
+    /// The hint must name the *model* picker, not the provider one.
+    ///
+    /// Asserted through `tr` rather than against the English literal: the
+    /// action suffix is localized, so pinning "Enter opens model picker" only
+    /// held where the ambient locale resolved to English. It passed on the
+    /// Linux and macOS runners and failed on Windows, which resolves to
+    /// Spanish — a green suite that depended on the machine it ran on.
     #[test]
     fn model_row_hint_names_the_model_picker() {
         let app = create_test_app();
@@ -7215,8 +7229,10 @@ context_window = 262144
         view.focus_key("model");
 
         let hint = view.selected_row_hint().expect("model row hint");
-        assert!(hint.contains("Enter opens model picker"), "{hint}");
-        assert!(!hint.contains("Enter opens provider picker"), "{hint}");
+        let opens_model = tr(view.locale, MessageId::ConfigActionOpenModel);
+        let opens_provider = tr(view.locale, MessageId::ConfigActionOpenProvider);
+        assert!(hint.contains(opens_model.as_ref()), "{hint}");
+        assert!(!hint.contains(opens_provider.as_ref()), "{hint}");
     }
 
     #[test]

@@ -153,6 +153,11 @@ def provider_kind_ids(config_rs: str) -> dict[str, str]:
         ("Openmodel", "openmodel"),
         ("MinimaxAnthropic", "minimax-anthropic"),
         ("OpencodeZen", "opencode-zen"),
+        # EasyBits is a first-class provider since 0.0.15, not a DeepSeek
+        # alias, and it carries reseller-specific auth, so it has a
+        # hand-written `impl Provider` too. Omitting it here made the check
+        # read `easybits` as an undeclared `[providers.easybits]` table.
+        ("Easybits", "easybits"),
         # Alibaba Model Studio ships four plan/dialect identities, each with a
         # hand-written impl Provider for the same reason as the rows above:
         # the wire policy is not fixed, so provider!() cannot express them.
