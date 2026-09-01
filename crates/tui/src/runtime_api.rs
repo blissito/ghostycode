@@ -969,6 +969,21 @@ pub async fn run_http_server(
     let addr: SocketAddr = format!("{}:{}", options.host, options.port)
         .parse()
         .with_context(|| format!("Invalid bind address '{}:{}'", options.host, options.port))?;
+    // A listener reachable from outside plus a token nobody was given is not a
+    // degraded server, it is a useless one: the generated token is never
+    // printed, so every remote client gets 401 with no way to fix it from the
+    // client side. Refuse before binding, so nothing ever announces itself on
+    // a port it is about to abandon.
+    if resolved_auth.generated && !addr.ip().is_loopback() {
+        bail!(
+            "{}\n  {}\n  {}",
+            format_args!(
+                "Refusing to serve on {addr}: that is reachable from outside this machine, but no runtime token was given."
+            ),
+            "The token generated for this process is never printed, so every remote client would get 401.",
+            "Set GHOSTY_RUNTIME_TOKEN or pass --auth-token, or pass --insecure to accept an unauthenticated listener."
+        );
+    }
     let listener = TcpListener::bind(addr)
         .await
         .with_context(|| format!("Failed to bind {addr}"))?;

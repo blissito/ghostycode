@@ -1256,11 +1256,17 @@ struct ServeArgs {
     /// Browser origin allowed to open /acp (repeatable). The server's own
     /// origin is always allowed. Non-browser clients authenticate with
     /// `Authorization: Bearer` instead and need no entry here.
-    #[arg(long = "acp-allow-origin", value_name = "URL", requires = "acp_http")]
+    #[arg(long = "acp-allow-origin", value_name = "URL")]
     acp_allow_origin: Vec<String>,
-    /// Bind host for HTTP server (default localhost; --mobile defaults to 0.0.0.0)
+    /// Bind host for HTTP server (default localhost; --mobile and a detected
+    /// container or microVM default to 0.0.0.0)
     #[arg(long)]
     host: Option<String>,
+    /// Listen on every interface (0.0.0.0) so a client outside this machine can
+    /// reach the server. Implied inside a container or microVM, where loopback
+    /// is unreachable from the other side of the proxy.
+    #[arg(long, conflicts_with = "host")]
+    open: bool,
     /// Bind port for HTTP server
     #[arg(long, default_value_t = 7878)]
     port: u16,
@@ -1287,37 +1293,159 @@ struct ServeArgs {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ServeBindHost {
     host: String,
-    mobile_rebound_to_lan: bool,
+    /// Why the bind left loopback, when it did. The operator sees this before
+    /// the listener opens, because it is a change of attack surface.
+    opened_because: Option<String>,
 }
 
-fn resolve_serve_bind_host(mobile: bool, host: Option<String>) -> ServeBindHost {
-    match (mobile, host) {
-        (true, None) => ServeBindHost {
-            host: "0.0.0.0".to_string(),
-            mobile_rebound_to_lan: true,
-        },
-        (_, Some(host)) => ServeBindHost {
+impl ServeBindHost {
+    fn notice(&self) -> Option<String> {
+        self.opened_because.as_ref().map(|reason| {
+            format!(
+                "WARNING: binding 0.0.0.0, reachable from outside this machine ({reason}). Use --host 127.0.0.1 to stay loopback-only."
+            )
+        })
+    }
+}
+
+/// The bind is loopback unless the operator says otherwise, and nothing this
+/// process can sniff about its own machine counts as saying otherwise.
+///
+/// An earlier version widened the bind on its own when it found container or
+/// microVM markers, reasoning that such a box already sits behind the host's
+/// network. That reasoning does not hold: `docker run --network host`, a
+/// bridged LXC or systemd-nspawn dev box, and a CI pod all carry the same
+/// markers while being directly reachable — the first two on the operator's
+/// own LAN. Detecting "I am in a container" is not the same as detecting "my
+/// exposure is bounded", and only the second would justify the widening.
+///
+/// So the ways out of loopback are all explicit: `--host`, then `--open`, then
+/// `--mobile`, whose whole purpose is a phone on the LAN. Container evidence
+/// still gets surfaced, as a hint — see [`sandbox_hint`] — because loopback
+/// inside a box fails in a way that is genuinely hard to diagnose. It just
+/// does not move the bind.
+fn resolve_serve_bind_host(mobile: bool, host: Option<String>, open: bool) -> ServeBindHost {
+    if let Some(host) = host {
+        return ServeBindHost {
             host,
-            mobile_rebound_to_lan: false,
+            opened_because: None,
+        };
+    }
+    let reason = if open {
+        Some("--open".to_string())
+    } else if mobile {
+        Some("--mobile needs LAN devices to reach the control page".to_string())
+    } else {
+        None
+    };
+    match reason {
+        Some(reason) => ServeBindHost {
+            host: "0.0.0.0".to_string(),
+            opened_because: Some(reason),
         },
-        (false, None) => ServeBindHost {
+        None => ServeBindHost {
             host: "127.0.0.1".to_string(),
-            mobile_rebound_to_lan: false,
+            opened_because: None,
         },
     }
+}
+
+/// Evidence that this process runs inside a container or a microVM, as a
+/// human-readable phrase. This is diagnostic only: it never moves the bind,
+/// it only explains why a loopback bind may be unreachable from outside the
+/// box. `None` means "looks like a normal machine".
+///
+/// Deliberately not a signal: `GHOSTY_SANDBOX`. That name is already taken —
+/// `sandbox::spawn` exports it to every child of the *command execution*
+/// sandbox with values like `seatbelt`, `bwrap` or `windows:{kind}` — so
+/// reading it here would report a plain MacBook as a container.
+fn detect_sandbox_evidence(
+    env: impl Fn(&str) -> Option<String>,
+    exists: impl Fn(&str) -> bool,
+    read: impl Fn(&str) -> Option<String>,
+) -> Option<String> {
+    if env("container").is_some_and(|value| !value.trim().is_empty()) {
+        return Some("the `container` environment variable is set".to_string());
+    }
+    for marker in ["/.dockerenv", "/run/.containerenv"] {
+        if exists(marker) {
+            return Some(format!("{marker} exists"));
+        }
+    }
+    if let Some(cgroup) = read("/proc/1/cgroup") {
+        let cgroup = cgroup.to_ascii_lowercase();
+        for needle in ["docker", "containerd", "kubepods", "lxc", "podman"] {
+            if cgroup.contains(needle) {
+                return Some(format!("/proc/1/cgroup names {needle}"));
+            }
+        }
+    }
+    if let Some(product) = read("/sys/devices/virtual/dmi/id/product_name") {
+        let product = product.trim().to_ascii_lowercase();
+        for needle in ["firecracker", "cloud hypervisor", "microvm"] {
+            if product.contains(needle) {
+                return Some(format!("this is a {needle} guest"));
+            }
+        }
+    }
+    None
+}
+
+/// The hint that replaces the old automatic widening: it fires only when the
+/// bind stayed on loopback *and* this looks like a box, which is exactly the
+/// combination that produces an unexplained 502 on the client side.
+fn sandbox_hint(bind: &ServeBindHost, evidence: Option<String>) -> Option<String> {
+    if bind.opened_because.is_some() {
+        return None;
+    }
+    evidence.map(|evidence| {
+        format!(
+            "NOTE: {evidence}, so this looks like a container or microVM.\n  A client outside this box cannot reach the guest's loopback.\n  Use --open (or --host 0.0.0.0) if that is what you want."
+        )
+    })
+}
+
+fn sandbox_evidence() -> Option<String> {
+    detect_sandbox_evidence(
+        |name| std::env::var(name).ok(),
+        |path| std::path::Path::new(path).exists(),
+        |path| std::fs::read_to_string(path).ok(),
+    )
+}
+
+/// What `ghosty serve` ends up speaking, once the flags — or their absence —
+/// are resolved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ServeMode {
+    /// MCP over stdio (`--mcp`).
+    Mcp,
+    /// The runtime HTTP/SSE API (`--http`, `--mobile`, `--web`).
+    Http,
+    /// ACP over stdio, for an editor that spawns Ghosty as a child (`--acp`).
+    AcpStdio,
+    /// ACP over WebSocket + Streamable HTTP at `/acp`, next to the runtime API
+    /// and its unauthenticated `GET /health`. This is the default.
+    AcpNetwork,
 }
 
 /// `--acp-http` is a transport for `--acp`, not a fourth mode: it says how the
 /// ACP protocol reaches clients, while the mode says which protocol is spoken.
 /// So `--acp --acp-http` is one selection, and it still excludes `--mcp`.
-fn validate_serve_mode_selection(
+///
+/// With no mode flag at all the answer is [`ServeMode::AcpNetwork`]: an agent
+/// in a box that a remote ACP client dials is the case this command is used
+/// for, and it needs the network transport and the health route together.
+/// Reaching it used to take four flags, each of which failed differently and
+/// silently when forgotten.
+fn resolve_serve_mode(
     mcp: bool,
     http: bool,
     mobile: bool,
     web: bool,
     acp: bool,
     acp_http: bool,
-) -> Result<bool> {
+    acp_allow_origin: bool,
+) -> Result<ServeMode> {
     if http && mobile {
         bail!("--http and --mobile are mutually exclusive; choose one");
     }
@@ -1335,10 +1463,27 @@ fn validate_serve_mode_selection(
         .into_iter()
         .filter(|selected| *selected)
         .count();
-    if selected_modes != 1 {
-        bail!("Choose exactly one server mode: --mcp, --http/--mobile/--web, or --acp");
+    if selected_modes > 1 {
+        bail!("Choose at most one server mode: --mcp, --http/--mobile/--web, or --acp");
     }
-    Ok(http_selected)
+    let mode = if mcp {
+        ServeMode::Mcp
+    } else if http_selected {
+        ServeMode::Http
+    } else if acp && !acp_http {
+        ServeMode::AcpStdio
+    } else {
+        ServeMode::AcpNetwork
+    };
+    // An origin allow-list only means something on the network transport, and
+    // silently ignoring it would leave the operator believing a browser client
+    // was allowed in.
+    if acp_allow_origin && mode != ServeMode::AcpNetwork {
+        bail!(
+            "--acp-allow-origin only applies to ACP over the network, which is what `ghosty serve` serves by default"
+        );
+    }
+    Ok(mode)
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -2368,17 +2513,18 @@ async fn run_async_main_dispatch(
                 let workspace = cli.workspace.clone().unwrap_or_else(|| {
                     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
                 });
-                let http_selected = validate_serve_mode_selection(
+                let serve_mode = resolve_serve_mode(
                     args.mcp,
                     args.http,
                     args.mobile,
                     args.web,
                     args.acp,
                     args.acp_http,
+                    !args.acp_allow_origin.is_empty(),
                 )?;
-                if args.mcp {
+                if serve_mode == ServeMode::Mcp {
                     tokio::task::block_in_place(|| mcp_server::run_mcp_server(workspace))
-                } else if http_selected {
+                } else if serve_mode == ServeMode::Http {
                     let (mut config, config_profile) =
                         load_config_from_cli_with_effective_profile(&cli)?;
                     let explicit_route_override =
@@ -2391,14 +2537,15 @@ async fn run_async_main_dispatch(
                         false,
                     )?;
                     let cors_origins = resolve_cors_origins(&config, &args.cors_origin);
-                    let bind_host = resolve_serve_bind_host(args.mobile, args.host);
+                    let bind_host = resolve_serve_bind_host(args.mobile, args.host, args.open);
                     if args.web && bind_host.host != "127.0.0.1" {
                         bail!("Ghosty web is loopback-only and must bind to 127.0.0.1");
                     }
-                    if bind_host.mobile_rebound_to_lan {
-                        println!(
-                            "WARNING: --mobile is binding to 0.0.0.0 so LAN devices can reach the mobile control page. Use --host 127.0.0.1 to keep mobile loopback-only."
-                        );
+                    if let Some(notice) = bind_host.notice() {
+                        println!("{notice}");
+                    }
+                    if let Some(hint) = sandbox_hint(&bind_host, sandbox_evidence()) {
+                        println!("{hint}");
                     }
                     runtime_api::run_http_server(
                         config,
@@ -2420,17 +2567,24 @@ async fn run_async_main_dispatch(
                         },
                     )
                     .await
-                } else if args.acp {
+                } else {
                     let (config, config_profile) =
                         load_config_from_cli_with_effective_profile(&cli)?;
                     let model = config.default_model();
-                    if !args.acp_http {
+                    if serve_mode == ServeMode::AcpStdio {
                         return acp_server::run_acp_server(config, model, workspace).await;
                     }
                     // ACP over the network. The runtime API owns the listener,
-                    // the token check and the origin policy; `/v1/*` stays
-                    // unmounted unless the operator also asked for --http.
-                    let bind_host = resolve_serve_bind_host(false, args.host);
+                    // the token check and the origin policy, and it mounts
+                    // `/v1/*` and `GET /health` on the same port — the health
+                    // route is what clients probe before they connect.
+                    let bind_host = resolve_serve_bind_host(false, args.host, args.open);
+                    if let Some(notice) = bind_host.notice() {
+                        println!("{notice}");
+                    }
+                    if let Some(hint) = sandbox_hint(&bind_host, sandbox_evidence()) {
+                        println!("{hint}");
+                    }
                     let cors_origins = resolve_cors_origins(&config, &args.cors_origin);
                     let acp = runtime_api::AcpTransportOptions {
                         allow_origins: args.acp_allow_origin.clone(),
@@ -2457,8 +2611,6 @@ async fn run_async_main_dispatch(
                         },
                     )
                     .await
-                } else {
-                    unreachable!("server mode count checked above")
                 }
             }
             Commands::Resume { session_id, last } => {
@@ -11684,75 +11836,201 @@ pub(crate) use exec_agent::*;
 mod serve_bind_host_tests {
     use super::*;
 
+    fn no_env(_: &str) -> Option<String> {
+        None
+    }
+    fn no_file(_: &str) -> bool {
+        false
+    }
+    fn no_read(_: &str) -> Option<String> {
+        None
+    }
+
     #[test]
     fn http_defaults_to_loopback() {
         assert_eq!(
-            resolve_serve_bind_host(false, None),
+            resolve_serve_bind_host(false, None, false),
             ServeBindHost {
                 host: "127.0.0.1".to_string(),
-                mobile_rebound_to_lan: false,
+                opened_because: None,
             }
         );
     }
 
     #[test]
     fn mobile_default_rebinds_to_lan_with_warning_flag() {
-        assert_eq!(
-            resolve_serve_bind_host(true, None),
-            ServeBindHost {
-                host: "0.0.0.0".to_string(),
-                mobile_rebound_to_lan: true,
-            }
-        );
+        let bind = resolve_serve_bind_host(true, None, false);
+        assert_eq!(bind.host, "0.0.0.0");
+        assert!(bind.notice().is_some_and(|line| line.contains("--mobile")));
     }
 
     #[test]
     fn mobile_respects_explicit_loopback_host() {
         assert_eq!(
-            resolve_serve_bind_host(true, Some("127.0.0.1".to_string())),
+            resolve_serve_bind_host(true, Some("127.0.0.1".to_string()), false),
             ServeBindHost {
                 host: "127.0.0.1".to_string(),
-                mobile_rebound_to_lan: false,
+                opened_because: None,
             }
+        );
+    }
+
+    /// `--open` is the one-flag way to say "listen for clients outside this
+    /// machine" on a host where nothing marks a sandbox.
+    #[test]
+    fn open_widens_the_bind_and_says_so() {
+        let bind = resolve_serve_bind_host(false, None, true);
+        assert_eq!(bind.host, "0.0.0.0");
+        assert!(bind.notice().is_some_and(|line| line.contains("--open")));
+    }
+
+    /// The regression this module exists for: container evidence is a hint,
+    /// never a reason to open the bind. `docker run --network host` and a
+    /// bridged LXC box carry these same markers while sitting on the
+    /// operator's LAN, so widening on them would publish the listener.
+    #[test]
+    fn sandbox_evidence_never_widens_the_bind() {
+        let bind = resolve_serve_bind_host(false, None, false);
+        assert_eq!(bind.host, "127.0.0.1");
+        assert_eq!(bind.notice(), None);
+
+        let hint = sandbox_hint(&bind, Some("/.dockerenv exists".to_string()));
+        assert!(hint.is_some_and(|line| line.contains("/.dockerenv") && line.contains("--open")));
+    }
+
+    /// Once the operator has opened the bind, the hint has nothing to add.
+    #[test]
+    fn no_sandbox_hint_once_the_bind_is_open() {
+        let bind = resolve_serve_bind_host(false, None, true);
+        assert_eq!(bind.host, "0.0.0.0");
+        assert_eq!(
+            sandbox_hint(&bind, Some("/.dockerenv exists".to_string())),
+            None
+        );
+    }
+
+    /// `sandbox::spawn` exports `GHOSTY_SANDBOX=seatbelt` to every child of
+    /// the command-execution sandbox. Reading it as container evidence made a
+    /// plain MacBook look like a box, which is how the old default reached
+    /// 0.0.0.0 on a laptop.
+    #[test]
+    fn the_exec_sandbox_env_var_is_not_container_evidence() {
+        for value in ["seatbelt", "bwrap", "windows:appcontainer"] {
+            assert_eq!(
+                detect_sandbox_evidence(
+                    |name| (name == "GHOSTY_SANDBOX").then(|| value.to_string()),
+                    no_file,
+                    no_read,
+                ),
+                None,
+                "GHOSTY_SANDBOX={value} must not read as a container"
+            );
+        }
+    }
+
+    #[test]
+    fn a_plain_machine_shows_no_sandbox_evidence() {
+        assert_eq!(detect_sandbox_evidence(no_env, no_file, no_read), None);
+    }
+
+    #[test]
+    fn container_and_microvm_markers_are_evidence() {
+        assert!(detect_sandbox_evidence(no_env, |path| path == "/.dockerenv", no_read).is_some());
+        assert!(
+            detect_sandbox_evidence(
+                |name| (name == "container").then(|| "podman".to_string()),
+                no_file,
+                no_read,
+            )
+            .is_some()
+        );
+        assert!(
+            detect_sandbox_evidence(no_env, no_file, |path| (path == "/proc/1/cgroup")
+                .then(|| "0::/kubepods/pod123".to_string()))
+            .is_some()
+        );
+        assert!(
+            detect_sandbox_evidence(no_env, |path| path == "/run/.containerenv", no_read).is_some()
+        );
+        assert!(
+            detect_sandbox_evidence(no_env, no_file, |path| (path
+                == "/sys/devices/virtual/dmi/id/product_name")
+                .then(|| "Firecracker Virtual Machine\n".to_string()))
+            .is_some()
+        );
+        assert!(
+            detect_sandbox_evidence(no_env, no_file, |path| (path
+                == "/sys/devices/virtual/dmi/id/product_name")
+                .then(|| "Cloud Hypervisor\n".to_string()))
+            .is_some()
         );
     }
 
     #[test]
     fn http_and_mobile_are_mutually_exclusive() {
-        let err =
-            validate_serve_mode_selection(false, true, true, false, false, false).unwrap_err();
+        let err = resolve_serve_mode(false, true, true, false, false, false, false).unwrap_err();
         assert!(
             err.to_string()
                 .contains("--http and --mobile are mutually exclusive")
         );
     }
 
+    /// No flags is the box case: ACP on the network, beside `GET /health`.
+    #[test]
+    fn bare_serve_defaults_to_acp_over_the_network() {
+        assert_eq!(
+            resolve_serve_mode(false, false, false, false, false, false, false).unwrap(),
+            ServeMode::AcpNetwork
+        );
+    }
+
     /// `--acp-http` picks the transport for `--acp`; it is not a fourth mode
-    /// and must not trip the "exactly one mode" rule.
+    /// and must not trip the "at most one mode" rule.
     #[test]
     fn acp_http_is_a_transport_for_acp_not_a_mode() {
-        assert!(!validate_serve_mode_selection(false, false, false, false, true, true).unwrap());
-        assert!(!validate_serve_mode_selection(false, false, false, false, true, false).unwrap());
+        assert_eq!(
+            resolve_serve_mode(false, false, false, false, true, true, false).unwrap(),
+            ServeMode::AcpNetwork
+        );
+        assert_eq!(
+            resolve_serve_mode(false, false, false, false, true, false, false).unwrap(),
+            ServeMode::AcpStdio
+        );
 
-        let err =
-            validate_serve_mode_selection(false, false, false, false, false, true).unwrap_err();
+        let err = resolve_serve_mode(false, false, false, false, false, true, false).unwrap_err();
         assert!(err.to_string().contains("add --acp"));
 
-        let err = validate_serve_mode_selection(true, false, false, false, true, true).unwrap_err();
+        let err = resolve_serve_mode(true, false, false, false, true, true, false).unwrap_err();
         assert!(err.to_string().contains("mutually exclusive"));
+    }
+
+    /// The allow-list is meaningless without the network transport, so saying
+    /// it in a mode that cannot use it is an error, not a no-op.
+    #[test]
+    fn acp_allow_origin_needs_the_network_transport() {
+        assert_eq!(
+            resolve_serve_mode(false, false, false, false, false, false, true).unwrap(),
+            ServeMode::AcpNetwork
+        );
+        let err = resolve_serve_mode(false, false, false, false, true, false, true).unwrap_err();
+        assert!(err.to_string().contains("--acp-allow-origin"));
+        let err = resolve_serve_mode(false, true, false, false, false, false, true).unwrap_err();
+        assert!(err.to_string().contains("--acp-allow-origin"));
     }
 
     #[test]
     fn web_is_a_distinct_loopback_runtime_mode() {
-        assert!(validate_serve_mode_selection(false, false, false, true, false, false).unwrap());
-        let err =
-            validate_serve_mode_selection(false, true, false, true, false, false).unwrap_err();
+        assert_eq!(
+            resolve_serve_mode(false, false, false, true, false, false, false).unwrap(),
+            ServeMode::Http
+        );
+        let err = resolve_serve_mode(false, true, false, true, false, false, false).unwrap_err();
         assert!(err.to_string().contains("--web is mutually exclusive"));
         assert_eq!(
-            resolve_serve_bind_host(false, None),
+            resolve_serve_bind_host(false, None, false),
             ServeBindHost {
                 host: "127.0.0.1".to_string(),
-                mobile_rebound_to_lan: false,
+                opened_because: None,
             }
         );
     }
