@@ -248,12 +248,24 @@ Prompt requests are routed through the configured Ghosty client and current
 default model. Responses are emitted as `session/update` agent message chunks
 followed by a `session/prompt` response with `stopReason: "end_turn"`.
 
-The adapter is intentionally conservative: it does not yet expose shell tools,
-file-write tools, checkpoint replay, or session loading through ACP. Use
+Each session owns a tool registry built from the same builders as headless
+`exec` and the MCP adapter: file tools (read, write, edit, list), search, git,
+`apply_patch` when that feature is on, and `Bash` when `allow_shell` is enabled
+in config, the shell feature is on, and any requested sandbox boundary was
+actually built. Tool calls are reported as `tool_call` / `tool_call_update`
+updates and admitted through `session/request_permission`.
+
+The agent's shell is **not** gated on `clientCapabilities.terminal`. In ACP that
+capability means the client is lending the agent a terminal; `Bash` here is the
+agent's own shell in its own sandbox, so a client with nothing to lend — a
+browser, or anything talking to an agent alone in a microVM — still gets a
+working shell. The client-side `terminal/*` methods stay unexposed.
+
+Still not exposed through ACP: checkpoint replay and session loading. Use
 `ghosty serve --http` for the full local runtime API and `ghosty serve --mcp`
 when another client needs Ghosty's tools as MCP tools.
 
-### Network transport: `ghosty serve --acp --acp-http`
+### Network transport: `ghosty serve` (default)
 
 stdio requires the client to launch Ghosty as a child process, which a browser
 cannot do and a remote sandbox cannot offer. `--acp-http` serves the same
@@ -277,14 +289,44 @@ still apply. What it does change is concurrency: one process serves several
 connections at once, each with its own sessions.
 
 ```sh
-ghosty serve --acp --acp-http --port 7878
+GHOSTY_RUNTIME_TOKEN=... ghosty serve
 # then, from any ACP client:
 websocat -H 'Authorization: Bearer <token>' ws://127.0.0.1:7878/acp
 ```
 
+`ghosty serve` with no flags is this mode: ACP over the network at `/acp`, the
+runtime API at `/v1/*`, and the unauthenticated `GET /health` that clients
+health-check before connecting, all on one listener on port 7878.
+`--acp --acp-http` still selects it explicitly, and `--acp` alone still means
+stdio.
+
+**Bind host.** The default is `127.0.0.1`, always. Nothing Ghosty can detect
+about its own machine widens it: only `--host`, `--open`, and `--mobile` (whose
+purpose is a phone on the LAN) leave loopback, and the server prints why when
+it does.
+
+Inside a container or a microVM loopback is often the wrong answer — the client
+dials the guest's address through a proxy and gets a 502 with nothing in any
+log, because the server answers only on the guest's own loopback. Ghosty spots
+that case (`/.dockerenv`, `/run/.containerenv`, the `container` environment
+variable, a container name in `/proc/1/cgroup`, a Firecracker or Cloud
+Hypervisor DMI product name) and prints a hint pointing at `--open`. It does not
+act on it. The markers say "this is a container"; they do not say "this
+container's exposure is bounded", and the two come apart in ordinary setups —
+`docker run --network host`, a bridged LXC or systemd-nspawn dev box, a CI pod —
+where binding `0.0.0.0` publishes the listener on a real network.
+
+**Auth fails closed, and refuses to start.** With no `--auth-token` and no
+`GHOSTY_RUNTIME_TOKEN`, the server generates a token it never prints. On
+loopback that is fine. On a bind reachable from outside it would mean every
+remote client gets `401` forever, so the server exits with an error instead of
+listening. Give it a token you control, or pass `--insecure` to accept an
+unauthenticated listener deliberately. This applies to `--mobile` too: a mobile
+page on `0.0.0.0` with an unprintable token is a page the phone cannot sign in
+to.
+
 `--acp-allow-origin` adds a browser origin (repeatable); the server's own origin
-is always allowed. `--acp --acp-http` does not mount `/v1/*` — add `--http` if
-you want both.
+is always allowed.
 
 [acp-rfd]: https://agentclientprotocol.com/rfds/streamable-http-websocket-transport
 

@@ -13,7 +13,7 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-ghosty-protocol = { path = "../protocol", version = "0.0.19" }
+ghosty-protocol = { path = "../protocol", version = "0.0.20" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

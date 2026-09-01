@@ -20,7 +20,7 @@ session persistence, and zero vendor lock-in. Open source (MIT).
 >
 > Hasta ahora el agente sólo hablaba ACP por stdio, o sea que el cliente tenía que
 > lanzar a Ghosty como proceso hijo: un navegador no puede, y una caja remota
-> tampoco. `ghosty serve --acp --acp-http` lo publica en `ws://host:port/acp`
+> tampoco. `ghosty serve`, sin banderas, lo publica en `ws://host:port/acp`
 > —WebSocket y Streamable HTTP, la RFD oficial— y atiende a varios clientes a la
 > vez, cada uno con sus propias sesiones. El transporte es el del SDK oficial de
 > ACP, no uno escrito a mano.
@@ -155,8 +155,12 @@ Gestiona otros servidores con `ghosty mcp add stdio|http <nombre> ...`,
 ## Más
 
 - **Servidor**: `ghosty serve --http` (API HTTP/SSE) o `--mobile` (control desde el móvil en LAN).
-- **Editores**: `ghosty serve --acp` (stdio), y `--acp-http` cuando el cliente llega por red
-  — detalles y seguridad en [`docs/RUNTIME_API.md`](docs/RUNTIME_API.md).
+- **Editores**: `ghosty serve --acp` (stdio, para el editor que lanza a Ghosty como hijo).
+- **Agente en una caja**: `ghosty serve` a secas — ACP por red en `/acp`, API en `/v1/*` y
+  `GET /health` en el mismo puerto 7878. Escucha en `127.0.0.1` y sólo `--open` o `--host`
+  lo abren; dentro de un contenedor te avisa que el loopback del guest no lo alcanza nadie,
+  pero no decide por ti. Detalles y seguridad en
+  [`docs/RUNTIME_API.md`](docs/RUNTIME_API.md).
 - Otros proveedores compatibles con OpenAI vía `base_url` en la config.
 
 ## Related

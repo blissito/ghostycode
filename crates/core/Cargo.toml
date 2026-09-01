@@ -16,14 +16,14 @@ chrono.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio-util.workspace = true
-ghosty-agent = { path = "../agent", version = "0.0.19" }
-ghosty-config = { path = "../config", version = "0.0.19" }
-ghosty-execpolicy = { path = "../execpolicy", version = "0.0.19" }
-ghosty-hooks = { path = "../hooks", version = "0.0.19" }
-ghosty-mcp = { path = "../mcp", version = "0.0.19" }
-ghosty-protocol = { path = "../protocol", version = "0.0.19" }
-ghosty-state = { path = "../state", version = "0.0.19" }
-ghosty-tools = { path = "../tools", version = "0.0.19" }
+ghosty-agent = { path = "../agent", version = "0.0.20" }
+ghosty-config = { path = "../config", version = "0.0.20" }
+ghosty-execpolicy = { path = "../execpolicy", version = "0.0.20" }
+ghosty-hooks = { path = "../hooks", version = "0.0.20" }
+ghosty-mcp = { path = "../mcp", version = "0.0.20" }
+ghosty-protocol = { path = "../protocol", version = "0.0.20" }
+ghosty-state = { path = "../state", version = "0.0.20" }
+ghosty-tools = { path = "../tools", version = "0.0.20" }
 regex = "1.11"
 serde_json = { workspace = true, features = ["preserve_order"] }
 tokio = { workspace = true, features = ["time"] }

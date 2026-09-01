@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-09-01
+
+### Changed
+
+- **`ghosty serve` sin banderas ya sirve el caso del agente en una caja.** Antes había que
+  escribir `--acp --acp-http --host 0.0.0.0 --port 7878`, y cada bandera olvidada fallaba
+  distinto y en silencio: sin `--acp-http` el protocolo salía por stdio y el puerto no
+  existía; sin `--host` el servidor contestaba sólo en el loopback del guest y el cliente
+  del otro lado del proxy recibía un 502 sin rastro en ningún log. Ahora `ghosty serve` a
+  secas levanta ACP por red en `/acp`, la API en `/v1/*` y `GET /health` en el mismo
+  puerto. `--acp` a secas sigue siendo stdio y `--mcp`, `--http`, `--mobile` y `--web` no
+  cambian.
+- **El bind sólo se abre si se lo pides.** Se queda en `127.0.0.1` y nada que Ghosty
+  pueda olfatear de su propia máquina lo mueve: `--host`, `--open` y `--mobile` son las
+  únicas salidas del loopback, y el servidor imprime por cuál salió. Dentro de un
+  contenedor o microVM —`/.dockerenv`, `/run/.containerenv`, la variable `container`,
+  `/proc/1/cgroup`, el producto DMI de Firecracker o Cloud Hypervisor— sí te avisa que el
+  loopback del guest no lo alcanza nadie y te señala `--open`, pero no decide por ti: esas
+  señales dicen «esto es un contenedor», no «la exposición de este contenedor está
+  acotada», y las dos cosas se separan en `docker run --network host`, en una caja LXC o
+  systemd-nspawn con red bridged, o en un pod de CI, donde `0.0.0.0` publica el listener en
+  una red de verdad. La política de origen de `/acp` no se tocó: sin `Origin` sigue
+  entrando sólo quien manda `Authorization: Bearer`.
+- **El agente en una caja ya puede correr comandos.** El shell de ACP se encendía sólo
+  si el cliente declaraba `clientCapabilities.terminal`, y esa capability significa «yo,
+  cliente, te presto una terminal» — describe lo que ofrece el cliente, no si existe un
+  shell. Pero el `Bash` de ACP es el shell propio del agente, en su proceso y contra su
+  propio sandbox. Leer la capability como permiso dejaba el caso remoto —un agente solo
+  en una microVM, cuyo cliente no tiene terminal que prestar y justamente quiere que el
+  agente use la suya— con una máquina entera y sin poder correr `ls`. Ahora los gates son
+  los mismos que usan `exec` headless y el adaptador MCP: `allow_shell` en config, la
+  feature de shell, y que el sandbox pedido se haya podido construir. Los métodos
+  `terminal/*` del lado cliente siguen sin exponerse. Efecto secundario asumido: los
+  editores que hablan `--acp` por stdio y no anunciaban `terminal` ahora sí tienen shell,
+  siempre detrás de esos tres gates.
+
+- **Con el bind abierto y sin token, el servidor ya no arranca.** El token autogenerado
+  nunca se imprime, así que fuera del loopback significaba que todo cliente remoto recibía
+  401 para siempre. Ahora sale con un error que dice qué poner —`GHOSTY_RUNTIME_TOKEN`,
+  `--auth-token`, o `--insecure` para aceptar a propósito un listener sin autenticar—. Esto
+  también alcanza a `--mobile`: una página en `0.0.0.0` con un token ilegible es una página
+  a la que el teléfono no puede entrar.
+
 ## [0.0.19] - 2026-08-30
 
 ### Added
@@ -7752,7 +7795,8 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
-[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.19...HEAD
+[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.20...HEAD
+[0.0.20]: https://github.com/blissito/ghostycode/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/blissito/ghostycode/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/blissito/ghostycode/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/blissito/ghostycode/compare/v0.0.16...v0.0.17

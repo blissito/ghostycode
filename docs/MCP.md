@@ -409,7 +409,7 @@ becomes `mcp_ghosty_shell`.
 
 ### MCP Server vs HTTP/SSE API vs ACP
 
-| | `ghosty serve --mcp` | `ghosty serve --http` | `ghosty serve --acp` | `ghosty serve --acp --acp-http` |
+| | `ghosty serve --mcp` | `ghosty serve --http` | `ghosty serve --acp` | `ghosty serve` (default) |
 |---|---|---|---|---|
 | **Protocol** | MCP stdio | HTTP/SSE JSON-RPC | ACP stdio | ACP over WebSocket + Streamable HTTP |
 | **Use case** | Tool server for MCP clients | Runtime API for apps | Editor agent for Zed/custom ACP clients | Remote or browser clients that cannot spawn a child process |
@@ -420,10 +420,11 @@ becomes `mcp_ghosty_shell`.
 
 Use `mcp add-self` when you want Ghosty tools available to other MCP clients.
 Use `serve --http` when building applications that consume the API directly.
-Use `serve --acp` when an editor wants to talk to Ghosty as an ACP agent, and
-add `--acp-http` when the client reaches Ghosty over the network instead of
-launching it. That transport exposes tool execution, so read the origin policy
-in `docs/RUNTIME_API.md` before binding it anywhere but loopback.
+Use `serve --acp` when an editor wants to talk to Ghosty as an ACP agent and
+launches it as a child process. When the client reaches Ghosty over the network
+instead, plain `ghosty serve` is that mode already — no flags. That transport
+exposes tool execution, so read the origin policy in `docs/RUNTIME_API.md`
+before binding it anywhere but loopback.
 
 ### Verification
 
