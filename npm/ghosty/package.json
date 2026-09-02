@@ -1,7 +1,7 @@
 {
   "name": "ghostycode",
-  "version": "0.0.20",
-  "ghostyBinaryVersion": "0.0.20",
+  "version": "0.0.21",
+  "ghostyBinaryVersion": "0.0.21",
   "description": "Terminal coding agent for supported hosted and local models. One runtime on your machine. Rust, MIT.",
   "author": "Hmbown",
   "license": "MIT",

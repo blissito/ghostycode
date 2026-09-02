@@ -14,8 +14,8 @@ workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
-ghosty-protocol = { path = "../protocol", version = "0.0.20" }
-ghosty-release = { path = "../release", version = "0.0.20" }
+ghosty-protocol = { path = "../protocol", version = "0.0.21" }
+ghosty-release = { path = "../release", version = "0.0.21" }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -20,7 +20,7 @@
 # Uses prebuilt release binaries instead of a Rust build.
 set -euo pipefail
 
-RELEASE_TAG="${RELEASE_TAG:-v0.0.20}"
+RELEASE_TAG="${RELEASE_TAG:-v0.0.21}"
 REPO_URL="${REPO_URL:-https://github.com/blissito/ghostycode.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 SECRETS_FILE="${SECRETS_FILE:-/tmp/cw-secrets.env}"

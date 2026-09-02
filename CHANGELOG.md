@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-09-02
+
+### Added
+
+- **`ghosty acp`.** Subcomando propio para el Agent Client Protocol; `ghosty acp --http`
+  es el transporte por red. `ghosty serve --acp` sigue funcionando. `scripts/acp-serve.sh`
+  levanta el agente en una caja de EasyBits con sólo `EASYBITS_API_KEY` e imprime la URL
+  `wss://` que publica el host de cajas.
+- **ACP ya cuenta lo que consume.** Cada turno cierra con un `usage_update` (tokens en
+  contexto contra la ventana de la ruta, y el gasto acumulado de la sesión cuando la ruta
+  se cobra por token) y la respuesta de `session/prompt` trae el `usage` del turno. Antes
+  el servidor recibía el reporte del proveedor y lo tiraba.
+- **Proveedor, modelo y esfuerzo visibles en el cliente ACP.** `session/new` devuelve
+  `configOptions` y `session/set_config_option` los cambia, como hace Goose. El
+  razonamiento del modelo sale como `agent_thought_chunk` en vez de silencio.
+
+### Removed
+
+- `session/listProviders`, `session/currentModel` y `session/selectModel`: métodos
+  inventados que ningún cliente ACP llamaba. Los reemplazan los `configOptions`.
+
 ## [0.0.20] - 2026-09-01
 
 ### Added
@@ -7821,7 +7842,8 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
-[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.20...HEAD
+[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.21...HEAD
+[0.0.21]: https://github.com/blissito/ghostycode/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/blissito/ghostycode/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/blissito/ghostycode/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/blissito/ghostycode/compare/v0.0.17...v0.0.18

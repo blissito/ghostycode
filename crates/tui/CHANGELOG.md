@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-09-02
+
 ### Added
 
 - **`ghosty acp`.** Subcomando propio para el Agent Client Protocol; `ghosty acp --http`
@@ -3126,108 +3128,6 @@ File edits, terminal width, and Windows installation.
   was accidentally deleted during maintainer cleanup.
 - [mky](https://github.com/mky) (`@mky`) fixed the FreeBSD build (PR #5254, `rquickjs` `bindgen` on FreeBSD).
 - [cacdcaecawae](https://github.com/cacdcaecawae) (`@cacdcaecawae`) contributed embedder-owned sub-agent state roots (PR #5252).
-
-## [0.9.3] - 2026-07-31
-
-This is the Ghosty v0.9.3 source candidate. It is not a published release
-until the matching tag, packages, checksums, and release assets exist.
-
-DeepSeek V4 Flash is now a first-class Ghosty route, and the agent-facing
-tool surface has been reduced to the canonical action tools that current
-models actually need. This release also hardens credential, authorization,
-durability, compaction, and macOS File Provider boundaries while deleting
-stale runtime and dependency surface.
-
-### Added
-
-- Native `deepseek-v4-flash` support over DeepSeek's Responses API, including
-  stateless reasoning-item replay, semantic SSE terminal events, structured
-  function calls and outputs, `apply_patch`, and model-aware wire-format
-  selection. Exact current Flash IDs use Responses; future direct
-  `deepseek-vN-*` model IDs inherit that route conservatively, while custom
-  DeepSeek-compatible endpoints retain Chat Completions unless configured
-  otherwise.
-- A pipe-only `ghosty auth print-api-key` handoff for explicitly selected
-  providers. It shares Ghosty's home-scoped credential authority, refuses
-  terminal output, and prevents sentinel placeholders from becoming live
-  credentials.
-- Per-turn `max_tool_calls` enforcement at the engine admission gate, plus a
-  named-file write scope with a separate read seam. The runtime now rejects
-  over-budget calls before execution and keeps the operator's write boundary
-  explicit (#4415).
-- Runtime-contract, source-structure, and persistence-backlog ratchets that
-  name drift instead of allowing large ownership surfaces to grow silently
-  (#3921, #4785).
-
-### Changed
-
-- Model-visible built-ins now use the canonical `Bash`, `File`, and `Run`
-  action schemas. `apply_patch` remains available as the one direct custom
-  edit tool supported by DeepSeek Responses. The bundled stop-ship workflow,
-  Fleet fixtures, shell shortcut, and engine tests use the same canonical
-  vocabulary.
-- Canonical `File { action: "write" }` requests now pass through the same
-  semantic repo-law checks as the former write path. Approval, Full Access,
-  and workflow execution cannot bypass the repository safety floor by choosing
-  the canonical schema.
-- Ghosty home resolution is shared across the CLI, TUI, state, and secret
-  stores. `doctor` is offline by default, distinguishes credential source from
-  availability, and reports one consistent path snapshot.
-- Durable runtime event writes are serialized across simultaneous processes,
-  blocking history waits move off async workers, and provider quota exhaustion
-  remains typed and retryable through compaction (#4522).
-- Skill discovery caches the merged catalog behind watched-mtime validation;
-  large skill, engine, subagent, UI, and ambient-ocean test blocks now live in
-  owned test seams.
-- Reasoning summaries stay in the user's language, complete jellyfish
-  silhouettes relocate around transcript text, and cached ocean frames include
-  their palette identity (#4807).
-- The authorization-order contract now documents and tests how modes, hooks,
-  permission rules, safety floors, repo law, approvals, and sandboxing compose
-  (PR #4980).
-
-### Fixed
-
-- macOS sandbox extensions cover CloudStorage/File Provider workspaces without
-  broadening unrelated paths; thanks @Watcher24 for the #4085 report and
-  reproduction.
-- Foreground shell state detaches before steering, so an interrupted command
-  cannot keep owning the composer (PR #4979).
-- MCP application-level failures and malformed error envelopes fail closed
-  instead of looking like successful tool output.
-- Optional PDF failures are truthful and PDF classification no longer misses
-  supported inputs.
-- Bracketed-paste contents are redacted from traces, and credential diagnostics
-  never treat placeholder sentinels as usable keys.
-
-- Google Gemini is its own backend (`/provider google`) on the official
-  OpenAI-compatible route with thought-signature capture/replay and
-  fail-closed replay for thinking models. Antigravity (`agy` 1.1.13) joins
-  as a separate credential-plane provider: consent-gated read-only import
-  of the official CLI's login with `ANTIGRAVITY_API_KEY`/`AGY_ADC_AUTH`
-  precedence; requests fail closed until the cloud-code wire protocol is
-  implemented.
-
-### Removed
-
-- The legacy callable aliases `exec_shell`, `run_shell_command`, `read_file`,
-  `write_file`, `list_dir`, `grep_files`, `file_search`, and the duplicate
-  Work/RLM registrations. Historical transcript and policy semantics remain
-  readable, but new model turns receive only the canonical action surface.
-- The bundled PDF parser dependency chain, replacing it with the smaller
-  optional extraction boundary tracked by #4382.
-
-### Contributors
-
-- [Turisla](https://github.com/greyfreedom) (`@greyfreedom`) documented and
-  locked the authorization-order contract in PR #4980.
-- [Nightt](https://github.com/nightt5879) (`@nightt5879`) fixed foreground
-  shell detachment before steering in PR #4979.
-- [Watcher24](https://github.com/Watcher24) (`@Watcher24`) provided the macOS
-  File Provider report and reproduction for #4085.
-- [Fred Leitz](https://github.com/fleitz) (`@fleitz`) retains required
-  source-candidate credit for the canonical `Bash` workspace fix from PR #4673
-  and issue #4674.
 
 ---
 

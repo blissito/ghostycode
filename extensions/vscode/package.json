@@ -2,7 +2,7 @@
   "name": "ghosty-vscode",
   "displayName": "GhostyCode",
   "description": "Official GhostyCode VS Code integration scaffold for local runtime attach and terminal launch.",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "publisher": "ghosty",
   "license": "MIT",
   "repository": {
