@@ -27,7 +27,7 @@ export interface RepoFacts {
 }
 
 export const FACTS: RepoFacts = {
-  "generatedAt": "2026-09-01T15:01:27.060Z",
+  "generatedAt": "2026-09-02T01:03:48.118Z",
   "sourceRevision": null,
   "sourceCommittedAt": null,
   "version": "0.0.20",
@@ -295,9 +295,9 @@ export const FACTS: RepoFacts = {
   "toolCount": 74,
   "license": "MIT",
   "latestPublishedRelease": {
-    "tag": "v0.9.11",
-    "version": "0.9.11",
-    "publishedAt": "2026-08-23T17:39:46Z",
-    "url": "https://github.com/blissito/ghostycode/releases/tag/v0.9.11"
+    "tag": "v0.0.20",
+    "version": "0.0.20",
+    "publishedAt": "2026-09-01T21:10:19Z",
+    "url": "https://github.com/blissito/ghostycode/releases/tag/v0.0.20"
   }
 };

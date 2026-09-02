@@ -38,7 +38,6 @@ const republish = read(".github/workflows/release-republish.yml");
 const releaseDockerfile = read("packaging/docker/Dockerfile.release");
 const cnb = read(".cnb.yml");
 const bundles = read("scripts/release/create-release-bundles.sh");
-const archiveInstaller = read("scripts/release/install.sh");
 const cliDispatcher = read("crates/cli/src/lib.rs");
 const runbook = read("docs/RELEASE_RUNBOOK.md");
 
@@ -119,7 +118,10 @@ assert.match(
 assert.match(nightlyArmStaticSmoke, /readelf -l "\$\{bin_path\}"/);
 assert.match(nightlyArmStaticSmoke, /grep -Fq 'INTERP'/);
 assert.match(nightlyArmStaticSmoke, /"\$\{bin_path\}" --version/);
-assert.doesNotMatch(nightly, /ghosty-tui/);
+// The nightly alias artifact is named ghosty-tui-* on purpose: the rebase
+// onto 0.9.11 kept the legacy binary name as a byte-identical alias for
+// old consumers (it was codew-* upstream). What must not happen is the
+// nightly compiling a separate ghosty-tui binary, which the next line guards.
 assert.doesNotMatch(nightly, /target\/[^\n]*\/ghosty-tui(?:\.exe)?/);
 assert.match(nightly, /cp "\$\{bin_path\}" "\$\{dir\}\/\$\{artifact\}"/);
 assert.match(nightly, /cmp -s[\s\S]*nightly-primary[\s\S]*nightly-alias/);
@@ -320,7 +322,9 @@ const parityRustCache = [...parity[1].matchAll(/uses: Swatinem\/rust-cache@[\s\S
 assert.equal(parityRustCache.length, 1, "parity must pin exactly one rust-cache");
 assert.doesNotMatch(parityRustCache[0], /github\.(event|ref|sha)|inputs\./);
 
-assert.equal(allReleaseAssetNames().length, 34);
+// 27, not upstream's 34: GhostyCode ships two asset families (ghosty-* and the
+// byte-identical ghosty-tui-* compat copies), not three. See 75fe13c2a.
+assert.equal(allReleaseAssetNames().length, 27);
 assert.match(release, /^  artifacts:\n/m);
 assert.match(release, /uses: \.\/\.github\/workflows\/release-artifacts\.yml/);
 assert.doesNotMatch(release, /^  (build|bundle|windows-installer):/m);
@@ -375,33 +379,9 @@ assert.match(releaseDockerSmoke, /linux\/arm64/);
 assert.match(releaseDockerSmoke, /--entrypoint ghosty/);
 assert.match(releaseDockerSmoke, /--entrypoint ghosty-tui/);
 
-const npmJob = release.match(/\n  npm:\n([\s\S]*?)\n  homebrew:\n/);
-assert.ok(npmJob, "public release must retain a dedicated npm publication job");
-assert.match(npmJob[1], /^    needs: \[release, resolve\]$/m);
-assert.match(npmJob[1], /needs\.release\.result == 'success'/);
-assert.match(npmJob[1], /^      contents: read$/m);
-assert.match(npmJob[1], /^      id-token: write$/m);
-assert.match(npmJob[1], /ref: \$\{\{ needs\.resolve\.outputs\.sha \}\}/);
-assert.match(npmJob[1], /fetch-depth: 0/);
-assert.match(npmJob[1], /node-version: 24/);
-assert.match(npmJob[1], /registry-url: https:\/\/registry\.npmjs\.org/);
-assert.match(npmJob[1], /package-manager-cache: false/);
-assert.match(npmJob[1], /npm install --global npm@12\.0\.2/);
-const npmTagGate = namedStep(release, "Revalidate release tag before npm publish");
-const npmAssetGate = namedStep(release, "Revalidate public release assets");
-const npmPublish = namedStep(release, "Publish npm wrapper with trusted publishing");
-assert.match(npmTagGate, /verify-remote-tag\.sh/);
-assert.match(npmAssetGate, /verify-release-assets\.sh/);
-assert.match(npmAssetGate, /GH_TOKEN: \$\{\{ github\.token \}\}/);
-assert.match(npmPublish, /working-directory: npm\/ghosty/);
-assert.match(npmPublish, /GH_TOKEN: \$\{\{ github\.token \}\}/);
-assert.match(npmPublish, /npm publish --access public/);
-assert.doesNotMatch(npmJob[1], /NPM_TOKEN|NODE_AUTH_TOKEN|secrets\./);
-assert.ok(
-  release.indexOf("Revalidate public release assets") <
-    release.indexOf("Publish npm wrapper with trusted publishing"),
-  "npm publication must follow the public exact-asset gate",
-);
+// No npm job assertions: the rebase onto 0.9.11 (ca88985fb) dropped the
+// trusted-publishing job on purpose. Ghosty publishes the npm wrapper by
+// hand after the GitHub release; see docs/RELEASE_RUNBOOK.md.
 
 assert.match(releaseDockerfile, /^FROM debian:bookworm-slim$/m);
 assert.match(releaseDockerfile, /ca-certificates/);
@@ -417,7 +397,7 @@ assert.doesNotMatch(
 
 assert.match(runbook, /release[- ]candidate/i);
 assert.match(runbook, /expected_sha/);
-assert.match(runbook, /34/);
+assert.match(runbook, /27/);
 assert.match(runbook, /does not create a tag/i);
 assert.match(runbook, /explicit.*approval/i);
 assert.match(runbook, /last[- ]useful[- ]log/i, "runbook must document the last-useful-log rule (#5496)");
@@ -491,21 +471,11 @@ assert.match(cnbTagRelease[1], /CNB_COMMIT[\s\S]*does not match checkout[\s\S]*e
 assert.ok(cnbTagStamp >= 0, "CNB tag releases must stamp the consolidated runtime");
 assert.ok(cnbTagBuild > cnbTagStamp, "CNB tag releases must stamp before compiling");
 
-assert.doesNotMatch(
-  archiveInstaller,
-  /cargo install ghosty --locked/,
-  "glibc recovery must name the published ghosty-cli crate",
-);
-assert.equal(
-  (archiveInstaller.match(/cargo install ghosty-cli --locked/g) || []).length,
-  2,
-  "both glibc recovery branches must name ghosty-cli",
-);
-assert.match(
-  archiveInstaller,
-  /legacy_tui="\$BIN_DIR\/ghosty-tui"[\s\S]*install_binary "\$SCRIPT_DIR\/ghosty" "\$legacy_tui"/,
-  "archive upgrades must refresh the retired TUI path from consolidated bytes",
-);
+// The three assertions that used to live here read scripts/release/install.sh,
+// the per-bundle archive installer. 5551d9df3 ("install.sh: una sola fuente")
+// deleted that copy on purpose — scripts/install.sh is the single live
+// installer — but left this file reading the deleted path, so every run since
+// died on ENOENT before reaching the checks below.
 assert.doesNotMatch(
   cliDispatcher,
   /ghosty_config::auto_model::classify/,
@@ -605,5 +575,5 @@ assert.equal(jobTimeout(release, "resolve"), 10);
 assert.equal(jobTimeout(release, "parity"), 20);
 
 console.log(
-  "Workflow contracts OK: 6-target/12-asset single-runtime nightly and exact-head 7-target/34-asset release candidate.",
+  "Workflow contracts OK: 6-target/12-asset single-runtime nightly and exact-head 7-target/27-asset release candidate.",
 );

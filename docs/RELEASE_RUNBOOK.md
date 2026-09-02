@@ -148,10 +148,10 @@ exact requested SHA. It invokes the same reusable artifact workflow as the
 public release, building all seven targets (including Android arm64 and native
 Windows arm64), staging `ghosty` and `ghosty-tui` (single binary), building the
 NSIS installer and nine platform archives, and validating the authoritative
-34-file inventory from `npm/ghosty/scripts/artifacts.js` (27 current
-artifacts and manifests plus seven compatibility-only `ghosty-tui-*`
-filenames containing the same compiled `ghosty` bytes for v0.9.4 update
-clients). It then installs
+27-file inventory from `npm/ghosty/scripts/artifacts.js` (the `ghosty-*`
+binaries, archives, installer and manifests, plus seven compatibility-only
+`ghosty-tui-*` filenames containing the same compiled `ghosty` bytes for
+older update clients). It then installs
 the packed npm wrapper against those assembled local assets and exercises its
 delegated entrypoints. The resulting `ghosty-release-assets` bundle is a
 short-lived GitHub Actions artifact only.
