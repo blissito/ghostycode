@@ -40,18 +40,24 @@ fi
 export GHOSTY_RUNTIME_TOKEN
 export GHOSTY_PROVIDER=easybits
 export EASYBITS_API_KEY
+# Las cajas inyectan EASYBITS_BASE_URL para el Code Mode del runtime. Para
+# ghosty es un endpoint "custom" y se niega a mandarle la llave ambiental
+# (correcto en general, inútil aquí): la ruta easybits ya sabe su URL.
+unset EASYBITS_BASE_URL
 
 PORT="${GHOSTY_ACP_PORT:-7878}"
 set -- acp --http --port "$PORT"
 [ "${GHOSTY_ACP_LOCAL:-0}" = "1" ] || set -- "$@" --open
 [ -z "${GHOSTY_ACP_ALLOW_ORIGIN:-}" ] || set -- "$@" --allow-origin "$GHOSTY_ACP_ALLOW_ORIGIN"
 
-echo "ghosty-acp: token  $GHOSTY_RUNTIME_TOKEN"
-echo "ghosty-acp: local  ws://127.0.0.1:$PORT/acp?token=$GHOSTY_RUNTIME_TOKEN"
+echo "ghosty-acp: token  $GHOSTY_RUNTIME_TOKEN   (header: Authorization: Bearer <token>)"
+echo "ghosty-acp: local  ws://127.0.0.1:$PORT/acp"
 if [ -n "${EASYBITS_SANDBOX_ID:-}" ]; then
-  echo "ghosty-acp: caja   wss://sb-$EASYBITS_SANDBOX_ID-$PORT.sandboxes.easybits.cloud/acp?token=$GHOSTY_RUNTIME_TOKEN"
+  echo "ghosty-acp: caja   wss://sb-$EASYBITS_SANDBOX_ID-$PORT.sandboxes.easybits.cloud/acp"
   echo "ghosty-acp:        (expón el puerto $PORT de la caja para que esa URL exista)"
 fi
 echo "ghosty-acp: salud  GET /health en el mismo puerto, sin token"
+echo "ghosty-acp: nota   ?token=<token> en la URL sólo vale para un navegador cuyo Origin"
+echo "ghosty-acp:        esté en GHOSTY_ACP_ALLOW_ORIGIN; un cliente sin Origin usa el header."
 
 exec ghosty "$@"
