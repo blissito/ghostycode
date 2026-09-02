@@ -62,12 +62,22 @@ use crate::llm_client::{LlmClient, StreamEventBox};
 use crate::models::Role;
 use crate::models::{
     ContentBlock, ContentBlockStart, Delta, Message, MessageRequest, StreamEvent, SystemPrompt,
+    Usage,
 };
 use crate::tools::spec::{ApprovalRequirement, PreparedToolCall, RichToolResult, ToolError};
 use crate::tools::{ToolContext, ToolRegistry, ToolRegistryBuilder};
 use crate::worker_profile::ShellPolicy;
 
 const ACP_PROTOCOL_VERSION: u64 = 1;
+
+/// `session/set_config_option` ids. `model` and `thinking_effort` carry the
+/// ACP categories (`model`, `thought_level`) so a client can place them in its
+/// own pickers; `provider` has no standard category.
+const CONFIG_PROVIDER: &str = "provider";
+const CONFIG_MODEL: &str = "model";
+const CONFIG_THINKING_EFFORT: &str = "thinking_effort";
+/// Effort tiers offered to the client; the route normalizes them at dispatch.
+const THINKING_EFFORT_VALUES: [&str; 7] = ["auto", "off", "low", "medium", "high", "xhigh", "max"];
 
 /// Hard cap on LLM <-> tool round-trips within a single `session/prompt`
 /// turn. Guards against a model that never stops calling tools; each round is
@@ -202,6 +212,10 @@ where
                     // authority on a later provider round.
                     let frozen_system_prompt =
                         Arc::new(std::sync::Mutex::new(None::<SystemPrompt>));
+                    // Route facts captured at dispatch, so the turn's usage
+                    // is priced and sized against the route that actually
+                    // ran, not whatever config says once the turn is over.
+                    let route_receipt = Arc::new(std::sync::Mutex::new(None::<AcpRouteReceipt>));
                     // The stream-opening closure borrows `&server` only
                     // briefly per round; each returned `StreamEventBox` is
                     // `'static`, so it can be raced against the reader
@@ -232,6 +246,7 @@ where
                             let cwd = &cwd;
                             let tool_registry = &tool_registry;
                             let frozen_system_prompt = Arc::clone(&frozen_system_prompt);
+                            let route_receipt = Arc::clone(&route_receipt);
                             async move {
                                 server
                                     .open_prompt_stream(
@@ -239,6 +254,7 @@ where
                                         cwd,
                                         tool_registry,
                                         &frozen_system_prompt,
+                                        &route_receipt,
                                     )
                                     .await
                             }
@@ -246,49 +262,32 @@ where
                     )
                     .await;
                     match outcome {
-                        Ok((PromptOutcome::Completed(_text), full_messages)) => {
+                        Ok((outcome, messages, usage)) => {
                             // Chunks were already streamed; record the full
                             // conversation (including any tool rounds) for
-                            // the next prompt.
-                            server.commit_turn_messages(&session_id, full_messages);
-                            if let Some(id) = id {
-                                let id = response_id_policy.response_id(id);
-                                write_jsonrpc_result(
-                                    &mut writer,
-                                    id,
-                                    json!({ "stopReason": "end_turn" }),
-                                )
-                                .await?;
+                            // the next prompt. On cancel the turn driver keeps
+                            // complete receipts for every proposed tool call,
+                            // so partial side effects remain visible and no
+                            // dangling tool_use block is stored.
+                            server.commit_turn_messages(&session_id, messages);
+                            let receipt = route_receipt.lock().ok().and_then(|slot| slot.clone());
+                            let context =
+                                server.record_turn_usage(&session_id, &usage, receipt.as_ref());
+                            if let Some(context) = context {
+                                write_usage_update(&mut writer, &session_id, &context).await?;
                             }
-                        }
-                        Ok((PromptOutcome::Cancelled, partial_messages)) => {
-                            // The turn driver keeps complete receipts for every
-                            // proposed tool call, including calls cancelled
-                            // before execution, so partial side effects remain
-                            // visible and no dangling tool_use block is stored.
-                            server.commit_turn_messages(&session_id, partial_messages);
                             if let Some(id) = id {
                                 let id = response_id_policy.response_id(id);
-                                write_jsonrpc_result(
-                                    &mut writer,
-                                    id,
-                                    json!({ "stopReason": "cancelled" }),
-                                )
-                                .await?;
-                            }
-                        }
-                        Ok((PromptOutcome::MaxRounds(_text), full_messages)) => {
-                            // Max rounds reached — commit what we have
-                            // (unlike cancel, this is a normal completion).
-                            server.commit_turn_messages(&session_id, full_messages);
-                            if let Some(id) = id {
-                                let id = response_id_policy.response_id(id);
-                                write_jsonrpc_result(
-                                    &mut writer,
-                                    id,
-                                    json!({ "stopReason": "max_turn_requests" }),
-                                )
-                                .await?;
+                                let stop_reason = match outcome {
+                                    PromptOutcome::Completed(_) => "end_turn",
+                                    PromptOutcome::Cancelled => "cancelled",
+                                    PromptOutcome::MaxRounds(_) => "max_turn_requests",
+                                };
+                                let mut result = json!({ "stopReason": stop_reason });
+                                if !usage.is_empty() {
+                                    result["usage"] = acp_prompt_usage(&usage.total);
+                                }
+                                write_jsonrpc_result(&mut writer, id, result).await?;
                             }
                         }
                         Err(err) => {
@@ -322,6 +321,19 @@ where
                 if let Some(id) = id {
                     let id = server.response_id_policy.response_id(id);
                     write_jsonrpc_result(&mut writer, id, result).await?;
+                }
+            }
+            Ok(AcpDispatch::ResponseThenNotify {
+                result,
+                session_id,
+                updates,
+            }) => {
+                if let Some(id) = id {
+                    let id = server.response_id_policy.response_id(id);
+                    write_jsonrpc_result(&mut writer, id, result).await?;
+                }
+                for update in updates {
+                    write_session_notification(&mut writer, &session_id, update).await?;
                 }
             }
             Ok(AcpDispatch::Shutdown) => {
@@ -434,7 +446,8 @@ impl ToolUseAccumulator {
 }
 
 /// The text payload an ACP client should see for a given stream event, if any.
-/// ACP baseline is text-only, so thinking/tool/control events carry no chunk.
+/// Tool and control events carry no chunk; thinking goes through
+/// [`stream_thought_chunk`] as `agent_thought_chunk`.
 fn stream_text_chunk(event: &StreamEvent) -> Option<&str> {
     match event {
         StreamEvent::ContentBlockDelta {
@@ -446,6 +459,93 @@ fn stream_text_chunk(event: &StreamEvent) -> Option<&str> {
             ..
         } => Some(text),
         _ => None,
+    }
+}
+
+/// Reasoning text for a stream event, surfaced as `agent_thought_chunk` so a
+/// client can show the model thinking instead of silence until the answer.
+fn stream_thought_chunk(event: &StreamEvent) -> Option<&str> {
+    match event {
+        StreamEvent::ContentBlockDelta {
+            delta: Delta::ThinkingDelta { thinking },
+            ..
+        } => Some(thinking),
+        StreamEvent::ContentBlockStart {
+            content_block: ContentBlockStart::Thinking { thinking },
+            ..
+        } => Some(thinking),
+        _ => None,
+    }
+}
+
+/// Fold a later usage report for the same provider response into `into`.
+/// Providers report cumulative counts (`message_start` carries the prompt
+/// side, `message_delta` the final totals), so field-wise max is the merge.
+fn merge_round_usage(into: &mut Usage, later: &Usage) {
+    fn max_opt(a: Option<u32>, b: Option<u32>) -> Option<u32> {
+        match (a, b) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        }
+    }
+    into.input_tokens = into.input_tokens.max(later.input_tokens);
+    into.output_tokens = into.output_tokens.max(later.output_tokens);
+    into.prompt_cache_hit_tokens =
+        max_opt(into.prompt_cache_hit_tokens, later.prompt_cache_hit_tokens);
+    into.prompt_cache_miss_tokens = max_opt(
+        into.prompt_cache_miss_tokens,
+        later.prompt_cache_miss_tokens,
+    );
+    into.prompt_cache_write_tokens = max_opt(
+        into.prompt_cache_write_tokens,
+        later.prompt_cache_write_tokens,
+    );
+    into.reasoning_tokens = max_opt(into.reasoning_tokens, later.reasoning_tokens);
+}
+
+/// Add one provider round's usage to a running total (turn or session).
+fn add_usage(total: &mut Usage, round: &Usage) {
+    fn add_opt(a: Option<u32>, b: Option<u32>) -> Option<u32> {
+        match (a, b) {
+            (None, None) => None,
+            (a, b) => Some(a.unwrap_or(0).saturating_add(b.unwrap_or(0))),
+        }
+    }
+    total.input_tokens = total.input_tokens.saturating_add(round.input_tokens);
+    total.output_tokens = total.output_tokens.saturating_add(round.output_tokens);
+    total.prompt_cache_hit_tokens =
+        add_opt(total.prompt_cache_hit_tokens, round.prompt_cache_hit_tokens);
+    total.prompt_cache_miss_tokens = add_opt(
+        total.prompt_cache_miss_tokens,
+        round.prompt_cache_miss_tokens,
+    );
+    total.prompt_cache_write_tokens = add_opt(
+        total.prompt_cache_write_tokens,
+        round.prompt_cache_write_tokens,
+    );
+    total.reasoning_tokens = add_opt(total.reasoning_tokens, round.reasoning_tokens);
+}
+
+/// Provider usage accumulated over one `session/prompt` turn.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct AcpTurnUsage {
+    /// Sum across every provider round of the turn.
+    total: Usage,
+    /// The final round's own report: its `input_tokens` is what the context
+    /// currently holds, which is what `usage_update.used` describes.
+    last_round: Option<Usage>,
+}
+
+impl AcpTurnUsage {
+    fn record_round(&mut self, round: Option<Usage>) {
+        if let Some(round) = round {
+            add_usage(&mut self.total, &round);
+            self.last_round = Some(round);
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.last_round.is_none()
     }
 }
 
@@ -474,7 +574,7 @@ async fn drive_prompt_stream<R, W>(
     response_id_policy: JsonRpcResponseIdPolicy,
     reader: &mut Lines<R>,
     writer: &mut W,
-) -> Result<(PromptOutcome, Vec<PendingToolCall>)>
+) -> Result<(PromptOutcome, Vec<PendingToolCall>, Option<Usage>)>
 where
     R: AsyncBufRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -482,6 +582,7 @@ where
     let mut accumulated = String::new();
     let mut tool_calls: Vec<PendingToolCall> = Vec::new();
     let mut pending_tool_uses: HashMap<u32, ToolUseAccumulator> = HashMap::new();
+    let mut round_usage: Option<Usage> = None;
     // Once input closes mid-turn we stop selecting on the reader and just drain
     // the stream to completion, rather than spinning on repeated EOFs.
     let mut reader_open = true;
@@ -490,14 +591,36 @@ where
             event = stream.next() => {
                 match event {
                     // Stream exhausted without an explicit stop: turn is done.
-                    None => return Ok((PromptOutcome::Completed(accumulated), tool_calls)),
+                    None => return Ok((PromptOutcome::Completed(accumulated), tool_calls, round_usage)),
                     Some(Ok(event)) => {
                         if let Some(text) = stream_text_chunk(&event)
                             && !text.is_empty() {
                                 accumulated.push_str(text);
                                 write_session_update(writer, session_id, text.to_string()).await?;
                             }
+                        if let Some(thought) = stream_thought_chunk(&event)
+                            && !thought.is_empty() {
+                                write_session_chunk(
+                                    writer,
+                                    session_id,
+                                    "agent_thought_chunk",
+                                    thought.to_string(),
+                                )
+                                .await?;
+                            }
                         match event {
+                            StreamEvent::MessageStart { message } => {
+                                match round_usage.as_mut() {
+                                    Some(usage) => merge_round_usage(usage, &message.usage),
+                                    None => round_usage = Some(message.usage),
+                                }
+                            }
+                            StreamEvent::MessageDelta { usage: Some(usage), .. } => {
+                                match round_usage.as_mut() {
+                                    Some(current) => merge_round_usage(current, &usage),
+                                    None => round_usage = Some(usage),
+                                }
+                            }
                             StreamEvent::ContentBlockStart {
                                 index,
                                 content_block: ContentBlockStart::ToolUse { id, name, input, ..},
@@ -526,7 +649,7 @@ where
                                 }
                             }
                             StreamEvent::MessageStop => {
-                                return Ok((PromptOutcome::Completed(accumulated), tool_calls));
+                                return Ok((PromptOutcome::Completed(accumulated), tool_calls, round_usage));
                             }
                             StreamEvent::Error { error } => {
                                 return Err(anyhow!("provider stream error: {error}"));
@@ -569,7 +692,7 @@ where
                                 write_jsonrpc_result(writer, id, json!(null)).await?;
                             }
                             // Dropping `stream` on return aborts the provider call.
-                            return Ok((PromptOutcome::Cancelled, tool_calls));
+                            return Ok((PromptOutcome::Cancelled, tool_calls, round_usage));
                         }
                         // Cancel for some other session: acknowledge, keep going.
                         if let Some(id) = id {
@@ -1315,7 +1438,7 @@ async fn run_agentic_prompt_turn<R, W, F, Fut>(
     reader: &mut Lines<R>,
     writer: &mut W,
     mut open_stream: F,
-) -> std::result::Result<(PromptOutcome, Vec<Message>), AgenticPromptError>
+) -> std::result::Result<(PromptOutcome, Vec<Message>, AcpTurnUsage), AgenticPromptError>
 where
     R: AsyncBufRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -1328,17 +1451,19 @@ where
         ..
     } = context;
     let mut has_tool_receipts = false;
+    let mut usage = AcpTurnUsage::default();
     for _round in 0..MAX_ACP_TOOL_ROUNDS {
         let stream = open_stream(messages.clone())
             .await
             .map_err(|error| AgenticPromptError::new(error, &messages, has_tool_receipts))?;
-        let (outcome, tool_calls) =
+        let (outcome, tool_calls, round_usage) =
             drive_prompt_stream(stream, session_id, response_id_policy, reader, writer)
                 .await
                 .map_err(|error| AgenticPromptError::new(error, &messages, has_tool_receipts))?;
+        usage.record_round(round_usage);
 
         let text = match outcome {
-            PromptOutcome::Cancelled => return Ok((PromptOutcome::Cancelled, messages)),
+            PromptOutcome::Cancelled => return Ok((PromptOutcome::Cancelled, messages, usage)),
             PromptOutcome::Completed(text) => text,
             PromptOutcome::MaxRounds(text) => text,
         };
@@ -1367,7 +1492,7 @@ where
         }
 
         if tool_calls.is_empty() {
-            return Ok((PromptOutcome::Completed(text), messages));
+            return Ok((PromptOutcome::Completed(text), messages, usage));
         }
 
         let batch = execute_tool_calls_with_cancellation(context, tool_calls, reader, writer)
@@ -1376,7 +1501,7 @@ where
         match batch {
             ToolBatchOutcome::Cancelled(tool_result_messages) => {
                 messages.extend(tool_result_messages);
-                return Ok((PromptOutcome::Cancelled, messages));
+                return Ok((PromptOutcome::Cancelled, messages, usage));
             }
             ToolBatchOutcome::Completed(tool_result_messages) => {
                 messages.extend(tool_result_messages);
@@ -1399,7 +1524,7 @@ where
             })
         })
         .unwrap_or_default();
-    Ok((PromptOutcome::MaxRounds(final_text), messages))
+    Ok((PromptOutcome::MaxRounds(final_text), messages, usage))
 }
 
 struct AcpServer {
@@ -1417,6 +1542,13 @@ struct AcpServer {
 struct AcpSession {
     cwd: PathBuf,
     messages: Vec<Message>,
+    /// Tokens across every turn of the session, for `session/prompt`'s
+    /// cumulative `usage` and the running cost behind `usage_update`.
+    usage: Usage,
+    /// Priced spend so far, per currency. A turn whose route cannot be priced
+    /// adds nothing rather than a fake zero.
+    cost_usd: f64,
+    cost_cny: f64,
     /// The session's MCP pool: the user's configured servers plus anything the
     /// client handed us in `session/new`. Kept so the session can shut its
     /// child processes down; see [`AcpServer::retire_session`].
@@ -1425,6 +1557,28 @@ struct AcpSession {
     /// prompt turn: `to_api_tools()` memoises the serialised catalog, and
     /// `file_read_tracker` / the shell manager need to persist across turns.
     tool_registry: Arc<ToolRegistry>,
+}
+
+/// Route facts captured when a prompt round is dispatched: enough to price the
+/// turn's usage and size the context without re-reading mutable config after
+/// the fact (the same rule the interactive turn loop follows).
+#[derive(Debug, Clone)]
+struct AcpRouteReceipt {
+    envelope: crate::cost_status::EffectiveRouteEnvelope,
+    context_window_tokens: u32,
+}
+
+/// What one `usage_update` notification carries after a turn.
+#[derive(Debug, Clone, PartialEq)]
+struct AcpUsageContext {
+    /// Tokens the context currently holds: the final round's prompt plus its
+    /// answer (`input_tokens` is the authoritative prompt total; cache
+    /// classes partition it, they do not add to it).
+    used: u64,
+    /// Context window of the route that ran.
+    size: u64,
+    /// Session spend so far, when the route is money-metered and priced.
+    cost: Option<(f64, &'static str)>,
 }
 
 /// The `&mut self` result of validating a `session/prompt`: the user turn is
@@ -1438,6 +1592,14 @@ struct PreparedPrompt {
 
 enum AcpDispatch {
     Response(Value),
+    /// A response followed by `session/update` notifications for the same
+    /// session, written after the response so the client sees them in the
+    /// order the protocol describes.
+    ResponseThenNotify {
+        result: Value,
+        session_id: String,
+        updates: Vec<Value>,
+    },
     Shutdown,
 }
 
@@ -1474,10 +1636,32 @@ impl AcpServer {
                     &self.config,
                 )))
             }
-            "session/new" => Ok(AcpDispatch::Response(self.new_session(params).await?)),
-            "session/listProviders" => Ok(AcpDispatch::Response(self.list_providers())),
-            "session/currentModel" => Ok(AcpDispatch::Response(self.current_model())),
-            "session/selectModel" => Ok(AcpDispatch::Response(self.select_model(params)?)),
+            "session/new" => {
+                let result = self.new_session(params).await?;
+                let session_id = result["sessionId"].as_str().unwrap_or_default().to_string();
+                // Goose sends the (empty) command list at session setup and
+                // clients such as Zed wait for it before enabling slash input.
+                Ok(AcpDispatch::ResponseThenNotify {
+                    result,
+                    session_id,
+                    updates: vec![json!({
+                        "sessionUpdate": "available_commands_update",
+                        "availableCommands": []
+                    })],
+                })
+            }
+            "session/set_config_option" => {
+                let (session_id, result) = self.set_config_option(params)?;
+                let update = json!({
+                    "sessionUpdate": "config_option_update",
+                    "configOptions": result["configOptions"].clone()
+                });
+                Ok(AcpDispatch::ResponseThenNotify {
+                    result,
+                    session_id,
+                    updates: vec![update],
+                })
+            }
             // A cancel that arrives with no prompt in flight is an idempotent
             // no-op (the in-flight case is handled by the prompt driver).
             "session/cancel" => Ok(AcpDispatch::Response(json!(null))),
@@ -1533,11 +1717,17 @@ impl AcpServer {
             AcpSession {
                 cwd,
                 messages: Vec::new(),
+                usage: Usage::default(),
+                cost_usd: 0.0,
+                cost_cny: 0.0,
                 tool_registry,
                 mcp_pool,
             },
         );
-        Ok(json!({ "sessionId": session_id }))
+        Ok(json!({
+            "sessionId": session_id,
+            "configOptions": self.config_options()
+        }))
     }
 
     /// Assemble the session's MCP pool: the user's own `mcp.json` servers plus
@@ -1600,81 +1790,188 @@ impl AcpServer {
             .map(|session| session.tool_registry.clone())
     }
 
-    fn list_providers(&self) -> Value {
+    /// Provider ids a client may select: built-ins plus the user's own
+    /// `[providers.<name>]` tables, which keep their raw key so routing can
+    /// still find the configured base URL / auth / model (#1519).
+    fn provider_choices(&self) -> Vec<(String, String)> {
         let mut providers = ApiProvider::sorted_for_display()
             .into_iter()
             .map(|provider| {
-                json!({
-                    "id": provider.as_str(),
-                    "displayName": provider.display_name(),
-                    "defaultModel": provider.metadata().map(|metadata| metadata.default_model())
-                })
+                (
+                    provider.as_str().to_string(),
+                    provider.display_name().to_string(),
+                )
             })
             .collect::<Vec<_>>();
-
-        // Include user-defined `[providers.<name>]` custom entries so ACP
-        // clients can discover and round-trip the provider names that
-        // `session/selectModel` now accepts (#1519).
         if let Some(custom) = self.config.providers.as_ref().map(|p| &p.custom) {
             let mut names = custom.keys().collect::<Vec<_>>();
             names.sort();
-            for name in names {
-                providers.push(json!({
-                    "id": name,
-                    "displayName": name,
-                    "defaultModel": custom.get(name).and_then(|cfg| cfg.model.clone())
-                }));
-            }
+            providers.extend(names.into_iter().map(|name| (name.clone(), name.clone())));
         }
-
-        json!({ "providers": providers })
+        providers
     }
 
-    fn current_model(&self) -> Value {
-        // Prefer the raw configured provider key so a custom `[providers.<name>]`
-        // entry round-trips through ACP instead of canonicalizing to "custom".
-        let provider = match self.config.provider.as_deref() {
+    /// The configured provider key as the client should see it: a custom
+    /// `[providers.<name>]` entry round-trips by name instead of canonicalizing
+    /// to "custom".
+    fn current_provider_key(&self) -> String {
+        match self.config.provider.as_deref() {
             Some(name) if !name.trim().is_empty() => name.to_string(),
             _ => self.config.api_provider().as_str().to_string(),
-        };
-        json!({
-            "provider": provider,
-            "model": self.model.as_str()
-        })
+        }
     }
 
-    fn select_model(&mut self, params: Value) -> std::result::Result<Value, AcpError> {
-        let model = params
-            .get("model")
-            .and_then(Value::as_str)
-            .ok_or_else(|| AcpError::invalid_params("model is required"))?
-            .to_string();
+    /// Catalog models for the active provider, with the active model first
+    /// so the current value is always one of the options.
+    fn model_choices(&self) -> Vec<String> {
+        let active = self.config.api_provider();
+        let mut models = vec![self.model.clone()];
+        for model in crate::provider_lake::models_for_provider(&self.config, active, active) {
+            if !models.contains(&model) {
+                models.push(model);
+            }
+        }
+        models
+    }
 
-        if let Some(provider_value) = params.get("provider") {
-            let provider_name = provider_value
-                .as_str()
-                .ok_or_else(|| AcpError::invalid_params("provider must be a string"))?;
-            // Accept either a built-in provider id/alias or a user-defined
-            // custom provider name that has a `[providers.<name>]` table. For
-            // custom providers, preserve the raw key so routing can still find
-            // the configured base URL / auth / model (#1519); canonicalizing to
-            // "custom" would lose that table key.
-            let is_custom = self
-                .config
+    fn current_thinking_effort(&self) -> &'static str {
+        self.config
+            .reasoning_effort()
+            .filter(|_| self.config.reasoning_effort_is_explicit())
+            .map_or("auto", |value| {
+                crate::tui::app::ReasoningEffort::from_setting(value).as_setting()
+            })
+    }
+
+    /// The session config options every ACP client understands: provider,
+    /// model, and thinking effort as `select` options. This replaces the
+    /// former `session/listProviders` / `session/currentModel` /
+    /// `session/selectModel` methods, which no ACP client called.
+    fn config_options(&self) -> Value {
+        let select = |value: &str, name: &str| json!({ "value": value, "name": name });
+        let providers = self
+            .provider_choices()
+            .iter()
+            .map(|(id, name)| select(id, name))
+            .collect::<Vec<_>>();
+        let models = self
+            .model_choices()
+            .iter()
+            .map(|model| select(model, model))
+            .collect::<Vec<_>>();
+        let efforts = THINKING_EFFORT_VALUES
+            .iter()
+            .map(|value| select(value, value))
+            .collect::<Vec<_>>();
+        json!([
+            {
+                "id": CONFIG_PROVIDER,
+                "name": "Provider",
+                "type": "select",
+                "currentValue": self.current_provider_key(),
+                "options": providers
+            },
+            {
+                "id": CONFIG_MODEL,
+                "name": "Model",
+                "category": "model",
+                "type": "select",
+                "currentValue": self.model,
+                "options": models
+            },
+            {
+                "id": CONFIG_THINKING_EFFORT,
+                "name": "Thinking effort",
+                "category": "thought_level",
+                "type": "select",
+                "currentValue": self.current_thinking_effort(),
+                "options": efforts
+            }
+        ])
+    }
+
+    /// `session/set_config_option`: apply one option and return the session
+    /// id plus the refreshed option list, which the caller also sends as a
+    /// `config_option_update` (goose does the same).
+    fn set_config_option(
+        &mut self,
+        params: Value,
+    ) -> std::result::Result<(String, Value), AcpError> {
+        let session_id = params
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| AcpError::invalid_params("sessionId is required"))?
+            .to_string();
+        if !self.sessions.contains_key(&session_id) {
+            return Err(AcpError::invalid_params("unknown sessionId"));
+        }
+        let config_id = params
+            .get("configId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| AcpError::invalid_params("configId is required"))?;
+        let value = params
+            .get("value")
+            .and_then(Value::as_str)
+            .ok_or_else(|| AcpError::invalid_params("value must be a string"))?
+            .trim();
+        if value.is_empty() {
+            return Err(AcpError::invalid_params("value must not be empty"));
+        }
+
+        match config_id {
+            CONFIG_PROVIDER => self.set_provider(value)?,
+            CONFIG_MODEL => self.model = value.to_string(),
+            CONFIG_THINKING_EFFORT => {
+                let effort = crate::tui::app::ReasoningEffort::parse_strict(value)
+                    .map_err(AcpError::invalid_params)?;
+                self.config.reasoning_effort = Some(effort.as_setting().to_string());
+                self.config.reasoning_effort_inferred_from_legacy_alias = false;
+            }
+            other => {
+                return Err(AcpError::invalid_params(format!(
+                    "unknown configId: {other}"
+                )));
+            }
+        }
+        Ok((
+            session_id,
+            json!({ "configOptions": self.config_options() }),
+        ))
+    }
+
+    /// Switch the active provider. Accepts a built-in id/alias or a custom
+    /// `[providers.<name>]` table name. The model follows the provider's
+    /// default so the pair stays coherent; the client can pick another model
+    /// from the refreshed option list.
+    fn set_provider(&mut self, provider_name: &str) -> std::result::Result<(), AcpError> {
+        let is_custom = self
+            .config
+            .providers
+            .as_ref()
+            .and_then(|providers| providers.custom_provider_config(provider_name))
+            .is_some();
+        let builtin = ApiProvider::parse(provider_name);
+        if !is_custom && builtin.is_none() {
+            return Err(AcpError::invalid_params(format!(
+                "unknown provider: {provider_name}"
+            )));
+        }
+        self.config.provider = Some(provider_name.to_string());
+        let default_model = if is_custom {
+            self.config
                 .providers
                 .as_ref()
                 .and_then(|providers| providers.custom_provider_config(provider_name))
-                .is_some();
-            if !is_custom && ApiProvider::parse(provider_name).is_none() {
-                return Err(AcpError::invalid_params(format!(
-                    "unknown provider: {provider_name}"
-                )));
-            }
-            self.config.provider = Some(provider_name.to_string());
+                .and_then(|cfg| cfg.model.clone())
+        } else {
+            builtin
+                .and_then(ApiProvider::metadata)
+                .map(|metadata| metadata.default_model().to_string())
+        };
+        if let Some(model) = default_model {
+            self.model = model;
         }
-
-        self.model = model;
-        Ok(self.current_model())
+        Ok(())
     }
 
     /// Validate a `session/prompt` request and append the user turn to history,
@@ -1713,6 +2010,37 @@ impl AcpServer {
             session_id,
             messages,
             cwd,
+        })
+    }
+
+    /// Fold a finished turn's usage into the session and describe the
+    /// `usage_update` to send, if the turn reported any usage at all.
+    fn record_turn_usage(
+        &mut self,
+        session_id: &str,
+        usage: &AcpTurnUsage,
+        receipt: Option<&AcpRouteReceipt>,
+    ) -> Option<AcpUsageContext> {
+        let last_round = usage.last_round.as_ref()?;
+        let session = self.sessions.get_mut(session_id)?;
+        add_usage(&mut session.usage, &usage.total);
+        if let Some(receipt) = receipt
+            && let Some(estimate) = receipt.envelope.audit(&usage.total).estimate
+        {
+            session.cost_usd += estimate.usd;
+            session.cost_cny += estimate.cny;
+        }
+        let cost = if session.cost_usd > 0.0 {
+            Some((session.cost_usd, "USD"))
+        } else if session.cost_cny > 0.0 {
+            Some((session.cost_cny, "CNY"))
+        } else {
+            None
+        };
+        Some(AcpUsageContext {
+            used: u64::from(last_round.input_tokens) + u64::from(last_round.output_tokens),
+            size: receipt.map_or(0, |receipt| u64::from(receipt.context_window_tokens)),
+            cost,
         })
     }
 
@@ -1755,6 +2083,7 @@ impl AcpServer {
         cwd: &Path,
         tool_registry: &ToolRegistry,
         frozen_system_prompt: &std::sync::Mutex<Option<SystemPrompt>>,
+        route_receipt: &std::sync::Mutex<Option<AcpRouteReceipt>>,
     ) -> Result<StreamEventBox> {
         let last_user_text = messages
             .iter()
@@ -1790,6 +2119,16 @@ impl AcpServer {
         let tools = tool_registry.to_api_tools();
         let (route_limits, image_input) =
             resolve_acp_route_facts(&execution_config, request_route.provider, &model);
+        if let Ok(mut slot) = route_receipt.lock() {
+            *slot = Some(AcpRouteReceipt {
+                context_window_tokens: crate::route_budget::route_context_window_tokens(
+                    request_route.provider,
+                    &request_route.model,
+                    route_limits,
+                ),
+                envelope: request_route.clone(),
+            });
+        }
         let system = frozen_acp_system_prompt(
             frozen_system_prompt,
             &execution_config,
@@ -2307,7 +2646,6 @@ fn initialize_result(client_protocol_version: Option<u64>, config: &Config) -> V
             .unwrap_or(ACP_PROTOCOL_VERSION),
         "agentCapabilities": {
             "loadSession": false,
-            "modelSelection": true,
             "promptCapabilities": {
                 "image": false,
                 "audio": false,
@@ -2388,21 +2726,94 @@ async fn write_session_update<W>(writer: &mut W, session_id: &str, text: String)
 where
     W: AsyncWrite + Unpin,
 {
-    let notification = json!({
-        "jsonrpc": "2.0",
-        "method": "session/update",
-        "params": {
-            "sessionId": session_id,
-            "update": {
-                "sessionUpdate": "agent_message_chunk",
-                "content": {
-                    "type": "text",
-                    "text": text
-                }
+    write_session_chunk(writer, session_id, "agent_message_chunk", text).await
+}
+
+/// One text content chunk: `agent_message_chunk` or `agent_thought_chunk`.
+async fn write_session_chunk<W>(
+    writer: &mut W,
+    session_id: &str,
+    session_update: &str,
+    text: String,
+) -> Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    write_session_notification(
+        writer,
+        session_id,
+        json!({
+            "sessionUpdate": session_update,
+            "content": {
+                "type": "text",
+                "text": text
             }
-        }
+        }),
+    )
+    .await
+}
+
+/// Any `session/update` notification; `update` is the tagged update object.
+async fn write_session_notification<W>(
+    writer: &mut W,
+    session_id: &str,
+    update: Value,
+) -> Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    write_json_line(
+        writer,
+        json!({
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {
+                "sessionId": session_id,
+                "update": update
+            }
+        }),
+    )
+    .await
+}
+
+async fn write_usage_update<W>(
+    writer: &mut W,
+    session_id: &str,
+    context: &AcpUsageContext,
+) -> Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    let mut update = json!({
+        "sessionUpdate": "usage_update",
+        "used": context.used,
+        "size": context.size
     });
-    write_json_line(writer, notification).await
+    if let Some((amount, currency)) = context.cost {
+        update["cost"] = json!({ "amount": amount, "currency": currency });
+    }
+    write_session_notification(writer, session_id, update).await
+}
+
+/// ACP `Usage` for a `session/prompt` response, from a provider usage total.
+fn acp_prompt_usage(usage: &Usage) -> Value {
+    let input = u64::from(usage.input_tokens);
+    let output = u64::from(usage.output_tokens);
+    let mut value = json!({
+        "totalTokens": input + output,
+        "inputTokens": input,
+        "outputTokens": output
+    });
+    if let Some(thought) = usage.reasoning_tokens {
+        value["thoughtTokens"] = json!(thought);
+    }
+    if let Some(read) = usage.prompt_cache_hit_tokens {
+        value["cachedReadTokens"] = json!(read);
+    }
+    if let Some(write) = usage.prompt_cache_write_tokens {
+        value["cachedWriteTokens"] = json!(write);
+    }
+    value
 }
 
 async fn write_jsonrpc_result<W>(writer: &mut W, id: Value, result: Value) -> Result<()>
@@ -2541,89 +2952,172 @@ mod tests {
     }
 
     #[test]
-    fn initialize_advertises_model_selection_capability() {
+    fn initialize_does_not_advertise_nonstandard_capabilities() {
         let result = initialize_result(Some(1), &Config::default());
 
-        assert_eq!(result["agentCapabilities"]["modelSelection"], true);
+        assert!(result["agentCapabilities"].get("modelSelection").is_none());
     }
 
     #[test]
-    fn list_providers_returns_provider_set() {
-        let server = AcpServer::new(
-            Config::default(),
-            "deepseek-chat".into(),
-            PathBuf::from("/tmp"),
-        );
-        let result = server.list_providers();
-        let providers = result["providers"].as_array().expect("providers array");
-
-        assert!(!providers.is_empty());
-        assert!(
-            providers
-                .iter()
-                .any(|provider| provider["id"] == "deepseek")
-        );
-    }
-
-    #[test]
-    fn current_model_reflects_constructor_default() {
+    fn config_options_expose_provider_model_and_effort() {
         let config = Config::default();
-        let expected_provider = config.api_provider().as_str();
+        let expected_provider = config.api_provider().as_str().to_string();
         let server = AcpServer::new(config, "deepseek-reasoner".into(), PathBuf::from("/tmp"));
-        let result = server.current_model();
 
-        assert_eq!(result["provider"], expected_provider);
-        assert_eq!(result["model"], "deepseek-reasoner");
+        let options = server.config_options();
+        let options = options.as_array().expect("options array");
+        let by_id = |id: &str| {
+            options
+                .iter()
+                .find(|option| option["id"] == id)
+                .unwrap_or_else(|| panic!("option {id}"))
+        };
+
+        let provider = by_id(CONFIG_PROVIDER);
+        assert_eq!(provider["type"], "select");
+        assert_eq!(provider["currentValue"], expected_provider);
+        assert!(
+            provider["options"]
+                .as_array()
+                .expect("provider options")
+                .iter()
+                .any(|option| option["value"] == "deepseek")
+        );
+
+        let model = by_id(CONFIG_MODEL);
+        assert_eq!(model["category"], "model");
+        assert_eq!(model["currentValue"], "deepseek-reasoner");
+        assert_eq!(model["options"][0]["value"], "deepseek-reasoner");
+
+        let effort = by_id(CONFIG_THINKING_EFFORT);
+        assert_eq!(effort["category"], "thought_level");
+        assert_eq!(effort["currentValue"], "auto");
     }
 
-    #[test]
-    fn select_model_updates_active_selection() {
+    fn server_with_session() -> (AcpServer, String) {
         let mut server = AcpServer::new(
             Config::default(),
             "deepseek-chat".into(),
             PathBuf::from("/tmp"),
         );
-
-        let result = server
-            .select_model(json!({ "provider": "openai", "model": "gpt-4o" }))
-            .expect("select model");
-
-        assert_eq!(result["provider"], "openai");
-        assert_eq!(result["model"], "gpt-4o");
-        assert_eq!(server.current_model()["provider"], "openai");
-        assert_eq!(server.current_model()["model"], "gpt-4o");
+        let session_id = "ghosty-test".to_string();
+        server.insertion_order.push_back(session_id.clone());
+        server.sessions.insert(
+            session_id.clone(),
+            AcpSession {
+                cwd: PathBuf::from("/tmp"),
+                messages: Vec::new(),
+                usage: Usage::default(),
+                cost_usd: 0.0,
+                cost_cny: 0.0,
+                mcp_pool: None,
+                tool_registry: Arc::new(
+                    ToolRegistryBuilder::new().build(ToolContext::new(PathBuf::from("/tmp"))),
+                ),
+            },
+        );
+        (server, session_id)
     }
 
     #[test]
-    fn select_model_rejects_unknown_provider() {
-        let mut server = AcpServer::new(
-            Config::default(),
-            "deepseek-chat".into(),
-            PathBuf::from("/tmp"),
-        );
-        let before = server.current_model();
+    fn set_config_option_switches_provider_model_and_effort() {
+        let (mut server, session_id) = server_with_session();
 
-        let err = server
-            .select_model(json!({ "provider": "unknown-provider", "model": "gpt-4o" }))
-            .expect_err("unknown provider rejected");
+        let (returned_id, result) = server
+            .set_config_option(json!({
+                "sessionId": session_id,
+                "configId": CONFIG_PROVIDER,
+                "value": "openai"
+            }))
+            .expect("set provider");
+        assert_eq!(returned_id, session_id);
+        assert_eq!(server.current_provider_key(), "openai");
+        // The model follows the provider so the pair stays coherent.
+        assert_ne!(server.model, "deepseek-chat");
+        assert_eq!(result["configOptions"][0]["currentValue"], "openai");
 
-        assert_eq!(err.code, -32602);
-        assert_eq!(server.current_model(), before);
+        server
+            .set_config_option(json!({
+                "sessionId": session_id,
+                "configId": CONFIG_MODEL,
+                "value": "gpt-4o"
+            }))
+            .expect("set model");
+        assert_eq!(server.model, "gpt-4o");
+
+        server
+            .set_config_option(json!({
+                "sessionId": session_id,
+                "configId": CONFIG_THINKING_EFFORT,
+                "value": "high"
+            }))
+            .expect("set effort");
+        assert_eq!(server.config.reasoning_effort(), Some("high"));
+        assert_eq!(server.current_thinking_effort(), "high");
     }
 
     #[test]
-    fn select_model_rejects_missing_model() {
-        let mut server = AcpServer::new(
-            Config::default(),
-            "deepseek-chat".into(),
-            PathBuf::from("/tmp"),
+    fn set_config_option_rejects_bad_input() {
+        let (mut server, session_id) = server_with_session();
+        let before = server.config_options();
+
+        for params in [
+            json!({ "sessionId": "nope", "configId": CONFIG_MODEL, "value": "x" }),
+            json!({ "sessionId": session_id, "configId": CONFIG_PROVIDER, "value": "unknown-provider" }),
+            json!({ "sessionId": session_id, "configId": CONFIG_THINKING_EFFORT, "value": "turbo" }),
+            json!({ "sessionId": session_id, "configId": "colour", "value": "blue" }),
+            json!({ "sessionId": session_id, "configId": CONFIG_MODEL, "value": 7 }),
+        ] {
+            let err = server.set_config_option(params).expect_err("rejected");
+            assert_eq!(err.code, -32602);
+        }
+        assert_eq!(server.config_options(), before);
+    }
+
+    #[test]
+    fn prompt_usage_maps_provider_usage_to_acp_fields() {
+        let usage = Usage {
+            input_tokens: 100,
+            output_tokens: 40,
+            prompt_cache_hit_tokens: Some(70),
+            prompt_cache_miss_tokens: Some(30),
+            prompt_cache_write_tokens: None,
+            reasoning_tokens: Some(12),
+            reasoning_replay_tokens: None,
+            server_tool_use: None,
+        };
+        assert_eq!(
+            acp_prompt_usage(&usage),
+            json!({
+                "totalTokens": 140,
+                "inputTokens": 100,
+                "outputTokens": 40,
+                "thoughtTokens": 12,
+                "cachedReadTokens": 70
+            })
         );
+    }
 
-        let err = server
-            .select_model(json!({ "provider": "openai" }))
-            .expect_err("missing model rejected");
+    #[tokio::test]
+    async fn usage_update_carries_context_and_cost() {
+        let mut out = Vec::new();
+        write_usage_update(
+            &mut out,
+            "sess_1",
+            &AcpUsageContext {
+                used: 1_500,
+                size: 128_000,
+                cost: Some((0.0042, "USD")),
+            },
+        )
+        .await
+        .expect("write usage update");
 
-        assert_eq!(err.code, -32602);
+        let update = &parse_lines(out)[0]["params"]["update"];
+        assert_eq!(update["sessionUpdate"], "usage_update");
+        assert_eq!(update["used"], 1_500);
+        assert_eq!(update["size"], 128_000);
+        assert_eq!(update["cost"]["currency"], "USD");
     }
 
     #[test]
@@ -3076,14 +3570,31 @@ mod tests {
     #[tokio::test]
     async fn drive_prompt_streams_each_delta_as_a_chunk_then_completes() {
         let stream = ready_stream(vec![
+            StreamEvent::ContentBlockDelta {
+                index: 0,
+                delta: Delta::ThinkingDelta {
+                    thinking: "hmm".to_string(),
+                },
+            },
             text_delta("hello"),
             text_delta(" world"),
+            StreamEvent::MessageDelta {
+                delta: crate::models::MessageDelta {
+                    stop_reason: None,
+                    stop_sequence: None,
+                },
+                usage: Some(Usage {
+                    input_tokens: 20,
+                    output_tokens: 5,
+                    ..Usage::default()
+                }),
+            },
             StreamEvent::MessageStop,
         ]);
         let mut reader = lines_from("");
         let mut out = Vec::new();
 
-        let (outcome, tool_calls) = drive_prompt_stream(
+        let (outcome, tool_calls, usage) = drive_prompt_stream(
             stream,
             "sess_1",
             JsonRpcResponseIdPolicy::Preserve,
@@ -3093,15 +3604,28 @@ mod tests {
         .await
         .expect("driver ok");
 
-        // Full text is accumulated for history...
+        // Full text is accumulated for history (thinking is not)...
         assert_eq!(outcome, PromptOutcome::Completed("hello world".to_string()));
         assert!(tool_calls.is_empty());
-        // ...and each delta was emitted as its own session/update chunk.
+        // ...the provider's usage report is returned for the turn total...
+        let usage = usage.expect("usage captured");
+        assert_eq!((usage.input_tokens, usage.output_tokens), (20, 5));
+        // ...and each delta was emitted as its own session/update chunk,
+        // thinking as `agent_thought_chunk`.
         let updates = parse_lines(out);
-        assert_eq!(updates.len(), 2);
+        assert_eq!(updates.len(), 3);
         assert!(updates.iter().all(|u| u["method"] == "session/update"));
-        assert_eq!(updates[0]["params"]["update"]["content"]["text"], "hello");
-        assert_eq!(updates[1]["params"]["update"]["content"]["text"], " world");
+        assert_eq!(
+            updates[0]["params"]["update"]["sessionUpdate"],
+            "agent_thought_chunk"
+        );
+        assert_eq!(updates[0]["params"]["update"]["content"]["text"], "hmm");
+        assert_eq!(
+            updates[1]["params"]["update"]["sessionUpdate"],
+            "agent_message_chunk"
+        );
+        assert_eq!(updates[1]["params"]["update"]["content"]["text"], "hello");
+        assert_eq!(updates[2]["params"]["update"]["content"]["text"], " world");
     }
 
     #[tokio::test]
@@ -3113,7 +3637,7 @@ mod tests {
         );
         let mut out = Vec::new();
 
-        let (outcome, tool_calls) = drive_prompt_stream(
+        let (outcome, tool_calls, _usage) = drive_prompt_stream(
             stream,
             "sess_1",
             JsonRpcResponseIdPolicy::Preserve,
@@ -3139,7 +3663,7 @@ mod tests {
         );
         let mut out = Vec::new();
 
-        let (outcome, _tool_calls) = drive_prompt_stream(
+        let (outcome, _tool_calls, _usage) = drive_prompt_stream(
             stream,
             "sess_1",
             JsonRpcResponseIdPolicy::StringifyNumeric,
@@ -3168,7 +3692,7 @@ mod tests {
             lines_from(r#"{"jsonrpc":"2.0","id":9,"method":"session/new","params":{}}"#);
         let mut out = Vec::new();
 
-        let (outcome, _tool_calls) = drive_prompt_stream(
+        let (outcome, _tool_calls, _usage) = drive_prompt_stream(
             stream,
             "sess_1",
             JsonRpcResponseIdPolicy::StringifyNumeric,
@@ -3196,7 +3720,7 @@ mod tests {
         let mut reader = lines_from("");
         let mut out = Vec::new();
 
-        let (outcome, tool_calls) = drive_prompt_stream(
+        let (outcome, tool_calls, _usage) = drive_prompt_stream(
             stream,
             "sess_1",
             JsonRpcResponseIdPolicy::Preserve,
@@ -3228,7 +3752,7 @@ mod tests {
         let mut reader = lines_from("");
         let mut out = Vec::new();
 
-        let (_outcome, tool_calls) = drive_prompt_stream(
+        let (_outcome, tool_calls, _usage) = drive_prompt_stream(
             stream,
             "sess_1",
             JsonRpcResponseIdPolicy::Preserve,
@@ -3251,7 +3775,7 @@ mod tests {
         let mut reader = lines_from("");
         let mut out = Vec::new();
 
-        let (_outcome, tool_calls) = drive_prompt_stream(
+        let (_outcome, tool_calls, _usage) = drive_prompt_stream(
             stream,
             "sess_1",
             JsonRpcResponseIdPolicy::Preserve,
@@ -4083,7 +4607,7 @@ mod tests {
         let mut reader = lines_from("");
         let mut out = Vec::new();
 
-        let (outcome, messages) = run_agentic_prompt_turn(
+        let (outcome, messages, _usage) = run_agentic_prompt_turn(
             AcpTurnContext {
                 config: &Config::default(),
                 model: "test-model",
@@ -4220,7 +4744,7 @@ mod tests {
         let mut reader = lines_from("");
         let mut out = Vec::new();
 
-        let (outcome, messages) = run_agentic_prompt_turn(
+        let (outcome, messages, _usage) = run_agentic_prompt_turn(
             AcpTurnContext {
                 config: &Config::default(),
                 model: "test-model",
@@ -4288,7 +4812,7 @@ mod tests {
         let mut reader = lines_from("");
         let mut out = Vec::new();
 
-        let (outcome, messages) = run_agentic_prompt_turn(
+        let (outcome, messages, _usage) = run_agentic_prompt_turn(
             AcpTurnContext {
                 config: &Config::default(),
                 model: "test-model",

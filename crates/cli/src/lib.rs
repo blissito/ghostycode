@@ -388,6 +388,12 @@ New integrations should prefer `ghosty app-server`.")]
         after_help = "The browser receives a one-time loopback bootstrap capability, never the Runtime token.\nThe capability is exchanged for a bounded, process-local HttpOnly, SameSite=Strict web session and then invalidated."
     )]
     Web(WebArgs),
+    /// Speak the Agent Client Protocol: over stdio for an editor that launches
+    /// Ghosty as a child (default), or over WebSocket + HTTP at /acp with --http.
+    #[command(
+        after_help = "Equivalent to `ghosty serve --acp [--acp-http ...]`, which keeps working."
+    )]
+    Acp(AcpArgs),
     /// Sign in to your Ghosty account (browser device flow).
     Login(LoginArgs),
     /// Remove saved authentication state.
@@ -639,6 +645,22 @@ struct RunArgs {
 struct TuiPassthroughArgs {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     args: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+struct AcpArgs {
+    /// Serve ACP over WebSocket + Streamable HTTP at /acp instead of stdio.
+    #[arg(long)]
+    http: bool,
+    /// Bind host for --http (default localhost).
+    #[arg(long, requires = "http")]
+    host: Option<String>,
+    /// Bind port for --http.
+    #[arg(long, requires = "http")]
+    port: Option<u16>,
+    /// Browser origin allowed to open /acp (repeatable; --http only).
+    #[arg(long = "allow-origin", value_name = "URL", requires = "http")]
+    allow_origin: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -2041,6 +2063,10 @@ fn run() -> Result<()> {
         Some(Commands::Web(args)) => {
             let resolved_runtime = resolve_runtime_for_dispatch(&mut store, &runtime_overrides);
             run_tui_server_in_process(&cli, &resolved_runtime, web_serve_passthrough(&args))
+        }
+        Some(Commands::Acp(args)) => {
+            let resolved_runtime = resolve_runtime_for_dispatch(&mut store, &runtime_overrides);
+            run_tui_server_in_process(&cli, &resolved_runtime, acp_serve_passthrough(&args))
         }
         Some(Commands::Login(args)) => {
             reject_legacy_login_provider_args(&args)?;
@@ -4685,6 +4711,28 @@ fn web_serve_passthrough(args: &WebArgs) -> Vec<String> {
     ]
 }
 
+/// `ghosty acp [...]` is `ghosty serve --acp [...]` with the ACP flags under
+/// their own names (`--http` → `--acp-http`, `--allow-origin` → `--acp-allow-origin`).
+fn acp_serve_passthrough(args: &AcpArgs) -> Vec<String> {
+    let mut forwarded = vec!["serve".to_string(), "--acp".to_string()];
+    if args.http {
+        forwarded.push("--acp-http".to_string());
+    }
+    if let Some(host) = args.host.as_ref() {
+        forwarded.push("--host".to_string());
+        forwarded.push(host.clone());
+    }
+    if let Some(port) = args.port {
+        forwarded.push("--port".to_string());
+        forwarded.push(port.to_string());
+    }
+    for origin in &args.allow_origin {
+        forwarded.push("--acp-allow-origin".to_string());
+        forwarded.push(origin.clone());
+    }
+    forwarded
+}
+
 fn app_server_token_from_env() -> Option<String> {
     std::env::var("GHOSTY_APP_SERVER_TOKEN")
         .ok()
@@ -6217,6 +6265,40 @@ verbosity = "project-imported"
         assert!(help.contains("--port"));
         assert!(help.contains("one-time loopback bootstrap"));
         assert!(!help.contains("--auth-token"));
+    }
+
+    #[test]
+    fn acp_command_forwards_to_serve_acp() {
+        let cli = parse_ok(&["ghosty", "acp"]);
+        let Some(Commands::Acp(args)) = cli.command else {
+            panic!("expected acp command");
+        };
+        assert_eq!(acp_serve_passthrough(&args), ["serve", "--acp"]);
+
+        let cli = parse_ok(&[
+            "ghosty",
+            "acp",
+            "--http",
+            "--port",
+            "9091",
+            "--allow-origin",
+            "https://app.example",
+        ]);
+        let Some(Commands::Acp(args)) = cli.command else {
+            panic!("expected acp command");
+        };
+        assert_eq!(
+            acp_serve_passthrough(&args),
+            [
+                "serve",
+                "--acp",
+                "--acp-http",
+                "--port",
+                "9091",
+                "--acp-allow-origin",
+                "https://app.example"
+            ]
+        );
     }
 
     #[test]

@@ -234,19 +234,30 @@ output is passed through a redactor, so secrets are never printed. The parser is
 covered by `scripts/release/app-server-smoke.test.sh` against a fake `ghosty`
 binary.
 
-## ACP adapter: `ghosty serve --acp`
+## ACP adapter: `ghosty acp`
 
-`ghosty serve --acp` speaks JSON-RPC 2.0 over newline-delimited stdio for
-ACP-compatible editor clients. The initial adapter implements the ACP baseline:
+`ghosty acp` (the long form `ghosty serve --acp` still works) speaks JSON-RPC
+2.0 over newline-delimited stdio for ACP-compatible editor clients. The adapter
+implements the ACP baseline:
 
 - `initialize`
 - `session/new`
 - `session/prompt`
 - `session/cancel`
+- `session/set_config_option`
 
 Prompt requests are routed through the configured Ghosty client and current
 default model. Responses are emitted as `session/update` agent message chunks
-followed by a `session/prompt` response with `stopReason: "end_turn"`.
+(`agent_thought_chunk` for the model's reasoning, `agent_message_chunk` for the
+answer) followed by a `session/prompt` response with `stopReason` and the turn's
+token `usage`. After every turn a `usage_update` reports how much of the route's
+context window the session now occupies and, on money-metered routes, the
+session's priced spend so far.
+
+`session/new` returns `configOptions` — `provider`, `model` (category `model`)
+and `thinking_effort` (category `thought_level`) as `select` options — so the
+client can show and change them through `session/set_config_option`; each
+change answers with the refreshed list and also emits a `config_option_update`.
 
 Each session owns a tool registry built from the same builders as headless
 `exec` and the MCP adapter: file tools (read, write, edit, list), search, git,

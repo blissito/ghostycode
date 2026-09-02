@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ghosty acp`.** Subcomando propio para el Agent Client Protocol; `ghosty acp --http`
+  es el transporte por red. `ghosty serve --acp` sigue funcionando.
+- **ACP ya cuenta lo que consume.** Cada turno cierra con un `usage_update` (tokens en
+  contexto contra la ventana de la ruta, y el gasto acumulado de la sesión cuando la ruta
+  se cobra por token) y la respuesta de `session/prompt` trae el `usage` del turno. Antes
+  el servidor recibía el reporte del proveedor y lo tiraba.
+- **Proveedor, modelo y esfuerzo visibles en el cliente ACP.** `session/new` devuelve
+  `configOptions` y `session/set_config_option` los cambia, como hace Goose. El
+  razonamiento del modelo sale como `agent_thought_chunk` en vez de silencio.
+
+### Removed
+
+- `session/listProviders`, `session/currentModel` y `session/selectModel`: métodos
+  inventados que ningún cliente ACP llamaba. Los reemplazan los `configOptions`.
+
 ## [0.0.20] - 2026-09-01
 
 ### Added
