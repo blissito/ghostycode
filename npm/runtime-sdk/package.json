@@ -1,6 +1,6 @@
 {
   "name": "@ghosty/runtime-sdk",
-  "version": "0.0.22",
+  "version": "0.0.23",
   "description": "Typed JavaScript helpers for Ghosty Runtime API Fleet endpoints.",
   "license": "MIT",
   "type": "module",

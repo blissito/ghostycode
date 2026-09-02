@@ -66,6 +66,7 @@ use crate::models::{
 };
 use crate::tools::spec::{ApprovalRequirement, PreparedToolCall, RichToolResult, ToolError};
 use crate::tools::{ToolContext, ToolRegistry, ToolRegistryBuilder};
+use crate::tui::approval::ApprovalMode;
 use crate::worker_profile::ShellPolicy;
 
 const ACP_PROTOCOL_VERSION: u64 = 1;
@@ -76,6 +77,129 @@ const ACP_PROTOCOL_VERSION: u64 = 1;
 const CONFIG_PROVIDER: &str = "provider";
 const CONFIG_MODEL: &str = "model";
 const CONFIG_THINKING_EFFORT: &str = "thinking_effort";
+/// Approval posture, exposed both as a config option (category `mode`) and as
+/// ACP session modes (`session/set_mode`); both paths move the same field.
+const CONFIG_MODE: &str = "mode";
+/// ACP mode ids in the order a client lists them. `Never` has no place in an
+/// editor session, so it is not offered.
+const ACP_MODES: [(&str, ApprovalMode, &str); 3] = [
+    (
+        "ask",
+        ApprovalMode::Suggest,
+        "Ask before tools that write or run commands",
+    ),
+    (
+        "auto",
+        ApprovalMode::Auto,
+        "Deterministic review decides; only risky calls ask",
+    ),
+    (
+        "yolo",
+        ApprovalMode::Bypass,
+        "Run every allowed tool without asking (hard blocks still apply)",
+    ),
+];
+/// Slash commands served locally by the ACP agent, without a provider round.
+/// (name, description, argument hint). Anything else starting with `/` goes
+/// to the model as ordinary text.
+const ACP_COMMANDS: [(&str, &str, Option<&str>); 7] = [
+    ("help", "List the commands this agent answers itself", None),
+    ("model", "Show or switch the model", Some("[model id]")),
+    (
+        "provider",
+        "Show or switch the provider",
+        Some("[provider id]"),
+    ),
+    (
+        "effort",
+        "Set the thinking effort",
+        Some("auto|off|low|medium|high|xhigh|max"),
+    ),
+    ("mode", "Set the approval mode", Some("ask|auto|yolo")),
+    ("usage", "Tokens and cost of this session so far", None),
+    ("clear", "Forget this session's conversation", None),
+];
+
+fn acp_mode_id(mode: ApprovalMode) -> &'static str {
+    ACP_MODES
+        .iter()
+        .find(|(_, candidate, _)| *candidate == mode)
+        .map_or("ask", |(id, _, _)| id)
+}
+
+fn parse_acp_mode(value: &str) -> Option<ApprovalMode> {
+    let mode = ApprovalMode::from_config_value(value)?;
+    ACP_MODES
+        .iter()
+        .any(|(_, candidate, _)| *candidate == mode)
+        .then_some(mode)
+}
+
+/// A readable name for a model id: the catalog carries none, so this is
+/// synthesized (`deepseek-v4-flash` → `DeepSeek V4 Flash`). The `value` a
+/// client sends back is always the raw id; this only decorates the label.
+fn model_display_name(id: &str) -> String {
+    const BRANDS: [(&str, &str); 12] = [
+        ("deepseek", "DeepSeek"),
+        ("gpt", "GPT"),
+        ("glm", "GLM"),
+        ("qwen", "Qwen"),
+        ("claude", "Claude"),
+        ("kimi", "Kimi"),
+        ("gemini", "Gemini"),
+        ("llama", "Llama"),
+        ("mistral", "Mistral"),
+        ("grok", "Grok"),
+        ("minimax", "MiniMax"),
+        ("o", "o"),
+    ];
+    let tail = id.rsplit(['/', ':']).next().unwrap_or(id);
+    tail.split(['-', '_'])
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let lower = part.to_ascii_lowercase();
+            if let Some((_, brand)) = BRANDS.iter().find(|(key, _)| *key == lower) {
+                return (*brand).to_string();
+            }
+            // Version-ish tokens (`v4`, `k3`, `4o`, `3.5`) read better upper.
+            if lower.chars().any(|c| c.is_ascii_digit()) && lower.len() <= 4 {
+                return lower.to_ascii_uppercase();
+            }
+            let mut chars = lower.chars();
+            match chars.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// `/name args` from a prompt's text, when `name` is one of [`ACP_COMMANDS`].
+fn parse_acp_slash_command(prompt: Option<&Value>) -> Option<(&'static str, String)> {
+    let text = extract_prompt_text(prompt)?;
+    let text = text.trim();
+    let rest = text.strip_prefix('/')?;
+    let (name, args) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+    let name = name.to_ascii_lowercase();
+    let (known, _, _) = ACP_COMMANDS.iter().find(|(known, _, _)| *known == name)?;
+    Some((known, args.trim().to_string()))
+}
+
+fn acp_available_commands() -> Value {
+    Value::Array(
+        ACP_COMMANDS
+            .iter()
+            .map(|(name, description, hint)| {
+                let mut command = json!({ "name": name, "description": description });
+                if let Some(hint) = hint {
+                    command["input"] = json!({ "hint": hint });
+                }
+                command
+            })
+            .collect(),
+    )
+}
 /// Effort tiers offered to the client; the route normalizes them at dispatch.
 const THINKING_EFFORT_VALUES: [&str; 7] = ["auto", "off", "low", "medium", "high", "xhigh", "max"];
 
@@ -192,6 +316,38 @@ where
         // running tool. Every other method is request/response and handled
         // synchronously below.
         if method == "session/prompt" {
+            // Local slash commands answer without a provider round; an
+            // unknown `/word` is just text for the model.
+            if let Some((name, args)) = parse_acp_slash_command(params.get("prompt")) {
+                let session_id = params
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let response_id_policy = server.response_id_policy;
+                match server.run_slash_command(&session_id, name, &args) {
+                    Ok((reply, updates)) => {
+                        write_session_update(&mut writer, &session_id, reply).await?;
+                        for update in updates {
+                            write_session_notification(&mut writer, &session_id, update).await?;
+                        }
+                        if let Some(id) = id {
+                            let id = response_id_policy.response_id(id);
+                            write_jsonrpc_result(
+                                &mut writer,
+                                id,
+                                json!({ "stopReason": "end_turn" }),
+                            )
+                            .await?;
+                        }
+                    }
+                    Err(err) => {
+                        let id = id.map(|id| response_id_policy.response_id(id));
+                        write_jsonrpc_error(&mut writer, id, err.code, err.message).await?;
+                    }
+                }
+                continue;
+            }
             match server.begin_prompt(params) {
                 Ok(prepared) => {
                     let PreparedPrompt {
@@ -229,6 +385,7 @@ where
                             session_id: &session_id,
                             tool_registry: &tool_registry,
                             response_id_policy,
+                            approval_mode: server.approval_mode,
                         },
                         messages,
                         &mut reader,
@@ -803,10 +960,24 @@ struct PreparedAcpTool {
 /// carve-out: a remembered exact allow rule may clear the ordinary tool hold,
 /// but the built-in safety floor and repository law can always re-add a prompt
 /// or hard block afterwards.
+#[cfg(test)]
 fn prepare_acp_tool_admission(
     config: &Config,
     registry: &ToolRegistry,
     call: &PendingToolCall,
+) -> std::result::Result<(PreparedToolCall, AcpToolAdmission), ToolError> {
+    prepare_acp_tool_admission_in_mode(config, registry, call, ApprovalMode::Suggest)
+}
+
+/// [`prepare_acp_tool_admission`] under an explicit posture. `Auto` feeds the
+/// deterministic review layer; `Bypass` (yolo) turns any remaining permission
+/// prompt into an automatic admission but never touches a `Block`: the safety
+/// floor, auto-review blocks and repository law hold in every mode.
+fn prepare_acp_tool_admission_in_mode(
+    config: &Config,
+    registry: &ToolRegistry,
+    call: &PendingToolCall,
+    approval_mode: ApprovalMode,
 ) -> std::result::Result<(PreparedToolCall, AcpToolAdmission), ToolError> {
     let spec = registry.get(&call.name).ok_or_else(|| {
         ToolError::not_available(format!("tool '{}' is not registered", call.name))
@@ -843,7 +1014,6 @@ fn prepare_acp_tool_admission(
     }
     let mut permission_reason =
         (prepared.approval != ApprovalRequirement::Auto).then(|| prepared.description.clone());
-    let approval_mode = crate::tui::approval::ApprovalMode::Suggest;
     let workspace = registry.context().workspace.as_path();
 
     let typed_rule = exec_shell_ask_rule_decision_for_policy(
@@ -910,9 +1080,11 @@ fn prepare_acp_tool_admission(
         }
     }
 
-    let admission = permission_reason
-        .map(AcpToolAdmission::RequestPermission)
-        .unwrap_or(AcpToolAdmission::Auto);
+    let admission = match permission_reason {
+        Some(_) if approval_mode == ApprovalMode::Bypass => AcpToolAdmission::Auto,
+        Some(reason) => AcpToolAdmission::RequestPermission(reason),
+        None => AcpToolAdmission::Auto,
+    };
     Ok((prepared, admission))
 }
 
@@ -926,6 +1098,7 @@ async fn prepare_acp_tool_with_hooks(
     model: &str,
     registry: &ToolRegistry,
     call: &PendingToolCall,
+    approval_mode: ApprovalMode,
 ) -> std::result::Result<PreparedAcpTool, ToolError> {
     let spec = registry.get(&call.name).ok_or_else(|| {
         ToolError::not_available(format!("tool '{}' is not registered", call.name))
@@ -948,7 +1121,8 @@ async fn prepare_acp_tool_with_hooks(
     if let Some(updated_input) = hook_outcome.updated_input {
         final_call.input = updated_input;
     }
-    let (prepared, mut admission) = prepare_acp_tool_admission(config, registry, &final_call)?;
+    let (prepared, mut admission) =
+        prepare_acp_tool_admission_in_mode(config, registry, &final_call, approval_mode)?;
     if hook_outcome.requires_approval && matches!(admission, AcpToolAdmission::Auto) {
         admission = AcpToolAdmission::RequestPermission(
             "A ToolCallBefore hook requires explicit approval for this call.".to_string(),
@@ -1206,6 +1380,7 @@ struct AcpTurnContext<'a> {
     session_id: &'a str,
     tool_registry: &'a ToolRegistry,
     response_id_policy: JsonRpcResponseIdPolicy,
+    approval_mode: ApprovalMode,
 }
 
 /// Execute `tool_calls` in order against `registry`, reporting each one to
@@ -1231,6 +1406,7 @@ where
         session_id,
         tool_registry: registry,
         response_id_policy,
+        ..
     } = context;
     let mut result_messages = Vec::with_capacity(tool_calls.len());
     let mut reader_open = true;
@@ -1246,7 +1422,15 @@ where
             continue;
         }
 
-        let prepared = match prepare_acp_tool_with_hooks(config, model, registry, &call).await {
+        let prepared = match prepare_acp_tool_with_hooks(
+            config,
+            model,
+            registry,
+            &call,
+            context.approval_mode,
+        )
+        .await
+        {
             Ok(prepared) => prepared,
             Err(err) => {
                 let content = format!("Error: {err}");
@@ -1537,6 +1721,9 @@ struct AcpServer {
     /// the session cap is reached.
     insertion_order: VecDeque<String>,
     response_id_policy: JsonRpcResponseIdPolicy,
+    /// Approval posture for every session on this connection; `Suggest`
+    /// (ask) until the client changes it.
+    approval_mode: ApprovalMode,
 }
 
 struct AcpSession {
@@ -1618,6 +1805,7 @@ impl AcpServer {
             sessions: HashMap::new(),
             insertion_order: VecDeque::new(),
             response_id_policy: JsonRpcResponseIdPolicy::Preserve,
+            approval_mode: ApprovalMode::Suggest,
         }
     }
 
@@ -1639,27 +1827,36 @@ impl AcpServer {
             "session/new" => {
                 let result = self.new_session(params).await?;
                 let session_id = result["sessionId"].as_str().unwrap_or_default().to_string();
-                // Goose sends the (empty) command list at session setup and
-                // clients such as Zed wait for it before enabling slash input.
+                // Goose sends the command list at session setup and clients
+                // such as Zed wait for it before enabling slash input.
                 Ok(AcpDispatch::ResponseThenNotify {
                     result,
                     session_id,
                     updates: vec![json!({
                         "sessionUpdate": "available_commands_update",
-                        "availableCommands": []
+                        "availableCommands": acp_available_commands()
                     })],
+                })
+            }
+            "session/set_mode" => {
+                let session_id = self.require_session_id(&params)?;
+                let mode_id = params
+                    .get("modeId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| AcpError::invalid_params("modeId is required"))?;
+                self.apply_config_value(CONFIG_MODE, mode_id)?;
+                Ok(AcpDispatch::ResponseThenNotify {
+                    result: json!(null),
+                    session_id,
+                    updates: self.mode_updates(),
                 })
             }
             "session/set_config_option" => {
                 let (session_id, result) = self.set_config_option(params)?;
-                let update = json!({
-                    "sessionUpdate": "config_option_update",
-                    "configOptions": result["configOptions"].clone()
-                });
                 Ok(AcpDispatch::ResponseThenNotify {
                     result,
                     session_id,
-                    updates: vec![update],
+                    updates: self.mode_updates(),
                 })
             }
             // A cancel that arrives with no prompt in flight is an idempotent
@@ -1726,6 +1923,7 @@ impl AcpServer {
         );
         Ok(json!({
             "sessionId": session_id,
+            "modes": self.session_modes(),
             "configOptions": self.config_options()
         }))
     }
@@ -1857,7 +2055,11 @@ impl AcpServer {
         let models = self
             .model_choices()
             .iter()
-            .map(|model| select(model, model))
+            .map(|model| select(model, &model_display_name(model)))
+            .collect::<Vec<_>>();
+        let modes = ACP_MODES
+            .iter()
+            .map(|(id, mode, _)| select(id, mode.permission_chip_label()))
             .collect::<Vec<_>>();
         let efforts = THINKING_EFFORT_VALUES
             .iter()
@@ -1886,38 +2088,68 @@ impl AcpServer {
                 "type": "select",
                 "currentValue": self.current_thinking_effort(),
                 "options": efforts
+            },
+            {
+                "id": CONFIG_MODE,
+                "name": "Mode",
+                "category": "mode",
+                "type": "select",
+                "currentValue": acp_mode_id(self.approval_mode),
+                "options": modes
             }
         ])
     }
 
-    /// `session/set_config_option`: apply one option and return the session
-    /// id plus the refreshed option list, which the caller also sends as a
-    /// `config_option_update` (goose does the same).
-    fn set_config_option(
-        &mut self,
-        params: Value,
-    ) -> std::result::Result<(String, Value), AcpError> {
+    /// ACP `SessionModeState`: the same posture as the `mode` config option,
+    /// for clients that drive it through `session/set_mode`.
+    fn session_modes(&self) -> Value {
+        json!({
+            "currentModeId": acp_mode_id(self.approval_mode),
+            "availableModes": ACP_MODES.iter().map(|(id, mode, description)| json!({
+                "id": id,
+                "name": mode.permission_chip_label(),
+                "description": description
+            })).collect::<Vec<_>>()
+        })
+    }
+
+    /// Notifications after any option change: the refreshed option list and
+    /// the current mode, so a client following either surface stays in sync.
+    fn mode_updates(&self) -> Vec<Value> {
+        vec![
+            json!({
+                "sessionUpdate": "config_option_update",
+                "configOptions": self.config_options()
+            }),
+            json!({
+                "sessionUpdate": "current_mode_update",
+                "currentModeId": acp_mode_id(self.approval_mode)
+            }),
+        ]
+    }
+
+    fn require_session_id(&self, params: &Value) -> std::result::Result<String, AcpError> {
         let session_id = params
             .get("sessionId")
             .and_then(Value::as_str)
-            .ok_or_else(|| AcpError::invalid_params("sessionId is required"))?
-            .to_string();
-        if !self.sessions.contains_key(&session_id) {
+            .ok_or_else(|| AcpError::invalid_params("sessionId is required"))?;
+        if !self.sessions.contains_key(session_id) {
             return Err(AcpError::invalid_params("unknown sessionId"));
         }
-        let config_id = params
-            .get("configId")
-            .and_then(Value::as_str)
-            .ok_or_else(|| AcpError::invalid_params("configId is required"))?;
-        let value = params
-            .get("value")
-            .and_then(Value::as_str)
-            .ok_or_else(|| AcpError::invalid_params("value must be a string"))?
-            .trim();
+        Ok(session_id.to_string())
+    }
+
+    /// Apply one config option value; shared by `session/set_config_option`,
+    /// `session/set_mode` and the slash commands.
+    fn apply_config_value(
+        &mut self,
+        config_id: &str,
+        value: &str,
+    ) -> std::result::Result<(), AcpError> {
+        let value = value.trim();
         if value.is_empty() {
             return Err(AcpError::invalid_params("value must not be empty"));
         }
-
         match config_id {
             CONFIG_PROVIDER => self.set_provider(value)?,
             CONFIG_MODEL => self.model = value.to_string(),
@@ -1927,12 +2159,138 @@ impl AcpServer {
                 self.config.reasoning_effort = Some(effort.as_setting().to_string());
                 self.config.reasoning_effort_inferred_from_legacy_alias = false;
             }
+            CONFIG_MODE => {
+                self.approval_mode = parse_acp_mode(value).ok_or_else(|| {
+                    AcpError::invalid_params(format!(
+                        "unknown mode: {value} (expected ask, auto or yolo)"
+                    ))
+                })?;
+            }
             other => {
                 return Err(AcpError::invalid_params(format!(
                     "unknown configId: {other}"
                 )));
             }
         }
+        Ok(())
+    }
+
+    /// Answer a local slash command. Returns the text to stream back and the
+    /// notifications to follow it with.
+    fn run_slash_command(
+        &mut self,
+        session_id: &str,
+        name: &str,
+        args: &str,
+    ) -> std::result::Result<(String, Vec<Value>), AcpError> {
+        if !self.sessions.contains_key(session_id) {
+            return Err(AcpError::invalid_params("unknown sessionId"));
+        }
+        let set = |server: &mut Self, config_id: &str, value: &str, what: &str| {
+            server.apply_config_value(config_id, value)?;
+            Ok::<_, AcpError>((format!("{what}: {value}"), server.mode_updates()))
+        };
+        match name {
+            "help" => {
+                let lines = ACP_COMMANDS
+                    .iter()
+                    .map(|(name, description, hint)| match hint {
+                        Some(hint) => format!("/{name} {hint} — {description}"),
+                        None => format!("/{name} — {description}"),
+                    })
+                    .collect::<Vec<_>>();
+                Ok((lines.join("\n"), Vec::new()))
+            }
+            "model" if args.is_empty() => {
+                let lines = self
+                    .model_choices()
+                    .iter()
+                    .map(|model| {
+                        let mark = if *model == self.model { "* " } else { "  " };
+                        format!("{mark}{model} — {}", model_display_name(model))
+                    })
+                    .collect::<Vec<_>>();
+                Ok((
+                    format!("Models (* current):\n{}", lines.join("\n")),
+                    Vec::new(),
+                ))
+            }
+            "model" => set(self, CONFIG_MODEL, args, "Model"),
+            "provider" if args.is_empty() => {
+                let current = self.current_provider_key();
+                let lines = self
+                    .provider_choices()
+                    .iter()
+                    .map(|(id, name)| {
+                        let mark = if *id == current { "* " } else { "  " };
+                        format!("{mark}{id} — {name}")
+                    })
+                    .collect::<Vec<_>>();
+                Ok((
+                    format!("Providers (* current):\n{}", lines.join("\n")),
+                    Vec::new(),
+                ))
+            }
+            "provider" => set(self, CONFIG_PROVIDER, args, "Provider"),
+            "effort" if args.is_empty() => Ok((
+                format!("Thinking effort: {}", self.current_thinking_effort()),
+                Vec::new(),
+            )),
+            "effort" => set(self, CONFIG_THINKING_EFFORT, args, "Thinking effort"),
+            "mode" if args.is_empty() => Ok((
+                format!("Mode: {}", acp_mode_id(self.approval_mode)),
+                Vec::new(),
+            )),
+            "mode" => set(self, CONFIG_MODE, args, "Mode"),
+            "usage" => {
+                let session = &self.sessions[session_id];
+                let usage = &session.usage;
+                let mut text = format!(
+                    "Session usage: {} input, {} output, {} cached read, {} reasoning tokens",
+                    usage.input_tokens,
+                    usage.output_tokens,
+                    usage.prompt_cache_hit_tokens.unwrap_or(0),
+                    usage.reasoning_tokens.unwrap_or(0)
+                );
+                if session.cost_usd > 0.0 {
+                    text.push_str(&format!("; ${:.4} USD", session.cost_usd));
+                } else if session.cost_cny > 0.0 {
+                    text.push_str(&format!("; ¥{:.4} CNY", session.cost_cny));
+                }
+                Ok((text, Vec::new()))
+            }
+            "clear" => {
+                if let Some(session) = self.sessions.get_mut(session_id) {
+                    session.messages.clear();
+                    session.usage = Usage::default();
+                    session.cost_usd = 0.0;
+                    session.cost_cny = 0.0;
+                }
+                Ok(("Conversation cleared.".to_string(), Vec::new()))
+            }
+            other => Err(AcpError::invalid_params(format!(
+                "unknown command: /{other}"
+            ))),
+        }
+    }
+
+    /// `session/set_config_option`: apply one option and return the session
+    /// id plus the refreshed option list, which the caller also sends as a
+    /// `config_option_update` (goose does the same).
+    fn set_config_option(
+        &mut self,
+        params: Value,
+    ) -> std::result::Result<(String, Value), AcpError> {
+        let session_id = self.require_session_id(&params)?;
+        let config_id = params
+            .get("configId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| AcpError::invalid_params("configId is required"))?;
+        let value = params
+            .get("value")
+            .and_then(Value::as_str)
+            .ok_or_else(|| AcpError::invalid_params("value must be a string"))?;
+        self.apply_config_value(config_id, value)?;
         Ok((
             session_id,
             json!({ "configOptions": self.config_options() }),
@@ -3545,6 +3903,7 @@ mod tests {
                 session_id: "sess_1",
                 tool_registry: registry,
                 response_id_policy,
+                approval_mode: ApprovalMode::Suggest,
             },
             vec![call],
             &mut reader,
@@ -4140,6 +4499,7 @@ mod tests {
             "test-model",
             &registry,
             &pending_call("File", json!({"action": "read", "path": "safe.txt"})),
+            ApprovalMode::Suggest,
         )
         .await
         .expect_err("strict hook must deny");
@@ -4170,9 +4530,15 @@ mod tests {
         let (_, raw_admission) = prepare_acp_tool_admission(&config, &registry, &raw).unwrap();
         assert_eq!(raw_admission, AcpToolAdmission::Auto);
 
-        let prepared = prepare_acp_tool_with_hooks(&config, "test-model", &registry, &raw)
-            .await
-            .expect("hook rewrite prepares");
+        let prepared = prepare_acp_tool_with_hooks(
+            &config,
+            "test-model",
+            &registry,
+            &raw,
+            ApprovalMode::Suggest,
+        )
+        .await
+        .expect("hook rewrite prepares");
         assert_eq!(
             prepared.call.input.get("action").and_then(Value::as_str),
             Some("write")
@@ -4200,6 +4566,114 @@ mod tests {
             AcpToolAdmission::RequestPermission(_)
         ));
         assert_eq!(registry.context().workspace, dir.path());
+    }
+
+    /// `yolo` clears the ordinary permission hold; `ask` keeps it. A hard
+    /// block (here: a stateful shell request) survives every mode.
+    #[tokio::test]
+    async fn bypass_mode_admits_what_ask_mode_would_prompt_for() {
+        let (_dir, registry) = workspace_registry().await;
+        let config = Config::default();
+        let write = pending_call(
+            "File",
+            json!({"action": "write", "path": "src/lib.rs", "content": "new"}),
+        );
+
+        let (_, asked) =
+            prepare_acp_tool_admission_in_mode(&config, &registry, &write, ApprovalMode::Suggest)
+                .unwrap();
+        let (_, bypassed) =
+            prepare_acp_tool_admission_in_mode(&config, &registry, &write, ApprovalMode::Bypass)
+                .unwrap();
+        assert!(matches!(asked, AcpToolAdmission::RequestPermission(_)));
+        assert_eq!(bypassed, AcpToolAdmission::Auto);
+    }
+
+    #[test]
+    fn model_display_names_are_synthesized_from_ids() {
+        assert_eq!(model_display_name("deepseek-v4-flash"), "DeepSeek V4 Flash");
+        assert_eq!(model_display_name("gpt-4o-mini"), "GPT 4O Mini");
+        assert_eq!(model_display_name("openai/glm-5.2"), "GLM 5.2");
+    }
+
+    #[test]
+    fn slash_commands_are_recognized_only_when_known() {
+        let prompt = |text: &str| json!([{ "type": "text", "text": text }]);
+        assert_eq!(
+            parse_acp_slash_command(Some(&prompt("/model gpt-4o"))),
+            Some(("model", "gpt-4o".to_string()))
+        );
+        assert_eq!(
+            parse_acp_slash_command(Some(&prompt("  /HELP "))),
+            Some(("help", String::new()))
+        );
+        assert_eq!(parse_acp_slash_command(Some(&prompt("/etc/passwd"))), None);
+        assert_eq!(parse_acp_slash_command(Some(&prompt("hola"))), None);
+    }
+
+    #[test]
+    fn session_new_state_lists_modes_and_commands() {
+        let (server, _) = server_with_session();
+        let modes = server.session_modes();
+        assert_eq!(modes["currentModeId"], "ask");
+        assert_eq!(modes["availableModes"].as_array().map(Vec::len), Some(3));
+        let options = server.config_options();
+        let mode = options
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|option| option["id"] == CONFIG_MODE)
+            .expect("mode option");
+        assert_eq!(mode["category"], "mode");
+        assert_eq!(mode["currentValue"], "ask");
+        assert_eq!(
+            acp_available_commands().as_array().map(Vec::len),
+            Some(ACP_COMMANDS.len())
+        );
+    }
+
+    #[test]
+    fn slash_mode_and_clear_change_the_session() {
+        let (mut server, session_id) = server_with_session();
+        server
+            .sessions
+            .get_mut(&session_id)
+            .unwrap()
+            .messages
+            .push(Message {
+                role: Role::User,
+                content: vec![ContentBlock::Text {
+                    text: "hi".into(),
+                    cache_control: None,
+                }],
+            });
+
+        let (reply, updates) = server
+            .run_slash_command(&session_id, "mode", "yolo")
+            .expect("mode");
+        assert_eq!(reply, "Mode: yolo");
+        assert_eq!(server.approval_mode, ApprovalMode::Bypass);
+        assert!(
+            updates.iter().any(
+                |u| u["sessionUpdate"] == "current_mode_update" && u["currentModeId"] == "yolo"
+            )
+        );
+        assert!(
+            updates
+                .iter()
+                .any(|u| u["sessionUpdate"] == "config_option_update")
+        );
+
+        let (reply, _) = server
+            .run_slash_command(&session_id, "clear", "")
+            .expect("clear");
+        assert_eq!(reply, "Conversation cleared.");
+        assert!(server.sessions[&session_id].messages.is_empty());
+
+        let err = server
+            .run_slash_command(&session_id, "mode", "never")
+            .expect_err("never is not offered");
+        assert_eq!(err.code, -32602);
     }
 
     #[tokio::test]
@@ -4352,6 +4826,7 @@ mod tests {
                 session_id: "sess_1",
                 tool_registry: &registry,
                 response_id_policy: JsonRpcResponseIdPolicy::Preserve,
+                approval_mode: ApprovalMode::Suggest,
             },
             vec![pending_call(
                 "File",
@@ -4614,6 +5089,7 @@ mod tests {
                 session_id: "sess_1",
                 tool_registry: &registry,
                 response_id_policy: JsonRpcResponseIdPolicy::Preserve,
+                approval_mode: ApprovalMode::Suggest,
             },
             vec![Message {
                 role: Role::User,
@@ -4690,6 +5166,7 @@ mod tests {
                 session_id: "sess_1",
                 tool_registry: &registry,
                 response_id_policy: JsonRpcResponseIdPolicy::Preserve,
+                approval_mode: ApprovalMode::Suggest,
             },
             vec![Message {
                 role: Role::User,
@@ -4751,6 +5228,7 @@ mod tests {
                 session_id: "sess_1",
                 tool_registry: &registry,
                 response_id_policy: JsonRpcResponseIdPolicy::Preserve,
+                approval_mode: ApprovalMode::Suggest,
             },
             vec![Message {
                 role: Role::User,
@@ -4819,6 +5297,7 @@ mod tests {
                 session_id: "sess_1",
                 tool_registry: &registry,
                 response_id_policy: JsonRpcResponseIdPolicy::Preserve,
+                approval_mode: ApprovalMode::Suggest,
             },
             vec![Message {
                 role: Role::User,

@@ -11,5 +11,5 @@ description = "Model/provider registry and fallback strategy for Ghosty"
 workspace = true
 
 [dependencies]
-ghosty-config = { path = "../config", version = "0.0.22" }
+ghosty-config = { path = "../config", version = "0.0.23" }
 serde.workspace = true

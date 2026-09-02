@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.23] - 2026-09-02
+
+### Added
+
+- **Modo de aprobación en ACP.** `session/new` devuelve `modes` (`ask`, `auto`,
+  `yolo`) y la opción `mode`; `session/set_mode` o `set_config_option` lo cambian y
+  ghosty avisa con `current_mode_update`. `yolo` deja pasar sin preguntar lo que
+  `ask` pediría; los bloqueos duros (piso del shell, auto-review, repo law) siguen
+  en todos los modos. Antes el adaptador ACP estaba clavado en "preguntar".
+- **Nombre legible del modelo.** Las opciones de modelo traen `DeepSeek V4 Flash`
+  como nombre y el id como valor; el catálogo no lo tiene, se sintetiza.
+- **Slash commands en ACP.** `available_commands_update` ya trae `/help`, `/model`,
+  `/provider`, `/effort`, `/mode`, `/usage` y `/clear`; el agente los contesta sin
+  ir al proveedor. Como Goose, pero con lo que ghosty puede hacer sin la TUI.
+
 ## [0.0.22] - 2026-09-02
 
 ### Fixed
@@ -2572,79 +2587,6 @@ runs against Pi 0.8.41 and by dogfooding repeated manual compaction.
 - Xavier Pestel (@xavierpestel-ai) — Mistral AI provider route (#5295).
 - Ben Younes (@ousamabenyounes) — inherited nested-agent depth cap (#5317).
 - Rafael Cavalheri (@rafaelcavalheri) — ACP agentic tool turns (#5225).
-
-## [0.9.5] - 2026-08-08
-
-Ghosty v0.9.5 consolidates the terminal application into one compiled
-runtime while preserving the familiar `ghosty` and `ghosty-tui` commands. It
-also expands the managed Runtime API, makes session and Fleet work easier to
-inspect and resume, and removes the hidden local continuation backstop that
-could end productive work without a final assistant response.
-
-### Added
-
-- **`model = "auto"` for prompt-based tier selection**: When set, the
-  dispatcher analyses the user's prompt before delegating to the TUI and
-  selects `deepseek-v4-pro` for complex tasks or `deepseek-v4-flash` for simple
-  tasks (PR #5257).
-- Runtime API controls for persistent goals, bounded memory inspection, MCP
-  server and skill lifecycle management, and durable Fleet receipt evidence.
-- Append-only session-tree history with `/tree`, `/branch`, `/fork`, and
-  `/resume`, plus `/rc` remote control and managed login.
-- A unified Fleet roster for built-in dispatch postures and a pinned indicator
-  that keeps active background work visible above the composer.
-- Incremental MCP registry refreshes that return the local snapshot immediately
-  and update it in the background.
-- Scout and Reviewer agents can use a bounded direct-command evidence shell for
-  read-only workspace, Git, and GitHub inspection, and can keep private working
-  notes in their own To-do while the durable transcript retains their evidence.
-
-### Changed
-
-- `ghosty-cli` now contains the terminal runtime directly. Release installers
-  expose byte-identical `ghosty` and `ghosty-tui` commands without a separate TUI
-  executable. v0.9.5 introduced deprecated `ghosty-tui-*` release filenames
-  as byte-identical compatibility copies; later releases retain those filenames
-  while installed v0.9.4 clients remain supported upgrade sources.
-- Startup release checks cache successful lookups for one hour. The updater
-  downloads and verifies the primary runtime once, then refreshes any existing
-  `ghosty-tui` or legacy `ghosty-tui` command paths from the same bytes.
-- Headless `ghosty exec` runs and verifier benchmark rollouts no longer
-  impose a 100-step default. `--max-turns` remains available as an explicit
-  opt-in ceiling; Fleet workers retain their separately configured budget.
-- Goal token and time budgets are telemetry rather than default stop
-  conditions, and automatic goal continuation is unlimited unless the user
-  explicitly configures a continuation ceiling.
-- Command-palette and slash-completion shadowing now share one alias-aware
-  discovery contract.
-- The website install guidance, localized product copy, navigation controls,
-  social metadata, and Cloudflare build pipeline now describe and deploy the
-  same one-runtime release contract.
-
-### Fixed
-
-- The hidden 20-step no-user-input backstop no longer ends productive turns.
-  Tool results, queued steering, child completions, REPL feedback, and goal
-  continuations can all reach the next provider step and a final assistant
-  response; explicit user-configured limits and genuine stuck-loop guards remain.
-- Complete error details are directly inspectable after a failure instead of
-  leaving the terminal with a clipped, unrecoverable error fragment.
-- A newly minted OAuth credential is adopted in the same provider-selection
-  flow instead of requiring a second picker trip.
-- Fresh session titles can replace a stale cached `New Session` placeholder,
-  unknown model context limits fail loudly, and release/source-install fallbacks
-  no longer request binaries removed by the single-runtime conversion.
-
-### Contributors
-
-- [Sh1Zuku](https://github.com/SparkofSpike) (`@SparkofSpike`) fixed stale
-  cached session titles that could pin the `New Session` placeholder.
-- [Paulo Aboim Pinto](https://github.com/aboimpinto) (`@aboimpinto`) built the
-  shared alias-aware command discovery contract and acceptance coverage.
-- [Sun Zhenyuan](https://github.com/bistack) (`@bistack`) contributed the
-  background incremental MCP Registry refresh.
-- [SKY ZHAO](https://github.com/skyzhao1223) (`@skyzhao1223`) contributed
-  prompt-based `model = "auto"` routing in PR #5257.
 
 ---
 

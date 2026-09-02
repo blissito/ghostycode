@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.23] - 2026-09-02
+
+### Added
+
+- **Modo de aprobación en ACP.** `session/new` devuelve `modes` (`ask`, `auto`,
+  `yolo`) y la opción `mode`; `session/set_mode` o `set_config_option` lo cambian y
+  ghosty avisa con `current_mode_update`. `yolo` deja pasar sin preguntar lo que
+  `ask` pediría; los bloqueos duros (piso del shell, auto-review, repo law) siguen
+  en todos los modos. Antes el adaptador ACP estaba clavado en "preguntar".
+- **Nombre legible del modelo.** Las opciones de modelo traen `DeepSeek V4 Flash`
+  como nombre y el id como valor; el catálogo no lo tiene, se sintetiza.
+- **Slash commands en ACP.** `available_commands_update` ya trae `/help`, `/model`,
+  `/provider`, `/effort`, `/mode`, `/usage` y `/clear`; el agente los contesta sin
+  ir al proveedor. Como Goose, pero con lo que ghosty puede hacer sin la TUI.
+
 ## [0.0.22] - 2026-09-02
 
 ### Fixed
@@ -7855,7 +7870,8 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
-[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.22...HEAD
+[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.23...HEAD
+[0.0.23]: https://github.com/blissito/ghostycode/compare/v0.0.22...v0.0.23
 [0.0.22]: https://github.com/blissito/ghostycode/compare/v0.0.21...v0.0.22
 [0.0.21]: https://github.com/blissito/ghostycode/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/blissito/ghostycode/compare/v0.0.19...v0.0.20

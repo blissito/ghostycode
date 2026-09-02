@@ -245,6 +245,7 @@ implements the ACP baseline:
 - `session/prompt`
 - `session/cancel`
 - `session/set_config_option`
+- `session/set_mode`
 
 Prompt requests are routed through the configured Ghosty client and current
 default model. Responses are emitted as `session/update` agent message chunks
@@ -254,10 +255,25 @@ token `usage`. After every turn a `usage_update` reports how much of the route's
 context window the session now occupies and, on money-metered routes, the
 session's priced spend so far.
 
-`session/new` returns `configOptions` — `provider`, `model` (category `model`)
-and `thinking_effort` (category `thought_level`) as `select` options — so the
-client can show and change them through `session/set_config_option`; each
-change answers with the refreshed list and also emits a `config_option_update`.
+`session/new` returns `configOptions` — `provider`, `model` (category `model`,
+with a readable name per id), `thinking_effort` (category `thought_level`) and
+`mode` (category `mode`) as `select` options — so the client can show and
+change them through `session/set_config_option`; each change answers with the
+refreshed list and also emits `config_option_update` and `current_mode_update`.
+
+The approval posture is also exposed as ACP session modes: `session/new`
+returns `modes` (`ask`, `auto`, `yolo`) and `session/set_mode` switches it.
+`ask` prompts through `session/request_permission` for anything that writes
+or runs; `auto` lets the deterministic reviewer decide; `yolo` admits every
+allowed call without asking. Hard blocks (the shell safety floor, auto-review
+blocks, repository law) hold in every mode.
+
+`session/new` also emits `available_commands_update` with the slash commands
+the agent answers itself, without a provider round: `/help`, `/model [id]`,
+`/provider [id]`, `/effort <tier>`, `/mode <ask|auto|yolo>`, `/usage` and
+`/clear`. A prompt whose text starts with one of them is handled locally and
+its reply streams back as an `agent_message_chunk`; any other `/word` goes to
+the model as ordinary text.
 
 Each session owns a tool registry built from the same builders as headless
 `exec` and the MCP adapter: file tools (read, write, edit, list), search, git,
