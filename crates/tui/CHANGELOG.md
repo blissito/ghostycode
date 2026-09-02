@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`ghosty acp`.** Subcomando propio para el Agent Client Protocol; `ghosty acp --http`
-  es el transporte por red. `ghosty serve --acp` sigue funcionando.
+  es el transporte por red. `ghosty serve --acp` sigue funcionando. `scripts/acp-serve.sh`
+  levanta el agente en una caja de EasyBits con sólo `EASYBITS_API_KEY` e imprime la URL
+  `wss://` que publica el host de cajas.
 - **ACP ya cuenta lo que consume.** Cada turno cierra con un `usage_update` (tokens en
   contexto contra la ventana de la ruta, y el gasto acumulado de la sesión cuando la ruta
   se cobra por token) y la respuesta de `session/prompt` trae el `usage` del turno. Antes

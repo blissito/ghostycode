@@ -653,8 +653,12 @@ struct AcpArgs {
     #[arg(long)]
     http: bool,
     /// Bind host for --http (default localhost).
-    #[arg(long, requires = "http")]
+    #[arg(long, requires = "http", conflicts_with = "open")]
     host: Option<String>,
+    /// Listen on every interface (0.0.0.0) so a client outside this machine
+    /// can reach /acp; needed inside a container or microVM.
+    #[arg(long, requires = "http")]
+    open: bool,
     /// Bind port for --http.
     #[arg(long, requires = "http")]
     port: Option<u16>,
@@ -4718,6 +4722,9 @@ fn acp_serve_passthrough(args: &AcpArgs) -> Vec<String> {
     if args.http {
         forwarded.push("--acp-http".to_string());
     }
+    if args.open {
+        forwarded.push("--open".to_string());
+    }
     if let Some(host) = args.host.as_ref() {
         forwarded.push("--host".to_string());
         forwarded.push(host.clone());
@@ -6279,6 +6286,7 @@ verbosity = "project-imported"
             "ghosty",
             "acp",
             "--http",
+            "--open",
             "--port",
             "9091",
             "--allow-origin",
@@ -6293,6 +6301,7 @@ verbosity = "project-imported"
                 "serve",
                 "--acp",
                 "--acp-http",
+                "--open",
                 "--port",
                 "9091",
                 "--acp-allow-origin",
