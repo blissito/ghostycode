@@ -363,13 +363,18 @@ It counts **only** on the WebSocket upgrade. `POST` and SSE on `/acp` still
 require a header or cookie, because `fetch()` can set headers and there is no
 reason to leak the secret into a URL that lands in proxy logs and history.
 
-A query token ranks with the cookie, never with a header: a page can put
-anything in a URL, so it proves possession of the secret and nothing about the
-caller not being a page. **It therefore still requires an allowed `Origin`.**
-That is the whole difference between this and the one-click RCE goose shipped,
-where a page could open a WebSocket to the local agent and run shell commands:
-the token is not what stops a hostile page, the allow-list is. Register your app
-with `--acp-allow-origin https://your.app`.
+When the upgrade carries an `Origin`, the query token is judged by it: a page
+can put anything in a URL, so the token proves possession of the secret and
+nothing about the page. **A browser client therefore still needs an allowed
+`Origin`** — register your app with `--acp-allow-origin https://your.app`. That
+is the whole difference between this and the one-click RCE goose shipped, where
+a page could open a WebSocket to the local agent and run shell commands: the
+token is not what stops a hostile page, the allow-list is.
+
+When the upgrade carries no `Origin` at all, the caller is not a page (a
+browser always stamps one), and the query token counts like a header. That is
+how a stdio↔WebSocket bridge such as `npx ghosty-acp <wss-url>` — Node's global
+`WebSocket` cannot set headers — reaches the agent from an editor.
 
 ### TLS
 

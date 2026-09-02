@@ -25,11 +25,15 @@
 //! cookie-only request with no `Origin` is refused.
 //!
 //! That same rule is why a browser app served from another origin could not
-//! authenticate at all, and why `?token=` exists. It is deliberately the
-//! *weakest* credential here: a page can put anything in a URL, so a query
-//! token proves possession of the secret but proves nothing about the caller
-//! not being a page. It therefore ranks with the cookie and never unlocks the
-//! no-`Origin` branch.
+//! authenticate at all, and why `?token=` exists. A page can put anything in
+//! a URL, so a query token proves possession of the secret and nothing about
+//! the caller — *when there is an `Origin` to judge*. In the no-`Origin`
+//! branch the caller is already known not to be a page (a browser always
+//! stamps `Origin` on a WebSocket upgrade), so there the query token vouches
+//! exactly as much as a header does. That is what lets a stdio↔WebSocket
+//! bridge built on Node's global `WebSocket`, which cannot set headers, reach
+//! the agent — the same shape goose serves. The cookie stays refused there:
+//! it is ambient, not something the caller chose to present.
 //!
 //! Goose shipped the same query token without an origin check and it became a
 //! one-click RCE: any page could open a WebSocket to the local agent and run
@@ -55,8 +59,8 @@ pub(super) enum AcpDenial {
 /// * `has_header_credential` — a valid `Authorization: Bearer` or
 ///   `X-*-Runtime-Token`; proof the caller is not a browser page.
 /// * `has_cookie_credential` — a valid runtime or web-session cookie.
-/// * `has_query_credential` — a valid `?token=` on a WebSocket upgrade. Ranks
-///   with the cookie, never with the header: see the module docs.
+/// * `has_query_credential` — a valid `?token=` on a WebSocket upgrade. Judged
+///   by `Origin` when there is one; vouches like a header when there is none.
 /// * `allowed_origins` — the server's own origin plus anything the operator
 ///   added with `--acp-allow-origin`.
 pub(super) fn decide(
@@ -79,9 +83,10 @@ pub(super) fn decide(
             Err(AcpDenial::ForbiddenOrigin)
         }
         Some(_) => Ok(()),
-        // No `Origin`. Only a header credential can vouch for this, because a
-        // page cannot produce one — and it can produce a query string.
-        None if has_header_credential => Ok(()),
+        // No `Origin`: not a browser page, which always sends one. A header
+        // or a query token is something this caller chose to present; the
+        // cookie is ambient and vouches for nothing here.
+        None if has_header_credential || has_query_credential => Ok(()),
         None => Err(AcpDenial::ForbiddenOrigin),
     }
 }
@@ -222,14 +227,12 @@ mod tests {
         );
     }
 
-    /// A query string is something a page *can* produce, so unlike a header it
-    /// never vouches for the caller in the no-`Origin` branch.
+    /// No `Origin` means no browser page, so the query token vouches like a
+    /// header there: a stdio↔WebSocket bridge on Node's global `WebSocket`
+    /// has no other way to present its credential.
     #[test]
-    fn query_credential_does_not_stand_in_for_a_header() {
-        assert_eq!(
-            decide(None, false, false, true, &allowed()),
-            Err(AcpDenial::ForbiddenOrigin)
-        );
+    fn query_credential_vouches_when_there_is_no_origin() {
+        assert_eq!(decide(None, false, false, true, &allowed()), Ok(()));
     }
 
     #[test]

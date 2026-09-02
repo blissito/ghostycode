@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-09-02
+
+### Fixed
+
+- **`?token=` en el upgrade de `/acp` sin `Origin` ya cuenta.** El puente
+  `npx ghosty-acp <wss-url>` usa el `WebSocket` global de Node, que no puede poner
+  headers, y ghosty le contestaba 403 aunque el token fuera bueno. Sin `Origin` el
+  que llama no es una página (el navegador siempre lo manda), así que ahí el token
+  en la URL vale lo mismo que el header, como en Goose. Con `Origin`, la allow-list
+  sigue mandando.
+- **`scripts/acp-serve.sh` descarta `EASYBITS_BASE_URL`.** La caja lo inyecta para su
+  runtime y ghosty lo tomaba como endpoint custom y se negaba a mandar la llave.
+
 ## [0.0.21] - 2026-09-02
 
 ### Added
@@ -7842,7 +7855,8 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
-[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.21...HEAD
+[Unreleased]: https://github.com/blissito/ghostycode/compare/v0.0.22...HEAD
+[0.0.22]: https://github.com/blissito/ghostycode/compare/v0.0.21...v0.0.22
 [0.0.21]: https://github.com/blissito/ghostycode/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/blissito/ghostycode/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/blissito/ghostycode/compare/v0.0.18...v0.0.19

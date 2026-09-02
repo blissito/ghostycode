@@ -2000,7 +2000,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-agent"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "ghosty-config",
  "serde",
@@ -2008,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-app-server"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "axum",
@@ -2036,11 +2036,11 @@ dependencies = [
 
 [[package]]
 name = "ghosty-build-support"
-version = "0.0.21"
+version = "0.0.22"
 
 [[package]]
 name = "ghosty-cli"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2081,14 +2081,14 @@ dependencies = [
 
 [[package]]
 name = "ghosty-command-contract"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "ghosty-core",
 ]
 
 [[package]]
 name = "ghosty-config"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "fd-lock",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-core"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-execpolicy"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "ghosty-protocol",
@@ -2143,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-hooks"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2161,7 +2161,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-lane"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2176,7 +2176,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-mcp"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "serde",
@@ -2186,14 +2186,14 @@ dependencies = [
 
 [[package]]
 name = "ghosty-paths"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "dirs",
 ]
 
 [[package]]
 name = "ghosty-protocol"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "chrono",
  "serde",
@@ -2203,7 +2203,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-release"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "reqwest 0.13.4",
@@ -2217,7 +2217,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-secrets"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "chrono",
  "ghosty-paths",
@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-state"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2247,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-telemetry"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2267,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-tools"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2281,7 +2281,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-tui"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "agent-client-protocol",
  "agent-client-protocol-http",
@@ -2382,7 +2382,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-workflow"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "serde",
  "serde_json",
@@ -2394,7 +2394,7 @@ dependencies = [
 
 [[package]]
 name = "ghosty-workflow-js"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "async-trait",
  "jsonschema",
