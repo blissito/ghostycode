@@ -120,7 +120,7 @@ ghosty-build-support = { path = "../build-support", version = "0.0.23" }
 [dev-dependencies]
 # Drives a real WebSocket handshake against the ACP transport. `oneshot`-style
 # router tests cannot: they never perform the upgrade.
-tokio-tungstenite = "0.29"
+tokio-tungstenite = "0.30"
 cucumber = "0.23.0"
 jsonschema.workspace = true
 wiremock = "0.6"
